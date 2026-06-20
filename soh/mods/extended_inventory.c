@@ -10,6 +10,7 @@
 #include "extended_inventory.h"
 #include "extended_equipment.h"
 #include "z64.h"
+#include "functions.h" // Item_Give, Player_UnsetMask (ExtInv_KeepMmMaskOrSell)
 #include <string.h>
 #include "assets/soh_assets.h"
 #include "transformation_masks/transformation_masks.h"
@@ -162,12 +163,8 @@ int ExtInv_GetPageForSlot(uint8_t slot) {
     return 0;
 }
 uint8_t ExtInv_GetItemAgeReq(uint16_t itemId) {
-    for (int i = 0; i < 24; i++) {
-        if (gPage2Items[i] == itemId) {
-            return gPage2ItemAgeReqs[i];
-        }
-    }
     // MM Mask items: use per-mask age requirements from gPage3MaskAgeReqs
+    // (kept on the page-3 table; NEI registry rows are no-op AGE_REQ_NONE).
     if (itemId >= ITEM_MM_MASK_POSTMAN && itemId <= ITEM_MM_MASK_FIERCE_DEITY) {
         for (int i = 0; i < 24; i++) {
             if (gPage3MaskItems[i] == itemId) {
@@ -175,6 +172,11 @@ uint8_t ExtInv_GetItemAgeReq(uint16_t itemId) {
             }
         }
         return AGE_REQ_NONE;
+    }
+    // Page-2 custom items: unified NEI registry. Skijer's NEI
+    const NeiItem* it = Nei_FindByItem(itemId);
+    if (it != NULL) {
+        return it->ageReq;
     }
     return 9;
 }
@@ -199,9 +201,10 @@ uint8_t ExtInv_GetSlotAgeReq(uint8_t slot) {
     if (slot < 24) {
         return gSlotAgeReqs[slot];
     }
-    // Custom slots (24-47) use gPage2ItemAgeReqs
+    // Custom slots (24-47): unified NEI registry. Skijer's NEI
     if (slot < 48) {
-        return gPage2ItemAgeReqs[slot - 24];
+        const NeiItem* it = Nei_FindBySlot(slot);
+        return it ? it->ageReq : 9;
     }
     // MM Mask slots (48-71) use gPage3MaskAgeReqs
     if (slot < 72) {
@@ -412,13 +415,13 @@ void* ExtInv_GetItemIcon(uint16_t itemId) {
             return (void*)path;
         return gItemIcons[0]; // Fallback
     }
-    // Page-2 custom items with a constant icon live in the shared asset table.
-    // (ITEM_LANTERN has a NULL icon entry there because its icon is dynamic;
-    // it falls through to the dedicated case in the switch below.)
+    // Page-2 custom items with a constant icon: unified NEI registry. Skijer's NEI
+    // (ITEM_LANTERN has a NULL iconTex because its icon is dynamic; it falls
+    // through to the dedicated case in the switch below.)
     {
-        const CustomItemAsset* asset = ExtInv_FindCustomItemAsset(itemId);
-        if (asset && asset->icon) {
-            return asset->icon;
+        const NeiItem* it = Nei_FindByItem(itemId);
+        if (it != NULL && it->iconTex != NULL) {
+            return it->iconTex;
         }
     }
     switch (itemId) {
@@ -504,19 +507,26 @@ int32_t ExtInv_HasMmMask(uint16_t itemId) {
     return 0;
 }
 
+// Trade-mask sale helper for En_Mm (Bunny Hood) / En_Heishi2 (Keaton Mask): if the
+// player does NOT own the given MM counterpart mask, take the worn OOT trade mask and
+// hand back ITEM_SOLD_OUT (vanilla behavior). When the MM counterpart IS owned the mask
+// is permanent, so it is kept and no SOLD_OUT is given. Collapses the byte-identical
+// idiom both actors previously inlined.
+void ExtInv_KeepMmMaskOrSell(PlayState* play, uint16_t maskItem) {
+    if (!ExtInv_HasMmMask(maskItem)) {
+        Player_UnsetMask(play);
+        Item_Give(play, ITEM_SOLD_OUT);
+    }
+}
+
 uint8_t ExtInv_GetItemSlot(uint16_t itemId) {
     if (itemId < 52) {
         return gItemSlots[itemId];
     }
-    // Special case: ITEM_ROCS_CAPE shares slot with ITEM_ROCS_FEATHER_SKIJER (progressive upgrade)
-    if (itemId == ITEM_ROCS_CAPE) {
-        return SLOT_ROCS; // Same as SLOT_ROCS_FEATHER_SKIJER (24)
-    }
-    // Page 2 items
-    for (int i = 0; i < 24; i++) {
-        if (gPage2Items[i] == itemId) {
-            return 24 + i;
-        }
+    // Page 2 items (incl. ROCS_CAPE -> shared SLOT_ROCS): unified NEI registry. Skijer's NEI
+    const NeiItem* it = Nei_FindByItem(itemId);
+    if (it != NULL && it->slot != NEI_NO_SLOT) {
+        return it->slot;
     }
     // Page 3 MM Mask items
     for (int i = 0; i < 24; i++) {

@@ -71,7 +71,7 @@ static void LightRod_SpawnKiraKira(PlayState* play, Vec3f* pos, f32 spread, s32 
 
 static void LightRod_Backfire(Player* p, PlayState* play) {
     Audio_PlayActorSound2(&p->actor, LIGHT_ROD_SFX_BACKFIRE_HIT);
-    Audio_PlayActorSound2(&p->actor, NA_SE_VO_LI_DAMAGE_S);
+    ItemVoice_PlayId(p, NA_SE_VO_LI_DAMAGE_S);
 
     // Electrocute Link using the electric shock response (PLAYER_HIT_RESPONSE_ELECTRIC_SHOCK = 4)
     func_80837C0C(play, p, 4, 0.0f, 0.0f, 0, 20);

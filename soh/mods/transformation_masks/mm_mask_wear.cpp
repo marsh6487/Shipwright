@@ -1830,6 +1830,12 @@ extern "C" s32 MmMaskWear_IsAllNightMaskActive(void) {
     return (sCurrentMmMask != ITEM_NONE) && (MaskItemToIndex(sCurrentMmMask) == MM_MASK_IDX_ALL_NIGHT);
 }
 
+// Shared night-GS spawn override for En_Sw / En_Wood02 (see header). Behavior is the
+// byte-identical sub-expression the two actors previously inlined.
+extern "C" s32 MmMaskWear_ShouldForceNightGS(void) {
+    return CVarGetInteger(CVAR_ENHANCEMENT("NightGSAlwaysSpawn"), 0) || MmMaskWear_IsAllNightMaskActive();
+}
+
 extern "C" s32 MmMaskWear_IsGibdoMaskWorn(void) {
     return (sCurrentMmMask != ITEM_NONE) && (MaskItemToIndex(sCurrentMmMask) == MM_MASK_IDX_GIBDO);
 }

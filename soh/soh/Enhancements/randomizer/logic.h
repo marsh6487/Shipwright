@@ -117,6 +117,11 @@ class Logic {
     bool CanRead();
     bool HasFireSource();
     bool HasFireSourceWithTorch();
+    bool HasFireProjectile();
+    bool HasIceSource();
+    bool HasLightSource();
+    bool CanReflectLight();
+    bool HasMagicFire();
     bool CanMeltRedIce();
     bool HasStrength(uint8_t level);
     bool SunlightArrows();

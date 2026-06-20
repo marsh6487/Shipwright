@@ -21,6 +21,7 @@
 #include "../helpers/camera_helper.h"
 #include "../helpers/equip_helper.h"
 #include "../helpers/combat_helper.h"
+#include "../helpers/item_voice.h"
 #include "../anim/ballchain/ballchain_anim_data.h"
 #include "macros.h"
 #include "functions.h"
@@ -521,9 +522,7 @@ static void StateSpinning(Player* p, PlayState* play, ItemInputState* in) {
         bcThrowYaw = throwYaw;
         sBallChainThrownFirstFrame = 1;
 
-        Audio_PlaySoundGeneral(LINK_IS_ADULT ? BALLCHAIN_SFX_VOICE_ADULT : BALLCHAIN_SFX_VOICE_CHILD,
-                               &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultReverb);
+        ItemVoice_Play(p, BALLCHAIN_SFX_VOICE_ADULT, BALLCHAIN_SFX_VOICE_CHILD);
         Audio_PlaySoundGeneral(BALLCHAIN_SFX_SWING, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     }

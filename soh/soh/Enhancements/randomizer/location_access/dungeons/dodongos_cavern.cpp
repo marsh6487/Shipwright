@@ -127,7 +127,7 @@ void RegionTable_Init_DodongosCavern() {
     }, {
         //Exits
         ENTRANCE(RR_DODONGOS_CAVERN_LOBBY,        true),
-        ENTRANCE(RR_DODONGOS_CAVERN_STAIRS_UPPER, logic->HasExplosives() || logic->HasStrength(1) || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)) || (ctx->GetTrickOption(RT_DC_STAIRS_WITH_BOW) && logic->CanUse(RG_FAIRY_BOW))),
+        ENTRANCE(RR_DODONGOS_CAVERN_STAIRS_UPPER, logic->HasExplosives() || logic->HasStrength(1) || (logic->HasMagicFire()) || (ctx->GetTrickOption(RT_DC_STAIRS_WITH_BOW) && logic->CanUse(RG_FAIRY_BOW))),
         ENTRANCE(RR_DODONGOS_CAVERN_COMPASS_ROOM, AnyAgeTime([]{return logic->CanBreakMudWalls() || logic->HasStrength(1);})),
     });
 
@@ -329,7 +329,7 @@ void RegionTable_Init_DodongosCavern() {
 
     areaTable[RR_DODONGOS_CAVERN_MQ_MOUTH_SIDE_BRIDGE] = Region("Dodongos Cavern MQ Mouth Side Bridge", SCENE_DODONGOS_CAVERN, {
         //Events
-        EVENT_ACCESS(LOGIC_DC_MQ_CLEAR_UPPER_LOBBY_ROCKS, logic->BlastOrSmash() || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD))),
+        EVENT_ACCESS(LOGIC_DC_MQ_CLEAR_UPPER_LOBBY_ROCKS, logic->BlastOrSmash() || (logic->HasMagicFire())),
         EVENT_ACCESS(LOGIC_DC_EYES_LIT,                   logic->HasExplosives() || (logic->Get(LOGIC_DC_MQ_CLEAR_UPPER_LOBBY_ROCKS) && logic->HasStrength(1) && ((logic->IsAdult && ctx->GetTrickOption(RT_DC_MQ_ADULT_EYES)) || (logic->IsChild && ctx->GetTrickOption(RT_DC_MQ_CHILD_EYES))))),
     }, {
         //Locations
@@ -358,7 +358,7 @@ void RegionTable_Init_DodongosCavern() {
         //Exits
         ENTRANCE(RR_DODONGOS_CAVERN_MQ_LOBBY,               true),
         //This is possible with sticks and shield, igniting a first flower by "touch" then very quickly crouch stabbing in a way that cuts the corner to light the 3rd bomb on the other side, but that's a trick
-        ENTRANCE(RR_DODONGOS_CAVERN_MQ_STAIRS_UPPER,         AnyAgeTime([]{return logic->HasExplosives() || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)) || (ctx->GetTrickOption(RT_DC_STAIRS_WITH_BOW) && logic->CanUse(RG_FAIRY_BOW));})),
+        ENTRANCE(RR_DODONGOS_CAVERN_MQ_STAIRS_UPPER,         AnyAgeTime([]{return logic->HasExplosives() || (logic->HasMagicFire()) || (ctx->GetTrickOption(RT_DC_STAIRS_WITH_BOW) && logic->CanUse(RG_FAIRY_BOW));})),
         ENTRANCE(RR_DODONGOS_CAVERN_MQ_STAIRS_PAST_MUD_WALL, AnyAgeTime([]{return logic->HasStrength(1) || logic->CanBreakMudWalls();})),
     });
 
@@ -370,7 +370,7 @@ void RegionTable_Init_DodongosCavern() {
         LOCATION(RC_DODONGOS_CAVERN_MQ_GS_SONG_OF_TIME_BLOCK_ROOM, logic->CanUse(RG_SONG_OF_TIME) && logic->CanGetEnemyDrop(RE_GOLD_SKULLTULA)),
     }, {
         //Exits
-        ENTRANCE(RR_DODONGOS_CAVERN_MQ_STAIRS_UPPER, logic->HasExplosives() || (logic->HasStrength(1) && (logic->CanUse(RG_STICKS) || ctx->GetTrickOption(RT_DC_MQ_STAIRS_WITH_ONLY_STRENGTH))) || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)) || (ctx->GetTrickOption(RT_DC_STAIRS_WITH_BOW) && logic->CanUse(RG_FAIRY_BOW))),
+        ENTRANCE(RR_DODONGOS_CAVERN_MQ_STAIRS_UPPER, logic->HasExplosives() || (logic->HasStrength(1) && (logic->CanUse(RG_STICKS) || ctx->GetTrickOption(RT_DC_MQ_STAIRS_WITH_ONLY_STRENGTH))) || (logic->HasMagicFire()) || (ctx->GetTrickOption(RT_DC_STAIRS_WITH_BOW) && logic->CanUse(RG_FAIRY_BOW))),
         ENTRANCE(RR_DODONGOS_CAVERN_MQ_STAIRS_LOWER, true),
     });
 
@@ -517,7 +517,7 @@ void RegionTable_Init_DodongosCavern() {
         LOCATION(RC_DODONGOS_CAVERN_MQ_RIGHT_SIDE_POT_2,     logic->CanBreakPots()),
         LOCATION(RC_DODONGOS_CAVERN_MQ_RIGHT_SIDE_POT_3,     logic->CanBreakPots()),
         LOCATION(RC_DODONGOS_CAVERN_MQ_RIGHT_SIDE_POT_4,     logic->CanBreakPots()),
-        LOCATION(RC_DODONGOS_CAVERN_MQ_RIGHT_SIDE_BOULDER_1, logic->CanBreakBoulder() || logic->HasStrength(1) || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)) || (ctx->GetTrickOption(RT_BOULDER_COLLISION) && logic->CanUse(RG_FAIRY_BOW))),
+        LOCATION(RC_DODONGOS_CAVERN_MQ_RIGHT_SIDE_BOULDER_1, logic->CanBreakBoulder() || logic->HasStrength(1) || (logic->HasMagicFire()) || (ctx->GetTrickOption(RT_BOULDER_COLLISION) && logic->CanUse(RG_FAIRY_BOW))),
         LOCATION(RC_DODONGOS_CAVERN_MQ_RIGHT_SIDE_BOULDER_2, logic->CanDetonateBombFlowers() || logic->HasStrength(1) || (ctx->GetTrickOption(RT_BLUE_FIRE_MUD_WALLS) && logic->CanUse(RG_BOTTLE_WITH_BLUE_FIRE) && (logic->EffectiveHealth() != 1 || logic->CanUse(RG_NAYRUS_LOVE)))),
     }, {
         //Exits

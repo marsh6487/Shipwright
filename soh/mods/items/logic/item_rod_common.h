@@ -26,6 +26,7 @@
 
 #include "z64.h"
 #include "../helpers/fx_helper.h" // RodColor
+#include "../helpers/item_voice.h" // ItemVoice_PlayId (form-aware rod voice)
 
 // Number of concurrent projectile sets per rod. Mirrors the value historically
 // defined in each rod's own header; guarded so include order doesn't matter.

@@ -4,6 +4,16 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include <assert.h>
 
+// NEI: true when the player's contact/sword damage should be scaled by
+// ivanDamageMultiplier (Ivan co-op possession or SM64 Mario active). Centralizes the
+// condition that was duplicated in the AC-apply and sword-damage paths below.
+static u8 NEI_PlayerDamageBoostActive(void) {
+    extern u8 gIvanPossessActive;
+    extern u8 Sm64Mario_IsReady(void);
+    return CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) || gIvanPossessActive ||
+           Sm64Mario_IsReady();
+}
+
 typedef s32 (*ColChkResetFunc)(PlayState*, Collider*);
 typedef void (*ColChkBloodFunc)(PlayState*, Collider*, Vec3f*);
 typedef void (*ColChkApplyFunc)(PlayState*, CollisionCheckContext*, Collider*);
@@ -3042,13 +3052,8 @@ void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCt
         collider->actor->colChkInfo.damage += damage;
     }
 
-    {
-        extern u8 gIvanPossessActive;
-        extern u8 Sm64Mario_IsReady(void);
-        if (CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) || gIvanPossessActive ||
-            Sm64Mario_IsReady()) {
-            collider->actor->colChkInfo.damage *= GET_PLAYER(play)->ivanDamageMultiplier;
-        }
+    if (NEI_PlayerDamageBoostActive()) {
+        collider->actor->colChkInfo.damage *= GET_PLAYER(play)->ivanDamageMultiplier;
     }
 }
 
@@ -3683,13 +3688,8 @@ u8 CollisionCheck_GetSwordDamage(s32 dmgFlags, PlayState* play) {
         }
     }
 
-    {
-        extern u8 gIvanPossessActive;
-        extern u8 Sm64Mario_IsReady(void);
-        if (CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) || gIvanPossessActive ||
-            Sm64Mario_IsReady()) {
-            damage *= GET_PLAYER(play)->ivanDamageMultiplier;
-        }
+    if (NEI_PlayerDamageBoostActive()) {
+        damage *= GET_PLAYER(play)->ivanDamageMultiplier;
     }
 
     KREG(7) = damage;

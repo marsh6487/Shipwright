@@ -13,6 +13,7 @@
 #include "mods/extended_player.h"
 #include "mods/extended_equipment.h"
 #include "mods/items/logic/item_mitts.h"
+#include "mods/items/logic/weapon_upgrades.h"
 #include "mods/transformation_masks/transformation_masks.h"
 #include "mods/transformation_masks/gerudo_form.h"
 #include "mods/pak_loader/pak_loader.h"
@@ -2266,8 +2267,8 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
                 Vec3f spE4_byrna[3];
                 D_80126080.x = sMeleeWeaponLengths[Player_GetMeleeWeaponHeld(this)];
 
-                // IK Axe: double the hitbox reach
-                if (ExtEquip_IsEnabled() && gExtEquipState.currentExtSword == 3) {
+                // Hammer upgrade (Iron Knuckle's Axe): double the hitbox reach
+                if (WeaponUpgrade_HasHammerAxe()) {
                     D_80126080.x = 8000.0f; // 2x normal hammer reach (~4000)
                 }
 

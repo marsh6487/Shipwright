@@ -22,6 +22,7 @@ extern "C" {
 #include "mods/items/custom_items.h"
 #include "mods/extended_inventory.h"
 #include "mods/extended_equipment.h"
+#include "mods/items/logic/weapon_upgrades.h"
 }
 namespace Rando {
 
@@ -412,8 +413,19 @@ bool Logic::HasItem(RandomizerGet itemName) {
             return ctx->GetOption(RSK_EXT_EQUIPMENT) && ExtEquip_HasItem(EQUIP_TYPE_SWORD, EXT_EQUIP_1);
         case RG_EXT_FOUR_SWORD:
             return ctx->GetOption(RSK_EXT_EQUIPMENT) && ExtEquip_HasItem(EQUIP_TYPE_SWORD, EXT_EQUIP_2);
-        case RG_EXT_IRON_KNUCKLE_AXE:
-            return ctx->GetOption(RSK_EXT_EQUIPMENT) && ExtEquip_HasItem(EQUIP_TYPE_SWORD, EXT_EQUIP_3);
+        // ───── NEI Weapon Upgrades (RSK_NEI_WEAPON_UPGRADES) — require the base weapon ─────
+        case RG_HAMMER_UPGRADE:
+            return ctx->GetOption(RSK_NEI_WEAPON_UPGRADES) && WeaponUpgrade_HasHammerAxe() &&
+                   CanUse(RG_MEGATON_HAMMER);
+        case RG_PROGRESSIVE_KOKIRI_SWORD:
+            return ctx->GetOption(RSK_NEI_WEAPON_UPGRADES) && WeaponUpgrade_HasRazor() &&
+                   CanUse(RG_KOKIRI_SWORD);
+        case RG_TRUE_MASTER_SWORD:
+            return ctx->GetOption(RSK_NEI_WEAPON_UPGRADES) && WeaponUpgrade_HasTrueMaster() &&
+                   CanUse(RG_MASTER_SWORD);
+        case RG_GREAT_FAIRY_SWORD:
+            return ctx->GetOption(RSK_NEI_WEAPON_UPGRADES) && WeaponUpgrade_HasGreatFairy() &&
+                   CanUse(RG_BIGGORON_SWORD);
         case RG_EXT_DIVINE_SHIELD:
             return ctx->GetOption(RSK_EXT_EQUIPMENT) && ExtEquip_HasItem(EQUIP_TYPE_SHIELD, EXT_EQUIP_1);
         case RG_EXT_SHEIKAH_SHIELD:
@@ -1620,7 +1632,7 @@ bool Logic::CanJumpslashExceptHammer() {
 
 bool Logic::CanJumpslash() {
     return CanJumpslashExceptHammer() || CanUse(RG_MEGATON_HAMMER) ||
-           CanUse(RG_BALL_AND_CHAIN) || CanUse(RG_EXT_IRON_KNUCKLE_AXE) ||
+           CanUse(RG_BALL_AND_CHAIN) || CanUse(RG_HAMMER_UPGRADE) ||
            CanUse(RG_FIRE_ROD) || CanUse(RG_ICE_ROD) || CanUse(RG_LIGHT_ROD);
 }
 
@@ -1786,7 +1798,7 @@ bool Logic::HasExplosives() {
 
 bool Logic::BlastOrSmash() {
     return HasExplosives() || CanUse(RG_MEGATON_HAMMER) ||
-           CanUse(RG_BALL_AND_CHAIN) || CanUse(RG_EXT_IRON_KNUCKLE_AXE) ||
+           CanUse(RG_BALL_AND_CHAIN) || CanUse(RG_HAMMER_UPGRADE) ||
            CanUse(RG_MM_MASK_GORON);
 }
 
@@ -1817,7 +1829,7 @@ bool Logic::CanCutShrubs() {
            HasItem(RG_GORONS_BRACELET) ||
            CanUse(RG_DEMISE_DESTRUCTION) || CanUse(RG_MM_MASK_FIERCE_DEITY) ||
            CanUse(RG_EXT_FOUR_SWORD) || CanUse(RG_EXT_CANE_OF_BYRNA) ||
-           CanUse(RG_BALL_AND_CHAIN) || CanUse(RG_EXT_IRON_KNUCKLE_AXE) || CanUse(RG_MM_MASK_GORON);
+           CanUse(RG_BALL_AND_CHAIN) || CanUse(RG_HAMMER_UPGRADE) || CanUse(RG_MM_MASK_GORON);
 }
 
 bool Logic::CanStunDeku() {
@@ -1929,6 +1941,33 @@ bool Logic::HasFireSource() {
 
 bool Logic::HasFireSourceWithTorch() {
     return HasFireSource() || CanUse(RG_STICKS);
+}
+
+// A ranged fire source (fire arrows / SW97 fire projectile / fire rod). Distinct from
+// HasFireSource(), which is the torch-lighting set (Din's Fire / SW97 fire spell / lantern).
+bool Logic::HasFireProjectile() {
+    return CanUse(RG_FIRE_ARROWS) || CanUse(RG_SW97_FIRE_PROJECTILE) || CanUse(RG_FIRE_ROD);
+}
+
+// A ranged ice source (ice arrows / SW97 ice projectile / ice rod).
+bool Logic::HasIceSource() {
+    return CanUse(RG_ICE_ARROWS) || CanUse(RG_SW97_ICE_PROJECTILE) || CanUse(RG_ICE_ROD);
+}
+
+// A ranged light source (light arrows / SW97 light projectile). Note: does NOT include RG_LIGHT_ROD,
+// which is OR'd in separately at the call sites that allow it.
+bool Logic::HasLightSource() {
+    return CanUse(RG_LIGHT_ARROWS) || CanUse(RG_SW97_LIGHT_PROJECTILE);
+}
+
+// A shield able to reflect light/sunlight (Mirror Shield or Shield of Ikana).
+bool Logic::CanReflectLight() {
+    return CanUse(RG_MIRROR_SHIELD) || CanUse(RG_EXT_SHIELD_OF_IKANA);
+}
+
+// Magical close-range fire (Din's Fire or Fire Rod), used to light/burn without a torch.
+bool Logic::HasMagicFire() {
+    return CanUse(RG_DINS_FIRE) || CanUse(RG_FIRE_ROD);
 }
 
 bool Logic::CanMeltRedIce() {

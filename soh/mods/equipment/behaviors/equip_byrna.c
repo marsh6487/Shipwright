@@ -11,48 +11,9 @@
  * Included by ext_equip_behavior.c (unity build).
  */
 
-// Somaria cane tri DLs + header included by ext_equip_behavior.c
-
-// ---------------------------------------------------------------------------
-// Blue material DLs (same structure as Somaria's red materials, but blue)
-// ---------------------------------------------------------------------------
-static Gfx gfx_byrna_cane_mat_body[] = {
-    gsSPLoadGeometryMode(G_SHADE | G_FOG | G_CULL_BACK | G_ZBUFFER | G_SHADING_SMOOTH | G_LIGHTING),
-    gsDPPipeSync(),
-    gsDPSetCombineLERP(0, 0, 0, SHADE, 0, 0, 0, 1, COMBINED, 0, PRIMITIVE, 0, 0, 0, 0, COMBINED),
-    gsSPSetOtherMode(G_SETOTHERMODE_H, 4, 20,
-                     G_TD_CLAMP | G_CYC_2CYCLE | G_AD_NOISE | G_CD_MAGICSQ | G_TP_PERSP | G_TL_TILE | G_TF_BILERP |
-                         G_CK_NONE | G_PM_NPRIMITIVE | G_TT_NONE | G_TC_FILT),
-    gsSPSetOtherMode(G_SETOTHERMODE_L, 0, 32, G_RM_FOG_SHADE_A | G_AC_NONE | G_ZS_PIXEL | G_RM_AA_ZB_OPA_SURF2),
-    gsSPTexture(65535, 65535, 0, 0, 1),
-    gsDPSetPrimColor(0, 0, 41, 80, 200, 255), // Blue body (was 177, 50, 41 red)
-    gsSPEndDisplayList(),
-};
-
-static Gfx gfx_byrna_cane_mat_color[] = {
-    gsSPLoadGeometryMode(G_SHADE | G_FOG | G_CULL_BACK | G_ZBUFFER | G_SHADING_SMOOTH | G_LIGHTING),
-    gsDPPipeSync(),
-    gsDPSetCombineLERP(0, 0, 0, SHADE, 0, 0, 0, 1, COMBINED, 0, PRIMITIVE, 0, 0, 0, 0, COMBINED),
-    gsSPSetOtherMode(G_SETOTHERMODE_H, 4, 20,
-                     G_TD_CLAMP | G_CYC_2CYCLE | G_AD_NOISE | G_CD_MAGICSQ | G_TP_PERSP | G_TL_TILE | G_TF_BILERP |
-                         G_CK_NONE | G_PM_NPRIMITIVE | G_TT_NONE | G_TC_FILT),
-    gsSPSetOtherMode(G_SETOTHERMODE_L, 0, 32, G_RM_FOG_SHADE_A | G_AC_NONE | G_ZS_PIXEL | G_RM_AA_ZB_OPA_SURF2),
-    gsSPTexture(65535, 65535, 0, 0, 1),
-    gsDPSetPrimColor(0, 0, 80, 140, 255, 255), // Blue orb (was 56, 83, 113 dark)
-    gsSPEndDisplayList(),
-};
-
-// Byrna main DL: blue materials + shared Somaria tri geometry
-Gfx g_byrna_cane_dl[] = {
-    gsDPPipeSync(),
-    gsSPClearGeometryMode(G_CULL_BACK | G_FOG | G_TEXTURE_GEN | G_TEXTURE_GEN_LINEAR),
-    gsSPSetGeometryMode(G_ZBUFFER | G_SHADE | G_SHADING_SMOOTH | G_LIGHTING),
-    gsSPDisplayList(gfx_byrna_cane_mat_body),
-    gsSPDisplayList(gfx_somaria_cane_tri_0),
-    gsSPDisplayList(gfx_byrna_cane_mat_color),
-    gsSPDisplayList(gfx_somaria_cane_tri_1),
-    gsSPEndDisplayList(),
-};
+// Byrna 3D model (blue cane) now lives in soh.o2r as
+// objects/object_somaria/g_byrna_cane_dl and is loaded at draw time in
+// extended_equipment.c (Byrna_GetCaneDL). No inline C model here anymore.
 
 // ---------------------------------------------------------------------------
 // Constants

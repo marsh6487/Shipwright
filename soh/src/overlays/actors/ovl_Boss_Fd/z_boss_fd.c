@@ -1709,16 +1709,7 @@ void BossFd_Draw(Actor* thisx, PlayState* play) {
     // spheres were refreshed during BossFd_DrawBody (Collider_UpdateSpheres) and run
     // head→tail, so their world centers blanket the whole serpent — ideal spark anchors.
     // No-op when the spark timer is 0 (not recently hit by a super attack).
-    {
-        Vec3f limbs[19];
-        s32 k;
-        for (k = 0; k < 19; k++) {
-            limbs[k].x = this->collider.elements[k].dim.worldSphere.center.x;
-            limbs[k].y = this->collider.elements[k].dim.worldSphere.center.y;
-            limbs[k].z = this->collider.elements[k].dim.worldSphere.center.z;
-        }
-        BossSuperDamage_DrawElectricSparks(&this->actor, play, limbs, 19, 1.5f);
-    }
+    BossSuperDamage_DrawGlowFromSpheres(&this->actor, play, &this->collider, 19, 1.5f);
 }
 
 s32 BossFd_OverrideRightArmDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, void* thisx) {

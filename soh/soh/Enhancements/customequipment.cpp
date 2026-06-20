@@ -3,15 +3,32 @@
 #include "objects/object_link_child/object_link_child.h"
 #include "objects/object_custom_equip/object_custom_equip.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/game-interactor/vanilla-behavior/PlayerAnimOverride.h"
 #include "soh/ShipInit.hpp"
 #include "soh/ResourceManagerHelpers.h"
+// The VB_PLAYER_DRAW_BEGIN handler below uses OPEN_DISPS/CLOSE_DISPS, whose macro
+// bodies (macros.h) block-scope-declare + call FrameInterpolation_RecordOpenChild/
+// CloseChild. This header provides their namespace-scope extern "C" decls so the
+// macro's redeclaration inherits C linkage (otherwise C++ mangles them -> LNK2001).
+#include "soh/frame_interpolation.h"
 
 extern "C" {
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
 #include "mods/transformation_masks/transformation_masks.h"
+// NEI player-draw subsystems used by the VB_PLAYER_DRAW_BEGIN handler below
+// (these own the custom-model draws that replace/precede the vanilla Link draw).
+#include "mods/pak_loader/pak_loader.h"     // PakLoader_FrameBegin
+#include "expansions/sm64/sm64_mario.h"     // Sm64Mario_HasMesh/Draw/ShouldHideLink
+#include "mods/items/custom_items.h"        // CustomItems_OverrideDraw
+#include "mods/extended_equipment.h"        // ExtEquip_DrawBehavior
 extern SaveContext gSaveContext;
+
+// Harpoon Prop Hunt local-prop draw intercept. Forward-declared (matching the
+// inline `extern` z_player.c previously used) to avoid pulling the Harpoon C++
+// headers into this TU. Returns 1 when it rendered a prop (suppress Link), else 0.
+s32 HarpoonPropHunt_TryDrawLocalProp(Actor* thisx, PlayState* play);
 }
 
 static const char* ResolveCustomChain(std::initializer_list<const char*> paths) {
@@ -574,3 +591,230 @@ static void RegisterCustomEquipment() {
 }
 
 static RegisterShipInitFunc initFunc(RegisterCustomEquipment, { CVAR_SETTING("AltAssets") });
+
+// ----------------------------------------------------------------------------
+// NEI player-draw fork (VB_PLAYER_DRAW_BEGIN)
+//
+// Moved verbatim out of the top of `Player_Draw` (z_player.c). Fires as the
+// very first statement of `Player_Draw`, before any vanilla draw setup. Returns
+// `false` (sets *should) to suppress the entire vanilla `Player_Draw` body when
+// a custom model is rendered (SM64 Mario / Harpoon prop / fully-loaded MM form);
+// returns `true` (default) to fall through into the vanilla draw for additive
+// side-effects (Dragon Scale swim barrier, MM pre-flash overlay, MM FP aim).
+//
+// NOTE: the Pak/O2r skeleton swap + restore and the post-draw additive draws
+// (CustomItems/ExtEquip/SSBB/GetItem/Garo body) remain INLINE in z_player.c —
+// they thread `pakActive`/`o2rActive` function-locals across the vanilla draw
+// and so cannot be relocated to a VB with provably-identical behavior.
+//
+// Registered unconditionally: each block self-guards (Sm64Mario_HasMesh(),
+// TransformMasks_*(), etc.), so it must NOT be gated on the AltAssets CVar.
+static void RegisterPlayerDrawForkNEI() {
+    REGISTER_VB_SHOULD(VB_PLAYER_DRAW_BEGIN, {
+        PlayState* play = va_arg(args, PlayState*);
+        Player* player = va_arg(args, Player*);
+        u8 isLocalPlayer = (player == GET_PLAYER(play));
+
+        // PAK Loader: free previous frame's GbiWrap combined DLs (once per frame, main player only)
+        if (isLocalPlayer) {
+            PakLoader_FrameBegin();
+        }
+
+        // Harpoon Prop Hunt — direct prop-draw intercept. Only fires for the LOCAL
+        // player; remote dummies are handled separately in HarpoonDummyPlayer. The
+        // shim internally checks isPropHuntMode + IsLocalHiderWithProp + AreGhostsReady
+        // and only returns 1 when it actually rendered a prop; 0 falls through to
+        // vanilla Link draw.
+        if (isLocalPlayer) {
+            if (HarpoonPropHunt_TryDrawLocalProp(&player->actor, play)) {
+                *should = false;
+                va_end(args);
+                return;
+            }
+        }
+
+        // SM64 MARIO: Draw Mario mesh instead of Link. Uses HasMesh (stricter than
+        // IsReady) so Link falls back to normal draw during the brief window between
+        // mario_create success and the first successful tick.
+        if (isLocalPlayer) {
+            // Mario has a current mesh → draw Mario instead of Link.
+            if (Sm64Mario_HasMesh()) {
+                Sm64Mario_Draw(play, player);
+                *should = false;
+                va_end(args);
+                return;
+            }
+            // CVAR on but Mario isn't drawable right now (between Reset and Init
+            // during detransform, or while Lens of Truth is held) — skip Link's draw
+            // entirely so the player doesn't see Link briefly pop in.
+            if (Sm64Mario_ShouldHideLink()) {
+                *should = false;
+                va_end(args);
+                return;
+            }
+        }
+
+        // Transformation Masks: If transformed, draw MM form instead of OOT Link.
+        // Dragon Scale swim: draw barrier, then fall through to OOT Link draw.
+        if (isLocalPlayer && TransformMasks_IsZoraSwimEnabled()) {
+            TransformMasks_Draw(play, player); // Draws barrier only (state=INACTIVE + zoraSwimEnabled)
+        }
+
+        if (isLocalPlayer && (TransformMasks_IsTransformed() || TransformMasks_IsFDSkinMode())) {
+            if (TransformMasks_HasSkeleton()) {
+                // Always draw transformed forms (no invincibility blink — use color flash instead)
+                {
+                    TransformMasks_Draw(play, player);
+
+                    // Update hookshot anchor position (unk_3C8) since Player_PostLimbDrawGameplay
+                    // won't run. Arms_Hook uses this to calculate distance for pull termination.
+                    // Without this, hookshot pull never ends because unk_3C8 stays stale.
+                    if ((player->heldItemAction == PLAYER_IA_HOOKSHOT) ||
+                        (player->heldItemAction == PLAYER_IA_LONGSHOT)) {
+                        player->unk_3C8.x = player->actor.world.pos.x;
+                        player->unk_3C8.y = player->actor.world.pos.y + 40.0f; // Approximate hand height
+                        player->unk_3C8.z = player->actor.world.pos.z;
+                    }
+
+                    // Still draw get-item animations and custom items on MM forms.
+                    OPEN_DISPS(play->state.gfxCtx);
+                    if (!(player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+                        if (player->unk_862 > 0) {
+                            Player_DrawGetItem(play, player);
+                        }
+                        CustomItems_OverrideDraw(player, play);
+                        ExtEquip_DrawBehavior(player, play);
+                    }
+                    CLOSE_DISPS(play->state.gfxCtx);
+                    *should = false;
+                    va_end(args);
+                    return;
+                }
+                // First-person aim (unk_6AD != 0): fall through to OOT draw but all limbs
+                // will be hidden (see transform check at overrideLimbDraw selection below).
+                // Skeleton still processes for body part positions (hookshot chain, arrow spawn).
+            } else {
+                // Skeleton not loaded: draw flash overlay only, then fall through to OOT Link draw
+                TransformMasks_Draw(play, player);
+            }
+        }
+    });
+}
+
+static RegisterShipInitFunc initFuncPlayerDrawFork(RegisterPlayerDrawForkNEI, {});
+
+// ----------------------------------------------------------------------------
+// NEI player animation-override fork (VB_PLAYER_ANIM_OVERRIDE)
+//
+// Each block below was moved VERBATIM out of an inline anim-override site in
+// `z_player.c`. At every converted site the vanilla code first stores the stock
+// animation in a local, then fires this positioned VB at the exact point the
+// animation is about to be played, passing `&anim` so a handler can replace it.
+// The vanilla code then plays whatever `*animOut` points to.
+//
+// Behavior equivalence: with this handler unregistered, GameInteractor_Should
+// returns its default (true) and never touches *animOut, so the vanilla
+// animation plays unchanged. With it registered, *animOut is overwritten only
+// when the same getter the inline code called returns a non-NULL replacement,
+// under the same TransformMasks_IsTransformed()/animation-range gating — so the
+// played animation is identical in every case to the original inline code.
+//
+// The MM form getters return NULL unless an MM transformation form is active;
+// the MHR getters return NULL unless the user bound a moveset animation. Hence
+// this is registered unconditionally (each block self-guards), like the draw
+// fork above.
+//
+// Sites intentionally LEFT INLINE in z_player.c (NOT converted) because they do
+// not have the uniform "compute the final anim, then play once" shape:
+//   - func_808358F0 (boomerang throw): plays the vanilla throw anim first, then
+//     RE-plays an override on top of it (double LinkAnimation_PlayOnce).
+//   - func_80831F00 melee start: plays the vanilla swing first, then RE-plays a
+//     jump-slash override, then RE-plays an MHR override (two stacked re-plays).
+// Relocating those to this single-play VB would change the transformed-path side
+// effects (a single play instead of the original double play), so they stay put.
+extern "C" {
+LinkAnimationHeader* MmForm_GetJumpSlashAnim(s32 phase);
+LinkAnimationHeader* MmForm_GetZoraBoomerangAnim(s32 phase);
+LinkAnimationHeader* MhrMoveset_GetMoveAnim(s32 moveId);
+LinkAnimationHeader* MhrMoveset_GetShieldAnim(s32 loopPhase);
+}
+
+static void RegisterPlayerAnimOverrideNEI() {
+    REGISTER_VB_SHOULD(VB_PLAYER_ANIM_OVERRIDE, {
+        s32 siteId = va_arg(args, s32);
+        s32 siteArg = va_arg(args, s32);
+        LinkAnimationHeader** animOut = va_arg(args, LinkAnimationHeader**);
+        Player* player = va_arg(args, Player*);
+
+        switch (siteId) {
+            case VB_PLAYER_ANIM_SITE_ZORA_BOOMERANG_WAIT: {
+                // z_player.c func_80835884: phase 0, gated on IsTransformed (NULL otherwise).
+                LinkAnimationHeader* formAnim =
+                    TransformMasks_IsTransformed() ? MmForm_GetZoraBoomerangAnim(0) : nullptr;
+                if (formAnim != nullptr) {
+                    *animOut = formAnim;
+                }
+                break;
+            }
+            case VB_PLAYER_ANIM_SITE_ZORA_BOOMERANG_CATCH: {
+                // z_player.c func_80835B60: phase 2, gated on IsTransformed (NULL otherwise).
+                LinkAnimationHeader* zoraCatch =
+                    TransformMasks_IsTransformed() ? MmForm_GetZoraBoomerangAnim(2) : nullptr;
+                if (zoraCatch != nullptr) {
+                    *animOut = zoraCatch;
+                }
+                break;
+            }
+            case VB_PLAYER_ANIM_SITE_ROLL: {
+                // z_player.c Player_SetupRoll: MHR moveset roll binding (moveId 4 = MHR_MOVE_ROLL).
+                LinkAnimationHeader* rollAnim = MhrMoveset_GetMoveAnim(4 /* MHR_MOVE_ROLL */);
+                if (rollAnim != nullptr) {
+                    *animOut = rollAnim;
+                }
+                break;
+            }
+            case VB_PLAYER_ANIM_SITE_DODGE_HOP: {
+                // z_player.c func_8083BCD0: MHR moveset dodge-hop binding keyed on
+                // controlStickDirection (passed through siteArg).
+                LinkAnimationHeader* hopAnim = MhrMoveset_GetMoveAnim(siteArg);
+                if (hopAnim != nullptr) {
+                    *animOut = hopAnim;
+                }
+                break;
+            }
+            case VB_PLAYER_ANIM_SITE_SHIELD_RAISE: {
+                // z_player.c shield raise: MHR moveset shield binding, loop phase 0.
+                LinkAnimationHeader* mhrShield = MhrMoveset_GetShieldAnim(0);
+                if (mhrShield != nullptr) {
+                    *animOut = mhrShield;
+                }
+                break;
+            }
+            case VB_PLAYER_ANIM_SITE_SHIELD_LOOP: {
+                // z_player.c Player_Action_80843188: MHR moveset shield binding, loop phase 1.
+                LinkAnimationHeader* shieldLoop = MhrMoveset_GetShieldAnim(1);
+                if (shieldLoop != nullptr) {
+                    *animOut = shieldLoop;
+                }
+                break;
+            }
+            case VB_PLAYER_ANIM_SITE_JUMPSLASH_RECOVERY: {
+                // z_player.c jump-slash recovery: gated on IsTransformed AND
+                // meleeWeaponAnimation in [FLIPSLASH_FINISH, JUMPSLASH_FINISH].
+                if (TransformMasks_IsTransformed() &&
+                    (player->meleeWeaponAnimation >= PLAYER_MWA_FLIPSLASH_FINISH) &&
+                    (player->meleeWeaponAnimation <= PLAYER_MWA_JUMPSLASH_FINISH)) {
+                    LinkAnimationHeader* formAnim = MmForm_GetJumpSlashAnim(player->meleeWeaponAnimation);
+                    if (formAnim != nullptr) {
+                        *animOut = formAnim;
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    });
+}
+
+static RegisterShipInitFunc initFuncPlayerAnimOverride(RegisterPlayerAnimOverrideNEI, {});

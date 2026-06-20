@@ -349,7 +349,9 @@ RANDO_ENUM_ITEM(RG_PENDING_3)
 // Extended Equipment
 RANDO_ENUM_ITEM(RG_EXT_CANE_OF_BYRNA)
 RANDO_ENUM_ITEM(RG_EXT_FOUR_SWORD)
-RANDO_ENUM_ITEM(RG_EXT_IRON_KNUCKLE_AXE)
+// Was RG_EXT_IRON_KNUCKLE_AXE — repurposed as the Hammer upgrade (Iron Knuckle's Axe).
+// Renamed in place to keep its enum value stable. No longer an ext-equipment sword.
+RANDO_ENUM_ITEM(RG_HAMMER_UPGRADE)
 RANDO_ENUM_ITEM(RG_EXT_DIVINE_SHIELD)
 RANDO_ENUM_ITEM(RG_EXT_SHEIKAH_SHIELD)
 RANDO_ENUM_ITEM(RG_EXT_SHIELD_OF_IKANA)
@@ -399,6 +401,11 @@ RANDO_ENUM_ITEM(RG_SW97_LIGHT_SPELL)
 RANDO_ENUM_ITEM(RG_SW97_SPIRIT_SPELL)
 // Mask of Scents: Bottle with Magic Mushroom (caught from Lost Woods spots)
 RANDO_ENUM_ITEM(RG_BOTTLE_WITH_MAGIC_MUSHROOM)
+// NEI Weapon Upgrades — each requires the base weapon to be owned (see weapon_upgrades.h).
+// (RG_HAMMER_UPGRADE lives above in the old ext-equipment slot to keep its value stable.)
+RANDO_ENUM_ITEM(RG_PROGRESSIVE_KOKIRI_SWORD) // 2 in pool: Razor then Gilded
+RANDO_ENUM_ITEM(RG_TRUE_MASTER_SWORD)
+RANDO_ENUM_ITEM(RG_GREAT_FAIRY_SWORD)
 RANDO_ENUM_ITEM(RG_MAX)
 RANDO_ENUM_END(RandomizerGet)
 

@@ -815,6 +815,7 @@ void SaveManager::InitFileNormal() {
     gSaveContext.ship.lanternFireType = 0;
     gSaveContext.ship.lanternCapturedTypes = 0;
     gSaveContext.ship.twilightUpgrade = 0;
+    gSaveContext.ship.weaponUpgrades = 0;
     gSaveContext.ship.clawshotModeActive = 0;
     gSaveContext.ship.galeBoomerangModeActive = 0;
     gSaveContext.ship.extEquipSword = 0;
@@ -2189,6 +2190,7 @@ void SaveManager::LoadBaseVersion4() {
     SaveManager::Instance->LoadData("lanternFireType", gSaveContext.ship.lanternFireType);
     SaveManager::Instance->LoadData("lanternCapturedTypes", gSaveContext.ship.lanternCapturedTypes);
     SaveManager::Instance->LoadData("twilightUpgrade", gSaveContext.ship.twilightUpgrade);
+    SaveManager::Instance->LoadData("weaponUpgrades", gSaveContext.ship.weaponUpgrades);
     SaveManager::Instance->LoadData("clawshotModeActive", gSaveContext.ship.clawshotModeActive);
     SaveManager::Instance->LoadData("galeBoomerangModeActive", gSaveContext.ship.galeBoomerangModeActive);
     SaveManager::Instance->LoadData("extEquipSword", gSaveContext.ship.extEquipSword);
@@ -2366,6 +2368,7 @@ void SaveManager::SaveBase(SaveContext* saveContext, int sectionID, bool fullSav
     SaveManager::Instance->SaveData("lanternFireType", saveContext->ship.lanternFireType);
     SaveManager::Instance->SaveData("lanternCapturedTypes", saveContext->ship.lanternCapturedTypes);
     SaveManager::Instance->SaveData("twilightUpgrade", saveContext->ship.twilightUpgrade);
+    SaveManager::Instance->SaveData("weaponUpgrades", saveContext->ship.weaponUpgrades);
     SaveManager::Instance->SaveData("clawshotModeActive", saveContext->ship.clawshotModeActive);
     SaveManager::Instance->SaveData("galeBoomerangModeActive", saveContext->ship.galeBoomerangModeActive);
     SaveManager::Instance->SaveData("extEquipSword", saveContext->ship.extEquipSword);

@@ -70,7 +70,11 @@ void Randomizer_DrawMinishCap(PlayState* play, GetItemEntry* getItemEntry);
 // Extended Equipment Get-Item 3D Models
 void Randomizer_DrawExtCaneOfByrna(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawExtFourSword(PlayState* play, GetItemEntry* getItemEntry);
-void Randomizer_DrawExtIronKnuckleAxe(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawHammerUpgrade(PlayState* play, GetItemEntry* getItemEntry);
+// NEI Weapon Upgrades
+void Randomizer_DrawProgressiveKokiriSword(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawTrueMasterSword(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawGreatFairySword(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawExtDivineShield(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawExtSheikahShield(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawExtShieldOfIkana(PlayState* play, GetItemEntry* getItemEntry);

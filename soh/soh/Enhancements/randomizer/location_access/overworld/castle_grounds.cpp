@@ -192,7 +192,7 @@ void RegionTable_Init_CastleGrounds() {
         EVENT_ACCESS(LOGIC_BUILD_RAINBOW_BRIDGE, logic->CanBuildRainbowBridge()),
     }, {
         //Locations
-        LOCATION(RC_OGC_GS,               logic->HookshotOrBoomerang() || ((logic->CanJumpslashExceptHammer() || logic->CanUseProjectile() || (logic->CanShield() && logic->CanUse(RG_MEGATON_HAMMER)) || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD))) && ctx->GetTrickOption(RT_VOIDOUT_COLLECTION))) ,
+        LOCATION(RC_OGC_GS,               logic->HookshotOrBoomerang() || ((logic->CanJumpslashExceptHammer() || logic->CanUseProjectile() || (logic->CanShield() && logic->CanUse(RG_MEGATON_HAMMER)) || (logic->HasMagicFire())) && ctx->GetTrickOption(RT_VOIDOUT_COLLECTION))) ,
         LOCATION(RC_OGC_BRONZE_BOULDER_1, logic->CanBreakBronzeBoulder()),
         LOCATION(RC_OGC_BRONZE_BOULDER_2, logic->CanBreakBronzeBoulder()),
         LOCATION(RC_OGC_BRONZE_BOULDER_3, logic->CanBreakBronzeBoulder()),

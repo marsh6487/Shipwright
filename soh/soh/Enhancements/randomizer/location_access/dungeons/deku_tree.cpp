@@ -383,7 +383,7 @@ void RegionTable_Init_DekuTree() {
     areaTable[RR_DEKU_TREE_MQ_BASEMENT_WATER_ROOM_FRONT] = Region("Deku Tree MQ Basement Water Room Front", SCENE_DEKU_TREE, {
         //Events
         //It's possible to get this with bow if you have move while in first person and one-point skips on, noticeably harder and jankier as child, but that's a trick
-        EVENT_ACCESS(LOGIC_DEKU_TREE_MQ_WATER_ROOM_TORCHES, (logic->CanUse(RG_FIRE_ARROWS) || logic->CanUse(RG_SW97_FIRE_PROJECTILE) || logic->CanUse(RG_FIRE_ROD)) || (logic->CanUse(RG_STICKS) && (ctx->GetTrickOption(RT_DEKU_MQ_LOG) || (logic->IsChild && logic->CanShield())))),
+        EVENT_ACCESS(LOGIC_DEKU_TREE_MQ_WATER_ROOM_TORCHES, (logic->HasFireProjectile()) || (logic->CanUse(RG_STICKS) && (ctx->GetTrickOption(RT_DEKU_MQ_LOG) || (logic->IsChild && logic->CanShield())))),
     }, {
         //Locations
         LOCATION(RC_DEKU_TREE_MQ_BEFORE_SPINNING_LOG_CHEST,           logic->HasItem(RG_OPEN_CHEST)),

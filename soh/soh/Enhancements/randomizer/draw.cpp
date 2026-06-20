@@ -61,8 +61,6 @@ extern "C" {
 #include "mods/items/objects/spinner_giveDL/model.inc.c"
 #include "mods/items/objects/beetle_giveDL/header.h"
 #include "mods/items/objects/beetle_giveDL/model.inc.c"
-#include "mods/items/objects/somaria_cane_DL/header.h"
-#include "mods/items/objects/somaria_cane_DL/model.inc.c"
 #include "mods/items/objects/mogma_mittsDL/header.h"
 #include "mods/items/objects/mogma_mittsDL/model.inc.c"
 #include "mods/items/objects/magic_spell_giveDL/header.h"
@@ -1553,46 +1551,9 @@ Gfx gRandoBeetleDL[] = {
     gsSPDisplayList(g_beetle_dl),
     gsSPEndDisplayList(),
 };
-Gfx gRandoSomariaCaneDL[] = {
-    gsSPDisplayList(g_somaria_cane_give_dl),
-    gsSPEndDisplayList(),
-};
-
-// Blue Byrna cane materials for GI draw
-static Gfx gfx_byrna_gi_mat_body[] = {
-    gsSPLoadGeometryMode(G_SHADE | G_FOG | G_CULL_BACK | G_ZBUFFER | G_SHADING_SMOOTH | G_LIGHTING),
-    gsDPPipeSync(),
-    gsDPSetCombineLERP(0, 0, 0, SHADE, 0, 0, 0, 1, COMBINED, 0, PRIMITIVE, 0, 0, 0, 0, COMBINED),
-    gsSPSetOtherMode(G_SETOTHERMODE_H, 4, 20,
-                     G_TD_CLAMP | G_CYC_2CYCLE | G_AD_NOISE | G_CD_MAGICSQ | G_TP_PERSP | G_TL_TILE | G_TF_BILERP |
-                         G_CK_NONE | G_PM_NPRIMITIVE | G_TT_NONE | G_TC_FILT),
-    gsSPSetOtherMode(G_SETOTHERMODE_L, 0, 32, G_RM_FOG_SHADE_A | G_AC_NONE | G_ZS_PIXEL | G_RM_AA_ZB_OPA_SURF2),
-    gsSPTexture(65535, 65535, 0, 0, 1),
-    gsDPSetPrimColor(0, 0, 41, 80, 200, 255),
-    gsSPEndDisplayList(),
-};
-static Gfx gfx_byrna_gi_mat_color[] = {
-    gsSPLoadGeometryMode(G_SHADE | G_FOG | G_CULL_BACK | G_ZBUFFER | G_SHADING_SMOOTH | G_LIGHTING),
-    gsDPPipeSync(),
-    gsDPSetCombineLERP(0, 0, 0, SHADE, 0, 0, 0, 1, COMBINED, 0, PRIMITIVE, 0, 0, 0, 0, COMBINED),
-    gsSPSetOtherMode(G_SETOTHERMODE_H, 4, 20,
-                     G_TD_CLAMP | G_CYC_2CYCLE | G_AD_NOISE | G_CD_MAGICSQ | G_TP_PERSP | G_TL_TILE | G_TF_BILERP |
-                         G_CK_NONE | G_PM_NPRIMITIVE | G_TT_NONE | G_TC_FILT),
-    gsSPSetOtherMode(G_SETOTHERMODE_L, 0, 32, G_RM_FOG_SHADE_A | G_AC_NONE | G_ZS_PIXEL | G_RM_AA_ZB_OPA_SURF2),
-    gsSPTexture(65535, 65535, 0, 0, 1),
-    gsDPSetPrimColor(0, 0, 80, 140, 255, 255),
-    gsSPEndDisplayList(),
-};
-Gfx gRandoByrnaCaneGiveDL[] = {
-    gsDPPipeSync(),
-    gsSPClearGeometryMode(G_CULL_BACK | G_FOG | G_TEXTURE_GEN | G_TEXTURE_GEN_LINEAR),
-    gsSPSetGeometryMode(G_ZBUFFER | G_SHADE | G_SHADING_SMOOTH | G_LIGHTING),
-    gsSPDisplayList(gfx_byrna_gi_mat_body),
-    gsSPDisplayList(gfx_somaria_cane_tri_give_0),
-    gsSPDisplayList(gfx_byrna_gi_mat_color),
-    gsSPDisplayList(gfx_somaria_cane_tri_give_1),
-    gsSPEndDisplayList(),
-};
+// Cane of Somaria / Cane of Byrna GetItem models now live in soh.o2r
+// (objects/object_somaria/g_somaria_cane_give_dl + g_byrna_cane_give_dl) and are
+// drawn directly via (Gfx*)gSomariaCaneGiveDL / (Gfx*)gByrnaCaneGiveDL.
 Gfx gRandoMogmamittsDL[] = {
     gsSPDisplayList(gMogmaMittsGiveDL),
     gsSPEndDisplayList(),
@@ -1659,6 +1620,33 @@ static void DrawCustomItemDiamond(PlayState* play, Gfx* displayList, f32 scale) 
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPDisplayList(POLY_OPA_DISP++, displayList);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// Helper: Generic rotating renderer with a grayscale tint (Opaque). Mirrors DrawCustomItemDiamond
+// but wraps the DL(s) in a gSPGrayscale tint pass. Pass scale <= 0 to skip Matrix_Scale entirely,
+// and dl2 = NULL to draw a single DL.
+static void DrawCustomItemDiamondTint(PlayState* play, Gfx* dl1, Gfx* dl2, f32 scale, u8 r, u8 g, u8 b) {
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    if (scale > 0.0f) {
+        Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
+    }
+
+    s16 rotation = play->gameplayFrames * 0x2;
+    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPGrayscale(POLY_OPA_DISP++, true);
+    gDPSetGrayscaleColor(POLY_OPA_DISP++, r, g, b, 255);
+    gSPDisplayList(POLY_OPA_DISP++, dl1);
+    if (dl2 != NULL) {
+        gSPDisplayList(POLY_OPA_DISP++, dl2);
+    }
+    gSPGrayscale(POLY_OPA_DISP++, false);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -1731,7 +1719,7 @@ void Randomizer_DrawBallAndChain(PlayState* play, GetItemEntry* getItemEntry) {
 }
 
 void Randomizer_DrawCaneOfSomaria(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, gRandoSomariaCaneDL, 0.25f);
+    DrawCustomItemDiamond(play, (Gfx*)gSomariaCaneGiveDL, 0.25f);
 }
 
 void Randomizer_DrawDominionRod(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1799,61 +1787,47 @@ void Randomizer_DrawMinishCap(PlayState* play, GetItemEntry* getItemEntry) {
 // =============================================================================
 
 void Randomizer_DrawExtCaneOfByrna(PlayState* play, GetItemEntry* getItemEntry) {
-    // Blue Byrna cane (same mesh as Somaria, blue materials baked in DL)
-    DrawCustomItemDiamond(play, gRandoByrnaCaneGiveDL, 0.25f);
+    // Blue Byrna cane (same mesh as Somaria, blue materials) — from soh.o2r.
+    DrawCustomItemDiamond(play, (Gfx*)gByrnaCaneGiveDL, 0.25f);
 }
 
 void Randomizer_DrawExtFourSword(PlayState* play, GetItemEntry* getItemEntry) {
     // Kokiri Sword model with green tint (Four Sword = green Zelda sword)
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_Scale(0.55f, 0.55f, 0.55f, MTXMODE_APPLY);
-    s16 rotation = play->gameplayFrames * 0x2;
-    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPGrayscale(POLY_OPA_DISP++, true);
-    gDPSetGrayscaleColor(POLY_OPA_DISP++, 0, 180, 80, 255);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiKokiriSwordDL);
-    gSPGrayscale(POLY_OPA_DISP++, false);
-    CLOSE_DISPS(play->state.gfxCtx);
+    DrawCustomItemDiamondTint(play, (Gfx*)gGiKokiriSwordDL, NULL, 0.55f, 0, 180, 80);
 }
 
-void Randomizer_DrawExtIronKnuckleAxe(PlayState* play, GetItemEntry* getItemEntry) {
-    // IK Axe model (from equip_ikaxe.c) — inline DL is in actor-space scale, native ~1/50×
+void Randomizer_DrawHammerUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
+    // Hammer upgrade = Iron Knuckle's Axe model (from equip_ikaxe.c) — inline DL is in
+    // actor-space scale, native ~1/50×
     DrawCustomItemDiamond(play, gIKAxeInlineDL, 0.02f);
+}
+
+// NEI Weapon Upgrades — placeholder get-item models (Kokiri Sword mesh recolored).
+// Behavior for these sword upgrades is plumbing-only for now; the models are stand-ins
+// until dedicated meshes are added.
+void Randomizer_DrawProgressiveKokiriSword(PlayState* play, GetItemEntry* getItemEntry) {
+    // Razor/Gilded — silvery-gold blade
+    DrawCustomItemDiamondTint(play, (Gfx*)gGiKokiriSwordDL, NULL, 0.55f, 230, 200, 120);
+}
+
+void Randomizer_DrawTrueMasterSword(PlayState* play, GetItemEntry* getItemEntry) {
+    // True Master Sword — bright sacred blue
+    DrawCustomItemDiamondTint(play, (Gfx*)gGiKokiriSwordDL, NULL, 0.6f, 120, 180, 255);
+}
+
+void Randomizer_DrawGreatFairySword(PlayState* play, GetItemEntry* getItemEntry) {
+    // Great Fairy's Sword — fairy pink/violet
+    DrawCustomItemDiamondTint(play, (Gfx*)gGiKokiriSwordDL, NULL, 0.6f, 255, 130, 220);
 }
 
 void Randomizer_DrawExtDivineShield(PlayState* play, GetItemEntry* getItemEntry) {
     // Hylian Shield model with golden tint (Divine Shield = holy gold variant)
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_Scale(0.5f, 0.5f, 0.5f, MTXMODE_APPLY);
-    s16 rotation = play->gameplayFrames * 0x2;
-    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPGrayscale(POLY_OPA_DISP++, true);
-    gDPSetGrayscaleColor(POLY_OPA_DISP++, 255, 215, 0, 255);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiHylianShieldDL);
-    gSPGrayscale(POLY_OPA_DISP++, false);
-    CLOSE_DISPS(play->state.gfxCtx);
+    DrawCustomItemDiamondTint(play, (Gfx*)gGiHylianShieldDL, NULL, 0.5f, 255, 215, 0);
 }
 
 void Randomizer_DrawExtSheikahShield(PlayState* play, GetItemEntry* getItemEntry) {
     // Hylian Shield model with Sheikah teal/silver tint (Kite Shield)
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_Scale(0.5f, 0.5f, 0.5f, MTXMODE_APPLY);
-    s16 rotation = play->gameplayFrames * 0x2;
-    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPGrayscale(POLY_OPA_DISP++, true);
-    gDPSetGrayscaleColor(POLY_OPA_DISP++, 100, 200, 200, 255); // teal/silver Sheikah palette
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiHylianShieldDL);
-    gSPGrayscale(POLY_OPA_DISP++, false);
-    CLOSE_DISPS(play->state.gfxCtx);
+    DrawCustomItemDiamondTint(play, (Gfx*)gGiHylianShieldDL, NULL, 0.5f, 100, 200, 200); // teal/silver Sheikah palette
 }
 
 extern void* TransformMasks_LoadMmDL(const char* path);
@@ -1890,18 +1864,7 @@ void Randomizer_DrawExtShieldOfIkana(PlayState* play, GetItemEntry* getItemEntry
 
 void Randomizer_DrawExtMagicCape(PlayState* play, GetItemEntry* getItemEntry) {
     // Tunic model with red/purple tint (Magic Cape = LTTP magic cape)
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    s16 rotation = play->gameplayFrames * 0x2;
-    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPGrayscale(POLY_OPA_DISP++, true);
-    gDPSetGrayscaleColor(POLY_OPA_DISP++, 180, 40, 120, 255);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiTunicCollarDL);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiTunicDL);
-    gSPGrayscale(POLY_OPA_DISP++, false);
-    CLOSE_DISPS(play->state.gfxCtx);
+    DrawCustomItemDiamondTint(play, (Gfx*)gGiTunicCollarDL, (Gfx*)gGiTunicDL, -1.0f, 180, 40, 120);
 }
 
 void Randomizer_DrawExtSpiritBreastplate(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1942,34 +1905,12 @@ void Randomizer_DrawExtSpiritBreastplate(PlayState* play, GetItemEntry* getItemE
 
 void Randomizer_DrawExtChampionsTunic(PlayState* play, GetItemEntry* getItemEntry) {
     // Tunic model with BotW champion blue
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    s16 rotation = play->gameplayFrames * 0x2;
-    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPGrayscale(POLY_OPA_DISP++, true);
-    gDPSetGrayscaleColor(POLY_OPA_DISP++, 0, 120, 215, 255);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiTunicCollarDL);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiTunicDL);
-    gSPGrayscale(POLY_OPA_DISP++, false);
-    CLOSE_DISPS(play->state.gfxCtx);
+    DrawCustomItemDiamondTint(play, (Gfx*)gGiTunicCollarDL, (Gfx*)gGiTunicDL, -1.0f, 0, 120, 215);
 }
 
 void Randomizer_DrawExtPegasusAnklet(PlayState* play, GetItemEntry* getItemEntry) {
     // Hover Boots model with red tint (Pegasus = red winged boots)
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_Scale(0.45f, 0.45f, 0.45f, MTXMODE_APPLY);
-    s16 rotation = play->gameplayFrames * 0x2;
-    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPGrayscale(POLY_OPA_DISP++, true);
-    gDPSetGrayscaleColor(POLY_OPA_DISP++, 220, 40, 40, 255);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiHoverBootsDL);
-    gSPGrayscale(POLY_OPA_DISP++, false);
-    CLOSE_DISPS(play->state.gfxCtx);
+    DrawCustomItemDiamondTint(play, (Gfx*)gGiHoverBootsDL, NULL, 0.45f, 220, 40, 40);
 }
 
 void Randomizer_DrawExtPendantOfMemories(PlayState* play, GetItemEntry* getItemEntry) {

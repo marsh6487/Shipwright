@@ -875,6 +875,13 @@ void Settings::CreateOptionDescriptions() {
     mOptionDescriptions[RSK_EXT_EQUIPMENT] =
         "Adds 12 extended equipment pieces (3 swords, 3 shields, 3 tunics, 3 boots) to the item pool.\n"
         "Press L on the equipment page to toggle between vanilla and extended equipment.";
+    mOptionDescriptions[RSK_NEI_WEAPON_UPGRADES] =
+        "Adds NEI weapon upgrades to the item pool. Each upgrade requires the base weapon to be owned:\n"
+        "  - Hammer Upgrade (Iron Knuckle's Axe): double damage/reach + tomahawk throw\n"
+        "  - Kokiri Sword Upgrade (x2): Razor Sword, then Gilded Sword\n"
+        "  - True Master Sword (Master Sword)\n"
+        "  - Great Fairy's Sword (Biggoron Sword)\n"
+        "Only the Hammer upgrade has gameplay behavior for now.";
     mOptionDescriptions[RSK_SLINGBOW_BREAK_BEEHIVES] =
         "Allows Slingshot and Bow to break beehives when Beehive Shuffle is turned on.";
     mOptionDescriptions[RSK_LOGIC_RULES] =

@@ -211,6 +211,16 @@ void* MmAssets_LoadHookshotReticleDL(void);
 void* MmAssets_LoadHookshotTipDL(void);
 
 /**
+ * MM-display-list-or-fallback selector. Returns mmDL when it is non-NULL,
+ * otherwise vanillaDL. Collapses the repeated
+ *   if (mm != NULL) { dl = mm; }
+ * shape used in the MM-asset draw paths (e.g. the Clawshot tip/chain swap in
+ * z_arms_hook.c). Pure; no loading or drawing — behavior identical to the
+ * inline if-guard it replaces.
+ */
+Gfx* MmDL_Or(Gfx* vanillaDL, Gfx* mmDL);
+
+/**
  * Load form-specific B-button icon (mask icon for each transformation)
  * @param form MM_PLAYER_FORM_* enum (0=FD, 1=Goron, 2=Zora, 3=Deku)
  * @return Pointer to 32x32 RGBA icon texture, or NULL if not found

@@ -192,6 +192,12 @@ u8 TransformMasks_HasSkeleton(void);
 // Called from Player_PlayVoiceSfx when transformed, instead of suppressing.
 void TransformMasks_PlayMmVoice(u16 ootVoiceSfxId, Vec3f* pos);
 
+// Like TransformMasks_PlayMmVoice but reports whether a form voice played.
+// Returns 1 if the active form has its own voice bank (the OOT voice must be
+// suppressed); 0 if the caller should fall back to Link's OOT voice. Pass the
+// OOT *base* (adult) voice id — the _KID ids at 0x6820+ are out of range here.
+u8 TransformMasks_TryPlayMmVoice(u16 ootVoiceSfxId, Vec3f* pos);
+
 // Redirect OOT step/walk SFX to MM form-specific sample (Deku/Zora/Goron).
 // Returns 1 if the MM SFX was played and the OOT step should be skipped;
 // returns 0 for FD/Garo/Gerudo/Human so OOT handles it normally. Called from

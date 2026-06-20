@@ -1959,12 +1959,19 @@ void RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>
     // Exception: when the menu is open the consumer hides the MM overlay so OoT shows through as
     // the backdrop, so we must render OoT then (otherwise it'd be black behind the menu).
     // (Standalone: IsThisGameActive() is always true, so this never triggers.)
+    //
+    // ONLY safe where the PiP consumer composites MM OVER the empty scene (Windows/D3D11).
+    // On platforms without PiP (POSIX, two-window mode) this would leave Ship's window BLACK
+    // when MM is active, so there we keep rendering OoT (its frozen frame) — both windows show,
+    // nothing goes black, and the flow is intact. Extend this guard when POSIX PiP lands.
+#ifdef _WIN32
     static Gfx sFleetEmptyDL[] = { gsSPEndDisplayList() };
     auto fleetGui = wnd->GetGui();
     bool fleetMenuVisible = fleetGui != nullptr && fleetGui->GetMenuOrMenubarVisible();
     if (!FleetShipCombo_IsThisGameActive() && !fleetMenuVisible) {
         Commands = sFleetEmptyDL;
     }
+#endif
 
     auto intp = wnd->GetInterpreterWeak().lock().get();
     intp->mInterpolationIndex = 0;

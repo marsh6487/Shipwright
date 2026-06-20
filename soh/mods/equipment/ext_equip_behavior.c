@@ -37,7 +37,10 @@ static void ExtEquip_Behavior_Sword2(Player* player, PlayState* play) {
 }
 
 static void ExtEquip_Behavior_Sword3(Player* player, PlayState* play) {
-    IKAxe_Behavior(player, play);
+    // Ext sword slot 3 is unused: the Iron Knuckle's Axe is now the Hammer upgrade,
+    // driven from ExtEquip_UpdateBehavior via WeaponUpgrade_HasHammerAxe().
+    (void)player;
+    (void)play;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,10 +126,6 @@ static void ExtEquip_DispatchBehavior(Player* player, PlayState* play) {
     if (gExtEquipState.currentExtSword != 1) {
         Byrna_Cleanup();
     }
-    // IK Axe cleanup: restore original sword when IK Axe is no longer active
-    if (gExtEquipState.currentExtSword != 3) {
-        IKAxe_Cleanup();
-    }
     // Pegasus cleanup: disable collider when Pegasus boots are no longer active
     if (gExtEquipState.currentExtBoots != 1) {
         Pegasus_Cleanup();
@@ -184,10 +183,6 @@ static void ExtEquip_DrawDispatch(Player* player, PlayState* play) {
     // Magic Cape: Ganondorf cloth physics cape
     if (gExtEquipState.currentExtTunic == 1) {
         MagicCape_Draw(player, play);
-    }
-    // IK Axe: tomahawk aim reticle
-    if (gExtEquipState.currentExtSword == 3) {
-        IKAxe_DrawReticle(player, play);
     }
     // Four Sword: ghost clone Links
     if (gExtEquipState.currentExtSword == 2) {

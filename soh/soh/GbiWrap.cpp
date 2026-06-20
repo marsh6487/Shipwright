@@ -1,4 +1,5 @@
 #include "z64.h"
+#include "soh/NEI/nei_exports.h" // PakLoader_GetDLOverride (centralized NEI C-linkage export)
 
 // OTRTODO - this is awful
 
@@ -63,8 +64,6 @@ extern "C" void gSPSegmentLoadRes(void* value, int segNum, uintptr_t target) {
 
     __gSPSegment(value, segNum, target);
 }
-
-extern "C" Gfx* PakLoader_GetDLOverride(const char* otrPath);
 
 extern "C" void gSPDisplayList(Gfx* pkt, Gfx* dl) {
     char* imgData = (char*)dl;

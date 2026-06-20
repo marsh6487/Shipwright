@@ -3036,16 +3036,7 @@ void BossSst_DrawHead(Actor* thisx, PlayState* play) {
     // FD / Pika Gigantamax electric glow on the head. The 11 JntSph collider spheres were
     // refreshed during the skeleton draw (Collider_UpdateSpheres in BossSst_PostHeadDraw)
     // and blanket the head. No-op when the spark timer is 0 (not recently hit).
-    {
-        Vec3f limbs[11];
-        s32 k;
-        for (k = 0; k < 11; k++) {
-            limbs[k].x = this->colliderJntSph.elements[k].dim.worldSphere.center.x;
-            limbs[k].y = this->colliderJntSph.elements[k].dim.worldSphere.center.y;
-            limbs[k].z = this->colliderJntSph.elements[k].dim.worldSphere.center.z;
-        }
-        BossSuperDamage_DrawElectricSparks(&this->actor, play, limbs, 11, 1.4f);
-    }
+    BossSuperDamage_DrawGlowFromSpheres(&this->actor, play, &this->colliderJntSph, 11, 1.4f);
 }
 
 void BossSst_SpawnHeadShadow(BossSst* this) {

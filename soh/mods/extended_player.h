@@ -62,10 +62,15 @@ extern "C" {
 // ============================================================================
 // FUNCTION POINTER TYPES
 // ============================================================================
+// Guard shared with extended_inventory.h (NeiItem) so neither header redefines
+// these typedefs when both are included in one TU. Skijer's NEI
+#ifndef NEI_ITEM_ACTION_FUNC_TYPES
+#define NEI_ITEM_ACTION_FUNC_TYPES
 struct Player;
 struct PlayState;
 typedef int32_t (*ItemActionUpdateFunc)(struct Player* player, struct PlayState* play);
 typedef void (*ItemActionInitFunc)(struct PlayState* play, struct Player* player);
+#endif
 
 // ============================================================================
 // HELPER FUNCTIONS - Use these instead of directly accessing arrays

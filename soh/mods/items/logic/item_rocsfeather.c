@@ -22,6 +22,7 @@
 #include "../custom_items.h"
 #include "../helpers/equip_helper.h"
 #include "../helpers/fx_helper.h"
+#include "../helpers/item_voice.h"
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
@@ -80,7 +81,7 @@ void Handle_RocsFeather(Player* p, PlayState* play) {
     if (isOnGround || inWater) {
         f32 jumpVel = inWater ? ROCSFEATHER_WATER_JUMP_VELOCITY : ROCSFEATHER_JUMP_VELOCITY;
         p->actor.velocity.y = jumpVel;
-        Player_PlaySfx(p, LINK_IS_ADULT ? ROCSFEATHER_SOUND_JUMP_ADULT : ROCSFEATHER_SOUND_JUMP_CHILD);
+        ItemVoice_Play(p, ROCSFEATHER_SOUND_JUMP_ADULT, ROCSFEATHER_SOUND_JUMP_CHILD);
         FX_SpawnSparkles(p, play);
 
         // Schedule MM animation after 2 frame delay (let OOT finish its animation change)

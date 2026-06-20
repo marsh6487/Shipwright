@@ -3099,6 +3099,29 @@ typedef enum {
     // - None
     VB_TEMP_B_RESTORE_SWORDLESS,
 
+    // Hook fired as the very FIRST statement of `Player_Draw`, before any
+    // vanilla draw setup runs. NEI uses it to render an entirely different
+    // model in place of Link and skip the whole vanilla `Player_Draw` body
+    // (SM64 Mario, Harpoon Prop Hunt prop, fully-loaded MM transformation
+    // form). Subscribers return `false` to suppress the entire vanilla
+    // `Player_Draw` (the call site does `if (!Should(...)) return;`), or
+    // `true` (default) to fall through into the vanilla draw — used for
+    // additive side-effects that must still let Link draw (Dragon Scale swim
+    // barrier, MM pre-flash overlay, MM first-person aim).
+    //
+    // This is distinct from `VB_PLAYER_DRAW`, which fires much deeper (inside
+    // `Player_DrawImpl`, after eye/mouth/tunic/gauntlet setup) and only
+    // suppresses the skeleton DL — it cannot early-return out of `Player_Draw`.
+    //
+    // #### `result`
+    // ```c
+    // true   // run the vanilla Player_Draw body
+    // ```
+    // #### `args`
+    // - `*PlayState` (play)
+    // - `*Player`     (this)
+    VB_PLAYER_DRAW_BEGIN,
+
     // Hook fired around `SkelAnime_DrawFlexLod` inside `Player_DrawImpl`.
     // Subscribers may render their own visual in place of the vanilla Link
     // skeleton (e.g. Harpoon's Prop Hunt hider disguise) by returning
@@ -3112,6 +3135,38 @@ typedef enum {
     // - `*PlayState` (play)
     // - `*Player`     (this)
     VB_PLAYER_DRAW,
+
+    // Positioned hook fired at each NEI player ANIM-OVERRIDE site in
+    // `z_player.c`. It sits at the EXACT vanilla point where an animation is
+    // about to be played, after the local `anim` variable has been set to the
+    // vanilla animation. A subscriber may overwrite `*animOut` with a
+    // form/moveset-specific replacement (MM transformation forms, MHR moveset
+    // bindings); the vanilla code then plays whatever `*animOut` points to.
+    //
+    // With NO subscriber registered, `GameInteractor_Should` returns the
+    // default `result` (true) and leaves `*animOut` untouched, so the vanilla
+    // animation is played unchanged — behavior is byte-for-byte identical to
+    // stock OOT. The boolean return value is ignored by the call sites; the
+    // override is communicated solely through `*animOut`.
+    //
+    // `siteId` selects the call site (see `VBPlayerAnimOverrideSite` in
+    // `soh/Enhancements/game-interactor/vanilla-behavior/PlayerAnimOverride.h`).
+    // `siteArg` carries site-specific context the handler needs that is not
+    // reachable from `player` (e.g. the dodge-hop control-stick direction).
+    // Each site's original transform/range gating is reproduced inside the
+    // handler keyed on `siteId`, so a registered subscriber reproduces the
+    // exact same override decision the inline code made.
+    //
+    // #### `result`
+    // ```c
+    // true   // play the vanilla animation already stored in *animOut
+    // ```
+    // #### `args`
+    // - `s32` siteId  (VBPlayerAnimOverrideSite)
+    // - `s32` siteArg (site-specific context; 0 when unused)
+    // - `LinkAnimationHeader**` animOut (in: vanilla anim; write to *animOut to override)
+    // - `*Player` (this)
+    VB_PLAYER_ANIM_OVERRIDE,
 
     // Hook fired at the end of `Actor_Draw` for every actor. Subscribers
     // can use it to overlay extra visuals on an actor (e.g. Harpoon's

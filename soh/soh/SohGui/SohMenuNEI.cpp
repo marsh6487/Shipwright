@@ -35,6 +35,18 @@ extern unsigned char TwilightUpgrade_HasGaleBoomerang(void);
 void TwilightUpgrade_SetClawshot(unsigned char on);
 void TwilightUpgrade_SetBombArrows(unsigned char on);
 void TwilightUpgrade_SetGaleBoomerang(unsigned char on);
+// NEI Weapon Upgrades (mods/items/logic/weapon_upgrades.c)
+extern unsigned char WeaponUpgrade_HasHammerAxe(void);
+extern unsigned char WeaponUpgrade_HasRazor(void);
+extern unsigned char WeaponUpgrade_HasGilded(void);
+extern unsigned char WeaponUpgrade_HasTrueMaster(void);
+extern unsigned char WeaponUpgrade_HasGreatFairy(void);
+void WeaponUpgrade_SetHammerAxe(unsigned char on);
+void WeaponUpgrade_SetRazor(unsigned char on);
+void WeaponUpgrade_SetGilded(unsigned char on);
+void WeaponUpgrade_SetTrueMaster(unsigned char on);
+void WeaponUpgrade_SetGreatFairy(unsigned char on);
+void WeaponUpgrade_GrantAll(void);
 void PikachuControls_OpenWindow(void); // pikachu_hud.cpp — Pikachu mode bindings window
 extern PlayState* gPlayState;
 u8 GerudoForm_IsActive(void); // gerudo_form.cpp
@@ -561,17 +573,17 @@ extern "C" LinkAnimationHeader* MhrMoveset_GetMoveAnim(s32 moveId) {
 // Widgets are grouped by SIDEBAR (not file order), so each block below just
 // (re)sets path.sidebarName to land in the right tab.
 // =============================================================================
-void SohMenu::AddMenuNEI() {
+void RegisterNEIMenu() {
     WidgetPath path = { "Skijer's NEI", "Masks", SECTION_COLUMN_1 };
 
-    AddMenuEntry("Skijer's NEI", CVAR_SETTING("Menu.SkijerNEISidebarSection"));
-    AddSidebarEntry("Skijer's NEI", "Masks", 1);
-    AddSidebarEntry("Skijer's NEI", "Spells", 1);
-    AddSidebarEntry("Skijer's NEI", "Pak Loader", 3);
-    AddSidebarEntry("Skijer's NEI", "Custom Items", 1);
-    AddSidebarEntry("Skijer's NEI", "Randomizer", 1);
-    AddSidebarEntry("Skijer's NEI", "Controls", 1);
-    AddSidebarEntry("Skijer's NEI", "MHR Anims", 1);
+    mSohMenu->AddMenuEntry("Skijer's NEI", CVAR_SETTING("Menu.SkijerNEISidebarSection"));
+    mSohMenu->AddSidebarEntry("Skijer's NEI", "Masks", 1);
+    mSohMenu->AddSidebarEntry("Skijer's NEI", "Spells", 1);
+    mSohMenu->AddSidebarEntry("Skijer's NEI", "Pak Loader", 3);
+    mSohMenu->AddSidebarEntry("Skijer's NEI", "Custom Items", 1);
+    mSohMenu->AddSidebarEntry("Skijer's NEI", "Randomizer", 1);
+    mSohMenu->AddSidebarEntry("Skijer's NEI", "Controls", 1);
+    mSohMenu->AddSidebarEntry("Skijer's NEI", "MHR Anims", 1);
     path.sectionName = "Skijer's NEI";
 
     // ===================== Tab: MHR Anims =====================
@@ -579,16 +591,16 @@ void SohMenu::AddMenuNEI() {
     // converted animations. See MhrAnimNotesWidget above.
     path.sidebarName = "MHR Anims";
     path.column = SECTION_COLUMN_1;
-    AddWidget(path, "MHR Animation Notes & Bindings", WIDGET_CUSTOM)
+    mSohMenu->AddWidget(path, "MHR Animation Notes & Bindings", WIDGET_CUSTOM)
         .CustomFunction(MhrAnimNotesWidget)
         .HideInSearch(true);
 
     // ===================== Tab: Custom Items =====================
     path.sidebarName = "Custom Items";
     path.column = SECTION_COLUMN_1;
-    AddWidget(path, "Custom Items", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Custom Items", WIDGET_SEPARATOR_TEXT);
 
-    AddWidget(path, "Enable Extra Equipment", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Enable Extra Equipment", WIDGET_CVAR_CHECKBOX)
         .CVar("gCheats.ExtEquip.Enabled")
         .RaceDisable(false)
         .Options(CheckboxOptions().DefaultValue(true).Tooltip(
@@ -598,7 +610,7 @@ void SohMenu::AddMenuNEI() {
             "whether they are shuffled into the seed.)"));
 
     // Roc's Items MM Animations - requires mm.o2r
-    AddWidget(path, "Roc's Items Use MM Animations", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Roc's Items Use MM Animations", WIDGET_CVAR_CHECKBOX)
         .CVar("gEnhancements.RocsItemsUseMmAnims")
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
@@ -613,7 +625,7 @@ void SohMenu::AddMenuNEI() {
                                            "Roc's Cape: Backflip on ground jump, roll jump on double jump.\n\n"
                                            "REQUIRES: mm.o2r from 2Ship2Harkinian Keiichi Alfa 4.0.0"));
 
-    AddWidget(path, "Invert Roc's Items Animations", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Invert Roc's Items Animations", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.RocsItems.InvertAnims")
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
@@ -631,7 +643,7 @@ void SohMenu::AddMenuNEI() {
     // NEI Aim Cycle — extends the vanilla BowArrowCycle cheat with L button
     // (previous direction), SW97 elemental arrow cycling, slingshot support,
     // and in-game Gust Jar element switching while in first-person aim.
-    AddWidget(path, "NEI Aim Cycle (R/L while aiming)", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "NEI Aim Cycle (R/L while aiming)", WIDGET_CVAR_CHECKBOX)
         .CVar("gEnhancements.NeiAimCycle")
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip(
@@ -652,10 +664,10 @@ void SohMenu::AddMenuNEI() {
     // which sub-upgrades are unlocked on this save (eventually shuffled by
     // rando). State is read live from the save each frame via PreFunc → the
     // shadow bool, and writes go through TwilightUpgrade_Set* on Callback.
-    AddWidget(path, "Twilight Upgrade Bits", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Twilight Upgrade Bits", WIDGET_SEPARATOR_TEXT);
 
     static bool sTwilightClawshotShadow = false;
-    AddWidget(path, "Clawshot", WIDGET_CHECKBOX)
+    mSohMenu->AddWidget(path, "Clawshot", WIDGET_CHECKBOX)
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
             sTwilightClawshotShadow = TwilightUpgrade_HasClawshot() != 0;
@@ -670,7 +682,7 @@ void SohMenu::AddMenuNEI() {
             "reverse-pull behaviour (enemy → Link, pin to grappling point)."));
 
     static bool sTwilightBombArrowsShadow = false;
-    AddWidget(path, "Bomb Arrows", WIDGET_CHECKBOX)
+    mSohMenu->AddWidget(path, "Bomb Arrows", WIDGET_CHECKBOX)
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
             sTwilightBombArrowsShadow = TwilightUpgrade_HasBombArrows() != 0;
@@ -685,7 +697,7 @@ void SohMenu::AddMenuNEI() {
             "arrow cycle during bow aim."));
 
     static bool sTwilightGaleBoomerangShadow = false;
-    AddWidget(path, "Gale Boomerang", WIDGET_CHECKBOX)
+    mSohMenu->AddWidget(path, "Gale Boomerang", WIDGET_CHECKBOX)
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
             sTwilightGaleBoomerangShadow = TwilightUpgrade_HasGaleBoomerang() != 0;
@@ -701,7 +713,7 @@ void SohMenu::AddMenuNEI() {
 
     // Convenience: still expose the grant-all button as a one-click that
     // flips all three checkboxes on at once.
-    AddWidget(path, "Grant All Twilight Bits", WIDGET_BUTTON)
+    mSohMenu->AddWidget(path, "Grant All Twilight Bits", WIDGET_BUTTON)
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
             TwilightUpgrade_Grant();
@@ -710,16 +722,104 @@ void SohMenu::AddMenuNEI() {
             "Sets all three Twilight Upgrade bits at once. Equivalent to\n"
             "checking the three checkboxes above. Idempotent."));
 
+    // NEI Weapon Upgrades — per-bit save flags (gSaveContext.ship.weaponUpgrades).
+    // Each upgrade requires the BASE weapon to be owned. State is read live from the
+    // save each frame via PreFunc → the shadow bool, and writes go through
+    // WeaponUpgrade_Set* on Callback (same pattern as the Twilight Upgrade bits).
+    // Only the Hammer upgrade has gameplay behavior for now; the sword upgrades are
+    // reachable plumbing (rando give/logic) with behavior TBD.
+    mSohMenu->AddWidget(path, "Weapon Upgrade Bits", WIDGET_SEPARATOR_TEXT);
+
+    static bool sWuHammerShadow = false;
+    mSohMenu->AddWidget(path, "Hammer: Iron Knuckle's Axe", WIDGET_CHECKBOX)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            sWuHammerShadow = WeaponUpgrade_HasHammerAxe() != 0;
+            info.valuePointer = &sWuHammerShadow;
+        })
+        .Callback([](WidgetInfo& info) {
+            WeaponUpgrade_SetHammerAxe(sWuHammerShadow ? 1 : 0);
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Upgrades the Megaton Hammer into the Iron Knuckle's Axe:\n"
+            "double damage, double reach, chunky heavy swings, and a\n"
+            "tomahawk throw (hold R + B). Only takes effect while the\n"
+            "hammer is actually equipped and wielded."));
+
+    static bool sWuRazorShadow = false;
+    mSohMenu->AddWidget(path, "Kokiri: Razor Sword", WIDGET_CHECKBOX)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            sWuRazorShadow = WeaponUpgrade_HasRazor() != 0;
+            info.valuePointer = &sWuRazorShadow;
+        })
+        .Callback([](WidgetInfo& info) {
+            WeaponUpgrade_SetRazor(sWuRazorShadow ? 1 : 0);
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Kokiri Sword upgrade, progressive level 1. (Behavior TBD —\n"
+            "reachable rando/save plumbing for now.)"));
+
+    static bool sWuGildedShadow = false;
+    mSohMenu->AddWidget(path, "Kokiri: Gilded Sword", WIDGET_CHECKBOX)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            sWuGildedShadow = WeaponUpgrade_HasGilded() != 0;
+            info.valuePointer = &sWuGildedShadow;
+        })
+        .Callback([](WidgetInfo& info) {
+            WeaponUpgrade_SetGilded(sWuGildedShadow ? 1 : 0);
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Kokiri Sword upgrade, progressive level 2. (Behavior TBD —\n"
+            "reachable rando/save plumbing for now.)"));
+
+    static bool sWuTrueMasterShadow = false;
+    mSohMenu->AddWidget(path, "Master: True Master Sword", WIDGET_CHECKBOX)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            sWuTrueMasterShadow = WeaponUpgrade_HasTrueMaster() != 0;
+            info.valuePointer = &sWuTrueMasterShadow;
+        })
+        .Callback([](WidgetInfo& info) {
+            WeaponUpgrade_SetTrueMaster(sWuTrueMasterShadow ? 1 : 0);
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Master Sword upgrade: True Master Sword. (Behavior TBD —\n"
+            "reachable rando/save plumbing for now.)"));
+
+    static bool sWuGreatFairyShadow = false;
+    mSohMenu->AddWidget(path, "Biggoron: Great Fairy's Sword", WIDGET_CHECKBOX)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            sWuGreatFairyShadow = WeaponUpgrade_HasGreatFairy() != 0;
+            info.valuePointer = &sWuGreatFairyShadow;
+        })
+        .Callback([](WidgetInfo& info) {
+            WeaponUpgrade_SetGreatFairy(sWuGreatFairyShadow ? 1 : 0);
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Biggoron Sword upgrade: Great Fairy's Sword. (Behavior TBD —\n"
+            "reachable rando/save plumbing for now.)"));
+
+    mSohMenu->AddWidget(path, "Grant All Weapon Upgrades", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) {
+            WeaponUpgrade_GrantAll();
+        })
+        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
+            "Sets all weapon-upgrade bits at once. Idempotent."));
+
     // ===================== Tab: Spells =====================
     path.sidebarName = "Spells";
     path.column = SECTION_COLUMN_1;
-    AddWidget(path, "Spells & Spiritual Stones", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Spells & Spiritual Stones", WIDGET_SEPARATOR_TEXT);
 
     // SW97 Medallion Spells — merged with the old "Enable Sage Spells" rando
     // toggle. This one checkbox now drives BOTH the C-button medallion casting
     // (gEnhancements.SkijerNEI.SW97Medallions) and the seed-locked elemental-
     // damage rando setting (RSK_SW97_SPELLS via CVAR_RANDOMIZER_SETTING).
-    AddWidget(path, "SW97 Medallion Spells", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "SW97 Medallion Spells", WIDGET_CVAR_CHECKBOX)
         .CVar("gEnhancements.SkijerNEI.SW97Medallions")
         .RaceDisable(false)
         .PostFunc([](WidgetInfo& info) {
@@ -735,7 +835,7 @@ void SohMenu::AddMenuNEI() {
             "paths), synced with 'Sage Spells' in the Randomizer menu.\n\n"
             "Credit: z64proto/sw97 team (spell/arrow actors)"));
 
-    AddWidget(path, "Enable Spiritual Stones", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Enable Spiritual Stones", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.SpiritualStones.Enabled")
         .RaceDisable(false)
         .Options(CheckboxOptions().DefaultValue(true).Tooltip(
@@ -748,9 +848,9 @@ void SohMenu::AddMenuNEI() {
     // ===================== Tab: Masks =====================
     path.sidebarName = "Masks";
     path.column = SECTION_COLUMN_1;
-    AddWidget(path, "Mask Transformations", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Mask Transformations", WIDGET_SEPARATOR_TEXT);
 
-    AddWidget(path, "Kafei Mask Transform", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Kafei Mask Transform", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.KafeiMaskTransform")
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
@@ -765,7 +865,7 @@ void SohMenu::AddMenuNEI() {
                                            "Remove the mask to revert.\n\n"
                                            "REQUIRES: nei/N64_Kafei.pak"));
 
-    AddWidget(path, "Gerudo Mask Transform", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Gerudo Mask Transform", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.GerudoMaskTransform")
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip(
@@ -784,7 +884,7 @@ void SohMenu::AddMenuNEI() {
     // Garo Mask: gated by gMods.GaroMaskTransform (default ON). When OFF, the
     // Garo Mask stays a cosmetic mask (no transformation), matching the Gerudo
     // opt-out. Enforced in mm_player_form.cpp (MmForm_GetMaskType / HandleMaskUse).
-    AddWidget(path, "Garo Mask Transform", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Garo Mask Transform", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.GaroMaskTransform")
         .RaceDisable(false)
         .Options(CheckboxOptions().DefaultValue(true).Tooltip(
@@ -794,13 +894,13 @@ void SohMenu::AddMenuNEI() {
             "OFF: the Garo Mask draws as a plain cosmetic mask (no transformation).\n\n"
             "REQUIRES: garo.o2r in the nei/ folder."));
 
-    AddWidget(path, "MM Masks", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "MM Masks", WIDGET_SEPARATOR_TEXT);
 
     // Merged option: "Include MM Masks Inventory" + "Extra Mask Effects" are now
     // a single toggle. Enabling the MM masks page also enables the per-mask
     // visual effects and the transformation system. (ExtraEffects had no runtime
     // reader other than this menu, so the merge loses nothing.)
-    AddWidget(path, "Include MM Masks (Inventory + Effects)", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Include MM Masks (Inventory + Effects)", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.MmMasks.InventoryEnabled")
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
@@ -826,7 +926,7 @@ void SohMenu::AddMenuNEI() {
             "randomizer pool.\n\n"
             "REQUIRES: mm.o2r from 2Ship2Harkinian Keiichi Alfa 4.0.0"));
 
-    AddWidget(path, "Enable Transformation Masks", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Enable Transformation Masks", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.TransformMasks.Enabled")
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
@@ -841,7 +941,7 @@ void SohMenu::AddMenuNEI() {
                                            "Equip transformation masks from the MM Masks inventory page.\n\n"
                                            "REQUIRES: mm.o2r from 2Ship2Harkinian Keiichi Alfa 4.0.0"));
 
-    AddWidget(path, "Instant Transform", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Instant Transform", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.TransformMasks.InstantTransform")
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
@@ -859,13 +959,13 @@ void SohMenu::AddMenuNEI() {
                                            "Transform instantly when equipping a transformation mask.\n\n"
                                            "REQUIRES: Include MM Masks + mm.o2r"));
 
-    AddWidget(path, "Instant Blast Mask", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Instant Blast Mask", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.BlastMask.Instant")
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip("Removes the cooldown on Blast Mask.\n"
                                            "Normally there is a 310-frame (~5 second) cooldown between uses."));
 
-    AddWidget(path, "Invisible Non-Transformation Masks", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Invisible Non-Transformation Masks", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("HideNonTransformationMasks"))
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip(
@@ -874,7 +974,7 @@ void SohMenu::AddMenuNEI() {
             "Only affects MM masks; vanilla OOT child masks are unaffected (use Invisible Bunny Hood for OOT bunny hood)."));
 
     // Mute MM Audio (moved here from the Spells tab — it's a mask/MM-assets option).
-    AddWidget(path, "Mute MM Audio", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Mute MM Audio", WIDGET_CVAR_CHECKBOX)
         .CVar("gEnhancements.SkijerNEI.MuteMmAudio")
         .RaceDisable(false)
         .Options(CheckboxOptions().DefaultValue(true).Tooltip("Mute all sounds from MM (mm.o2r).\n"
@@ -884,7 +984,7 @@ void SohMenu::AddMenuNEI() {
     // ===================== Tab: Pak Loader =====================
     path.sidebarName = "Pak Loader";
     path.column = SECTION_COLUMN_1;
-    AddWidget(path, "Custom Models (.pak)", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Custom Models (.pak)", WIDGET_SEPARATOR_TEXT);
 
     // Build model combobox maps per age (triggers lazy init of PakLoader)
     {
@@ -908,7 +1008,7 @@ void SohMenu::AddMenuNEI() {
             }
         }
 
-        AddWidget(path, "Enable Custom Player Model", WIDGET_CVAR_CHECKBOX)
+        mSohMenu->AddWidget(path, "Enable Custom Player Model", WIDGET_CVAR_CHECKBOX)
             .CVar("gMods.PakLoader.Enabled")
             .RaceDisable(false)
             .PreFunc([](WidgetInfo& info) {
@@ -934,7 +1034,7 @@ void SohMenu::AddMenuNEI() {
                                                "Place ModLoader64 zzplayas .pak files in the mods/ folder.\n"
                                                "You can choose different models for Adult and Child Link."));
 
-        AddWidget(path, "Adult Link Model", WIDGET_CVAR_COMBOBOX)
+        mSohMenu->AddWidget(path, "Adult Link Model", WIDGET_CVAR_COMBOBOX)
             .CVar("gMods.PakLoader.AdultModel")
             .RaceDisable(false)
             .PreFunc([](WidgetInfo& info) {
@@ -942,7 +1042,7 @@ void SohMenu::AddMenuNEI() {
                     info.options->disabled = true;
                 }
                 // Rebuild the comboMap from current sModels every frame so the
-                // dropdown stays in sync if paks load after AddMenuNEI ran
+                // dropdown stays in sync if paks load after RegisterNEIMenu ran
                 // (lazy init), or if Force* added entries at runtime. Also
                 // clamp the CVar to -1 if it points outside the rebuilt map —
                 // otherwise Combobox<int>::at() throws std::out_of_range and
@@ -971,7 +1071,7 @@ void SohMenu::AddMenuNEI() {
                          .DefaultIndex(-1)
                          .Tooltip("Choose a custom model for Adult Link."));
 
-        AddWidget(path, "Child Link Model", WIDGET_CVAR_COMBOBOX)
+        mSohMenu->AddWidget(path, "Child Link Model", WIDGET_CVAR_COMBOBOX)
             .CVar("gMods.PakLoader.ChildModel")
             .RaceDisable(false)
             .PreFunc([](WidgetInfo& info) {
@@ -1016,7 +1116,7 @@ void SohMenu::AddMenuNEI() {
         }
 
         if (equipModelMap.size() > 1) { // More than just "Default"
-            AddWidget(path, "Equipment Pack", WIDGET_CVAR_COMBOBOX)
+            mSohMenu->AddWidget(path, "Equipment Pack", WIDGET_CVAR_COMBOBOX)
                 .CVar("gMods.PakLoader.Equipment")
                 .RaceDisable(false)
                 .PreFunc([](WidgetInfo& info) {
@@ -1050,7 +1150,7 @@ void SohMenu::AddMenuNEI() {
         }
 
         // ----- Voice Packs (Z64Online .pak with sounds/<HEX>/*.ogg) -----
-        AddWidget(path, "Custom Link Voice", WIDGET_SEPARATOR_TEXT);
+        mSohMenu->AddWidget(path, "Custom Link Voice", WIDGET_SEPARATOR_TEXT);
 
         std::map<int32_t, const char*> voicePackMap;
         voicePackMap[-1] = "None";
@@ -1058,7 +1158,7 @@ void SohMenu::AddMenuNEI() {
             voicePackMap[i] = VoicePack_GetName(i);
         }
 
-        AddWidget(path, "Enable Custom Voice", WIDGET_CVAR_CHECKBOX)
+        mSohMenu->AddWidget(path, "Enable Custom Voice", WIDGET_CVAR_CHECKBOX)
             .CVar("gMods.VoicePack.Enabled")
             .RaceDisable(false)
             .PreFunc([](WidgetInfo& info) {
@@ -1082,7 +1182,7 @@ void SohMenu::AddMenuNEI() {
                 "Voice samples play as 2D audio (no positional attenuation)."));
 
         if (voicePackMap.size() > 1) {
-            AddWidget(path, "Voice Pack", WIDGET_CVAR_COMBOBOX)
+            mSohMenu->AddWidget(path, "Voice Pack", WIDGET_CVAR_COMBOBOX)
                 .CVar("gMods.VoicePack.Selection")
                 .RaceDisable(false)
                 .PreFunc([](WidgetInfo& info) {
@@ -1113,7 +1213,7 @@ void SohMenu::AddMenuNEI() {
                              .Tooltip("Choose a voice pack.\n"
                                       "Selecting a pack decodes its OGG samples (lazy, ~one-time cost)."));
 
-            AddWidget(path, "Voice Pack Volume", WIDGET_CVAR_SLIDER_FLOAT)
+            mSohMenu->AddWidget(path, "Voice Pack Volume", WIDGET_CVAR_SLIDER_FLOAT)
                 .CVar("gMods.VoicePack.Volume")
                 .RaceDisable(false)
                 .PreFunc([](WidgetInfo& info) {
@@ -1144,9 +1244,9 @@ void SohMenu::AddMenuNEI() {
     // For now this button just flips and persists isPlayerIn2Ship. Frente B wires the
     // actual seamless hand-off: pause the inactive game's SESSION (no logic/audio/render,
     // process stays alive) + cross-process shared-texture compositing.
-    AddWidget(path, "Fleet Ship Combo (MM <-> OoT)", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Fleet Ship Combo (MM <-> OoT)", WIDGET_SEPARATOR_TEXT);
 
-    AddWidget(path, "Enable Fleet Ship Combo", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Enable Fleet Ship Combo", WIDGET_CVAR_CHECKBOX)
         .CVar("isFleetShipCombo.Enabled")
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip(
@@ -1155,7 +1255,7 @@ void SohMenu::AddMenuNEI() {
             "Place 2ship.exe in a '2ship' folder next to soh.exe (Ship/2ship/2ship.exe)."));
 
     // Live status so you always know which game you're in (and whether the combo is up).
-    AddWidget(path, "Combo Status", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
+    mSohMenu->AddWidget(path, "Combo Status", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
         int32_t active = FleetShipCombo_GetActiveGame();
         if (active < 0) {
             ImGui::TextColored(ImVec4(0.95f, 0.7f, 0.3f, 1.0f), "Combo NOT running (single game).");
@@ -1166,7 +1266,7 @@ void SohMenu::AddMenuNEI() {
         }
     });
 
-    AddWidget(path, "Switch Active Game", WIDGET_BUTTON)
+    mSohMenu->AddWidget(path, "Switch Active Game", WIDGET_BUTTON)
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
             // Use shared memory as the source of truth for the CURRENT active game so
@@ -1197,40 +1297,12 @@ void SohMenu::AddMenuNEI() {
             "NOTE: the runtime hand-off (session pause + cross-process compositing) is still\n"
             "being wired up. For now this just flips and remembers the active game."));
 
-    // ---- Settings View selector: which game's menu you configure (does NOT change the
-    // active game). 2ship's BenGui can't be drawn inside Ship (separate ImGui), so picking
-    // 2Ship brings 2ship's own window to the front; press ESC there for its menu.
-    AddWidget(path, "Settings View (does not change active game)", WIDGET_SEPARATOR_TEXT);
+    // The "View" game switcher (Ship / 2Ship / Shared) moved to the menu's top tab row
+    // (DrawFleetShipComboTabs in Menu.cpp) so it's the same in both apps.
 
-    AddWidget(path, "View: Ship (OoT) Settings", WIDGET_BUTTON)
-        .RaceDisable(false)
-        .Callback([](WidgetInfo& info) { FleetShipCombo_SetUiFocus(0); })
-        .Options(ButtonOptions().Tooltip("Bring Ship's window to the front (press ESC for the OoT/Ship menu)."));
+    mSohMenu->AddWidget(path, "Randomizer (seed-locked)", WIDGET_SEPARATOR_TEXT);
 
-    AddWidget(path, "View: 2Ship (MM) Settings", WIDGET_BUTTON)
-        .RaceDisable(false)
-        .Callback([](WidgetInfo& info) {
-            if (FleetShipCombo_GetUiFocus() < 0) {
-                Notification::Emit({ .message = "Combo not running - enable it and restart." });
-                return;
-            }
-            FleetShipCombo_SetUiFocus(1);
-            Notification::Emit({ .message = "Showing 2ship window - press ESC there for its menu (BenGui)." });
-        })
-        .Options(ButtonOptions().Tooltip(
-            "Bring 2ship's OWN window to the front so you can open its BenGui with ESC.\n"
-            "2ship's menu can't be composited inside Ship (separate ImGui per process), so its\n"
-            "window comes forward for configuration. Use '2Ship > Back to Ship UI' to return.\n"
-            "Does NOT change the active game."));
-
-    AddWidget(path, "View: Shared Features (coming soon)", WIDGET_BUTTON)
-        .RaceDisable(false)
-        .Callback([](WidgetInfo& info) { Notification::Emit({ .message = "Shared features panel - coming soon." }); })
-        .Options(ButtonOptions().Tooltip("Placeholder for combined OoT+MM (shared) options. To be designed."));
-
-    AddWidget(path, "Randomizer (seed-locked)", WIDGET_SEPARATOR_TEXT);
-
-    AddWidget(path, "Enable Custom Items", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Enable Custom Items", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_RANDOMIZER_SETTING("SkijerCustomItems"))
         .PostFunc([](WidgetInfo& info) {
             // Mirror to the runtime CVar that gates page-2 visibility in the pause menu.
@@ -1243,7 +1315,7 @@ void SohMenu::AddMenuNEI() {
                                            "When disabled, page 2 is inaccessible and items are not in rando.\n"
                                            "Synced with the same setting in the Randomizer menu."));
 
-    AddWidget(path, "Add All MM Masks to Rando", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Add All MM Masks to Rando", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_RANDOMIZER_SETTING("MmMasksAll"))
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
@@ -1269,7 +1341,7 @@ void SohMenu::AddMenuNEI() {
                                            "Seed-locked rando setting.\n"
                                            "REQUIRES: 'Include MM Masks' enabled"));
 
-    AddWidget(path, "Add Transformation Masks to Rando", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Add Transformation Masks to Rando", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_RANDOMIZER_SETTING("MmMasksTransform"))
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
@@ -1293,7 +1365,7 @@ void SohMenu::AddMenuNEI() {
                                            "Seed-locked rando setting.\n"
                                            "REQUIRES: 'Include MM Masks' enabled"));
 
-    AddWidget(path, "Add Extended Equipment to Rando", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Add Extended Equipment to Rando", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_RANDOMIZER_SETTING("ExtEquipment"))
         .RaceDisable(false)
         .PostFunc([](WidgetInfo& info) {
@@ -1306,7 +1378,22 @@ void SohMenu::AddMenuNEI() {
             "Press L on the equipment page to toggle between vanilla and extended equipment.\n\n"
             "Seed-locked rando setting (also enables the in-game equipment system)."));
 
-    AddWidget(path, "Bomb Arrows: Auto-grant with Bomb Bag", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Add NEI Weapon Upgrades to Rando", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_RANDOMIZER_SETTING("NeiWeaponUpgrades"))
+        .RaceDisable(false)
+        .PostFunc([](WidgetInfo& info) {
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Adds NEI weapon upgrades to the randomizer pool. Each requires its base weapon:\n"
+            "  - Hammer Upgrade (Iron Knuckle's Axe): double damage/reach + tomahawk throw\n"
+            "  - Kokiri Sword Upgrade x2: Razor Sword, then Gilded Sword\n"
+            "  - True Master Sword (Master Sword)\n"
+            "  - Great Fairy's Sword (Biggoron Sword)\n\n"
+            "Only the Hammer upgrade has gameplay behavior for now.\n"
+            "Seed-locked rando setting."));
+
+    mSohMenu->AddWidget(path, "Bomb Arrows: Auto-grant with Bomb Bag", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.BombArrows.AutoGrantOnBag")
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip(
@@ -1322,15 +1409,15 @@ void SohMenu::AddMenuNEI() {
     path.sidebarName = "Pak Loader";
     path.column = SECTION_COLUMN_1;
 
-    AddWidget(path, "Per-slot equipment override", WIDGET_SEPARATOR_TEXT);
-    AddWidget(path,
+    mSohMenu->AddWidget(path, "Per-slot equipment override", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path,
               "Each slot can pull from a different pak. 'Default' inherits from the main "
               "Equipment Pack dropdown (or vanilla if no pack selected). Sheathed and "
               "unsheathed pieces always come from the same source pak so the look stays "
               "consistent.",
               WIDGET_TEXT);
 
-    AddWidget(path, "Reset all slots to Default", WIDGET_BUTTON)
+    mSohMenu->AddWidget(path, "Reset all slots to Default", WIDGET_BUTTON)
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
             s32 n = PakLoader_GetSlotCount();
@@ -1347,7 +1434,7 @@ void SohMenu::AddMenuNEI() {
                                 .Tooltip("Clear every per-slot override at once."));
 
     // Cached CVar-name strings per slot so the widgets get stable c_str() pointers.
-    // AddMenuNEI is called once at boot, so static storage is fine.
+    // RegisterNEIMenu is called once at boot, so static storage is fine.
     static std::vector<std::string> slotCVarNames;
     {
         s32 n = PakLoader_GetSlotCount();
@@ -1371,11 +1458,11 @@ void SohMenu::AddMenuNEI() {
     // 21: MaskKeaton            22: MaskTruth           23: MaskGoron
     // 24: MaskZora              25: MaskGerudo          26: MaskBunny
 
-    auto addSlotWidget = [this, &path](s32 slotIdx) {
+    auto addSlotWidget = [&path](s32 slotIdx) {
         const char* label = PakLoader_GetSlotLabel(slotIdx);
         const char* cvarName = slotCVarNames[slotIdx].c_str();
 
-        AddWidget(path, label, WIDGET_CVAR_COMBOBOX)
+        mSohMenu->AddWidget(path, label, WIDGET_CVAR_COMBOBOX)
             .CVar(cvarName)
             .RaceDisable(false)
             .PreFunc([slotIdx](WidgetInfo& info) {
@@ -1414,20 +1501,20 @@ void SohMenu::AddMenuNEI() {
     };
 
     // Column 1 — Swords (0..2) + Shields (3..5)
-    AddWidget(path, "Swords", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Swords", WIDGET_SEPARATOR_TEXT);
     for (s32 i = 0; i <= 2; i++) addSlotWidget(i);
-    AddWidget(path, "Shields", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Shields", WIDGET_SEPARATOR_TEXT);
     for (s32 i = 3; i <= 5; i++) addSlotWidget(i);
 
     // Column 2 — Ranged + Tools + Boots + Gauntlets + Bracelet (6..18)
     path.column = SECTION_COLUMN_2;
-    AddWidget(path, "Ranged & Tools", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Ranged & Tools", WIDGET_SEPARATOR_TEXT);
     for (s32 i = 6; i <= 11; i++) addSlotWidget(i);   // Bow..DekuStick
-    AddWidget(path, "Items", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Items", WIDGET_SEPARATOR_TEXT);
     addSlotWidget(12); // Bottle
     addSlotWidget(13); // OcarinaFairy
     addSlotWidget(14); // OcarinaTime
-    AddWidget(path, "Boots & Gauntlets", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Boots & Gauntlets", WIDGET_SEPARATOR_TEXT);
     addSlotWidget(15); // IronBoots
     addSlotWidget(16); // HoverBoots
     addSlotWidget(17); // Gauntlets
@@ -1435,14 +1522,14 @@ void SohMenu::AddMenuNEI() {
 
     // Column 3 — Child masks (19..26)
     path.column = SECTION_COLUMN_3;
-    AddWidget(path, "Child Masks", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Child Masks", WIDGET_SEPARATOR_TEXT);
     for (s32 i = 19; i < PakLoader_GetSlotCount(); i++) addSlotWidget(i);
 
     // ===================== Tab: Controls =====================
     path.sidebarName = "Controls";
     path.column = SECTION_COLUMN_1;
 
-    AddWidget(path, "Pause Menu", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Pause Menu", WIDGET_SEPARATOR_TEXT);
 
     // This dropdown picks the button used to change page WITHIN a kaleido page
     // (inventory sub-page, extended equipment, SW97 arrow mode, Broken Modes).
@@ -1454,7 +1541,7 @@ void SohMenu::AddMenuNEI() {
         { 0, "L button (default)" },
         { 1, "Z button" },
     };
-    AddWidget(path, "In-Page Change Button (L / Z)", WIDGET_CVAR_COMBOBOX)
+    mSohMenu->AddWidget(path, "In-Page Change Button (L / Z)", WIDGET_CVAR_COMBOBOX)
         .CVar(CVAR_ENHANCEMENT("NGCKaleidoSwitcher"))
         .RaceDisable(false)
         .Options(ComboboxOptions()
@@ -1467,23 +1554,23 @@ void SohMenu::AddMenuNEI() {
                               "L button (default): L changes within the page, Z + R change kaleido pages.\n"
                               "Z button: Z changes within the page, L + R change kaleido pages."));
 
-    AddWidget(path, "Equip Items on D-Pad", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Equip Items on D-Pad", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("DpadEquips"))
         .Options(CheckboxOptions().Tooltip("Allow equipping items to the D-Pad directions."));
-    AddWidget(path, "D-Pad on Pause", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "D-Pad on Pause", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_SETTING("DPadOnPause"))
         .Options(CheckboxOptions().Tooltip("Use the D-Pad to navigate the pause menu."));
 
-    AddWidget(path, "Camera", WIDGET_SEPARATOR_TEXT);
-    AddWidget(path, "Free Camera", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Camera", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Free Camera", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_SETTING("FreeLook.Enabled"))
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip(
             "Enables free camera control (right stick / mouse).\n"
             "Same setting as Settings > Controls > Free Look — surfaced here for convenience."));
 
-    AddWidget(path, "Transformation Controls", WIDGET_SEPARATOR_TEXT);
-    AddWidget(path, "Mario Controls", WIDGET_BUTTON)
+    mSohMenu->AddWidget(path, "Transformation Controls", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Mario Controls", WIDGET_BUTTON)
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) { /* placeholder — SM64 Mario rebinding UI coming soon */ })
         .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
@@ -1492,7 +1579,7 @@ void SohMenu::AddMenuNEI() {
     // per-move N64 button binds (gPikaBind.*) + the mode UI style. Applies to
     // the SECRET Broken-Modes Pikachu mode only; the pokeball transformation
     // keeps items on C and the vanilla UI.
-    AddWidget(path, "Pikachu Controls", WIDGET_BUTTON)
+    mSohMenu->AddWidget(path, "Pikachu Controls", WIDGET_BUTTON)
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) { PikachuControls_OpenWindow(); })
         .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
@@ -1501,5 +1588,11 @@ void SohMenu::AddMenuNEI() {
             "the mode UI style (icons over OOT buttons, or the corner HUD).\n"
             "Secret Broken-Modes Pikachu mode only — the pokeball transformation is untouched."));
 }
+
+// Self-register the NEI menu via the same RegisterMenuInitFunc path every other
+// module uses (Anchor, Harpoon, Resolution...). SohMenu::AddMenuElements() drains
+// MenuInit::GetInitFuncs() at boot, so this replaces the old upstream edits to
+// SohMenu.h (member decl) and SohMenu.cpp (explicit AddMenuNEI() call).
+static RegisterMenuInitFunc neiMenuInitFunc(RegisterNEIMenu);
 
 } // namespace SohGui

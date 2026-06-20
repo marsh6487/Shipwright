@@ -575,6 +575,61 @@ void Menu::Draw() {
 }
 
 static bool freshOpen = true;
+// Fleet Ship Combo unified game-switch tab row — IDENTICAL helper in both apps' menus (Ship's
+// SohGui and 2ship's BenGui), so the two render the same. Full-width 3-up strip
+// [ Shared | Ship of Harkinian | 2 Ship 2 Harkinian ] styled like the existing header tabs
+// (selected = theme fill, others transparent). The tab whose game's GUI is currently in front
+// (FleetShipCombo uiFocus) is highlighted; clicking a game tab flips uiFocus so that game's
+// window/menu comes forward for config. "Shared" is a disabled placeholder. Drawn only when the
+// combo is running (GetUiFocus() >= 0), so standalone menus look exactly as before.
+static float DrawFleetShipComboTabs(float rowWidth) {
+    const int focus = FleetShipCombo_GetUiFocus();
+    if (focus < 0) {
+        return 0.0f; // combo not running -> draw nothing (standalone menu unchanged)
+    }
+    ImGuiStyle& style = ImGui::GetStyle();
+    const auto themeIndex =
+        static_cast<UIWidgets::Colors>(CVarGetInteger("gSettings.Menu.Theme", UIWidgets::Colors::LightBlue));
+    const float segW = (rowWidth - style.ItemSpacing.x * 2.0f) / 3.0f;
+
+    struct Tab {
+        const char* label;
+        int targetFocus; // -1 = disabled (Shared); 0 = Ship; 1 = 2ship
+    };
+    const Tab tabs[3] = {
+        { "Shared##fsctab", -1 },
+        { "Ship of Harkinian##fsctab", 0 },
+        { "2 Ship 2 Harkinian##fsctab", 1 },
+    };
+
+    for (int i = 0; i < 3; i++) {
+        if (i != 0) {
+            ImGui::SameLine();
+        }
+        const bool disabled = tabs[i].targetFocus < 0;
+        const bool selected = !disabled && tabs[i].targetFocus == focus;
+
+        UIWidgets::PushStyleButton(themeIndex);
+        if (!selected) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // unselected = transparent fill
+        }
+        if (disabled) {
+            ImGui::BeginDisabled();
+        }
+        if (ImGui::Button(tabs[i].label, ImVec2(segW, 0.0f)) && !disabled && tabs[i].targetFocus != focus) {
+            FleetShipCombo_SetUiFocus(tabs[i].targetFocus); // flip which game's GUI is in front
+        }
+        if (disabled) {
+            ImGui::EndDisabled();
+        }
+        if (!selected) {
+            ImGui::PopStyleColor();
+        }
+        UIWidgets::PopStyleButton();
+    }
+    return ImGui::GetFrameHeight() + style.ItemSpacing.y; // vertical space the row consumed
+}
+
 void Menu::DrawElement() {
     if (OTRGlobals::Instance->fontStandardLargest == nullptr) {
         return;
@@ -695,6 +750,12 @@ void Menu::DrawElement() {
                       ImGuiChildFlags_AutoResizeX | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize,
                       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar);
 
+    // Fleet Ship Combo: game-switch tab row at the very top of the menu (only when the combo is
+    // running). Replaces the old NEI "View" buttons; identical row in 2ship's BenGui. Returns the
+    // height it consumed so the manual `pos`-based layout below reserves space for it (this menu
+    // positions the separator/sidebar/content absolutely, so without this they'd overlap the row).
+    float fscTabRowH = DrawFleetShipComboTabs(menuSize.x);
+
     std::unordered_map<std::string, SidebarEntry>* sidebar;
     float headerHeight = headerSizes.at(0).y + style.FramePadding.y * 2;
     ImVec2 buttonSize = ImGui::CalcTextSize(ICON_FA_TIMES_CIRCLE) + style.FramePadding * 2;
@@ -764,23 +825,7 @@ void Menu::DrawElement() {
         ImGui::PopStyleColor();
     }
 
-    // Fleet Ship Combo: "View" selector next to the search box. Flips which game's UI is in
-    // front (Ship <-> 2ship) without changing the active game. Only shown when running combo.
-    if (FleetShipCombo_GetUiFocus() >= 0) {
-        ImGui::SameLine();
-        int fscFocus = FleetShipCombo_GetUiFocus();
-        ImGui::SetNextItemWidth(130.0f);
-        if (ImGui::BeginCombo("##fleetview", fscFocus == 1 ? "View: 2Ship" : "View: Ship")) {
-            if (ImGui::Selectable("Ship (OoT)", fscFocus == 0)) {
-                FleetShipCombo_SetUiFocus(0);
-            }
-            if (ImGui::Selectable("2Ship (MM)", fscFocus == 1)) {
-                FleetShipCombo_SetUiFocus(1);
-            }
-            ImGui::Selectable("Shared (coming soon)", false, ImGuiSelectableFlags_Disabled);
-            ImGui::EndCombo();
-        }
-    }
+    // Fleet Ship Combo: the "View" game switcher moved to the top tab row (DrawFleetShipComboTabs).
 
     ImGui::EndChild();
     ImGui::SameLine(menuSize.x - (buttonSize.x * 3) - (style.ItemSpacing.x * 2));
@@ -837,12 +882,12 @@ void Menu::DrawElement() {
         }
     }
 
-    pos.y += headerHeight + style.ItemSpacing.y;
+    pos.y += headerHeight + style.ItemSpacing.y + fscTabRowH; // + the game-switch tab row height
     pos.x = centerX - menuSize.x / 2 + (style.ItemSpacing.x * (menuEntries.size() + 1));
     window->DrawList->AddRectFilled(pos, pos + ImVec2{ menuSize.x, 4 }, ImGui::GetColorU32({ 255, 255, 255, 255 }),
                                     true, style.WindowRounding);
     pos.y += style.ItemSpacing.y;
-    float sectionHeight = menuSize.y - headerHeight - 4 - style.ItemSpacing.y * 2;
+    float sectionHeight = menuSize.y - headerHeight - 4 - style.ItemSpacing.y * 2 - fscTabRowH;
     float columnHeight = sectionHeight - style.ItemSpacing.y * 4;
     ImGui::SetNextWindowPos(pos + style.ItemSpacing * 2);
 

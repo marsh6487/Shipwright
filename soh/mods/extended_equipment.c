@@ -26,8 +26,29 @@ extern MmPlayerTransformation MmForm_GetCurrentForm(void);
 extern SaveContext gSaveContext;
 extern s32 CVarGetInteger(const char* name, s32 defaultValue);
 
-// Somaria cane DL for Byrna draw
-#include "items/objects/somaria_cane_DL/header.h"
+// Cane of Byrna 3D model: blue-tinted variant of the Somaria cane, loaded from
+// soh.o2r (objects/object_somaria/g_byrna_cane_dl — shares the Somaria tri
+// geometry). No inline C model. LoadGfxByName crashes on a missing path, so gate.
+extern u8 ResourceMgr_FileExists(const char* resName);
+extern Gfx* ResourceMgr_LoadGfxByName(const char* path);
+
+static Gfx* Byrna_GetCaneDL(void) {
+    static Gfx* sCached = NULL;
+    static u8 sTried = 0;
+    if (!sTried) {
+        sTried = 1;
+        const char* otr = "__OTR__objects/object_somaria/g_byrna_cane_dl";
+        if (ResourceMgr_FileExists(otr)) {
+            sCached = ResourceMgr_LoadGfxByName(otr);
+        }
+    }
+    return sCached;
+}
+
+// NEI Weapon Upgrades — the Hammer upgrade (Iron Knuckle's Axe) is driven from here,
+// independent of the extended-equipment cheat. Accessors are defined in
+// mods/items/logic/weapon_upgrades.c (linked via the custom_items.c TU).
+#include "items/logic/weapon_upgrades.h"
 
 // Unity build includes
 #include "equipment/ext_equip_icons.c"
@@ -440,11 +461,22 @@ void* ExtEquip_GetNameTex(u16 itemId, u8 language) {
 ExtEquipBehaviorState gExtEquipBehavior;
 
 void ExtEquip_UpdateBehavior(void* playerVoid, void* playVoid) {
-    if (!ExtEquip_IsEnabled())
-        return;
-
     Player* player = (Player*)playerVoid;
     PlayState* play = (PlayState*)playVoid;
+
+    // Hammer upgrade (Iron Knuckle's Axe) is a weapon upgrade, NOT extended equipment —
+    // it runs whenever the upgrade is owned, regardless of the ext-equipment cheat. Gate
+    // on the local player (reads global save state + local input for the throw).
+    if (gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        if (WeaponUpgrade_HasHammerAxe()) {
+            IKAxe_Behavior(player, play);
+        } else {
+            IKAxe_Cleanup();
+        }
+    }
+
+    if (!ExtEquip_IsEnabled())
+        return;
 
     ExtEquip_DispatchBehavior(player, play);
 }
@@ -460,18 +492,14 @@ void ExtEquip_OnMeleeHit(void* playerVoid, void* playVoid) {
 }
 
 void ExtEquip_DrawBehavior(void* playerVoid, void* playVoid) {
-    if (!ExtEquip_IsEnabled())
-        return;
-
     Player* player = (Player*)playerVoid;
     PlayState* play = (PlayState*)playVoid;
 
     // Skip remote dummy players. HarpoonDummyPlayer_Draw delegates to
-    // Player_Draw for skeleton/anim parity, which routes here. But the
-    // extended-equipment draw dispatch reads GLOBAL gExtEquipState (the
-    // LOCAL player's slot indices) — drawing Four Sword clones / Pegasus
-    // wind cone / Magic Cape / IK Axe reticle / Water-Dragon barrier on
-    // remote dummies would render the local player's effects on every
+    // Player_Draw for skeleton/anim parity, which routes here. But these draws
+    // read GLOBAL state (the LOCAL player's slots / save) — drawing Four Sword
+    // clones / Pegasus wind cone / Magic Cape / IK Axe reticle / Water-Dragon
+    // barrier on remote dummies would render the local player's effects on every
     // peer's body. Gate on "this player is the local player actor".
     if (gPlayState != NULL) {
         Player* localPlayer = GET_PLAYER(gPlayState);
@@ -480,39 +508,54 @@ void ExtEquip_DrawBehavior(void* playerVoid, void* playVoid) {
         }
     }
 
+    // Hammer upgrade reticle — independent of the ext-equipment cheat.
+    if (WeaponUpgrade_HasHammerAxe()) {
+        IKAxe_DrawReticle(player, play);
+    }
+
+    if (!ExtEquip_IsEnabled())
+        return;
+
     ExtEquip_DrawDispatch(player, play);
 }
 
 void ExtEquip_DrawSwordDL(void* playVoid) {
     PlayState* play = (PlayState*)playVoid;
 
+    // Hammer upgrade: draw the Iron Knuckle's Axe in place of the hammer DL.
+    // IKAxe_DrawAxe self-guards on heldItemAction == HAMMER / throw state, and the
+    // hammer DL itself is hidden via ExtEquip_ShouldHideSwordDL. Independent of cheat.
+    if (WeaponUpgrade_HasHammerAxe()) {
+        IKAxe_DrawAxe(play);
+    }
+
     if (gExtEquipState.currentExtSword == 1) {
         // Byrna: draw blue cane DL only when sword is held (not sheathed)
         Player* drawPlayer = GET_PLAYER(play);
         if (Player_GetMeleeWeaponHeld(drawPlayer) != 0) {
-            OPEN_DISPS(play->state.gfxCtx);
-            gSPDisplayList(POLY_OPA_DISP++, g_byrna_cane_dl);
-            CLOSE_DISPS(play->state.gfxCtx);
+            Gfx* byrnaDL = Byrna_GetCaneDL();
+            if (byrnaDL != NULL) {
+                OPEN_DISPS(play->state.gfxCtx);
+                gSPDisplayList(POLY_OPA_DISP++, byrnaDL);
+                CLOSE_DISPS(play->state.gfxCtx);
+            }
         }
-    } else if (gExtEquipState.currentExtSword == 3) {
-        // IK Axe: draw Iron Knuckle Axe DL
-        IKAxe_DrawAxe(play);
     }
 }
 
 u8 ExtEquip_ShouldHideSwordDL(void) {
+    // Hammer upgrade: hide the hammer DL only while the axe is actually being drawn
+    // (in free mode / putaway, don't hide — vanilla shows the open hand). Independent
+    // of the ext-equipment cheat.
+    if (WeaponUpgrade_HasHammerAxe() && gExtEquipBehavior.ikAxeDrawing)
+        return 1;
+
     if (!ExtEquip_IsEnabled())
         return 0;
 
     // Cane of Byrna replaces the sword model with its own draw
     if (gExtEquipState.currentExtSword == 1)
         return 1;
-
-    // IK Axe: only hide sword DL when hammer is active (drawn)
-    // In free mode (putaway), don't hide — vanilla shows open hand naturally
-    if (gExtEquipState.currentExtSword == 3) {
-        return gExtEquipBehavior.ikAxeDrawing;
-    }
 
     return 0;
 }

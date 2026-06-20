@@ -16,6 +16,7 @@
 #include "../custom_items.h"
 #include "../helpers/equip_helper.h"
 #include "../helpers/fx_helper.h"
+#include "../helpers/item_voice.h"
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
@@ -213,8 +214,7 @@ static void ZPerm_StateCasting(Player* p, PlayState* play) {
         LinkAnimation_Change(play, &p->skelAnime, &gPlayerAnim_link_magic_honoo1, ZPERM_ANIM_SPEED, 0.0f,
                              Animation_GetLastFrame(&gPlayerAnim_link_magic_honoo1), ANIMMODE_ONCE, -8.0f);
         ZPerm_ComputePhaseEnd(zpTimer, Animation_GetLastFrame(&gPlayerAnim_link_magic_honoo1));
-        Audio_PlaySoundGeneral(NA_SE_VO_LI_MAGIC_NALE, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        ItemVoice_PlayId(p, NA_SE_VO_LI_MAGIC_NALE);
     }
 
     // Double-update: vanilla calls LinkAnimation_Update once, we call it again (Demise pattern)

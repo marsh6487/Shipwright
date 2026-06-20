@@ -34,6 +34,7 @@
 extern "C" {
 #include "mods/extended_inventory.h"
 #include "mods/extended_equipment.h"
+#include "mods/items/logic/weapon_upgrades.h"
 #include "mods/items/custom_items.h"
 #include "src/overlays/actors/ovl_Obj_Bean/z_obj_bean.h"
 
@@ -461,10 +462,25 @@ static const CustomItemMessageEntry customItemMessages[] = {
       "Du hast das %gVier-Schwert%w!&Eine Klinge die ihren Träger&in vier Helden teilt.^Rüste es am %ySchwert-Platz%w aus.^Halte %y\xA3%w + %y\xA0%w 15 Frames ->&%g3 farbige Klone%w (Rot/Blau/Violett)&erscheinen im Dreieck.^Jeder Klon kostet %g12 Magie%w.&Klone %gspiegeln deine Schwerthiebe%w und&kopieren %gPfeile%w, %gBomben%w und %gBumerang%w.^Feindtreffer töten sie.",
       "Vous obtenez l'%gÉpée de Quatre%w!&Une lame qui divise son porteur&en quatre héros.^Équipez-la dans l'%yemplacement épée%w.^Maintenez %y\xA3%w + %y\xA0%w 15 frames ->&%g3 clones colorés%w (Rouge/Bleu/Violet)&apparaissent en triangle.^Chaque clone coûte %g12 Magie%w.&Les clones %gimitent vos coups%w et copient&%gflèches%w, %gbombes%w et %gboomerang%w.^Les ennemis les tuent au contact." },
 
-    { RG_EXT_IRON_KNUCKLE_AXE, static_cast<ItemID>(ITEM_EXT_SWORD_3),
-      "You got the %rIron Knuckle's Axe%w!&The massive tomahawk of Ganon's&armored knights.^Equip on the %ysword slot%w (%y\xA2%w toggles).^Wields like the %rMegaton Hammer%w&with chunky heavy swings:&%gdouble damage%w, %gdouble reach%w,&slower walk while held.^Hold %y\xA3%w + %y\xA0%w 15 frames to %rthrow%w&the axe - flies forward, then&boomerangs back to your hand.",
-      "Du hast die %rEisenknöchel-Axt%w!&Der massive Tomahawk der&gepanzerten Ritter Ganons.^Rüste sie am %ySchwert-Platz%w aus.^Führt sich wie der %rStahlhammer%w&mit schwerem chunky Schwung:&%gdoppelter Schaden%w, %gdoppelte Reichweite%w,&langsameres Gehen.^Halte %y\xA3%w + %y\xA0%w 15 Frames um die&Axt zu %rwerfen%w - fliegt nach vorn,&kommt dann zu dir zurück.",
-      "Vous obtenez la %rHache d'Iron Knuckle%w!&Le tomahawk massif des chevaliers&en armure de Ganon.^Équipez-la dans l'%yemplacement épée%w.^Se manie comme la %rMasse des Titans%w&avec des coups lourds:&%gdouble dégâts%w, %gdouble portée%w,&marche plus lente.^Maintenez %y\xA3%w + %y\xA0%w 15 frames pour&%rlancer%w la hache - elle vole&et revient en boomerang." },
+    { RG_HAMMER_UPGRADE, static_cast<ItemID>(ITEM_EXT_SWORD_3),
+      "You got the %rHammer Upgrade%w!&Your %rMegaton Hammer%w becomes the&%rIron Knuckle's Axe%w - the massive&tomahawk of Ganon's armored knights.^Heavy chunky swings:&%gdouble damage%w, %gdouble reach%w,&slower walk while held.^Hold %y\xA3%w + %y\xA0%w 15 frames to %rthrow%w&the axe - flies forward, then&boomerangs back to your hand.",
+      "Du hast das %rHammer-Upgrade%w!&Dein %rStahlhammer%w wird zur&%rEisenknöchel-Axt%w - dem massiven&Tomahawk der Ritter Ganons.^Schwerer chunky Schwung:&%gdoppelter Schaden%w, %gdoppelte Reichweite%w,&langsameres Gehen.^Halte %y\xA3%w + %y\xA0%w 15 Frames um die&Axt zu %rwerfen%w - fliegt nach vorn,&kommt dann zu dir zurück.",
+      "Vous obtenez l'%rAmélioration de Masse%w!&Votre %rMasse des Titans%w devient la&%rHache d'Iron Knuckle%w - le tomahawk&massif des chevaliers de Ganon.^Coups lourds:&%gdouble dégâts%w, %gdouble portée%w,&marche plus lente.^Maintenez %y\xA3%w + %y\xA0%w 15 frames pour&%rlancer%w la hache - elle revient&en boomerang." },
+
+    { RG_PROGRESSIVE_KOKIRI_SWORD, static_cast<ItemID>(ITEM_SWORD_KOKIRI),
+      "You got a %gKokiri Sword Upgrade%w!&Sharpens your %gKokiri Sword%w&into the %gRazor Sword%w, then the&%gGilded Sword%w.",
+      "Du hast ein %gKokiri-Schwert-Upgrade%w!&Schärft dein %gKokiri-Schwert%w&zum %gElfenschwert%w, dann zur&%gSchmirgelklinge%w.",
+      "Vous obtenez une %gAmélioration d'Épée Kokiri%w!&Aiguise votre %gÉpée Kokiri%w&en %gLame Rasoir%w, puis en&%gExcalibur%w." },
+
+    { RG_TRUE_MASTER_SWORD, static_cast<ItemID>(ITEM_SWORD_MASTER),
+      "You got the %cTrue Master Sword%w!&Your %cMaster Sword%w awakens to&its true, fully-restored power.",
+      "Du hast das %cWahre Master-Schwert%w!&Dein %cMaster-Schwert%w erwacht zu&seiner wahren Kraft.",
+      "Vous obtenez la %cVéritable Épée de Légende%w!&Votre %cÉpée de Légende%w révèle&son vrai pouvoir." },
+
+    { RG_GREAT_FAIRY_SWORD, static_cast<ItemID>(ITEM_SWORD_BGS),
+      "You got the %pGreat Fairy's Sword%w!&Your %yBiggoron Sword%w is reforged&into the legendary blade blessed&by the Great Fairy.",
+      "Du hast das %pSchwert der Großen Fee%w!&Dein %yBiggoron-Schwert%w wird zur&legendären Klinge der Großen Fee&umgeschmiedet.",
+      "Vous obtenez l'%pÉpée de la Grande Fée%w!&Votre %yÉpée de Biggoron%w est reforgée&en lame légendaire bénie par&la Grande Fée." },
 
     { RG_EXT_DIVINE_SHIELD, static_cast<ItemID>(ITEM_EXT_SHIELD_1),
       "You got the %yDivine Shield%w!&A blessed wooden shield said to&repel even the wrath of fire.^Equip on the %yshield slot%w (%y\xA2%w toggles).^Light wooden shield BUT %rfireproof%w -&fire breath, Dodongo flames and&torches will not burn it.^%cPerfect Parry%w (%y\xA3%w + block within&10 frames of an attack):&%cfreezes ALL enemies%w on screen!",
@@ -1987,8 +2003,18 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         case RG_EXT_FOUR_SWORD:
             ExtEquip_GiveItem(EQUIP_TYPE_SWORD, 2);
             break;
-        case RG_EXT_IRON_KNUCKLE_AXE:
-            ExtEquip_GiveItem(EQUIP_TYPE_SWORD, 3);
+        // NEI Weapon Upgrades (gSaveContext.ship.weaponUpgrades bits; require base weapon)
+        case RG_HAMMER_UPGRADE:
+            WeaponUpgrade_SetHammerAxe(1);
+            break;
+        case RG_PROGRESSIVE_KOKIRI_SWORD:
+            WeaponUpgrade_GiveProgressiveKokiri();
+            break;
+        case RG_TRUE_MASTER_SWORD:
+            WeaponUpgrade_SetTrueMaster(1);
+            break;
+        case RG_GREAT_FAIRY_SWORD:
+            WeaponUpgrade_SetGreatFairy(1);
             break;
         case RG_EXT_DIVINE_SHIELD:
             ExtEquip_GiveItem(EQUIP_TYPE_SHIELD, 1);

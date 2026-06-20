@@ -4550,6 +4550,12 @@ void* MmAssets_LoadHookshotTipDL(void) {
     return sCachedMmHookshotTipDL;
 }
 
+// MM-display-list-or-fallback selector (see mm_asset_loader.h). Behavior-equivalent
+// to the inline `if (mm != NULL) dl = mm;` guard at each MM draw site.
+Gfx* MmDL_Or(Gfx* vanillaDL, Gfx* mmDL) {
+    return (mmDL != NULL) ? mmDL : vanillaDL;
+}
+
 static void* sCachedMmHookshotChainDL = nullptr;
 static bool sMmHookshotChainDLLoaded = false;
 

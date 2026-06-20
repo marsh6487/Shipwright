@@ -85,7 +85,7 @@ void RegionTable_Init_SpiritTemple() {
     areaTable[RR_SPIRIT_TEMPLE_RUPEE_BRIDGE_NORTH] = Region("Spirit Temple Rupee Bridge North", SCENE_SPIRIT_TEMPLE, {
         //Events
         EVENT_ACCESS(LOGIC_SPIRIT_SILVER_RUPEE_BRIDGE,         logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT)),
-        EVENT_ACCESS(LOGIC_SPIRIT_SILVER_RUPEE_BRIDGE_TORCHES, (logic->Get(LOGIC_SPIRIT_SILVER_RUPEE_BRIDGE) && logic->HasFireSourceWithTorch()) || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD))),
+        EVENT_ACCESS(LOGIC_SPIRIT_SILVER_RUPEE_BRIDGE_TORCHES, (logic->Get(LOGIC_SPIRIT_SILVER_RUPEE_BRIDGE) && logic->HasFireSourceWithTorch()) || (logic->HasMagicFire())),
     }, {
         //Locations
         LOCATION(RC_SPIRIT_TEMPLE_CHILD_EARLY_TORCHES_CHEST, logic->Get(LOGIC_SPIRIT_SILVER_RUPEE_BRIDGE_TORCHES) && logic->HasItem(RG_OPEN_CHEST)),
@@ -139,7 +139,7 @@ void RegionTable_Init_SpiritTemple() {
     }, {
         //Exits
         ENTRANCE(RR_SPIRIT_TEMPLE_SUN_ON_FLOOR_1F,   true),
-        ENTRANCE(RR_SPIRIT_TEMPLE_STATUE_ROOM_CHILD, logic->HasExplosives() || ((ctx->GetOption(RSK_SUNLIGHT_ARROWS) && (logic->CanUse(RG_LIGHT_ARROWS) || logic->CanUse(RG_SW97_LIGHT_PROJECTILE))) || logic->CanUse(RG_LIGHT_ROD))),
+        ENTRANCE(RR_SPIRIT_TEMPLE_STATUE_ROOM_CHILD, logic->HasExplosives() || ((ctx->GetOption(RSK_SUNLIGHT_ARROWS) && (logic->HasLightSource())) || logic->CanUse(RG_LIGHT_ROD))),
     });
 
     areaTable[RR_SPIRIT_TEMPLE_ADULT_SIDE_HUB] = Region("Spirit Temple Adult Side Hub", SCENE_SPIRIT_TEMPLE, {}, {}, {
@@ -410,11 +410,11 @@ void RegionTable_Init_SpiritTemple() {
 
     areaTable[RR_SPIRIT_TEMPLE_4_ARMOS] = Region("Spirit Temple 4 Armos", SCENE_SPIRIT_TEMPLE, {}, {
         //Locations
-        LOCATION(RC_SPIRIT_TEMPLE_NEAR_FOUR_ARMOS_CHEST, ((logic->CanUse(RG_MIRROR_SHIELD) || logic->CanUse(RG_EXT_SHIELD_OF_IKANA)) || logic->SunlightArrows()) && logic->HasExplosives() && logic->HasItem(RG_OPEN_CHEST)),
+        LOCATION(RC_SPIRIT_TEMPLE_NEAR_FOUR_ARMOS_CHEST, ((logic->CanReflectLight()) || logic->SunlightArrows()) && logic->HasExplosives() && logic->HasItem(RG_OPEN_CHEST)),
         LOCATION(RC_SPIRIT_TEMPLE_ARMOS_ROOM_SUN_FAIRY,  logic->HasExplosives() && logic->CanUse(RG_SUNS_SONG)),
     }, {
         ENTRANCE(RR_SPIRIT_TEMPLE_BEAMOS_PITS,       true),
-        ENTRANCE(RR_SPIRIT_TEMPLE_4_ARMOS_SIDE_ROOM, (logic->CanUse(RG_MIRROR_SHIELD) || logic->CanUse(RG_EXT_SHIELD_OF_IKANA)) || logic->SunlightArrows()),
+        ENTRANCE(RR_SPIRIT_TEMPLE_4_ARMOS_SIDE_ROOM, (logic->CanReflectLight()) || logic->SunlightArrows()),
         ENTRANCE(RR_SPIRIT_TEMPLE_CHEST_STAIRS,      true),
     });
 
@@ -497,7 +497,7 @@ void RegionTable_Init_SpiritTemple() {
         //Events
         EVENT_ACCESS(LOGIC_SPIRIT_4F_SWITCH,        logic->CanJumpslash() || logic->HasExplosives() || logic->CanUse(RG_GIANTS_KNIFE) ||
                                                     (ctx->GetTrickOption(RT_ITEM_EXTENSION) && ((logic->IsAdult && logic->CanUse(RG_HOOKSHOT)) || logic->CanUse(RG_FAIRY_BOW) || logic->CanUse(RG_FAIRY_SLINGSHOT)))),
-        EVENT_ACCESS(LOGIC_SPIRIT_PLATFORM_LOWERED, (logic->Get(LOGIC_SPIRIT_PUSHED_4F_MIRRORS) && (logic->CanUse(RG_MIRROR_SHIELD) || logic->CanUse(RG_EXT_SHIELD_OF_IKANA))) || logic->SunlightArrows()),
+        EVENT_ACCESS(LOGIC_SPIRIT_PLATFORM_LOWERED, (logic->Get(LOGIC_SPIRIT_PUSHED_4F_MIRRORS) && (logic->CanReflectLight())) || logic->SunlightArrows()),
 
     }, {}, {
         ENTRANCE(RR_SPIRIT_TEMPLE_4F_CENTRAL,      true),
@@ -513,7 +513,7 @@ void RegionTable_Init_SpiritTemple() {
         EVENT_ACCESS(LOGIC_SPIRIT_PUSHED_4F_MIRRORS, logic->HasExplosives() && logic->HasItem(RG_POWER_BRACELET)),
     }, {
         //Locations
-        LOCATION(RC_SPIRIT_TEMPLE_TOPMOST_CHEST, ((logic->IsAdult && (logic->CanUse(RG_MIRROR_SHIELD) || logic->CanUse(RG_EXT_SHIELD_OF_IKANA))) || logic->SunlightArrows()) && logic->HasItem(RG_OPEN_CHEST)),
+        LOCATION(RC_SPIRIT_TEMPLE_TOPMOST_CHEST, ((logic->IsAdult && (logic->CanReflectLight())) || logic->SunlightArrows()) && logic->HasItem(RG_OPEN_CHEST)),
     }, {
         //Exits
         ENTRANCE(RR_SPIRIT_TEMPLE_BIG_MIRROR_ROOM, true),
@@ -527,7 +527,7 @@ void RegionTable_Init_SpiritTemple() {
         ENTRANCE(RR_SPIRIT_TEMPLE_INNER_WEST_HAND,   true),
         ENTRANCE(RR_SPIRIT_TEMPLE_STATUE_ROOM_ADULT, true),
         ENTRANCE(RR_SPIRIT_TEMPLE_INNER_LEFT_HAND,   true),
-        ENTRANCE(RR_SPIRIT_TEMPLE_STATUE_HEAD,       logic->Get(LOGIC_SPIRIT_PUSHED_4F_MIRRORS) && (logic->CanUse(RG_MIRROR_SHIELD) || logic->CanUse(RG_EXT_SHIELD_OF_IKANA)) && logic->CanUse(RG_HOOKSHOT)),
+        ENTRANCE(RR_SPIRIT_TEMPLE_STATUE_HEAD,       logic->Get(LOGIC_SPIRIT_PUSHED_4F_MIRRORS) && (logic->CanReflectLight()) && logic->CanUse(RG_HOOKSHOT)),
     });
 
     areaTable[RR_SPIRIT_TEMPLE_STATUE_HEAD] = Region("Spirit Temple Statue Head", SCENE_SPIRIT_TEMPLE, {
@@ -775,7 +775,7 @@ void RegionTable_Init_SpiritTemple() {
         //This event does not need handling in SpiritShared as it only affects navigation, Adult access here is always Certain, and Child has no way through that adult does not.
         EVENT_ACCESS(LOGIC_SPIRIT_STATUE_SOUTH_DOOR,      logic->HasFireSource()),
         //Assuming all higher areas filter down to here for this despite there being many good angles to use FAs
-        EVENT_ACCESS(LOGIC_SPIRIT_MQ_STATUE_ROOM_TORCHES, (logic->CanUse(RG_FIRE_ARROWS) || logic->CanUse(RG_SW97_FIRE_PROJECTILE) || logic->CanUse(RG_FIRE_ROD)) || (ctx->GetTrickOption(RT_SPIRIT_MQ_LOWER_ADULT) && (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)))),
+        EVENT_ACCESS(LOGIC_SPIRIT_MQ_STATUE_ROOM_TORCHES, (logic->HasFireProjectile()) || (ctx->GetTrickOption(RT_SPIRIT_MQ_LOWER_ADULT) && (logic->HasMagicFire()))),
     }, {
         //Locations
         LOCATION(RC_SPIRIT_TEMPLE_MQ_COMPASS_CHEST,             SpiritShared(RR_SPIRIT_TEMPLE_MQ_STATUE_ROOM, []{return logic->CanHitEyeTargets() && logic->HasItem(RG_OPEN_CHEST);})),
@@ -906,7 +906,7 @@ void RegionTable_Init_SpiritTemple() {
     areaTable[RR_SPIRIT_TEMPLE_MQ_3_SUNS_ROOM_2F] = Region("Spirit Temple MQ Three Suns Room 2F", SCENE_SPIRIT_TEMPLE, {
         //Events
         //implies logic->CanKillEnemy(RE_WALLMASTER). If we have lights, we can kill stalfos and wallmasters with bow
-        EVENT_ACCESS(LOGIC_SPIRIT_MQ_3SUNS_ENEMIES, ((logic->CanUse(RG_MIRROR_SHIELD) || logic->CanUse(RG_EXT_SHIELD_OF_IKANA)) && logic->CanKillEnemy(RE_STALFOS, ED_CLOSE, true, 2)) || logic->SunlightArrows()),
+        EVENT_ACCESS(LOGIC_SPIRIT_MQ_3SUNS_ENEMIES, ((logic->CanReflectLight()) && logic->CanKillEnemy(RE_STALFOS, ED_CLOSE, true, 2)) || logic->SunlightArrows()),
     }, {}, {
         //Exits
         ENTRANCE(RR_SPIRIT_TEMPLE_MQ_STATUE_ROOM_ADULT, true),
@@ -1006,7 +1006,7 @@ void RegionTable_Init_SpiritTemple() {
         //Exits
         ENTRANCE(RR_SPIRIT_TEMPLE_MQ_BEAMOS_PITS,        true),
         ENTRANCE(RR_SPIRIT_TEMPLE_MQ_FLOORMASTER_STAIRS, logic->CanJumpslash()),
-        ENTRANCE(RR_SPIRIT_TEMPLE_MQ_3F_GIBDO_ROOM,      AnyAgeTime([]{return ((logic->IsAdult || logic->CanUse(RG_SONG_OF_TIME)) && (logic->CanUse(RG_MIRROR_SHIELD) || logic->CanUse(RG_EXT_SHIELD_OF_IKANA))) || logic->SunlightArrows();})),
+        ENTRANCE(RR_SPIRIT_TEMPLE_MQ_3F_GIBDO_ROOM,      AnyAgeTime([]{return ((logic->IsAdult || logic->CanUse(RG_SONG_OF_TIME)) && (logic->CanReflectLight())) || logic->SunlightArrows();})),
     });
 
     areaTable[RR_SPIRIT_TEMPLE_MQ_FLOORMASTER_STAIRS] = Region("Spirit Temple MQ Floormaster Stairs", SCENE_SPIRIT_TEMPLE, {}, {}, {
@@ -1089,7 +1089,7 @@ void RegionTable_Init_SpiritTemple() {
     areaTable[RR_SPIRIT_TEMPLE_MQ_BIG_MIRROR_ROOM] = Region("Spirit Temple MQ Big Mirror Room", SCENE_SPIRIT_TEMPLE, {
         //Events
         //Needs the mirror in the cave to be a perm flag and event for doorsanity
-        EVENT_ACCESS(LOGIC_SPIRIT_PLATFORM_LOWERED, (logic->Get(LOGIC_SPIRIT_PUSHED_4F_MIRRORS) && (logic->CanUse(RG_MIRROR_SHIELD) || logic->CanUse(RG_EXT_SHIELD_OF_IKANA))) || logic->SunlightArrows()),
+        EVENT_ACCESS(LOGIC_SPIRIT_PLATFORM_LOWERED, (logic->Get(LOGIC_SPIRIT_PUSHED_4F_MIRRORS) && (logic->CanReflectLight())) || logic->SunlightArrows()),
     }, {
         //Locations
         LOCATION(RC_SPIRIT_TEMPLE_MQ_BIG_MIRROR_POT_1,   logic->CanBreakPots()),
@@ -1109,7 +1109,7 @@ void RegionTable_Init_SpiritTemple() {
 
     areaTable[RR_SPIRIT_TEMPLE_MQ_BIG_MIRROR_CAVE] = Region("Spirit Temple MQ Big Mirror Cave", SCENE_SPIRIT_TEMPLE, {
         //Events
-        EVENT_ACCESS(LOGIC_SPIRIT_PUSHED_4F_MIRRORS, ((logic->IsAdult && (logic->CanUse(RG_MIRROR_SHIELD) || logic->CanUse(RG_EXT_SHIELD_OF_IKANA))) || logic->SunlightArrows() || (ctx->GetTrickOption(RT_FIRE_RINGS) && logic->TakeDamage())) && logic->HasItem(RG_POWER_BRACELET)),
+        EVENT_ACCESS(LOGIC_SPIRIT_PUSHED_4F_MIRRORS, ((logic->IsAdult && (logic->CanReflectLight())) || logic->SunlightArrows() || (ctx->GetTrickOption(RT_FIRE_RINGS) && logic->TakeDamage())) && logic->HasItem(RG_POWER_BRACELET)),
     }, {
         //Locations
         LOCATION(RC_SPIRIT_TEMPLE_MQ_MIRROR_PUZZLE_INVISIBLE_CHEST, (ctx->GetTrickOption(RT_LENS_SPIRIT_MQ) || logic->CanUse(RG_LENS_OF_TRUTH)) && logic->HasItem(RG_OPEN_CHEST)),
@@ -1121,7 +1121,7 @@ void RegionTable_Init_SpiritTemple() {
     //Assumes SpiritPlatformLowered is checked on entry
     areaTable[RR_SPIRIT_TEMPLE_MQ_PLATFORM] = Region("Spirit Temple MQ Platform", SCENE_SPIRIT_TEMPLE, {}, {}, {
         //Exits
-        ENTRANCE(RR_SPIRIT_TEMPLE_MQ_STATUE_HEAD,       logic->Get(LOGIC_SPIRIT_PUSHED_4F_MIRRORS) && (logic->CanUse(RG_MIRROR_SHIELD) || logic->CanUse(RG_EXT_SHIELD_OF_IKANA)) && logic->CanUse(RG_HOOKSHOT)),
+        ENTRANCE(RR_SPIRIT_TEMPLE_MQ_STATUE_HEAD,       logic->Get(LOGIC_SPIRIT_PUSHED_4F_MIRRORS) && (logic->CanReflectLight()) && logic->CanUse(RG_HOOKSHOT)),
         ENTRANCE(RR_SPIRIT_TEMPLE_MQ_STATUE_ROOM_CHILD, true),
         ENTRANCE(RR_SPIRIT_TEMPLE_MQ_INNER_RIGHT_HAND,  true),
         ENTRANCE(RR_SPIRIT_TEMPLE_MQ_STATUE_ROOM,       true),

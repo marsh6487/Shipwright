@@ -18,6 +18,7 @@
 // MM mask ownership check (mods/extended_inventory.c) — Keaton Mask with an MM
 // counterpart is permanent: selling it grants the reward without losing the mask.
 extern int32_t ExtInv_HasMmMask(uint16_t itemId);
+extern void ExtInv_KeepMmMaskOrSell(PlayState* play, uint16_t maskItem);
 
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY)
 
@@ -567,10 +568,7 @@ void func_80A540C0(EnHeishi2* this, PlayState* play) {
                 Flags_SetItemGetInf(ITEMGETINF_38);
                 // MM Keaton Mask owners keep the mask: the guard pays for it (reward flags
                 // above stay set) but the permanent MM mask is not taken away.
-                if (!ExtInv_HasMmMask(ITEM_MM_MASK_KEATON)) {
-                    Player_UnsetMask(play);
-                    Item_Give(play, ITEM_SOLD_OUT);
-                }
+                ExtInv_KeepMmMaskOrSell(play, ITEM_MM_MASK_KEATON);
                 if (this->unk_30A != 0) {
                     this->unk_30A = 2;
                     this->unk_30E = 1;

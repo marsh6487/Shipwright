@@ -8,6 +8,7 @@
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "mods/transformation_masks/transformation_masks.h"
 #include "mods/extended_equipment.h"
+#include "mods/items/logic/weapon_upgrades.h"
 #include "mods/equipment/objects/ikaxe_DL/header.h"
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED)
@@ -69,9 +70,9 @@ void EnBoom_Init(Actor* thisx, PlayState* play) {
 
     Actor_ProcessInitChain(&this->actor, sInitChain);
 
-    // IK Axe: if spawned by vanilla boomerang pipeline during throw mode,
-    // convert to tomahawk (params 99)
-    if (this->actor.params == 0 && ExtEquip_IsEnabled() && gExtEquipState.currentExtSword == 3) {
+    // Hammer upgrade (Iron Knuckle's Axe): if spawned by the vanilla boomerang
+    // pipeline during throw mode, convert to tomahawk (params 99)
+    if (this->actor.params == 0 && WeaponUpgrade_HasHammerAxe()) {
         this->actor.params = 99;
     }
 

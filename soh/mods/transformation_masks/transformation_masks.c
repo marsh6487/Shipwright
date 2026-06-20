@@ -157,15 +157,21 @@ u8 TransformMasks_IsTransformed(void) {
 // OOT voice base = 0x6800 (NA_SE_VO_LI_SWORD_N).
 // MM voiceSfxIdOffset per form (from 2Ship z_player.c sPlayerAgeProperties):
 //   FD=0x00, Human=0x20, Deku=0x80, Zora=0xA0, Goron=0xC0
-void TransformMasks_PlayMmVoice(u16 ootVoiceSfxId, Vec3f* pos) {
+// Returns 1 if a form-specific voice was played (caller must NOT play the OOT
+// voice afterwards); 0 if no override applies — no mm.o2r, action out of range,
+// or a form with no voice bank (Human/Gerudo/Pikachu) — in which case the caller
+// should fall back to Link's OOT voice.
+u8 TransformMasks_TryPlayMmVoice(u16 ootVoiceSfxId, Vec3f* pos) {
     if (!MmSfx_IsAvailable())
-        return;
+        return 0;
 
     // Compute action index: ootVoiceSfxId is the BASE sfxId (before OOT age offset)
-    // e.g., NA_SE_VO_LI_DAMAGE_S = 0x6805, action = 5
+    // e.g., NA_SE_VO_LI_DAMAGE_S = 0x6805, action = 5. The OOT child (_KID) voice
+    // IDs live at 0x6820+ and are intentionally out of range here — callers pass
+    // the adult base id and the form voice bank supplies the form's "age".
     u16 action = ootVoiceSfxId - 0x6800;
     if (action >= 0x20)
-        return; // Out of range
+        return 0; // Out of range
 
     // Get MM voice offset for current form
     u16 mmOffset;
@@ -184,14 +190,14 @@ void TransformMasks_PlayMmVoice(u16 ootVoiceSfxId, Vec3f* pos) {
             mmOffset = 0x00;
             break;
         case MM_PLAYER_FORM_GERUDO:
-            // No MM voice samples for Gerudo — fall through to default so
-            // Player_PlayVoiceSfx ends up calling the OOT path (Link's normal
-            // voice). Mapping a fake offset like 0x40 used to crash the audio
-            // thread because MmSfx_PlayAtPos dereferenced a NULL sample for
-            // SFX IDs the SF0 doesn't contain. When a gerudo voice pack is
-            // added later (pitch-shifted Link or sampled NPC), assign an unused
-            // 0x20-wide block (e.g. 0x40 or 0x60) and ship the samples in mm.o2r.
-            return;
+            // No MM voice samples for Gerudo — return 0 so the caller falls back
+            // to the OOT path (Link's normal voice). Mapping a fake offset like
+            // 0x40 used to crash the audio thread because MmSfx_PlayAtPos
+            // dereferenced a NULL sample for SFX IDs the SF0 doesn't contain.
+            // When a gerudo voice pack is added later (pitch-shifted Link or
+            // sampled NPC), assign an unused 0x20-wide block (e.g. 0x40 or 0x60)
+            // and ship the samples in mm.o2r.
+            return 0;
         case MM_PLAYER_FORM_GARO:
             // Garo Master MM voice samples bundled at mm.o2r SFX bank
             // 0x6800+0x60+action. Block layout: FD=0x00, Gerudo=0x40, Garo=0x60,
@@ -201,7 +207,7 @@ void TransformMasks_PlayMmVoice(u16 ootVoiceSfxId, Vec3f* pos) {
             mmOffset = 0x60;
             break;
         default:
-            return;
+            return 0;
     }
 
     u16 mmSfxId = 0x6800 + mmOffset + action;
@@ -214,6 +220,13 @@ void TransformMasks_PlayMmVoice(u16 ootVoiceSfxId, Vec3f* pos) {
               "[MmVoice] form=%d oot=0x%04X offset=0x%X action=0x%X -> mmSfxId=0x%04X",
               (s32)form, (u32)ootVoiceSfxId, (u32)mmOffset, (u32)action, (u32)mmSfxId);
     MmSfx_PlayAtPos(mmSfxId, pos);
+    return 1;
+}
+
+// Void wrapper kept for the Player_PlayVoiceSfx hook (z_player.c), which
+// suppresses the OOT voice whenever transformed regardless of the result.
+void TransformMasks_PlayMmVoice(u16 ootVoiceSfxId, Vec3f* pos) {
+    TransformMasks_TryPlayMmVoice(ootVoiceSfxId, pos);
 }
 
 // Redirect OOT floor/walk SFX to MM equivalent for current form. MM's
@@ -808,6 +821,27 @@ void BossSuperDamage_DrawElectricSparks(Actor* boss, PlayState* play, Vec3f* lim
     }
 
     CLOSE_DISPS(gfxCtx);
+}
+
+// Build spark anchors from a JntSph collider's world-sphere centers, then draw the
+// glow. Collapses the identical per-boss copy loop (Fd, Fd2, Dodongo, Sst, ...).
+void BossSuperDamage_DrawGlowFromSpheres(Actor* boss, PlayState* play, ColliderJntSph* collider, s32 sphereCount,
+                                         f32 scale) {
+    Vec3f anchors[32]; // headroom; the largest reworked boss collider is 19 spheres
+    s32 i;
+
+    if (collider == NULL || sphereCount <= 0) {
+        return;
+    }
+    if (sphereCount > 32) {
+        sphereCount = 32;
+    }
+    for (i = 0; i < sphereCount; i++) {
+        anchors[i].x = collider->elements[i].dim.worldSphere.center.x;
+        anchors[i].y = collider->elements[i].dim.worldSphere.center.y;
+        anchors[i].z = collider->elements[i].dim.worldSphere.center.z;
+    }
+    BossSuperDamage_DrawElectricSparks(boss, play, anchors, sphereCount, scale);
 }
 
 // =============================================================================

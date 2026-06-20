@@ -17,7 +17,7 @@ void RegionTable_Init_DeathMountainTrail() {
         LOCATION(RC_DMT_GS_ABOVE_DODONGOS_CAVERN, 	  logic->IsAdult && logic->CanGetNightTimeGS() && 
 							        					  ((logic->CanUse(RG_MEGATON_HAMMER) || (ctx->GetTrickOption(RT_ITEM_EXTENSION) && logic->CanUse(RG_HOOKSHOT)) || (ctx->GetTrickOption(RT_BOULDER_COLLISION) && logic->CanUse(RG_LONGSHOT)) || (ctx->GetTrickOption(RT_DMT_JS_LOWER_GS) && logic->CanJumpslash())) || 
 							        					  ((ctx->GetTrickOption(RT_DMT_BEAN_LOWER_GS) && CanPlantBean(RR_DEATH_MOUNTAIN_TRAIL, RG_DEATH_MOUNTAIN_TRAIL_BEAN_SOUL)) || (ctx->GetTrickOption(RT_DMT_HOVERS_LOWER_GS) && logic->CanUse(RG_HOVER_BOOTS)) &&
-							        						  (logic->HasExplosives() || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)) || ((ctx->GetTrickOption(RT_BOULDER_COLLISION) || ctx->GetTrickOption(RT_ITEM_EXTENSION)) && (logic->CanUse(RG_FAIRY_BOW) || logic->CanUse(RG_FAIRY_SLINGSHOT))) || logic->CanJumpslash())))),
+							        						  (logic->HasExplosives() || (logic->HasMagicFire()) || ((ctx->GetTrickOption(RT_BOULDER_COLLISION) || ctx->GetTrickOption(RT_ITEM_EXTENSION)) && (logic->CanUse(RG_FAIRY_BOW) || logic->CanUse(RG_FAIRY_SLINGSHOT))) || logic->CanJumpslash())))),
         LOCATION(RC_DMT_BLUE_RUPEE,               	  logic->IsChild && logic->BlastOrSmash()),
         LOCATION(RC_DMT_RED_RUPEE,                	  logic->IsChild && logic->BlastOrSmash()),
         LOCATION(RC_DMT_BEAN_SPROUT_FAIRY_1,      	  logic->IsChild && logic->CanUse(RG_MAGIC_BEAN) && logic->HasItem(RG_DEATH_MOUNTAIN_TRAIL_BEAN_SOUL) && logic->CanUse(RG_SONG_OF_STORMS) && (logic->HasExplosives() || logic->HasStrength(1))),
@@ -69,7 +69,7 @@ void RegionTable_Init_DeathMountainTrail() {
         //Locations
         LOCATION(RC_DMT_GS_FALLING_ROCKS_PATH, logic->IsAdult && logic->CanGetNightTimeGS() && 
                                                (logic->CanUse(RG_MEGATON_HAMMER) || (ctx->GetTrickOption(RT_BOULDER_COLLISION) && logic->CanUse(RG_LONGSHOT)) || (ctx->GetTrickOption(RT_ITEM_EXTENSION) && logic->CanUse(RG_HOOKSHOT)) || 
-                                                (ctx->GetTrickOption(RT_DMT_UPPER_GS) && (logic->CanJumpslash() || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)) || logic->HasExplosives() || (ctx->GetTrickOption(RT_ITEM_EXTENSION) && logic->CanUse(RG_FAIRY_SLINGSHOT)) || 
+                                                (ctx->GetTrickOption(RT_DMT_UPPER_GS) && (logic->CanJumpslash() || (logic->HasMagicFire()) || logic->HasExplosives() || (ctx->GetTrickOption(RT_ITEM_EXTENSION) && logic->CanUse(RG_FAIRY_SLINGSHOT)) || 
                                                                                           (ctx->GetTrickOption(RT_BOULDER_COLLISION) && logic->CanKillEnemy(RE_GOLD_SKULLTULA, ED_LONGSHOT)))))),
         LOCATION(RC_DMT_BRONZE_BOULDER_8,      logic->IsAdult && logic->CanBreakBronzeBoulder()),
         LOCATION(RC_DMT_BRONZE_BOULDER_9,      logic->IsAdult && logic->CanBreakBronzeBoulder()),

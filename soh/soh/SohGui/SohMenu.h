@@ -44,8 +44,6 @@ class SohMenu : public Ship::Menu {
     void AddMenuElements();
     void AddMenuSettings();
     void AddMenuEnhancements();
-    void AddMenuNEI();
-    void AddMenuSw97();
     void AddMenuDevTools();
     void AddMenuRandomizer();
     void AddMenuNetwork();

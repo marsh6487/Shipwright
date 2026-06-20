@@ -50,6 +50,13 @@ s32 MmMaskWear_IsBlastCooldown(void);
 // Returns true if All-Night Mask is currently worn (used by En_Sw and En_Wood02).
 s32 MmMaskWear_IsAllNightMaskActive(void);
 
+// Shared night-GS spawn override used by both En_Sw and En_Wood02: returns true if
+// either the "NightGSAlwaysSpawn" enhancement CVar is set OR the All-Night Mask is
+// worn. Collapses the byte-identical
+//   (CVarGetInteger(CVAR_ENHANCEMENT("NightGSAlwaysSpawn"), 0) || MmMaskWear_IsAllNightMaskActive())
+// sub-expression duplicated in both actors.
+s32 MmMaskWear_ShouldForceNightGS(void);
+
 // Returns true if Gibdo Mask is currently worn (used by En_Rd to switch
 // Redeads/Gibdos to a friendly + dancing state, mirroring MM behavior).
 s32 MmMaskWear_IsGibdoMaskWorn(void);

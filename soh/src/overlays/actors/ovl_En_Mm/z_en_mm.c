@@ -12,6 +12,7 @@
 // MM mask ownership check (mods/extended_inventory.c) — Bunny Hood with an MM
 // counterpart is permanent: selling it grants the reward without losing the mask.
 extern int32_t ExtInv_HasMmMask(uint16_t itemId);
+extern void ExtInv_KeepMmMaskOrSell(PlayState* play, uint16_t maskItem);
 
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY | ACTOR_FLAG_UPDATE_CULLING_DISABLED)
 
@@ -245,10 +246,7 @@ s32 func_80AADAA0(EnMm* this, PlayState* play) {
             if (Message_ShouldAdvance(play)) {
                 // MM Bunny Hood owners keep the mask: the Running Man pays for it but the
                 // permanent MM mask is not taken away.
-                if (!ExtInv_HasMmMask(ITEM_MM_MASK_BUNNY)) {
-                    Player_UnsetMask(play);
-                    Item_Give(play, ITEM_SOLD_OUT);
-                }
+                ExtInv_KeepMmMaskOrSell(play, ITEM_MM_MASK_BUNNY);
                 Flags_SetItemGetInf(ITEMGETINF_3B);
                 Rupees_ChangeBy(500);
                 player->actor.textId = 0x202E;

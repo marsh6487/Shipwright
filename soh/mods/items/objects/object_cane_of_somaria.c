@@ -8,7 +8,25 @@
 #include "macros.h"
 #include "functions.h"
 #include <math.h>
-#include "somaria_cane_DL/header.h"
+// 3D model lives in soh.o2r: objects/object_somaria/g_somaria_cane_dl (XML emitted
+// by apps/dl_c_to_xml.py, packed via rebuild_soh_otr.bat). No inline C model.
+// ResourceMgr_LoadGfxByName crashes on a missing path, so gate with FileExists;
+// returns NULL (cane simply not drawn) if the archive lacks the object.
+extern u8 ResourceMgr_FileExists(const char* resName);
+extern Gfx* ResourceMgr_LoadGfxByName(const char* path);
+
+static Gfx* Somaria_GetHandDL(void) {
+    static Gfx* sCached = NULL;
+    static u8 sTried = 0;
+    if (!sTried) {
+        sTried = 1;
+        const char* otr = "__OTR__objects/object_somaria/g_somaria_cane_dl";
+        if (ResourceMgr_FileExists(otr)) {
+            sCached = ResourceMgr_LoadGfxByName(otr);
+        }
+    }
+    return sCached;
+}
 
 void CustomItems_DrawCaneOfSomaria(Player* player, PlayState* play) {
     if (!shSomariaActive)
@@ -45,9 +63,12 @@ void CustomItems_DrawCaneOfSomaria(Player* player, PlayState* play) {
 
     Matrix_Scale(0.05f, 0.05f, 0.05f, MTXMODE_APPLY);
 
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, g_somaria_cane_dl);
+    Gfx* handDL = Somaria_GetHandDL();
+    if (handDL != NULL) {
+        gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
+                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_OPA_DISP++, handDL);
+    }
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

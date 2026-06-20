@@ -16,6 +16,7 @@
 #include "objects/gameplay_keep/gameplay_keep.h"
 
 // Helper modules
+#include "../helpers/item_voice.c"
 #include "../helpers/movement_helper.c"
 #include "../helpers/equip_helper.c"
 #include "../helpers/camera_helper.c"
@@ -53,6 +54,7 @@
 #include "item_ballchain.c"
 #include "item_bombarrows.c"
 #include "twilight_upgrade.c"
+#include "weapon_upgrades.c"
 #include "item_gustjar.c"
 #include "item_beetle.c"
 #include "item_dominionrod.c"

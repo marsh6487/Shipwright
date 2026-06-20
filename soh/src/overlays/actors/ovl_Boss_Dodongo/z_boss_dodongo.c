@@ -1401,16 +1401,7 @@ void BossDodongo_Draw(Actor* thisx, PlayState* play) {
     // refreshed during the skeleton draw (Collider_UpdateSpheres in PostLimbDraw)
     // and their world-space centers blanket Dodongo's whole body — ideal anchors
     // for the light-orb shell. No-op when the spark timer is 0 (not recently hit).
-    {
-        Vec3f limbs[19];
-        s32 k;
-        for (k = 0; k < 19; k++) {
-            limbs[k].x = this->collider.elements[k].dim.worldSphere.center.x;
-            limbs[k].y = this->collider.elements[k].dim.worldSphere.center.y;
-            limbs[k].z = this->collider.elements[k].dim.worldSphere.center.z;
-        }
-        BossSuperDamage_DrawElectricSparks(&this->actor, play, limbs, 19, 1.3f);
-    }
+    BossSuperDamage_DrawGlowFromSpheres(&this->actor, play, &this->collider, 19, 1.3f);
 }
 
 f32 func_808C4F6C(BossDodongo* this, PlayState* play) {

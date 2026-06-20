@@ -17,6 +17,36 @@
 extern "C" {
 #endif
 
+// Skijer's NEI — item-action func ptr types (shared with extended_player.h via
+// the NEI_ITEM_ACTION_FUNC_TYPES guard so neither header redefines them).
+#ifndef NEI_ITEM_ACTION_FUNC_TYPES
+#define NEI_ITEM_ACTION_FUNC_TYPES
+struct Player;
+struct PlayState;
+typedef int32_t (*ItemActionUpdateFunc)(struct Player* player, struct PlayState* play);
+typedef void (*ItemActionInitFunc)(struct PlayState* play, struct Player* player);
+#endif
+
+// Skijer's NEI — unified custom-item registry row (single source of truth).
+// item: ITEM_xxx (or NEI_NO_ITEM for IA-only rows). slot: page-2/3 inventory
+// slot, or NEI_NO_SLOT. ageReq: AGE_REQ_*. iconTex: page-2 icon (NULL = dynamic).
+#define NEI_NO_ITEM ((int16_t)-1)
+#define NEI_NO_SLOT ((uint8_t)0xFF)
+
+typedef struct {
+    int16_t item;
+    int16_t ia;
+    uint8_t modelGroup;
+    uint8_t slot;
+    uint8_t ageReq;
+    void* iconTex;
+    ItemActionUpdateFunc updateFn;
+    ItemActionInitFunc initFn;
+} NeiItem;
+
+const NeiItem* Nei_FindByItem(int32_t item);
+const NeiItem* Nei_FindBySlot(uint8_t slot);
+
 typedef struct {
     int currentPage;         // 0 = vanilla, 1 = custom items, 2 = MM masks
     int16_t pageSwitchTimer; // Cooldown to prevent rapid switching
@@ -146,6 +176,15 @@ uint8_t ExtInv_GetItemSlot(uint16_t itemId);
  * @return 1 if the player owns this MM mask (extended inventory page 3)
  */
 int32_t ExtInv_HasMmMask(uint16_t itemId);
+
+/**
+ * Trade-mask sale helper for En_Mm (Bunny Hood) / En_Heishi2 (Keaton Mask).
+ * If the player does NOT own the given MM counterpart mask, unsets the worn OOT
+ * trade mask and gives ITEM_SOLD_OUT; otherwise keeps the (permanent) mask.
+ * @param play - Current PlayState
+ * @param maskItem - MM mask item ID counterpart (ITEM_MM_MASK_BUNNY / ITEM_MM_MASK_KEATON)
+ */
+void ExtInv_KeepMmMaskOrSell(struct PlayState* play, uint16_t maskItem);
 extern const uint8_t gPage2Items[24];
 #define AGE_REQ_ADULT LINK_AGE_ADULT
 #define AGE_REQ_CHILD LINK_AGE_CHILD

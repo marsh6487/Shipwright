@@ -17,6 +17,7 @@
 #include "item_time_gate.h"
 #include "../custom_items.h"
 #include "../helpers/equip_helper.h"
+#include "../helpers/item_voice.h"
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
@@ -139,8 +140,7 @@ static void TimeGate_StateCasting(Player* p, PlayState* play) {
         LinkAnimation_Change(play, &p->skelAnime, &gPlayerAnim_link_magic_tamashii1, TGATE_ANIM_SPEED, 0.0f,
                              Animation_GetLastFrame(&gPlayerAnim_link_magic_tamashii1), ANIMMODE_ONCE, -8.0f);
         TGate_ComputePhaseEnd(tgTimer, Animation_GetLastFrame(&gPlayerAnim_link_magic_tamashii1));
-        Audio_PlaySoundGeneral(NA_SE_VO_LI_MAGIC_NALE, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        ItemVoice_PlayId(p, NA_SE_VO_LI_MAGIC_NALE);
     }
 
     // Double-update: vanilla calls LinkAnimation_Update once, we call it again (Demise pattern)

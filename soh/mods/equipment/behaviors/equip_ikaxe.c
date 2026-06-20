@@ -1,14 +1,18 @@
 /**
- * equip_ikaxe.c - Iron Knuckle Axe (Extended Sword Slot 3)
+ * equip_ikaxe.c - Hammer Upgrade: Iron Knuckle's Axe
  *
- * Pure Hammer IA — chunky, heavy, double damage.
- * No spin attack, no charge. Just heavy hammer swings.
+ * A true upgrade ON the Megaton Hammer (RG_HAMMER_UPGRADE / weaponUpgrades bit).
+ * The player wields their real hammer on a C-button; this only ENHANCES it — no
+ * sword-slot hijack, no forced equip. Driven by WeaponUpgrade_HasHammerAxe()
+ * from ExtEquip_UpdateBehavior (independent of the extended-equipment cheat).
  *
- * - Forces PLAYER_IA_HAMMER
- * - Chunky anim speeds (0.25x startup, 1.25x impact)
+ * While the hammer is out:
+ * - Chunky anim speeds (slow windup → fast impact)
  * - Double damage via meleeWeaponQuads
  * - 2x hitbox reach (in z_player_lib.c)
  * - Slower walk speed
+ * - Hammer DL is hidden and the Iron Knuckle Axe model is drawn in its place
+ * - Tomahawk throw (R + B hold)
  *
  * Included by ext_equip_behavior.c (unity build).
  */
@@ -79,24 +83,12 @@ static void IKAxe_Behavior(Player* player, PlayState* play) {
         return;
     }
 
-    // Save original state (only once)
-    if (!gExtEquipBehavior.ikAxeActive) {
-        gExtEquipBehavior.ikAxeSavedSwordEquip =
-            (gSaveContext.equips.equipment >> gEquipShifts[EQUIP_TYPE_SWORD]) & 0xF;
-        gExtEquipBehavior.ikAxeSavedButtonItem = gSaveContext.equips.buttonItems[0];
-        gExtEquipBehavior.ikAxeActive = 1;
-    }
+    // Mark active so IKAxe_Cleanup resets throw state when the upgrade is lost.
+    gExtEquipBehavior.ikAxeActive = 1;
 
-    // Hammer on B — game handles equip/putaway naturally:
-    // B press → equip hammer → swing → auto putaway → free anims
-    // Only buttonItems[0] is needed: sItemActions[ITEM_HAMMER] → PLAYER_IA_HAMMER drives the swing.
-    // Do NOT write inventory.items[SLOT_HAMMER]: that slot is what the pause menu reads to draw
-    // the hammer icon, so writing it would falsely give the player a hammer they don't own.
-    gSaveContext.equips.buttonItems[0] = ITEM_HAMMER;
-
-    // DON'T force heldItemAction every frame — let the game manage it.
-    // Hammer's natural cycle: press B → heldItemAction=HAMMER → swing → putaway → NONE
-
+    // The player wields their REAL Megaton Hammer (on a C-button). We do NOT touch
+    // buttonItems / the sword slot — this is an upgrade ON the hammer. isHolding is
+    // simply "the hammer is currently out". Its natural cycle drives everything.
     u8 isHolding = (player->heldItemAction == PLAYER_IA_HAMMER);
 
     // Signal draw system: hide vanilla sword DL only when hammer is out
@@ -127,17 +119,13 @@ static void IKAxe_Cleanup(void) {
     if (!gExtEquipBehavior.ikAxeActive)
         return;
 
-    // Exit aim mode if we were charging when unequipped
-    if (sIKAxeAimActive) {
-        // Can't call FirstPerson_Exit without player/play, just clear flags
-        sIKAxeAimActive = 0;
-    }
+    // No sword/buttonItems to restore — the hammer upgrade never hijacked them.
+    // Just clear throw/aim/draw state so a stale axe model isn't left drawn.
+    sIKAxeAimActive = 0;
     sIKAxeThrowState = IKAXE_THROW_IDLE;
     sIKAxeBHoldFrames = 0;
     sIKAxeThrown = 0;
-
-    Inventory_ChangeEquipment(EQUIP_TYPE_SWORD, gExtEquipBehavior.ikAxeSavedSwordEquip);
-    gSaveContext.equips.buttonItems[0] = gExtEquipBehavior.ikAxeSavedButtonItem;
+    gExtEquipBehavior.ikAxeDrawing = 0;
     gExtEquipBehavior.ikAxeActive = 0;
 }
 

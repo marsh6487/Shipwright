@@ -1287,14 +1287,5 @@ void BossFd2_Draw(Actor* thisx, PlayState* play) {
     // FD / Pika Gigantamax electric glow on the emerged head + neck. The 9 JntSph
     // collider spheres were refreshed during the skeleton draw (Collider_UpdateSpheres
     // in BossFd2_PostLimbDraw). No-op when the spark timer is 0 (not recently hit).
-    {
-        Vec3f limbs[9];
-        s32 k;
-        for (k = 0; k < 9; k++) {
-            limbs[k].x = this->collider.elements[k].dim.worldSphere.center.x;
-            limbs[k].y = this->collider.elements[k].dim.worldSphere.center.y;
-            limbs[k].z = this->collider.elements[k].dim.worldSphere.center.z;
-        }
-        BossSuperDamage_DrawElectricSparks(&this->actor, play, limbs, 9, 1.2f);
-    }
+    BossSuperDamage_DrawGlowFromSpheres(&this->actor, play, &this->collider, 9, 1.2f);
 }

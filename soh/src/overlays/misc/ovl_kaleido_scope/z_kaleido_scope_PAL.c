@@ -1541,6 +1541,25 @@ void KaleidoScope_DrawPages(PlayState* play, GraphicsContext* gfxCtx) {
     FrameInterpolation_RecordCloseChild();
 }
 
+// Twilight Upgrade mode-name swap: when the player has the corresponding upgrade
+// bit set AND its kaleido toggle is in the "upgraded" position, the alternate
+// item-name texture path should be shown instead of the vanilla one. Returns the
+// OTR override path for the given namedItem, or NULL if no override applies.
+// Shared by KaleidoScope_DrawInfoPanel (per-frame re-apply) and
+// KaleidoScope_UpdateNamePanel (cursor-change apply).
+static const char* KaleidoScope_GetTwilightNameOverride(s32 namedItem) {
+    extern u8 TwilightUpgrade_IsClawshotActive(void);
+    extern u8 TwilightUpgrade_IsGaleBoomerangActive(void);
+    static const char sClawshotName[] = "__OTR__textures/item_name_custom/gClawshotNameTex";
+    static const char sGaleName[] = "__OTR__textures/item_name_custom/gGaleBoomerangNameTex";
+    if ((namedItem == ITEM_HOOKSHOT || namedItem == ITEM_LONGSHOT) && TwilightUpgrade_IsClawshotActive()) {
+        return sClawshotName;
+    } else if (namedItem == ITEM_BOOMERANG && TwilightUpgrade_IsGaleBoomerangActive()) {
+        return sGaleName;
+    }
+    return NULL;
+}
+
 void KaleidoScope_DrawInfoPanel(PlayState* play) {
     Color_RGB8 aButtonColor = { 0, 100, 255 };
     if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.Changed"), 0)) {
@@ -1848,17 +1867,7 @@ void KaleidoScope_DrawInfoPanel(PlayState* play) {
             // slot left a stale vanilla name in nameSegment. Re-apply here so the
             // displayed name always matches the current mode.
             {
-                extern u8 TwilightUpgrade_IsClawshotActive(void);
-                extern u8 TwilightUpgrade_IsGaleBoomerangActive(void);
-                static const char sClawshotNameDraw[] = "__OTR__textures/item_name_custom/gClawshotNameTex";
-                static const char sGaleNameDraw[] = "__OTR__textures/item_name_custom/gGaleBoomerangNameTex";
-                const char* twilightOverrideDraw = NULL;
-                if ((pauseCtx->namedItem == ITEM_HOOKSHOT || pauseCtx->namedItem == ITEM_LONGSHOT) &&
-                    TwilightUpgrade_IsClawshotActive()) {
-                    twilightOverrideDraw = sClawshotNameDraw;
-                } else if (pauseCtx->namedItem == ITEM_BOOMERANG && TwilightUpgrade_IsGaleBoomerangActive()) {
-                    twilightOverrideDraw = sGaleNameDraw;
-                }
+                const char* twilightOverrideDraw = KaleidoScope_GetTwilightNameOverride(pauseCtx->namedItem);
                 if (twilightOverrideDraw != NULL) {
                     memcpy(pauseCtx->nameSegment, twilightOverrideDraw, strlen(twilightOverrideDraw) + 1);
                 }
@@ -2210,17 +2219,7 @@ void KaleidoScope_UpdateNamePanel(PlayState* play) {
                 // "upgraded" position, show the alternate item name instead of
                 // the vanilla one. C-level override done here to keep the C-only
                 // unity build (no extra .cpp file needed).
-                extern u8 TwilightUpgrade_IsClawshotActive(void);
-                extern u8 TwilightUpgrade_IsGaleBoomerangActive(void);
-                static const char sClawshotName[] = "__OTR__textures/item_name_custom/gClawshotNameTex";
-                static const char sGaleName[] = "__OTR__textures/item_name_custom/gGaleBoomerangNameTex";
-                const char* twilightOverride = NULL;
-                if ((pauseCtx->namedItem == ITEM_HOOKSHOT || pauseCtx->namedItem == ITEM_LONGSHOT) &&
-                    TwilightUpgrade_IsClawshotActive()) {
-                    twilightOverride = sClawshotName;
-                } else if (pauseCtx->namedItem == ITEM_BOOMERANG && TwilightUpgrade_IsGaleBoomerangActive()) {
-                    twilightOverride = sGaleName;
-                }
+                const char* twilightOverride = KaleidoScope_GetTwilightNameOverride(pauseCtx->namedItem);
 
                 if (twilightOverride != NULL) {
                     memcpy(pauseCtx->nameSegment, twilightOverride, strlen(twilightOverride) + 1);

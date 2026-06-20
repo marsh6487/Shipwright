@@ -20,6 +20,7 @@
 #include "../helpers/camera_helper.h"
 #include "../helpers/equip_helper.h"
 #include "../helpers/combat_helper.h"
+#include "../helpers/item_voice.h"
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
@@ -170,8 +171,7 @@ static void Beetle_Launch(Player* p, PlayState* play) {
     Beetle_CreateSubCam(play);
 
     Beetle_PlaySound(&p->actor.world.pos, BEETLE_SFX_LAUNCH);
-    Audio_PlaySoundGeneral(LINK_IS_ADULT ? NA_SE_VO_LI_SWORD_N : NA_SE_VO_LI_SWORD_N_KID, &p->actor.world.pos, 4,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    ItemVoice_Play(p, NA_SE_VO_LI_SWORD_N, NA_SE_VO_LI_SWORD_N_KID);
 }
 
 static void Beetle_StartReturn(Player* p, PlayState* play) {
@@ -186,8 +186,7 @@ static void Beetle_Catch(Player* p, PlayState* play) {
     LinkAnimation_PlayOnce(play, &p->upperSkelAnime, &gPlayerAnim_link_boom_catch);
 
     Beetle_PlaySound(&p->actor.world.pos, BEETLE_SFX_CATCH);
-    Audio_PlaySoundGeneral(LINK_IS_ADULT ? NA_SE_VO_LI_SWORD_N : NA_SE_VO_LI_SWORD_N_KID, &p->actor.world.pos, 4,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    ItemVoice_Play(p, NA_SE_VO_LI_SWORD_N, NA_SE_VO_LI_SWORD_N_KID);
 
     Beetle_DropGrabbedActor(p);
 

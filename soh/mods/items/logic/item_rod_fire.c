@@ -139,7 +139,7 @@ extern void func_8083821C(Player* this);
 
 static void FireRod_Backfire(Player* p, PlayState* play) {
     Audio_PlayActorSound2(&p->actor, FIRE_ROD_SFX_BACKFIRE_HIT);
-    Audio_PlayActorSound2(&p->actor, NA_SE_VO_LI_FALL_L);
+    ItemVoice_PlayId(p, NA_SE_VO_LI_FALL_L);
 
     // Set Link on fire using the real burn system
     func_8083821C(p);

@@ -91,6 +91,14 @@ void BossSuperDamage_StartElectricSparks(Actor* boss, s16 durationFrames);
 // (1.0 ≈ 45-unit sparks; use 0.6-0.8 for tiny bosses, 1.5-2.5 for huge ones).
 void BossSuperDamage_DrawElectricSparks(Actor* boss, PlayState* play, Vec3f* limbsPos, s32 limbCount, f32 scale);
 
+// Convenience wrapper around DrawElectricSparks for the common case where the spark
+// anchors ARE a JntSph collider's world-sphere centers. Collapses the identical
+// per-boss "copy elements[i].dim.worldSphere.center into a Vec3f[] then call
+// DrawElectricSparks" loop. `collider` = the boss's ColliderJntSph; the first
+// `sphereCount` element centers become the anchors. No-op when idle.
+void BossSuperDamage_DrawGlowFromSpheres(Actor* boss, PlayState* play, ColliderJntSph* collider, s32 sphereCount,
+                                         f32 scale);
+
 #ifdef __cplusplus
 }
 #endif

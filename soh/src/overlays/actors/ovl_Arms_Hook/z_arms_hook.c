@@ -423,15 +423,13 @@ void ArmsHook_Draw(Actor* thisx, PlayState* play) {
         {
             extern u8 TwilightUpgrade_IsClawshotActive(void);
             extern void* MmAssets_LoadHookshotTipDL(void);
+            extern Gfx* MmDL_Or(Gfx* vanillaDL, Gfx* mmDL);
             u8 isShooting = (this->actionFunc == ArmsHook_Shoot) && (this->timer > 0);
             if (GameInteractor_Should(VB_DRAW_HOOKSHOT_TIP, true, player, play)) {
                 Gfx* tipDL = gLinkAdultHookshotTipDL;
                 u8 useMmTip = TwilightUpgrade_IsClawshotActive();
                 if (useMmTip) {
-                    Gfx* mmTip = (Gfx*)MmAssets_LoadHookshotTipDL();
-                    if (mmTip != NULL) {
-                        tipDL = mmTip;
-                    }
+                    tipDL = MmDL_Or(tipDL, (Gfx*)MmAssets_LoadHookshotTipDL());
                 }
                 // Skip the tip entirely when clawshot mode is held-not-shooting.
                 // Vanilla OOT keeps drawing its own tip here even when not
@@ -462,12 +460,10 @@ void ArmsHook_Draw(Actor* thisx, PlayState* play) {
         {
             extern u8 TwilightUpgrade_IsClawshotActive(void);
             extern void* MmAssets_LoadHookshotChainDL(void);
+            extern Gfx* MmDL_Or(Gfx* vanillaDL, Gfx* mmDL);
             Gfx* chainDL = gLinkAdultHookshotChainDL;
             if (TwilightUpgrade_IsClawshotActive()) {
-                Gfx* mmChain = (Gfx*)MmAssets_LoadHookshotChainDL();
-                if (mmChain != NULL) {
-                    chainDL = mmChain;
-                }
+                chainDL = MmDL_Or(chainDL, (Gfx*)MmAssets_LoadHookshotChainDL());
             }
             // upstream: alt-asset hookshot models can suppress the vanilla chain draw
             if (GameInteractor_Should(VB_DRAW_HOOKSHOT_CHAIN, true, player, play)) {

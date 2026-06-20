@@ -205,7 +205,7 @@ void RegionTable_Init_BottomOfTheWell() {
         LOCATION(RC_BOTTOM_OF_THE_WELL_BASEMENT_GRASS_3,   logic->CanCutShrubs()),
         LOCATION(RC_BOTW_BOULDER_1,                        logic->CanBreakBoulder()),
         LOCATION(RC_BOTW_BOULDER_2,                        logic->CanBreakBoulder()),
-        LOCATION(RC_BOTW_BOULDER_3,                        logic->CanBreakBoulder() || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)) || (logic->CanUse(RG_STICKS) && ctx->GetTrickOption(RT_BOTW_BASEMENT)) ||
+        LOCATION(RC_BOTW_BOULDER_3,                        logic->CanBreakBoulder() || (logic->HasMagicFire()) || (logic->CanUse(RG_STICKS) && ctx->GetTrickOption(RT_BOTW_BASEMENT)) ||
                                                            (ctx->GetTrickOption(RT_BOULDER_COLLISION) && logic->CanUse(RG_FAIRY_BOW))),
         LOCATION(RC_BOTW_BOULDER_4,                        logic->CanBreakBoulder()),
         LOCATION(RC_BOTW_BOULDER_5,                        logic->CanBreakBoulder()),
@@ -215,7 +215,7 @@ void RegionTable_Init_BottomOfTheWell() {
         ENTRANCE(RR_BOTW_HIDDEN_POTS,      logic->CanClimbHighLadder()),
         //It's possible to abuse boulder's limited range of collision detection to detonate the flowers through the boulder with bow, but this is a glitch
         //the exact range is just past the furthest away plank in the green goo section
-        ENTRANCE(RR_BOTW_B3_BOMB_FLOWERS,  AnyAgeTime([]{return logic->BlastOrSmash() || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)) || (ctx->GetTrickOption(RT_BOTW_BASEMENT) && logic->CanUse(RG_STICKS)) || (ctx->GetTrickOption(RT_BOULDER_COLLISION) && logic->CanUse(RG_FAIRY_BOW));})),
+        ENTRANCE(RR_BOTW_B3_BOMB_FLOWERS,  AnyAgeTime([]{return logic->BlastOrSmash() || (logic->HasMagicFire()) || (ctx->GetTrickOption(RT_BOTW_BASEMENT) && logic->CanUse(RG_STICKS)) || (ctx->GetTrickOption(RT_BOULDER_COLLISION) && logic->CanUse(RG_FAIRY_BOW));})),
         ENTRANCE(RR_BOTW_B3_BLOCKED_GRASS, AnyAgeTime([]{return logic->BlastOrSmash();})),
         ENTRANCE(RR_BOTW_B3_CHEST_AREA,    AnyAgeTime([]{return logic->BlastOrSmash();})),
     });

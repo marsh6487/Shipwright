@@ -19,6 +19,7 @@
 #include "../helpers/equip_helper.h"
 #include "../helpers/combat_helper.h"
 #include "../helpers/fx_helper.h"
+#include "../helpers/item_voice.h"
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
@@ -400,7 +401,7 @@ static void StateRiding(Player* p, PlayState* play, ItemInputState* in) {
     if (in->isPressed && sAtkTimer == 0) {
         sState = SPINNER_STATE_ATTACKING;
         sAtkTimer = SPINNER_ATTACK_DURATION;
-        Audio_PlayActorSound2(&p->actor, NA_SE_VO_LI_MAGIC_ATTACK);
+        ItemVoice_PlayId(p, NA_SE_VO_LI_MAGIC_ATTACK);
         Audio_PlaySoundGeneral(NA_SE_IT_HAMMER_SWING, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         // Shockwave at Link's feet (floorHeight)

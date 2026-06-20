@@ -24,6 +24,7 @@
 #include <soh/Enhancements/custom-message/CustomMessageTypes.h>
 #include "soh/Enhancements/item-tables/ItemTableTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/game-interactor/vanilla-behavior/PlayerAnimOverride.h"
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/enhancementTypes.h"
@@ -3476,10 +3477,12 @@ s32 func_80835884(Player* this, PlayState* play) {
     if (LinkAnimation_Update(play, &this->upperSkelAnime)) {
         Player_SetUpperActionFunc(this, func_808358F0);
         {
-            extern LinkAnimationHeader* MmForm_GetZoraBoomerangAnim(s32 phase);
-            LinkAnimationHeader* formAnim = TransformMasks_IsTransformed() ? MmForm_GetZoraBoomerangAnim(0) : NULL;
-            LinkAnimation_PlayLoop(play, &this->upperSkelAnime,
-                                   formAnim ? formAnim : &gPlayerAnim_link_boom_throw_waitR);
+            // NEI anim override (Zora boomerang throw-wait). Handler:
+            // RegisterPlayerAnimOverrideNEI in customequipment.cpp.
+            LinkAnimationHeader* anim = &gPlayerAnim_link_boom_throw_waitR;
+            GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_ZORA_BOOMERANG_WAIT, 0, &anim,
+                                  this);
+            LinkAnimation_PlayLoop(play, &this->upperSkelAnime, anim);
         }
     }
 
@@ -3609,9 +3612,12 @@ s32 func_80835B60(Player* this, PlayState* play) {
     if (!(this->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN)) {
         Player_SetUpperActionFunc(this, func_80835C08);
         {
-            extern LinkAnimationHeader* MmForm_GetZoraBoomerangAnim(s32 phase);
-            LinkAnimationHeader* zoraCatch = TransformMasks_IsTransformed() ? MmForm_GetZoraBoomerangAnim(2) : NULL;
-            LinkAnimation_PlayOnce(play, &this->upperSkelAnime, zoraCatch ? zoraCatch : &gPlayerAnim_link_boom_catch);
+            // NEI anim override (Zora boomerang catch). Handler:
+            // RegisterPlayerAnimOverrideNEI in customequipment.cpp.
+            LinkAnimationHeader* anim = &gPlayerAnim_link_boom_catch;
+            GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_ZORA_BOOMERANG_CATCH, 0, &anim,
+                                  this);
+            LinkAnimation_PlayOnce(play, &this->upperSkelAnime, anim);
         }
         func_808357E8(this, gPlayerLeftHandBoomerangDLs);
         Player_PlaySfx(this, NA_SE_PL_CATCH_BOOMERANG);
@@ -6883,12 +6889,10 @@ void Player_SetupRoll(Player* this, PlayState* play) {
 
     Player_SetupAction(play, this, Player_Action_Roll, 0);
     {
-        // MHR moveset: user-bound roll animation.
-        extern LinkAnimationHeader* MhrMoveset_GetMoveAnim(s32 moveId);
-        LinkAnimationHeader* rollAnim = MhrMoveset_GetMoveAnim(4 /* MHR_MOVE_ROLL */);
-        if (rollAnim == NULL) {
-            rollAnim = GET_PLAYER_ANIM(PLAYER_ANIMGROUP_landing_roll, this->modelAnimType);
-        }
+        // NEI anim override (roll). Handler: RegisterPlayerAnimOverrideNEI in
+        // customequipment.cpp (MHR moveset user-bound roll animation).
+        LinkAnimationHeader* rollAnim = GET_PLAYER_ANIM(PLAYER_ANIMGROUP_landing_roll, this->modelAnimType);
+        GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_ROLL, 0, &rollAnim, this);
         LinkAnimation_PlayOnceSetSpeed(play, &this->skelAnime, rollAnim, 1.25f * sWaterSpeedFactor);
     }
     gSaveContext.ship.stats.count[COUNT_ROLLS]++;
@@ -6910,11 +6914,11 @@ void func_8083BCD0(Player* this, PlayState* play, s32 controlStickDirection) {
     // Only the main hop anim is overridable — the landing anims stay vanilla.
     LinkAnimationHeader* hopAnim;
     {
-        extern LinkAnimationHeader* MhrMoveset_GetMoveAnim(s32 moveId);
-        hopAnim = MhrMoveset_GetMoveAnim(controlStickDirection);
-        if (hopAnim == NULL) {
-            hopAnim = D_80853D4C[controlStickDirection][0];
-        }
+        // NEI anim override (dodge hop). Handler: RegisterPlayerAnimOverrideNEI
+        // in customequipment.cpp (MHR moveset hop binding keyed on direction).
+        hopAnim = D_80853D4C[controlStickDirection][0];
+        GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_DODGE_HOP, controlStickDirection,
+                              &hopAnim, this);
     }
     func_80838940(this, hopAnim, !(controlStickDirection & 1) ? 5.8f : 3.5f, play,
                   NA_SE_VO_LI_SWORD_N);
@@ -7279,14 +7283,10 @@ s32 Player_ActionHandler_11(Player* this, PlayState* play) {
                 anim = &gPlayerAnim_clink_normal_defense_ALL;
             }
 
-            // MHR moveset: user-bound shield raise animation.
-            {
-                extern LinkAnimationHeader* MhrMoveset_GetShieldAnim(s32 loopPhase);
-                LinkAnimationHeader* mhrShield = MhrMoveset_GetShieldAnim(0);
-                if (mhrShield != NULL) {
-                    anim = mhrShield;
-                }
-            }
+            // NEI anim override (shield raise). Handler:
+            // RegisterPlayerAnimOverrideNEI in customequipment.cpp (MHR moveset
+            // user-bound shield raise animation).
+            GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_SHIELD_RAISE, 0, &anim, this);
 
             if (anim != this->skelAnime.animation) {
                 if (Player_CheckHostileLockOn(this)) {
@@ -10142,12 +10142,11 @@ s32 func_80842DF4(PlayState* play, Player* this) {
 void Player_Action_80843188(Player* this, PlayState* play) {
     if (LinkAnimation_Update(play, &this->skelAnime)) {
         if (!Player_IsChildWithHylianShield(this)) {
-            // MHR moveset: user-bound shield hold loop.
-            extern LinkAnimationHeader* MhrMoveset_GetShieldAnim(s32 loopPhase);
-            LinkAnimationHeader* shieldLoop = MhrMoveset_GetShieldAnim(1);
-            if (shieldLoop == NULL) {
-                shieldLoop = GET_PLAYER_ANIM(PLAYER_ANIMGROUP_defense_wait, this->modelAnimType);
-            }
+            // NEI anim override (shield hold loop). Handler:
+            // RegisterPlayerAnimOverrideNEI in customequipment.cpp (MHR moveset
+            // user-bound shield hold loop).
+            LinkAnimationHeader* shieldLoop = GET_PLAYER_ANIM(PLAYER_ANIMGROUP_defense_wait, this->modelAnimType);
+            GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_SHIELD_LOOP, 0, &shieldLoop, this);
             Player_AnimPlayLoop(play, this, shieldLoop);
         }
         this->av2.actionVar2 = 1;
@@ -13812,46 +13811,17 @@ void Player_Draw(Actor* thisx, PlayState* play2) {
     Vec3s rot;
     f32 scale;
 
-    // PAK Loader: free previous frame's GbiWrap combined DLs (once per frame, main player only)
-    if (thisx == &GET_PLAYER(play2)->actor) {
-        PakLoader_FrameBegin();
-    }
-
-    // Harpoon Prop Hunt — direct prop-draw intercept. Mirrors Scooter's
-    // patch (HarpoonPropHunt_DrawProp + return). Only fires for the LOCAL
-    // player; remote dummies are handled separately in HarpoonDummyPlayer.
-    // The shim internally checks isPropHuntMode + IsLocalHiderWithProp +
-    // AreGhostsReady and only returns 1 when it actually rendered a prop;
-    // 0 falls through to vanilla Link draw.
-    if (thisx == &GET_PLAYER(play2)->actor) {
-        extern s32 HarpoonPropHunt_TryDrawLocalProp(Actor* thisx, PlayState* play);
-        if (HarpoonPropHunt_TryDrawLocalProp(thisx, play)) {
-            return;
-        }
-    }
-
-    // SM64 MARIO: Draw Mario mesh instead of Link.
-    // Uses HasMesh (stricter than IsReady) so Link falls back to normal draw
-    // during the brief window between mario_create success and the first
-    // successful tick — otherwise both Link and Mario would be invisible.
-    // No first-person exception anymore: with Ivan-style item handling,
-    // Mario never enters Link's FP aim mode, so we never need to fall
-    // through to Link's draw to show FP arms.
-    if (thisx == &GET_PLAYER(play2)->actor) {
-        // Mario has a current mesh → draw Mario instead of Link.
-        if (Sm64Mario_HasMesh()) {
-            Sm64Mario_Draw(play, this);
-            return;
-        }
-        // CVAR on but Mario isn't drawable right now (between Reset
-        // and Init during detransform — door cutscene, item-get, etc.,
-        // or while Lens of Truth is held) — skip Link's draw entirely
-        // so the player doesn't see Link briefly pop in. The
-        // detransform / suspend logic continues unchanged; this is
-        // purely a visibility veto.
-        if (Sm64Mario_ShouldHideLink()) {
-            return;
-        }
+    // NEI player-draw fork: the custom-model intercepts that ran at the top of
+    // this function (PakLoader_FrameBegin, Harpoon Prop Hunt prop draw, SM64
+    // Mario draw/hide, Dragon Scale swim barrier, fully-loaded MM transformation
+    // form) live in the VB_PLAYER_DRAW_BEGIN handler (soh/Enhancements/
+    // customequipment.cpp). Returning false means a custom model was drawn (or
+    // Link must be hidden) and the entire vanilla Player_Draw body is skipped;
+    // true falls through into the vanilla draw. The skeleton-swap (PakLoader /
+    // O2rLoader) and post-draw additive draws below remain inline because they
+    // thread the pakActive/o2rActive locals across the vanilla draw.
+    if (!GameInteractor_Should(VB_PLAYER_DRAW_BEGIN, true, play, this)) {
+        return;
     }
 
     // PAK Loader: Swap skeleton before vanilla draw, restore after.
@@ -13885,53 +13855,13 @@ void Player_Draw(Actor* thisx, PlayState* play2) {
     // gerudo_form.cpp mask-edge hook calls O2rLoader_ForceModel("gerudo"),
     // O2rLoader_SwapSkeleton above already replaced player->skelAnime.skeleton
     // with the native GeldB 23-bone skel from oot.o2r. No separate swap.
-
-    // Transformation Masks: If transformed, draw MM form instead of OOT Link.
-    // MmForm_Draw handles both skeleton draw (when loaded) and flash overlay (always).
-    // When skeleton isn't loaded yet (pre-flash phase), MmForm_Draw only draws the flash
-    // overlay and falls through to let OOT draw Link normally underneath.
-    // Guard: only apply to the REAL player actor — dummy/remote Player actors must draw
-    // their own OOT skeleton normally, not the local player's MM form.
-    // Dragon Scale swim: draw barrier, then fall through to OOT Link draw
-    if (thisx == &GET_PLAYER(play2)->actor && TransformMasks_IsZoraSwimEnabled()) {
-        TransformMasks_Draw(play, this); // Draws barrier only (state=INACTIVE + zoraSwimEnabled)
-    }
-
-    if (thisx == &GET_PLAYER(play2)->actor && (TransformMasks_IsTransformed() || TransformMasks_IsFDSkinMode())) {
-        if (TransformMasks_HasSkeleton()) {
-            // Always draw transformed forms (no invincibility blink — use color flash instead)
-            {
-                TransformMasks_Draw(play, this);
-
-                // Update hookshot anchor position (unk_3C8) since Player_PostLimbDrawGameplay
-                // won't run. Arms_Hook uses this to calculate distance for pull termination.
-                // Without this, hookshot pull never ends because unk_3C8 stays stale.
-                if ((this->heldItemAction == PLAYER_IA_HOOKSHOT) || (this->heldItemAction == PLAYER_IA_LONGSHOT)) {
-                    this->unk_3C8.x = this->actor.world.pos.x;
-                    this->unk_3C8.y = this->actor.world.pos.y + 40.0f; // Approximate hand height
-                    this->unk_3C8.z = this->actor.world.pos.z;
-                }
-
-                // Still draw get-item animations and custom items on MM forms.
-                OPEN_DISPS(play->state.gfxCtx);
-                if (!(this->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
-                    if (this->unk_862 > 0) {
-                        Player_DrawGetItem(play, this);
-                    }
-                    CustomItems_OverrideDraw(this, play);
-                    ExtEquip_DrawBehavior(this, play);
-                }
-                CLOSE_DISPS(play->state.gfxCtx);
-                return;
-            }
-            // First-person aim (unk_6AD != 0): fall through to OOT draw but all limbs
-            // will be hidden (see transform check at overrideLimbDraw selection below).
-            // Skeleton still processes for body part positions (hookshot chain, arrow spawn).
-        } else {
-            // Skeleton not loaded: draw flash overlay only, then fall through to OOT Link draw
-            TransformMasks_Draw(play, this);
-        }
-    }
+    //
+    // NOTE: the Dragon Scale swim barrier and the fully-loaded MM transformation
+    // form draw (which used to run here, before the vanilla draw) moved into the
+    // VB_PLAYER_DRAW_BEGIN handler at the top of this function. They are mutually
+    // exclusive with the skeleton swap above (the swap is gated on
+    // !transformBlocks), so running them before the swap is behavior-identical:
+    // whenever the MM-transformed return path fires, pakActive/o2rActive are 0.
 
     if (LINK_AGE_IN_YEARS == YEARS_CHILD) {
         pos.x = 2.0f;
@@ -16748,15 +16678,12 @@ void Player_Action_808502D0(Player* this, PlayState* play) {
                     sp3C = &gPlayerAnim_link_fighter_power_jump_kiru_end;
                 }
 
-                // Transformation masks: override jump slash recovery animation
-                if (TransformMasks_IsTransformed() && (this->meleeWeaponAnimation >= PLAYER_MWA_FLIPSLASH_FINISH) &&
-                    (this->meleeWeaponAnimation <= PLAYER_MWA_JUMPSLASH_FINISH)) {
-                    extern LinkAnimationHeader* MmForm_GetJumpSlashAnim(s32 phase);
-                    LinkAnimationHeader* formAnim = MmForm_GetJumpSlashAnim(this->meleeWeaponAnimation);
-                    if (formAnim != NULL) {
-                        sp3C = formAnim;
-                    }
-                }
+                // NEI anim override (jump-slash recovery). Handler:
+                // RegisterPlayerAnimOverrideNEI in customequipment.cpp. The
+                // original IsTransformed + meleeWeaponAnimation range gate is
+                // reproduced inside the handler (reads this->meleeWeaponAnimation).
+                GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_JUMPSLASH_RECOVERY, 0, &sp3C,
+                                      this);
 
                 func_8083A098(this, sp3C, play);
 

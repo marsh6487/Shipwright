@@ -110,6 +110,19 @@ static const ALIGN_ASSET(2) char gTriforcePieceCompletedDL[] = dgTriforcePieceCo
 #define dgBossSoulSkullDL "__OTR__objects/object_boss_soul/gGIBossSoulSkullDL"
 static const ALIGN_ASSET(2) char gBossSoulSkullDL[] = dgBossSoulSkullDL;
 
+// NEI custom item objects (generated from inline C via apps/dl_c_to_xml.py).
+// Packed into soh.o2r by rebuild_soh_otr.bat. Phase-3 pilot: Cane of Somaria.
+#define dgSomariaCaneDL "__OTR__objects/object_somaria/g_somaria_cane_dl"
+static const ALIGN_ASSET(2) char gSomariaCaneDL[] = dgSomariaCaneDL;
+#define dgSomariaCaneGiveDL "__OTR__objects/object_somaria/g_somaria_cane_give_dl"
+static const ALIGN_ASSET(2) char gSomariaCaneGiveDL[] = dgSomariaCaneGiveDL;
+// Cane of Byrna shares the Somaria tri geometry (blue materials) — lives in the
+// same object_somaria so it can reference those tris.
+#define dgByrnaCaneDL "__OTR__objects/object_somaria/g_byrna_cane_dl"
+static const ALIGN_ASSET(2) char gByrnaCaneDL[] = dgByrnaCaneDL;
+#define dgByrnaCaneGiveDL "__OTR__objects/object_somaria/g_byrna_cane_give_dl"
+static const ALIGN_ASSET(2) char gByrnaCaneGiveDL[] = dgByrnaCaneGiveDL;
+
 #define dgRandoBushDL "__OTR__objects/gameplay_field_keep/gFieldBushRandomDL"
 static const ALIGN_ASSET(2) char gRandoBushDL[] = dgRandoBushDL;
 

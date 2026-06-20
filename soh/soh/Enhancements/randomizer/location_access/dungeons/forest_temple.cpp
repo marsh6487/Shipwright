@@ -182,7 +182,7 @@ void RegionTable_Init_ForestTemple() {
         EVENT_ACCESS(LOGIC_FOREST_SUMMON_NE_SCARECROW, logic->ScarecrowsSong()),
     }, {
         //Locations
-        LOCATION(RC_FOREST_TEMPLE_GS_RAISED_ISLAND_COURTYARD, logic->CanUse(RG_FAIRY_BOW) || logic->CanUse(RG_FAIRY_SLINGSHOT) || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)) || logic->HasExplosives()),
+        LOCATION(RC_FOREST_TEMPLE_GS_RAISED_ISLAND_COURTYARD, logic->CanUse(RG_FAIRY_BOW) || logic->CanUse(RG_FAIRY_SLINGSHOT) || (logic->HasMagicFire()) || logic->HasExplosives()),
     }, {
         //Exits
         ENTRANCE(RR_FOREST_TEMPLE_NE_COURTYARD_ISLAND, true),
@@ -366,7 +366,7 @@ void RegionTable_Init_ForestTemple() {
     }, {
         //Exits
         ENTRANCE(RR_FOREST_TEMPLE_NE_HALLWAY_STRAIGHTENED, logic->SmallKeys(SCENE_FOREST_TEMPLE, 5)),
-        ENTRANCE(RR_FOREST_TEMPLE_NE_HALLWAY_TWISTED,      logic->SmallKeys(SCENE_FOREST_TEMPLE, 5) && (logic->CanUse(RG_FAIRY_BOW) || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)))),
+        ENTRANCE(RR_FOREST_TEMPLE_NE_HALLWAY_TWISTED,      logic->SmallKeys(SCENE_FOREST_TEMPLE, 5) && (logic->CanUse(RG_FAIRY_BOW) || (logic->HasMagicFire()))),
     });
 
     areaTable[RR_FOREST_TEMPLE_FALLING_ROOM] = Region("Forest Temple Falling Room", SCENE_FOREST_TEMPLE, {}, {
@@ -606,7 +606,7 @@ void RegionTable_Init_ForestTemple() {
 
     areaTable[RR_FOREST_TEMPLE_MQ_NW_COURTYARD] = Region("Forest Temple MQ NW Courtyard", SCENE_FOREST_TEMPLE, {
         //Events
-        EVENT_ACCESS(LOGIC_FOREST_MQ_BURNED_WEB, (logic->CanUse(RG_FIRE_ARROWS) || logic->CanUse(RG_SW97_FIRE_PROJECTILE) || logic->CanUse(RG_FIRE_ROD))),
+        EVENT_ACCESS(LOGIC_FOREST_MQ_BURNED_WEB, (logic->HasFireProjectile())),
     }, {
         //Locations
         //the well checks are considered from both areas instead of being a region because the draining is a temp flag and the skull (as well as the chest with hook glitch) has different breath timers from each side
@@ -757,7 +757,7 @@ void RegionTable_Init_ForestTemple() {
         //!QUANTUM LOGIC!
         //This key logic assumes that you can get to falling room either by spending the 5th key here, or by wasting a key in falling room itself.
         //While being the 5th key makes this simpler in theory, if a different age can waste the key compared to reaching this room it breaks
-        ENTRANCE(RR_FOREST_TEMPLE_MQ_FALLING_ROOM,    logic->SmallKeys(SCENE_FOREST_TEMPLE, 5) && AnyAgeTime([]{return logic->CanUse(RG_FAIRY_BOW) || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD));})),
+        ENTRANCE(RR_FOREST_TEMPLE_MQ_FALLING_ROOM,    logic->SmallKeys(SCENE_FOREST_TEMPLE, 5) && AnyAgeTime([]{return logic->CanUse(RG_FAIRY_BOW) || (logic->HasMagicFire());})),
         ENTRANCE(RR_FOREST_TEMPLE_MQ_TORCH_SHOT_ROOM, logic->SmallKeys(SCENE_FOREST_TEMPLE, 6)),
         ENTRANCE(RR_FOREST_TEMPLE_MQ_3_STALFOS_ROOM,  true),
     });
@@ -769,7 +769,7 @@ void RegionTable_Init_ForestTemple() {
         LOCATION(RC_FOREST_TEMPLE_MQ_FROZEN_EYE_SWITCH_SMALL_CRATE_3, logic->CanBreakSmallCrates()),
     }, {
         //Exits
-        ENTRANCE(RR_FOREST_TEMPLE_MQ_FALLING_ROOM, logic->CanUse(logic->HasItem(RG_POWER_BRACELET) ? RG_FAIRY_BOW : RG_FIRE_ARROWS) || (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD))),
+        ENTRANCE(RR_FOREST_TEMPLE_MQ_FALLING_ROOM, logic->CanUse(logic->HasItem(RG_POWER_BRACELET) ? RG_FAIRY_BOW : RG_FIRE_ARROWS) || (logic->HasMagicFire())),
         ENTRANCE(RR_FOREST_TEMPLE_MQ_BETH_ROOM,    logic->SmallKeys(SCENE_FOREST_TEMPLE, 6)),
     });
 

@@ -353,8 +353,8 @@ void RegionTable_Init_ShadowTemple() {
 
     areaTable[RR_SHADOW_TEMPLE_WOODEN_SPIKES] = Region("Shadow Temple Wooden Spikes", SCENE_SHADOW_TEMPLE, {}, {
         //Locations
-        LOCATION(RC_SHADOW_TEMPLE_SPIKE_WALLS_LEFT_CHEST,       (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)) && logic->HasItem(RG_OPEN_CHEST)),
-        LOCATION(RC_SHADOW_TEMPLE_BOSS_KEY_CHEST,               (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)) && logic->HasItem(RG_OPEN_CHEST)),
+        LOCATION(RC_SHADOW_TEMPLE_SPIKE_WALLS_LEFT_CHEST,       (logic->HasMagicFire()) && logic->HasItem(RG_OPEN_CHEST)),
+        LOCATION(RC_SHADOW_TEMPLE_BOSS_KEY_CHEST,               (logic->HasMagicFire()) && logic->HasItem(RG_OPEN_CHEST)),
         LOCATION(RC_SHADOW_TEMPLE_SPIKE_WALLS_POT_1,            logic->CanBreakPots()),
     }, {
         //Exits
@@ -396,7 +396,7 @@ void RegionTable_Init_ShadowTemple() {
     }, {
         //Exits
         ENTRANCE(RR_SHADOW_TEMPLE_ENTRYWAY,                  true),
-        ENTRANCE(RR_SHADOW_TEMPLE_MQ_FIRST_BEAMOS,           AnyAgeTime([]{return logic->HasItem(RG_POWER_BRACELET) && (logic->CanUse(RG_HOVER_BOOTS) || (ctx->GetTrickOption(RT_LENS_SHADOW_MQ) || logic->CanUse(RG_LENS_OF_TRUTH)));}) && (logic->CanUse(RG_HOVER_BOOTS) || AnyAgeTime([]{return (logic->CanUse(RG_FIRE_ARROWS) || logic->CanUse(RG_SW97_FIRE_PROJECTILE) || logic->CanUse(RG_FIRE_ROD));}) || (ctx->GetTrickOption(RT_SHADOW_MQ_GAP) && logic->CanUse(RG_LONGSHOT) && logic->CanJumpslashExceptHammer()))),
+        ENTRANCE(RR_SHADOW_TEMPLE_MQ_FIRST_BEAMOS,           AnyAgeTime([]{return logic->HasItem(RG_POWER_BRACELET) && (logic->CanUse(RG_HOVER_BOOTS) || (ctx->GetTrickOption(RT_LENS_SHADOW_MQ) || logic->CanUse(RG_LENS_OF_TRUTH)));}) && (logic->CanUse(RG_HOVER_BOOTS) || AnyAgeTime([]{return (logic->HasFireProjectile());}) || (ctx->GetTrickOption(RT_SHADOW_MQ_GAP) && logic->CanUse(RG_LONGSHOT) && logic->CanJumpslashExceptHammer()))),
         ENTRANCE(RR_SHADOW_TEMPLE_MQ_WHISPERING_WALLS_START, AnyAgeTime([]{return logic->HasExplosives();}) && logic->SmallKeys(SCENE_SHADOW_TEMPLE, 6) && (ctx->GetTrickOption(RT_LENS_SHADOW_MQ) || logic->CanUse(RG_LENS_OF_TRUTH))),
     });
 
@@ -755,8 +755,8 @@ void RegionTable_Init_ShadowTemple() {
 
     areaTable[RR_SHADOW_TEMPLE_MQ_SPIKE_WALLS_ROOM] = Region("Shadow Temple MQ Spike Walls Room", SCENE_SHADOW_TEMPLE, {}, {
         //Locations
-        LOCATION(RC_SHADOW_TEMPLE_MQ_SPIKE_WALLS_LEFT_CHEST, (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)) && logic->HasItem(RG_OPEN_CHEST)),
-        LOCATION(RC_SHADOW_TEMPLE_MQ_BOSS_KEY_CHEST,         (logic->CanUse(RG_DINS_FIRE) || logic->CanUse(RG_FIRE_ROD)) && logic->HasItem(RG_OPEN_CHEST)),
+        LOCATION(RC_SHADOW_TEMPLE_MQ_SPIKE_WALLS_LEFT_CHEST, (logic->HasMagicFire()) && logic->HasItem(RG_OPEN_CHEST)),
+        LOCATION(RC_SHADOW_TEMPLE_MQ_BOSS_KEY_CHEST,         (logic->HasMagicFire()) && logic->HasItem(RG_OPEN_CHEST)),
         LOCATION(RC_SHADOW_TEMPLE_MQ_SPIKE_BARICADE_POT,     logic->CanBreakPots()),
     }, {
         //Exits
