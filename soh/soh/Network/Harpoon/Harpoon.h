@@ -127,6 +127,7 @@ typedef struct {
                        // HARPOON_MODELTYPE_MARIO (6) = SM64 Mario via libsm64.
     s32 marioAnimId;   // libsm64 anim ID  (only meaningful when transformation==MARIO)
     s16 marioAnimFrame; // libsm64 anim frame
+    u32 marioFlags;    // libsm64 cap flags + SOH Fire bit (drives cap/transformation)
     s16 cylRadius;     // Form-specific collider radius
     s16 cylHeight;     // Form-specific collider height
     s16 cylYShift;     // Form-specific collider Y offset

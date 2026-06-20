@@ -627,13 +627,15 @@ void Harpoon::SendPacket_PlayerUpdate() {
     // render + animate a per-remote Mario instance. (MM-joint copy above is untouched.)
     s32 marioAnimId = 0;
     s16 marioAnimFrame = 0;
+    u32 marioFlags = 0;
     u8 txValue = modelType;
-    if (Sm64Mario_GetSyncState(&marioAnimId, &marioAnimFrame)) {
+    if (Sm64Mario_GetSyncState(&marioAnimId, &marioAnimFrame, &marioFlags)) {
         txValue = HARPOON_MODELTYPE_MARIO;
     }
     payload["transformation"] = txValue;
     payload["marioAnimId"] = marioAnimId;
     payload["marioAnimFrame"] = marioAnimFrame;
+    payload["marioFlags"] = marioFlags;
     payload["cylRadius"] = player->cylinder.dim.radius;
     payload["cylHeight"] = player->cylinder.dim.height;
     payload["cylYShift"] = player->cylinder.dim.yShift;
@@ -1041,6 +1043,7 @@ void Harpoon::HandlePacket_PlayerUpdate(nlohmann::json payload) {
     // SM64 Mario remote pose (only present/meaningful when transformation == MARIO)
     client.marioAnimId = payload.value("marioAnimId", (s32)0);
     client.marioAnimFrame = payload.value("marioAnimFrame", (s16)0);
+    client.marioFlags = payload.value("marioFlags", (u32)0);
     client.cylRadius = payload.value("cylRadius", (s16)30);
     client.cylHeight = payload.value("cylHeight", (s16)60);
     client.cylYShift = payload.value("cylYShift", (s16)0);
@@ -2418,6 +2421,19 @@ s32 Harpoon_IsPvpActive(void) {
     return (state != HARPOON_STATE_LOBBY && state != HARPOON_STATE_COUNTDOWN && state != HARPOON_STATE_DISCONNECTED);
 }
 
+s32 Harpoon_GetLocalPlayerColor(u8* r, u8* g, u8* b) {
+    // Only override the local avatar's colour while in a room — solo players keep
+    // Mario's classic colours. Same CVar peers receive as client.color, so your own
+    // Mario matches the colour everyone else sees you wearing.
+    if (!Harpoon::Instance || !Harpoon::Instance->isConnected)
+        return 0;
+    Color_RGBA8 c = CVarGetColor(CVAR_HARPOON("Color.Value"), { 100, 255, 100 });
+    if (r) *r = c.r;
+    if (g) *g = c.g;
+    if (b) *b = c.b;
+    return 1;
+}
+
 void Harpoon_SendCustomDamage(Actor* hitActor, s32 damageType, s32 damage) {
     if (!Harpoon::Instance)
         return;
@@ -3002,6 +3018,7 @@ void Harpoon::HandlePacket_PlayerTransformation(nlohmann::json payload) {
     c->transformation = payload.value("transformation", c->transformation);
     c->marioAnimId = payload.value("marioAnimId", c->marioAnimId);
     c->marioAnimFrame = payload.value("marioAnimFrame", c->marioAnimFrame);
+    c->marioFlags = payload.value("marioFlags", c->marioFlags);
     c->cylRadius = payload.value("cylRadius", c->cylRadius);
     c->cylHeight = payload.value("cylHeight", c->cylHeight);
     c->cylYShift = payload.value("cylYShift", c->cylYShift);
@@ -3266,12 +3283,14 @@ void Harpoon::SendPacket_PlayerTransformation() {
     // (+ anim pose) so it can't momentarily clobber c->transformation back to 0.
     s32 marioAnimId = 0;
     s16 marioAnimFrame = 0;
-    if (Sm64Mario_GetSyncState(&marioAnimId, &marioAnimFrame)) {
+    u32 marioFlags = 0;
+    if (Sm64Mario_GetSyncState(&marioAnimId, &marioAnimFrame, &marioFlags)) {
         modelType = HARPOON_MODELTYPE_MARIO;
     }
     payload["transformation"] = modelType;
     payload["marioAnimId"] = marioAnimId;
     payload["marioAnimFrame"] = marioAnimFrame;
+    payload["marioFlags"] = marioFlags;
     payload["cylRadius"] = player->cylinder.dim.radius;
     payload["cylHeight"] = player->cylinder.dim.height;
     payload["cylYShift"] = player->cylinder.dim.yShift;

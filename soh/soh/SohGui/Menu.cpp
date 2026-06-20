@@ -1,6 +1,7 @@
 #include "Menu.h"
 #include "UIWidgets.hpp"
 #include "soh/OTRGlobals.h"
+#include "soh/FleetShipCombo/FleetShipCombo.h"
 #include <ship/window/gui/GuiMenuBar.h>
 #include <ship/window/gui/GuiElement.h>
 #include "SohModals.h"
@@ -762,6 +763,25 @@ void Menu::DrawElement() {
         ImGui::PopStyleVar();
         ImGui::PopStyleColor();
     }
+
+    // Fleet Ship Combo: "View" selector next to the search box. Flips which game's UI is in
+    // front (Ship <-> 2ship) without changing the active game. Only shown when running combo.
+    if (FleetShipCombo_GetUiFocus() >= 0) {
+        ImGui::SameLine();
+        int fscFocus = FleetShipCombo_GetUiFocus();
+        ImGui::SetNextItemWidth(130.0f);
+        if (ImGui::BeginCombo("##fleetview", fscFocus == 1 ? "View: 2Ship" : "View: Ship")) {
+            if (ImGui::Selectable("Ship (OoT)", fscFocus == 0)) {
+                FleetShipCombo_SetUiFocus(0);
+            }
+            if (ImGui::Selectable("2Ship (MM)", fscFocus == 1)) {
+                FleetShipCombo_SetUiFocus(1);
+            }
+            ImGui::Selectable("Shared (coming soon)", false, ImGuiSelectableFlags_Disabled);
+            ImGui::EndCombo();
+        }
+    }
+
     ImGui::EndChild();
     ImGui::SameLine(menuSize.x - (buttonSize.x * 3) - (style.ItemSpacing.x * 2));
     UIWidgets::ButtonOptions options3 = {};

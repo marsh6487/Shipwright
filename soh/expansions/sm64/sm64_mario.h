@@ -48,9 +48,12 @@ u8 Sm64Mario_IsReady(void);
 u8 Sm64Mario_IsGrounded(void);
 
 // Remote sync (Harpoon): when the local player is an active Mario, returns 1 and
-// fills the libsm64 anim pose (animID + animFrame) for broadcast so peers render
-// the same animation on their per-remote Mario instance. Returns 0 otherwise.
-u8 Sm64Mario_GetSyncState(s32* outAnimId, s16* outAnimFrame);
+// fills the libsm64 anim pose (animID + animFrame) plus the cap flags for broadcast
+// so peers render the same animation AND cap/transformation on their per-remote
+// Mario instance. outFlags packs the libsm64 cap flags (normal/wing/metal/vanish +
+// cap-on-head) and the SOH-only Fire bit. Any out-param may be NULL. Returns 0 when
+// the local player isn't an active Mario.
+u8 Sm64Mario_GetSyncState(s32* outAnimId, s16* outAnimFrame, u32* outFlags);
 
 // --- Remote-Mario puppet renderer (Harpoon) ---
 // True only when this client can render a remote player as a libsm64 Mario: the
@@ -60,12 +63,14 @@ u8 Sm64Mario_GetSyncState(s32* outAnimId, s16* outAnimFrame);
 u8 Sm64Remote_CanRender(void);
 
 // Draw a remote player's Mario at OOT world (x,y,z) facing faceYaw (OOT binary
-// angle), posed to the network-synced libsm64 animId/animFrame, with Mario's red
-// (cap + shirt) recolored to (tintR,tintG,tintB). Returns 1 on success, 0 if it
-// couldn't render (caller should then draw the normal Link dummy). Uses a single
-// shared libsm64 renderer instance, re-posed per call (no physics).
+// angle), posed to the network-synced libsm64 animId/animFrame, with the synced cap
+// flags (marioFlags, from Sm64Mario_GetSyncState) driving the cap geometry + the
+// transformation visuals (wing / metal / vanish / fire). Mario's red (cap + shirt)
+// is recolored to (tintR,tintG,tintB) except where metal/fire override it. Returns
+// 1 on success, 0 if it couldn't render (caller should then draw the normal Link
+// dummy). Uses a single shared libsm64 renderer instance, re-posed per call.
 u8 Sm64Remote_DrawPuppet(PlayState* play, f32 x, f32 y, f32 z, s16 faceYaw, s32 animId,
-                         s16 animFrame, u8 tintR, u8 tintG, u8 tintB);
+                         s16 animFrame, u32 marioFlags, u8 tintR, u8 tintG, u8 tintB);
 
 // True only while the Vanish Cap is worn. Forces NoClip (z_bgcheck.c) so Mario
 // phases walls but floor-based loading zones still trigger.

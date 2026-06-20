@@ -45,6 +45,12 @@ s32 Harpoon_IsDummyPlayer(Actor* actor);
 // Returns 1 if PVP is currently active (not LOBBY/COUNTDOWN/DISCONNECTED)
 s32 Harpoon_IsPvpActive(void);
 
+// Local player's chosen Harpoon colour (the "Remote.Harpoon.Color.Value" CVar set
+// in the Harpoon menu). Returns 1 and fills r/g/b ONLY when connected to a room, so
+// callers can colour the LOCAL avatar to match what peers see; returns 0 when not
+// connected (caller keeps its default colours). Any out-param may be NULL.
+s32 Harpoon_GetLocalPlayerColor(u8* r, u8* g, u8* b);
+
 // Send custom damage to a dummy player's owner.
 // hitActor: the dummy player actor that was hit
 // damageType: HarpoonCustomDamageType enum value

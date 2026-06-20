@@ -1858,6 +1858,35 @@ class SSBBAnimGenerator:
 
         return '\n'.join(lines) + '\n'
 
+    def to_anim(self):
+        """Return this animation as an ssbb_anim_bin.Anim (for --emit-bin).
+
+        Values are rounded through '%.6f' so the .bin matches the committed
+        *_ssbb.c byte-for-byte (those store 6-decimal floats), which lets the
+        verifier confirm extractor output == in-game data with delta 0.
+        """
+        import ssbb_anim_bin
+        from array import array
+
+        floats = array('f')
+        for f in range(self.total_frames):
+            t = self.anim.start_time + f
+            for bone in self.bones:
+                ch = self.anim.channels.get(bone.name, {})
+                tx = self._get_value(ch.get('translateX'), t) if 'translateX' in ch else bone.local_pos[0]
+                ty = self._get_value(ch.get('translateY'), t) if 'translateY' in ch else bone.local_pos[1]
+                tz = self._get_value(ch.get('translateZ'), t) if 'translateZ' in ch else bone.local_pos[2]
+                rx = self._get_value(ch.get('rotateX'), t) if 'rotateX' in ch else 0.0
+                ry = self._get_value(ch.get('rotateY'), t) if 'rotateY' in ch else 0.0
+                rz = self._get_value(ch.get('rotateZ'), t) if 'rotateZ' in ch else 0.0
+                sx = self._get_value(ch.get('scaleX'), t) if 'scaleX' in ch else 1.0
+                sy = self._get_value(ch.get('scaleY'), t) if 'scaleY' in ch else 1.0
+                sz = self._get_value(ch.get('scaleZ'), t) if 'scaleZ' in ch else 1.0
+                floats.extend(float(f'{v:.6f}') for v in (tx, ty, tz, rx, ry, rz, sx, sy, sz))
+
+        return ssbb_anim_bin.Anim(name=self.anim.name, num_frames=self.total_frames,
+                                  num_bones=self.num_bones, frame_rate=60.0, floats=floats)
+
 
 # ── COLLADA Direct Skin Generator ──────────────────────────────────────────
 # Uses COLLADA mesh geometry directly. No Fast64, no nearest-neighbor matching.
@@ -2300,6 +2329,9 @@ def main():
                         help='Generate skin mesh directly from COLLADA geometry (no Fast64, 1:1 weights)')
     parser.add_argument('--axis-map', default='+y,-z,+x',
                         help='DAE→F64 axis mapping, e.g. "+y,-z,+x" means F64.x=+DAE.y, F64.y=-DAE.z, F64.z=+DAE.x (default: %(default)s)')
+    parser.add_argument('--emit-bin', default=None,
+                        help='Also write the SSBB animations to a flat NEI .bin (loaded at runtime instead of compiling the *_ssbb.c). '
+                             'Order = the order anims are processed; the verifier matches by name. Ship the .bin produced by verify_ssbb_anims.py build.')
 
     args = parser.parse_args()
 
@@ -2453,6 +2485,7 @@ def main():
 
     # Generate SSBB animations (translate+rotate+scale) when --collada-skin
     ssbb_anims_generated = []
+    ssbb_bin_anims = []
     if args.collada_skin and anims and bones:
         print(f'\nGenerating SSBB animations (translate+rotate+scale)...')
         for anim in anims:
@@ -2467,6 +2500,21 @@ def main():
                 f.write(ssbb_gen.generate_source())
             print(f'Wrote SSBB anim: {anim.name} ({ssbb_gen.total_frames} frames)')
             ssbb_anims_generated.append(anim)
+            if args.emit_bin:
+                ssbb_bin_anims.append(ssbb_gen.to_anim())
+
+    # Write the flat NEI .bin (replaces compiling the *_ssbb.c into the .exe)
+    if args.emit_bin and ssbb_bin_anims:
+        import ssbb_anim_bin
+        os.makedirs(os.path.dirname(os.path.abspath(args.emit_bin)), exist_ok=True)
+        with open(args.emit_bin, 'wb') as f:
+            f.write(ssbb_anim_bin.pack(ssbb_bin_anims))
+        total = sum(len(a.floats) for a in ssbb_bin_anims)
+        print(f'Wrote NEI anim binary: {args.emit_bin} '
+              f'({len(ssbb_bin_anims)} anims, {total:,} floats, '
+              f'{os.path.getsize(args.emit_bin) / (1024 * 1024):.2f} MB)')
+        print('  -> verify with: python apps/verify_ssbb_anims.py check '
+              f'--chars <chars_dir> --name {args.name} --bin {args.emit_bin}')
 
     # Generate registration helper
     if bones and anims:

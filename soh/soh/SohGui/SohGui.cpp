@@ -23,6 +23,7 @@
 
 #include "soh/Enhancements/debugger/MessageViewer.h"
 #include "soh/Notification/Notification.h"
+#include "soh/FleetShipCombo/FleetShipCombo.h"
 #include "soh/Enhancements/TimeDisplay/TimeDisplay.h"
 #include "soh/Enhancements/mod_menu.h"
 #include "soh/Network/Anchor/Anchor.h"
@@ -119,6 +120,9 @@ void SetupMenuElements() {
 
 void SetupGuiElements() {
     auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
+
+    // Fleet Ship Combo: picture-in-picture window that shows 2ship (MM) inside Ship.
+    FleetShipCombo_RegisterConsumerWindow();
 
     mConsoleWindow = std::make_shared<SohConsoleWindow>(CVAR_WINDOW("SohConsole"), "Console##SoH", ImVec2(820, 630));
     gui->AddGuiWindow(mConsoleWindow);

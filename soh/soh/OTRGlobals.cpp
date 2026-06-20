@@ -75,6 +75,7 @@
 #include "Enhancements/Lang/Lang.h"
 #include "soh/SohGui/SohGui.hpp"
 #include "soh/SohGui/ImGuiUtils.h"
+#include "soh/FleetShipCombo/FleetShipCombo.h"
 #include "ActorDB.h"
 #include "SaveManager.h"
 #include "soh/Network/CrowdControl/CrowdControl.h"
@@ -422,6 +423,11 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     std::vector<std::string> args;
     if (argc > 1) {
         for (int i = 1; i < argc; i++) {
+            // Skip command-line flags (e.g. Fleet Ship Combo's --boot=mm / --fleet-child) so
+            // the ROM extractor doesn't treat them as a ROM path. ROM paths never start with '-'.
+            if (argv[i] != nullptr && argv[i][0] == '-') {
+                continue;
+            }
             args.push_back(argv[i]);
         }
     }
@@ -1107,6 +1113,13 @@ int AudioPlayer_Buffered(void);
 extern "C" int AudioPlayer_GetDesiredBuffered(void);
 std::unordered_map<std::string, ExtensionEntry> ExtensionCache;
 
+// Fleet Ship Combo: silence OoT's audio while it's the INACTIVE game. We zero the final mixed
+// PCM buffer, which holds the COMPLETE post-mix output (N64 synth + every mod mix-in: MM direct,
+// voice packs, Gerudo/Pikachu voices, and the SM64 mix), so it mutes everything. Written by the
+// gfx thread before it wakes the audio worker, read by the worker before it plays the buffer.
+// No volume CVar is touched and no sequence is stopped, so audio resumes bit-exactly.
+static std::atomic<bool> gFscAudioMuted{ false };
+
 void OTRAudio_Thread() {
 #define SAMPLES_HIGH 560
 #define SAMPLES_LOW 528
@@ -1125,6 +1138,13 @@ void OTRAudio_Thread() {
         for (int i = 0; i < AUDIO_FRAMES_PER_UPDATE; i++) {
             AudioMgr_CreateNextAudioBuffer(audio_buffer + i * (num_audio_samples * NUM_AUDIO_CHANNELS),
                                            num_audio_samples);
+        }
+
+        // Fleet Ship Combo: silence OoT's output while it's the inactive game. audio_buffer holds
+        // the COMPLETE post-mix output (synth + all mix-ins), so zeroing it mutes everything
+        // without stopping any sequence (positions keep advancing -> bit-exact resume).
+        if (gFscAudioMuted.load(std::memory_order_relaxed)) {
+            memset(audio_buffer, 0, total_samples * sizeof(int16_t));
         }
 
         AudioPlayer_Play(reinterpret_cast<u8*>(audio_buffer), total_samples * sizeof(int16_t));
@@ -1931,6 +1951,21 @@ void RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>
     // Process window events for resize, mouse, keyboard events
     wnd->HandleEvents();
 
+    // Render-gating (Fleet Ship Combo, host side): when OoT is the INACTIVE game (MM active),
+    // OoT's 3D scene is fully hidden behind the composited MM image, so rendering it is wasted
+    // GPU. Swap in an EMPTY display list to skip the scene while STILL running the ImGui pass
+    // (which draws the MM picture-in-picture overlay + the menu) and presenting. This makes the
+    // combo cost ~one game when MM is active, mirroring the guest-side gating in 2ship.
+    // Exception: when the menu is open the consumer hides the MM overlay so OoT shows through as
+    // the backdrop, so we must render OoT then (otherwise it'd be black behind the menu).
+    // (Standalone: IsThisGameActive() is always true, so this never triggers.)
+    static Gfx sFleetEmptyDL[] = { gsSPEndDisplayList() };
+    auto fleetGui = wnd->GetGui();
+    bool fleetMenuVisible = fleetGui != nullptr && fleetGui->GetMenuOrMenubarVisible();
+    if (!FleetShipCombo_IsThisGameActive() && !fleetMenuVisible) {
+        Commands = sFleetEmptyDL;
+    }
+
     auto intp = wnd->GetInterpreterWeak().lock().get();
     intp->mInterpolationIndex = 0;
 
@@ -1949,6 +1984,9 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
         audio.processing = true;
+        // Set the combo audio-mute flag BEFORE waking the worker so this frame's buffer is
+        // (un)muted correctly; storing it after the notify would race the worker by a frame.
+        gFscAudioMuted.store(!FleetShipCombo_IsThisGameActive(), std::memory_order_relaxed);
     }
 
     audio.cv_to_thread.notify_one();

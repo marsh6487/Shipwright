@@ -5,6 +5,8 @@
 #include "soh/resource/type/PlayerAnimation.h"
 #include "soh/resource/type/SohResourceType.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Notification/Notification.h"
+#include "soh/FleetShipCombo/FleetShipCombo.h"
 #include <ship/resource/ResourceManager.h>
 #include <ship/resource/archive/ArchiveManager.h>
 #include <nlohmann/json.hpp>
@@ -1131,6 +1133,100 @@ void SohMenu::AddMenuNEI() {
     // ===================== Tab: Randomizer =====================
     path.sidebarName = "Randomizer";
     path.column = SECTION_COLUMN_1;
+
+    // ---- Fleet Ship Combo: live MM <-> OoT switch ----
+    // CVar namespace (matches user's "isFleetShipCombo[X]"):
+    //   isFleetShipCombo.Enabled - master toggle for the combo / launcher bootstrap
+    //   isPlayerIn2Ship          - persistent "where is the player": 1 = Majora's Mask
+    //                              (2ship), 0 = Ocarina of Time (Ship). Single source of
+    //                              truth for which game is active; also drives auto-start
+    //                              (the host resumes the game the player was last in).
+    // For now this button just flips and persists isPlayerIn2Ship. Frente B wires the
+    // actual seamless hand-off: pause the inactive game's SESSION (no logic/audio/render,
+    // process stays alive) + cross-process shared-texture compositing.
+    AddWidget(path, "Fleet Ship Combo (MM <-> OoT)", WIDGET_SEPARATOR_TEXT);
+
+    AddWidget(path, "Enable Fleet Ship Combo", WIDGET_CVAR_CHECKBOX)
+        .CVar("isFleetShipCombo.Enabled")
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Master switch for running OoT (Ship) and MM (2ship) together.\n\n"
+            "RESTART REQUIRED after toggling: the second game is launched at boot.\n"
+            "Place 2ship.exe in a '2ship' folder next to soh.exe (Ship/2ship/2ship.exe)."));
+
+    // Live status so you always know which game you're in (and whether the combo is up).
+    AddWidget(path, "Combo Status", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
+        int32_t active = FleetShipCombo_GetActiveGame();
+        if (active < 0) {
+            ImGui::TextColored(ImVec4(0.95f, 0.7f, 0.3f, 1.0f), "Combo NOT running (single game).");
+            ImGui::TextWrapped("Enable above + restart, and put 2ship.exe under Ship/2ship/.");
+        } else {
+            ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Active game: %s",
+                               active == 1 ? "Majora's Mask (2ship)" : "Ocarina of Time (Ship)");
+        }
+    });
+
+    AddWidget(path, "Switch Active Game", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) {
+            // Use shared memory as the source of truth for the CURRENT active game so
+            // the toggle stays correct no matter which process last switched.
+            int32_t cur = FleetShipCombo_GetActiveGame();
+            if (cur < 0) {
+                // No shared region -> the combo isn't actually running two games.
+                Notification::Emit({
+                    .message = "Combo not running - enable it and restart (need 2ship.exe under Ship/2ship/).",
+                });
+                return;
+            }
+            int32_t next = cur ? 0 : 1; // 1 = MM (2ship), 0 = OoT (Ship)
+            CVarSetInteger("isPlayerIn2Ship", next);
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            // Publish to shared memory so BOTH processes freeze/unfreeze + show/hide in sync.
+            FleetShipCombo_SetActiveGame(next);
+            SPDLOG_INFO("[FleetShipCombo] isPlayerIn2Ship -> {}", next ? "Majora's Mask (2ship)" : "Ocarina of Time (Ship)");
+            Notification::Emit({
+                .message = next ? "Switching to Majora's Mask..." : "Switching to Ocarina of Time...",
+            });
+        })
+        .Options(ButtonOptions().Tooltip(
+            "Toggle the active game between Ocarina of Time and Majora's Mask at any time.\n"
+            "Both games stay loaded and running; the inactive one's session is paused (seamless).\n\n"
+            "Persists 'isPlayerIn2Ship' so the combo remembers which game you're in and can\n"
+            "auto-start there next launch.\n\n"
+            "NOTE: the runtime hand-off (session pause + cross-process compositing) is still\n"
+            "being wired up. For now this just flips and remembers the active game."));
+
+    // ---- Settings View selector: which game's menu you configure (does NOT change the
+    // active game). 2ship's BenGui can't be drawn inside Ship (separate ImGui), so picking
+    // 2Ship brings 2ship's own window to the front; press ESC there for its menu.
+    AddWidget(path, "Settings View (does not change active game)", WIDGET_SEPARATOR_TEXT);
+
+    AddWidget(path, "View: Ship (OoT) Settings", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) { FleetShipCombo_SetUiFocus(0); })
+        .Options(ButtonOptions().Tooltip("Bring Ship's window to the front (press ESC for the OoT/Ship menu)."));
+
+    AddWidget(path, "View: 2Ship (MM) Settings", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) {
+            if (FleetShipCombo_GetUiFocus() < 0) {
+                Notification::Emit({ .message = "Combo not running - enable it and restart." });
+                return;
+            }
+            FleetShipCombo_SetUiFocus(1);
+            Notification::Emit({ .message = "Showing 2ship window - press ESC there for its menu (BenGui)." });
+        })
+        .Options(ButtonOptions().Tooltip(
+            "Bring 2ship's OWN window to the front so you can open its BenGui with ESC.\n"
+            "2ship's menu can't be composited inside Ship (separate ImGui per process), so its\n"
+            "window comes forward for configuration. Use '2Ship > Back to Ship UI' to return.\n"
+            "Does NOT change the active game."));
+
+    AddWidget(path, "View: Shared Features (coming soon)", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) { Notification::Emit({ .message = "Shared features panel - coming soon." }); })
+        .Options(ButtonOptions().Tooltip("Placeholder for combined OoT+MM (shared) options. To be designed."));
 
     AddWidget(path, "Randomizer (seed-locked)", WIDGET_SEPARATOR_TEXT);
 

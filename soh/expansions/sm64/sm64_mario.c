@@ -7,6 +7,7 @@
 
 #define SM64_LIB_FN
 #include "expansions/sm64/libsm64.h"
+#include "soh/Network/Harpoon/HarpoonBridge.h" // Harpoon_GetLocalPlayerColor (local Mario tint)
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -259,6 +260,15 @@ static struct SM64MarioGeometryBuffers sSm64OutBuffers;
 #define SM64_MARIO_METAL_CAP        0x00000004
 #define SM64_MARIO_WING_CAP         0x00000008
 #define SM64_MARIO_CAP_ON_HEAD      0x00000010  // restored after clearing a special cap
+
+// Remote-Mario (Harpoon) cap sync: the local Mario's cap flags are broadcast so a
+// peer can skin the matching cap on its puppet. SM64_REMOTE_FIRE_BIT is a SOH-only
+// bit (Fire mode has no libsm64 flag) packed above libsm64's flag range (max
+// 0x00400000) — it's masked off before reaching the puppet's libsm64 state.
+#define SM64_REMOTE_FIRE_BIT        0x40000000
+#define SM64_REMOTE_CAP_MASK                                                          \
+    (SM64_MARIO_NORMAL_CAP | SM64_MARIO_VANISH_CAP | SM64_MARIO_METAL_CAP |           \
+     SM64_MARIO_WING_CAP | SM64_MARIO_CAP_ON_HEAD)
 
 // How often (in frames) to re-upload OOT collision into libsm64 so the LIVE
 // world stays in sync: broken blocks stop colliding, dynapoly doors / moving
@@ -1708,8 +1718,22 @@ void Sm64Mario_Draw(PlayState* play, Player* player) {
             sLastCapState = nowState;
         }
     }
+    // Recolor your OWN Mario to your chosen Harpoon colour while in a room, so it
+    // matches the colour peers render on your puppet (metal's envmap and fire's
+    // recolor still override it in emitTrisSingle). Solo / not connected → recolor
+    // stays 0, keeping Mario's classic red.
+    u8 recolor = 0, tintR = 0, tintG = 0, tintB = 0;
+    {
+        u8 hr, hg, hb;
+        if (Harpoon_GetLocalPlayerColor(&hr, &hg, &hb)) {
+            recolor = 1;
+            tintR = hr;
+            tintG = hg;
+            tintB = hb;
+        }
+    }
     Sm64Render_DrawMarioMesh(play, &sSm64OutBuffers, dx, dy, dz, translucent, metalTint, wingCap,
-                             fireActive, /*recolor*/ 0, 0, 0, 0);
+                             fireActive, recolor, tintR, tintG, tintB);
 
     // If the player is holding a deku stick C-button, render the lit stick
     // model floating at Mario's hand. State + render impl live in
@@ -1825,7 +1849,7 @@ u8 Sm64Mario_IsGrounded(void) {
 // drive their own Mario instance to the same animation. Returns 1 when the local
 // player is an active Mario (caller then broadcasts transformation = MARIO). Pos +
 // yaw already ride the normal posRot sync; this adds the libsm64 animID/frame.
-u8 Sm64Mario_GetSyncState(s32* outAnimId, s16* outAnimFrame) {
+u8 Sm64Mario_GetSyncState(s32* outAnimId, s16* outAnimFrame, u32* outFlags) {
     if (!Sm64Mario_IsReady()) {
         return 0;
     }
@@ -1834,6 +1858,15 @@ u8 Sm64Mario_GetSyncState(s32* outAnimId, s16* outAnimFrame) {
     }
     if (outAnimFrame != NULL) {
         *outAnimFrame = sSm64OutState.animFrame;
+    }
+    if (outFlags != NULL) {
+        // Cap flags (normal/wing/metal/vanish + cap-on-head) so the peer skins the
+        // right cap, plus the SOH-only Fire bit (Fire mode has no libsm64 flag).
+        u32 f = sSm64OutState.flags & SM64_REMOTE_CAP_MASK;
+        if (Sm64MarioCaps_IsFireActive()) {
+            f |= SM64_REMOTE_FIRE_BIT;
+        }
+        *outFlags = f;
     }
     return 1;
 }
@@ -1887,7 +1920,7 @@ u8 Sm64Remote_CanRender(void) {
 // render (caller then draws the normal Link dummy). Immediate-mode: it poses,
 // puppet-ticks, and draws the shared renderer instance all within this call.
 u8 Sm64Remote_DrawPuppet(PlayState* play, f32 x, f32 y, f32 z, s16 faceYaw, s32 animId,
-                         s16 animFrame, u8 tintR, u8 tintG, u8 tintB) {
+                         s16 animFrame, u32 marioFlags, u8 tintR, u8 tintG, u8 tintB) {
     if (play == NULL || !Sm64Remote_CanRender()) {
         return 0;
     }
@@ -1927,16 +1960,40 @@ u8 Sm64Remote_DrawPuppet(PlayState* play, f32 x, f32 y, f32 z, s16 faceYaw, s32 
         p_sm64_set_mario_anim_frame(sSm64PuppetId, animFrame);
     }
 
+    // Apply the remote's cap flags so the geometry-only tick skins the matching cap
+    // (normal / wing / metal / vanish). Strip the SOH-only Fire bit first — it isn't
+    // a libsm64 flag. ALWAYS set them (the renderer instance is shared across every
+    // remote Mario, so skipping would leave this puppet wearing the PREVIOUS remote's
+    // cap). If nothing was synced (an older peer that doesn't send marioFlags), fall
+    // back to the plain cap on head so Mario is never bareheaded or mis-capped.
+    u32 libFlags = marioFlags & ~(u32)SM64_REMOTE_FIRE_BIT;
+    if (libFlags == 0) {
+        libFlags = SM64_MARIO_NORMAL_CAP | SM64_MARIO_CAP_ON_HEAD;
+    }
+    if (p_sm64_set_mario_state != NULL) {
+        p_sm64_set_mario_state(sSm64PuppetId, libFlags);
+    }
+
     p_sm64_mario_tick_puppet(sSm64PuppetId, &sSm64PuppetBuffers);
 
     if (sSm64PuppetBuffers.numTrianglesUsed == 0) {
         return 0;
     }
 
+    // Same cap → render-state mapping as the local draw: vanish = translucent,
+    // metal = chrome envmap, wing = wing-cap alpha, fire = classic Fire recolor
+    // (which takes precedence over the Harpoon tint in emitTrisSingle). recolor=1
+    // keeps the Harpoon tint for the plain / wing / vanish caps so peers stay
+    // colour-coded; metal's envmap and fire's recolor override it as intended.
+    u8 translucent = (marioFlags & SM64_MARIO_VANISH_CAP) != 0;
+    u8 metalTint   = (marioFlags & SM64_MARIO_METAL_CAP) != 0;
+    u8 wingCap     = (marioFlags & SM64_MARIO_WING_CAP) != 0;
+    u8 fireActive  = (marioFlags & SM64_REMOTE_FIRE_BIT) != 0;
+
     // Mesh verts come out at libsm64 world coords; ×SM64_SCALE (in the renderer)
     // lands them back at the OOT world pos we set, so no extra offset is needed.
     Sm64Render_DrawMarioMesh(play, &sSm64PuppetBuffers, 0.0f, 0.0f, 0.0f,
-                             /*translucent*/ 0, /*metalTint*/ 0, /*wingCap*/ 0, /*fireActive*/ 0,
+                             translucent, metalTint, wingCap, fireActive,
                              /*recolor*/ 1, tintR, tintG, tintB);
     return 1;
 }

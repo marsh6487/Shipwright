@@ -1,4 +1,5 @@
 #include "global.h"
+#include "soh/FleetShipCombo/FleetShipCombo.h"
 
 void FrameAdvance_Init(FrameAdvanceContext* frameAdvCtx) {
     frameAdvCtx->timer = 0;
@@ -14,6 +15,13 @@ void FrameAdvance_Init(FrameAdvanceContext* frameAdvCtx) {
  * This function returns true when frame advance is not active (game will run normally)
  */
 s32 FrameAdvance_Update(FrameAdvanceContext* frameAdvCtx, Input* input) {
+    // Fleet Ship Combo: while OoT is the inactive game, freeze it completely (never
+    // advance) so Link, enemies and events stay put in the background and the player
+    // can't die while playing MM.
+    if (!FleetShipCombo_IsThisGameActive()) {
+        return false;
+    }
+
     if (CHECK_BTN_ALL(input->cur.button, BTN_R) && CHECK_BTN_ALL(input->press.button, BTN_DDOWN)) {
         frameAdvCtx->enabled = !frameAdvCtx->enabled;
     }

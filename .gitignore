@@ -462,9 +462,12 @@ soh/properties.h
 *.o2r
 /mm_pc_port_tested_ver
 rebuild_soh_otr.bat
-run-clang-format.sh
 run-clang-format.ps1
 
 # Local config
 /.claude/
 /references
+CLAUDE.md
+/tools
+/apps/mhr_to_oot
+/apps

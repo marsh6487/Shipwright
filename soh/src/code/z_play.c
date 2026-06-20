@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "soh/Enhancements/gameconsole.h"
+#include "soh/FleetShipCombo/FleetShipCombo.h"
 #include "soh/frame_interpolation.h"
 #include <overlays/actors/ovl_En_Niw/z_en_niw.h>
 #include <overlays/misc/ovl_kaleido_scope/z_kaleido_scope.h>
@@ -2203,6 +2204,9 @@ s32 func_800C0CB8(PlayState* play) {
 }
 
 s32 FrameAdvance_IsEnabled(PlayState* play) {
+    // NOTE (Fleet Ship Combo): do NOT force this true for the inactive game. The freeze is
+    // done in FrameAdvance_Update (returns false -> whole play update is skipped). Forcing
+    // IsEnabled true here also gates Effect_Add, breaking player init (null weapon-effect).
     return !!play->frameAdvCtx.enabled;
 }
 

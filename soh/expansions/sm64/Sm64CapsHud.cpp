@@ -104,6 +104,10 @@ const char* kMaskResPath = "textures/icon_item_custom/gItemIconMarioMaskTex";
 
 bool sTexturesLoaded = false;
 
+// Forward decl — defined below, used by EnsureTextures to pre-load the C-Down
+// item icons.
+bool CDownItemTex(int item, const char** outName, const char** outPath);
+
 void EnsureTextures() {
     if (sTexturesLoaded) {
         return;
@@ -129,6 +133,19 @@ void EnsureTextures() {
                                : "textures/buttons/DPadRight.png";
     gui->LoadTextureFromRawImage(kDpadBtnTexName, dpadPath);
     gui->LoadTextureFromRawImage(kCDownBtnTexName, "textures/buttons/CDown.png");
+
+    // C-Down item icons (the assignable items: bomb / bombchu / deku nut / ocarina).
+    // Compiled item textures load sync like the cap icons. Guarded by FileExists so
+    // a wrong/absent path is skipped instead of crashing (LoadGuiTexture derefs a
+    // NULL resource). Drawn for whatever's on buttonItems[2].
+    const int cdItems[] = { ITEM_BOMB, ITEM_BOMBCHU, ITEM_NUT, ITEM_OCARINA_TIME };
+    for (int it : cdItems) {
+        const char* nm = nullptr;
+        const char* pth = nullptr;
+        if (CDownItemTex(it, &nm, &pth) && ResourceMgr_FileExists(pth)) {
+            gui->LoadGuiTexture(nm, pth, ImVec4(1, 1, 1, 1));
+        }
+    }
     sTexturesLoaded = true;
 }
 
@@ -145,6 +162,41 @@ void DrawRotatedImage(ImDrawList* dl, ImTextureID tex, ImVec2 center, float size
     int r = ((rotQuarters % 4) + 4) % 4;
     dl->AddImageQuad(tex, p1, p2, p3, p4, uv[(0 - r + 4) % 4], uv[(1 - r + 4) % 4], uv[(2 - r + 4) % 4],
                      uv[(3 - r + 4) % 4], col);
+}
+
+// Vector fallback button badge (always renders, even if the PNG didn't load): a
+// filled disc + a directional triangle. dir 0=right,1=down,2=left,3=up. Pass
+// cButton=true for the C-Down item row (yellow C-button styling instead of D-pad).
+void DrawDirBadge(ImDrawList* dl, ImVec2 c, float size, int dir, bool cButton) {
+    float rr = size * 0.5f;
+    ImU32 disc = cButton ? IM_COL32(245, 210, 50, 235) : IM_COL32(36, 38, 48, 235);
+    ImU32 edge = cButton ? IM_COL32(120, 95, 0, 230) : IM_COL32(230, 230, 230, 220);
+    ImU32 arrow = cButton ? IM_COL32(60, 45, 0, 255) : IM_COL32(255, 255, 255, 255);
+    dl->AddCircleFilled(c, rr, disc, 28);
+    dl->AddCircle(c, rr, edge, 28, 1.6f);
+    float a = rr * 0.52f;
+    ImVec2 tip, b1, b2;
+    switch (((dir % 4) + 4) % 4) {
+        case 0: tip = ImVec2(c.x + a, c.y); b1 = ImVec2(c.x - a * 0.5f, c.y - a); b2 = ImVec2(c.x - a * 0.5f, c.y + a); break;
+        case 1: tip = ImVec2(c.x, c.y + a); b1 = ImVec2(c.x - a, c.y - a * 0.5f); b2 = ImVec2(c.x + a, c.y - a * 0.5f); break;
+        case 2: tip = ImVec2(c.x - a, c.y); b1 = ImVec2(c.x + a * 0.5f, c.y - a); b2 = ImVec2(c.x + a * 0.5f, c.y + a); break;
+        default: tip = ImVec2(c.x, c.y - a); b1 = ImVec2(c.x - a, c.y + a * 0.5f); b2 = ImVec2(c.x + a, c.y + a * 0.5f); break;
+    }
+    dl->AddTriangleFilled(tip, b1, b2, arrow);
+}
+
+// Resource name + path for the C-Down equipped item's ImGui icon. Returns false
+// for items we don't have an icon registered for (then the slot shows just the
+// ring + button). Loaded lazily + guarded so a missing texture never crashes.
+bool CDownItemTex(int item, const char** outName, const char** outPath) {
+    switch (item) {
+        case ITEM_BOMB:    *outName = "Sm64CDItem_Bomb";    *outPath = "textures/icon_item_static/gItemIconBombTex";    return true;
+        case ITEM_BOMBCHU: *outName = "Sm64CDItem_Bombchu"; *outPath = "textures/icon_item_static/gItemIconBombchuTex"; return true;
+        case ITEM_NUT:     *outName = "Sm64CDItem_Nut";     *outPath = "textures/icon_item_static/gItemIconDekuNutTex"; return true;
+        case ITEM_OCARINA_FAIRY:
+        case ITEM_OCARINA_TIME: *outName = "Sm64CDItem_Ocarina"; *outPath = "textures/icon_item_static/gItemIconOcarinaTimeTex"; return true;
+        default: return false;
+    }
 }
 
 ImU32 ChargeColor(int phase, float charge) {
@@ -319,13 +371,17 @@ void Sm64CapsHudWindow::Draw() {
             dl->AddImage(tex, iconMin, iconMax, ImVec2(0, 0), ImVec2(1, 1), tint);
         }
 
-        // D-pad activation button (d-right.png rotated to this cap's direction),
-        // to the LEFT of the ring — Genshin-style "press this to use it" cue.
+        // D-pad activation button to the LEFT of the ring — Genshin-style "press
+        // this to use it" cue. Uses the d-right.png texture (rotated to this cap's
+        // direction) if it loaded; otherwise a crisp vector arrow that always
+        // renders (the raw-PNG GUI texture load can silently miss).
+        ImVec2 dpadBtnCenter(center.x - radius - btnGap - btnSize * 0.5f, center.y);
         ImTextureID dpadTex = gui->GetTextureByName(kDpadBtnTexName);
         if (dpadTex != (ImTextureID)0) {
-            ImVec2 btnCenter(center.x - radius - btnGap - btnSize * 0.5f, center.y);
             ImU32 btnTint = (phase == kPhaseCooldown) ? IM_COL32(150, 150, 150, 210) : IM_COL32(255, 255, 255, 255);
-            DrawRotatedImage(dl, dpadTex, btnCenter, btnSize, kSlots[slot].rot, btnTint);
+            DrawRotatedImage(dl, dpadTex, dpadBtnCenter, btnSize, kSlots[slot].rot, btnTint);
+        } else {
+            DrawDirBadge(dl, dpadBtnCenter, btnSize, kSlots[slot].rot, false);
         }
 
         // Timer badge — seconds remaining, only while ACTIVE or COOLDOWN.
@@ -357,11 +413,29 @@ void Sm64CapsHudWindow::Draw() {
         float cy = topY + kSlotCount * pitch + radius;
         ImVec2 center(centerX, cy);
         dl->AddCircle(center, radius, IM_COL32(0, 0, 0, 130), 64, ringThick);
+
+        // Equipped C-Down item icon inside the ring (bomb / bombchu / nut / ocarina).
+        int cdItem = gSaveContext.equips.buttonItems[2];
+        const char* cdName = nullptr;
+        const char* cdPath = nullptr;
+        if (CDownItemTex(cdItem, &cdName, &cdPath)) {
+            ImTextureID itemTex = gui->GetTextureByName(cdName);
+            if (itemTex != (ImTextureID)0) {
+                ImVec2 iMin(center.x - iconSize * 0.5f, center.y - iconSize * 0.5f);
+                ImVec2 iMax(center.x + iconSize * 0.5f, center.y + iconSize * 0.5f);
+                dl->AddImage(itemTex, iMin, iMax);
+            }
+        }
+
+        // C-Down activation button to the LEFT (CDown.png texture, or a yellow
+        // C-button vector badge with a down arrow if the texture didn't load).
+        ImVec2 cdBtnCenter(center.x - radius - btnGap - btnSize * 0.5f, center.y);
         ImTextureID cdTex = gui->GetTextureByName(kCDownBtnTexName);
         if (cdTex != (ImTextureID)0) {
-            ImVec2 btnCenter(center.x - radius - btnGap - btnSize * 0.5f, center.y);
-            dl->AddImage(cdTex, ImVec2(btnCenter.x - btnSize * 0.5f, btnCenter.y - btnSize * 0.5f),
-                         ImVec2(btnCenter.x + btnSize * 0.5f, btnCenter.y + btnSize * 0.5f));
+            dl->AddImage(cdTex, ImVec2(cdBtnCenter.x - btnSize * 0.5f, cdBtnCenter.y - btnSize * 0.5f),
+                         ImVec2(cdBtnCenter.x + btnSize * 0.5f, cdBtnCenter.y + btnSize * 0.5f));
+        } else {
+            DrawDirBadge(dl, cdBtnCenter, btnSize, 1, true);
         }
     }
 }

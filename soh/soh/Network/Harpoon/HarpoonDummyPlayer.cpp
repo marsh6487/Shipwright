@@ -746,8 +746,10 @@ void HarpoonDummyPlayer_Draw(Actor* actor, PlayState* play) {
     // SM64 Mario (transformation == HARPOON_MODELTYPE_MARIO): if THIS client has
     // the libsm64 runtime ready (sm64.dll + sm64.n64 present, puppet export
     // available), render the remote as a real libsm64 Mario mesh — recolored from
-    // red to their Harpoon color and posed to their network-synced animation
-    // (marioAnimId/marioAnimFrame). CONDITIONAL: if we can't render Mario (missing
+    // red to their Harpoon color, posed to their network-synced animation
+    // (marioAnimId/marioAnimFrame) and wearing their synced cap (marioFlags drives
+    // the cap geometry + wing/metal/vanish/fire transformation). CONDITIONAL: if we
+    // can't render Mario (missing
     // DLL/ROM, or an older sm64.dll), drew is false and we fall through to the
     // normal Link draw so the dummy stays visible. A dedicated shared renderer
     // instance is used (not the local Mario singleton), so this works whether or
@@ -756,7 +758,8 @@ void HarpoonDummyPlayer_Draw(Actor* actor, PlayState* play) {
         bool drew = Sm64Remote_DrawPuppet(play, actor->world.pos.x, actor->world.pos.y,
                                           actor->world.pos.z, actor->shape.rot.y,
                                           client.marioAnimId, client.marioAnimFrame,
-                                          client.color.r, client.color.g, client.color.b);
+                                          client.marioFlags, client.color.r, client.color.g,
+                                          client.color.b);
         if (drew) return;  // remote rendered as Mario, skip the Link draw
     }
 
