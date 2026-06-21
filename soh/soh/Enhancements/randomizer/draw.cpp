@@ -47,12 +47,6 @@ extern "C" {
 #include "mods/transformation_masks/assets/mm_asset_loader.h"
 
 #include "objects/object_poh/object_poh.h"
-#include "mods/items/objects/rocs_cape_giveDL/header.h"
-#include "mods/items/objects/rocs_cape_giveDL/model.inc.c"
-#include "mods/items/objects/rocs_feather_giveDL/header.h"
-#include "mods/items/objects/rocs_feather_giveDL/model.inc.c"
-#include "mods/items/objects/gust_jar_giveDL/header.h"
-#include "mods/items/objects/gust_jar_giveDL/model.inc.c"
 #include "mods/items/objects/deku_leaf_giveDL/header.h"
 #include "mods/items/objects/deku_leaf_giveDL/model.inc.c"
 #include "mods/items/objects/ball_and_chainDL/header.h"
@@ -69,24 +63,16 @@ extern "C" {
 #include "mods/items/objects/bombarrows_giveDL/model.inc.c"
 #include "mods/items/objects/time_gate_giveDL/header.h"
 #include "mods/items/objects/time_gate_giveDL/model.inc.c"
-#include "mods/items/objects/desire_sensor_giveDL/header.h"
-#include "mods/items/objects/desire_sensor_giveDL/model.inc.c"
 #include "mods/items/objects/fire_rodDL/header.h"
 #include "mods/items/objects/fire_rodDL/model.inc.c"
 #include "mods/items/objects/ice_rodDL/header.h"
 #include "mods/items/objects/ice_rodDL/model.inc.c"
 #include "mods/items/objects/light_rodDL/header.h"
 #include "mods/items/objects/light_rodDL/Cylinder_002.c"
-#include "mods/items/objects/whip_giveDL/header.h"
-#include "mods/items/objects/whip_giveDL/model.inc.c"
-#include "mods/items/objects/switchhook_giveDL/header.h"
-#include "mods/items/objects/switchhook_giveDL/model.inc.c"
 #include "mods/items/objects/shovel_giveDL/header.h"
 #include "mods/items/objects/shovel_giveDL/model.inc.c"
 #include "mods/items/objects/pokeballDL/ItmPokeBall.h"
 #include "mods/items/objects/pokeballDL/ItmPokeBall.c"
-#include "mods/items/objects/minish_capDL/header.h"
-#include "mods/items/objects/minish_capDL/model.inc.c"
 
 // Vanilla GI equipment models (for ext equipment recolor draws)
 #include "objects/object_gi_sword_1/object_gi_sword_1.h"
@@ -1523,18 +1509,6 @@ Gfx gRandoRocsfeatherDL[] = {
         gsSPEndDisplayList(),                                                                                    \
     };
 
-Gfx gRandoRocsCapeDL[] = {
-    gsSPDisplayList(rocs_cape_mesh_dl),
-    gsSPEndDisplayList(),
-};
-Gfx gRandoRocsFeatherDL[] = {
-    gsSPDisplayList(rocs_feather_dl),
-    gsSPEndDisplayList(),
-};
-Gfx gRandoGustjarDL[] = {
-    gsSPDisplayList(jar_model_dl),
-    gsSPEndDisplayList(),
-};
 Gfx gRandoDekuLeafDL[] = {
     gsSPDisplayList(g_dekuleaf_dl),
     gsSPEndDisplayList(),
@@ -1578,20 +1552,12 @@ Gfx gRandoTimegateDL[] = {
     gsSPDisplayList(g_timegate_dl),
     gsSPEndDisplayList(),
 };
-Gfx gRandoDesireSensorDL[] = {
-    gsSPDisplayList(g_desire_sensor_dl),
-    gsSPEndDisplayList(),
-};
 Gfx gRandoFirerodDL[] = {
     gsSPDisplayList(g_fire_rod_give_dl),
     gsSPEndDisplayList(),
 };
 Gfx gRandoIcerodDL[] = {
     gsSPDisplayList(g_ice_rod_give_dl),
-    gsSPEndDisplayList(),
-};
-Gfx gRandoSwitchHookDL[] = {
-    gsSPDisplayList(g_switchhook_give_dl),
     gsSPEndDisplayList(),
 };
 Gfx gRandoLightrodDL[] = {
@@ -1653,15 +1619,15 @@ static void DrawCustomItemDiamondTint(PlayState* play, Gfx* dl1, Gfx* dl2, f32 s
 
 // All 24 draw functions (Skijer's custom items)
 void Randomizer_DrawRocsFeatherSkijer(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, gRandoRocsFeatherDL, 0.5f);
+    DrawCustomItemDiamond(play, (Gfx*)gNeiRocsFeatherDL, 0.5f);
 }
 
 void Randomizer_DrawRocsCape(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, gRandoRocsCapeDL, 0.6f);
+    DrawCustomItemDiamond(play, (Gfx*)gNeiRocsCapeDL, 0.6f);
 }
 
 void Randomizer_DrawWhip(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, g_whip_give_dl, 0.5f);
+    DrawCustomItemDiamond(play, (Gfx*)gNeiWhipDL, 0.5f);
 }
 
 void Randomizer_DrawSpinner(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1703,7 +1669,7 @@ void Randomizer_DrawDekuLeaf(PlayState* play, GetItemEntry* getItemEntry) {
 }
 
 void Randomizer_DrawSwitchHook(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, gRandoSwitchHookDL, 0.01f);
+    DrawCustomItemDiamond(play, (Gfx*)gNeiSwitchHookDL, 0.01f);
 }
 
 void Randomizer_DrawMogmaMitts(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1711,7 +1677,7 @@ void Randomizer_DrawMogmaMitts(PlayState* play, GetItemEntry* getItemEntry) {
 }
 
 void Randomizer_DrawGustJar(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, gRandoGustjarDL, 5.0f);
+    DrawCustomItemDiamond(play, (Gfx*)gNeiGustJarDL, 5.0f);
 }
 
 void Randomizer_DrawBallAndChain(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1731,7 +1697,7 @@ void Randomizer_DrawTimeGate(PlayState* play, GetItemEntry* getItemEntry) {
 }
 
 void Randomizer_DrawDesireSensor(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, gRandoDesireSensorDL, 0.5f);
+    DrawCustomItemDiamond(play, (Gfx*)gNeiDesireSensorDL, 0.5f);
 }
 
 void Randomizer_DrawBeetle(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1779,7 +1745,7 @@ void Randomizer_DrawPokeball(PlayState* play, GetItemEntry* getItemEntry) {
 }
 
 void Randomizer_DrawMinishCap(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, Cylinder_opaque_dl, 0.5f);
+    DrawCustomItemDiamond(play, (Gfx*)gNeiMinishCapDL, 0.5f);
 }
 
 // =============================================================================

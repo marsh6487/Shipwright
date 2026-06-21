@@ -1284,8 +1284,6 @@ void BossFd2_Draw(Actor* thisx, PlayState* play) {
     }
     CLOSE_DISPS(play->state.gfxCtx);
 
-    // FD / Pika Gigantamax electric glow on the emerged head + neck. The 9 JntSph
-    // collider spheres were refreshed during the skeleton draw (Collider_UpdateSpheres
-    // in BossFd2_PostLimbDraw). No-op when the spark timer is 0 (not recently hit).
+    // Skijer's NEI: FD/Pika electric glow
     BossSuperDamage_DrawGlowFromSpheres(&this->actor, play, &this->collider, 9, 1.2f);
 }

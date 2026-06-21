@@ -7,6 +7,7 @@
 #include "soh/Enhancements/custom-message/CustomMessageTypes.h"
 #include "draw.h"
 #include "mods/extended_equipment.h"
+#include "mods/extended_inventory.h" // Nei_FindByRg (Skijer's NEI)
 
 using namespace Rando;
 
@@ -536,55 +537,64 @@ void Rando::StaticData::InitItemTable() {
     itemTable[RG_BOTTLE_WITH_MAGIC_MUSHROOM] =          Item(RG_BOTTLE_WITH_MAGIC_MUSHROOM,       Text{ "Bottle with Magic Mushroom", "Fiole avec Champignon Magique", "Flasche mit Zauberpilz" },                                       ITEMTYPE_ITEM,              0xEE,                 true,  LOGIC_BOTTLES,                      RHT_BOTTLE_WITH_BLUE_FIRE,             ITEM_BOTTLE_WITH_MAGIC_MUSHROOM,      OBJECT_GI_MUSHROOM,     GID_BOTTLE,           TEXT_RANDOMIZER_CUSTOM_ITEM, 0x80, CHEST_ANIM_LONG,  ITEM_CATEGORY_MAJOR,  MOD_RANDOMIZER, {"a ", "une ", "eine "});
 
     // ────────── Custom draw functions for NEI items (matches Randomizer_Draw* in draw.cpp) ──────────
-    itemTable[RG_PROGRESSIVE_ROCS].SetCustomDrawFunc(Randomizer_DrawRocsFeatherSkijer);
-    itemTable[RG_WHIP].SetCustomDrawFunc(Randomizer_DrawWhip);
-    itemTable[RG_SPINNER].SetCustomDrawFunc(Randomizer_DrawSpinner);
-    itemTable[RG_BOMB_ARROWS].SetCustomDrawFunc(Randomizer_DrawBombArrows);
-    itemTable[RG_FIRE_ROD].SetCustomDrawFunc(Randomizer_DrawFireRod);
-    itemTable[RG_ICE_ROD].SetCustomDrawFunc(Randomizer_DrawIceRod);
-    itemTable[RG_LIGHT_ROD].SetCustomDrawFunc(Randomizer_DrawLightRod);
-    itemTable[RG_DEKU_LEAF].SetCustomDrawFunc(Randomizer_DrawDekuLeaf);
-    itemTable[RG_SWITCH_HOOK].SetCustomDrawFunc(Randomizer_DrawSwitchHook);
-    itemTable[RG_MOGMA_MITTS].SetCustomDrawFunc(Randomizer_DrawMogmaMitts);
-    itemTable[RG_GUST_JAR].SetCustomDrawFunc(Randomizer_DrawGustJar);
-    itemTable[RG_BALL_AND_CHAIN].SetCustomDrawFunc(Randomizer_DrawBallAndChain);
-    itemTable[RG_CANE_OF_SOMARIA].SetCustomDrawFunc(Randomizer_DrawCaneOfSomaria);
-    itemTable[RG_DOMINION_ROD].SetCustomDrawFunc(Randomizer_DrawDominionRod);
-    itemTable[RG_TIME_GATE].SetCustomDrawFunc(Randomizer_DrawTimeGate);
-    itemTable[RG_DESIRE_SENSOR].SetCustomDrawFunc(Randomizer_DrawDesireSensor);
-    itemTable[RG_BEETLE].SetCustomDrawFunc(Randomizer_DrawBeetle);
-    itemTable[RG_SHOVEL].SetCustomDrawFunc(Randomizer_DrawShovel);
-    itemTable[RG_HYLIAS_GRACE].SetCustomDrawFunc(Randomizer_DrawHyliaGrace);
-    itemTable[RG_ZONAI_PERMAFROST].SetCustomDrawFunc(Randomizer_DrawZonaiPermafrost);
-    itemTable[RG_DEMISE_DESTRUCTION].SetCustomDrawFunc(Randomizer_DrawDemiseDestruction);
-    itemTable[RG_LANTERN].SetCustomDrawFunc(Randomizer_DrawLantern);
-    itemTable[RG_PENDING_3].SetCustomDrawFunc(Randomizer_DrawPokeball);
-    itemTable[RG_PENDING_1].SetCustomDrawFunc(Randomizer_DrawMinishCap);
-    // All 24 MM masks share the generic Randomizer_DrawMmMask (it dispatches by RG internally)
-    itemTable[RG_MM_MASK_POSTMAN].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_ALL_NIGHT].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_BLAST].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_STONE].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_GREAT_FAIRY].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_DEKU].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_KEATON].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_BREMEN].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_BUNNY].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_DON_GERO].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_SCENTS].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_GORON].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_ROMANI].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_CIRCUS_LEADER].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_KAFEI].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_COUPLE].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_TRUTH].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_ZORA].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_KAMARO].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_GIBDO].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_GARO].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_CAPTAIN].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_GIANT].SetCustomDrawFunc(Randomizer_DrawMmMask);
-    itemTable[RG_MM_MASK_FIERCE_DEITY].SetCustomDrawFunc(Randomizer_DrawMmMask);
+    // Skijer's NEI: the per-item draw func now lives in the unified registry (sNeiItems[]).
+    // Source each from Nei_FindByRg so adding an item = one row. RGs not in the registry
+    // (vanilla Roc, ext-equipment, weapon upgrades) keep their literal SetCustomDrawFunc below.
+    auto setNeiDraw = [](RandomizerGet rg) {
+        const NeiItem* nei = Nei_FindByRg((int16_t)rg);
+        if (nei != nullptr && nei->drawFunc != nullptr) {
+            itemTable[rg].SetCustomDrawFunc(nei->drawFunc);
+        }
+    };
+    itemTable[RG_PROGRESSIVE_ROCS].SetCustomDrawFunc(Randomizer_DrawRocsFeatherSkijer); // rg=NEI_NO_RG in registry (2 RGs -> 1 item)
+    setNeiDraw(RG_WHIP);
+    setNeiDraw(RG_SPINNER);
+    setNeiDraw(RG_BOMB_ARROWS);
+    setNeiDraw(RG_FIRE_ROD);
+    setNeiDraw(RG_ICE_ROD);
+    setNeiDraw(RG_LIGHT_ROD);
+    setNeiDraw(RG_DEKU_LEAF);
+    setNeiDraw(RG_SWITCH_HOOK);
+    setNeiDraw(RG_MOGMA_MITTS);
+    setNeiDraw(RG_GUST_JAR);
+    setNeiDraw(RG_BALL_AND_CHAIN);
+    setNeiDraw(RG_CANE_OF_SOMARIA);
+    setNeiDraw(RG_DOMINION_ROD);
+    setNeiDraw(RG_TIME_GATE);
+    setNeiDraw(RG_DESIRE_SENSOR);
+    setNeiDraw(RG_BEETLE);
+    setNeiDraw(RG_SHOVEL);
+    setNeiDraw(RG_HYLIAS_GRACE);
+    setNeiDraw(RG_ZONAI_PERMAFROST);
+    setNeiDraw(RG_DEMISE_DESTRUCTION);
+    setNeiDraw(RG_LANTERN);
+    setNeiDraw(RG_PENDING_3);
+    setNeiDraw(RG_PENDING_1);
+    // All 24 MM masks share the generic Randomizer_DrawMmMask (registry rows carry it).
+    setNeiDraw(RG_MM_MASK_POSTMAN);
+    setNeiDraw(RG_MM_MASK_ALL_NIGHT);
+    setNeiDraw(RG_MM_MASK_BLAST);
+    setNeiDraw(RG_MM_MASK_STONE);
+    setNeiDraw(RG_MM_MASK_GREAT_FAIRY);
+    setNeiDraw(RG_MM_MASK_DEKU);
+    setNeiDraw(RG_MM_MASK_KEATON);
+    setNeiDraw(RG_MM_MASK_BREMEN);
+    setNeiDraw(RG_MM_MASK_BUNNY);
+    setNeiDraw(RG_MM_MASK_DON_GERO);
+    setNeiDraw(RG_MM_MASK_SCENTS);
+    setNeiDraw(RG_MM_MASK_GORON);
+    setNeiDraw(RG_MM_MASK_ROMANI);
+    setNeiDraw(RG_MM_MASK_CIRCUS_LEADER);
+    setNeiDraw(RG_MM_MASK_KAFEI);
+    setNeiDraw(RG_MM_MASK_COUPLE);
+    setNeiDraw(RG_MM_MASK_TRUTH);
+    setNeiDraw(RG_MM_MASK_ZORA);
+    setNeiDraw(RG_MM_MASK_KAMARO);
+    setNeiDraw(RG_MM_MASK_GIBDO);
+    setNeiDraw(RG_MM_MASK_GARO);
+    setNeiDraw(RG_MM_MASK_CAPTAIN);
+    setNeiDraw(RG_MM_MASK_GIANT);
+    setNeiDraw(RG_MM_MASK_FIERCE_DEITY);
     // Extended Equipment
     itemTable[RG_EXT_CANE_OF_BYRNA].SetCustomDrawFunc(Randomizer_DrawExtCaneOfByrna);
     itemTable[RG_EXT_FOUR_SWORD].SetCustomDrawFunc(Randomizer_DrawExtFourSword);
@@ -602,8 +612,8 @@ void Rando::StaticData::InitItemTable() {
     itemTable[RG_EXT_PENDANT_OF_MEMORIES].SetCustomDrawFunc(Randomizer_DrawExtPendantOfMemories);
     itemTable[RG_EXT_WATER_DRAGON_SCALE].SetCustomDrawFunc(Randomizer_DrawExtWaterDragonScale);
 
-    // Mask of Scents reward (Bottle with Magic Mushroom).
-    itemTable[RG_BOTTLE_WITH_MAGIC_MUSHROOM].SetCustomDrawFunc(Randomizer_DrawBottleWithMagicMushroom);
+    // Mask of Scents reward (Bottle with Magic Mushroom). Draw func sourced from the registry. Skijer's NEI
+    setNeiDraw(RG_BOTTLE_WITH_MAGIC_MUSHROOM);
 
     // clang-format on
 

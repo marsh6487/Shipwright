@@ -4,9 +4,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include <assert.h>
 
-// NEI: true when the player's contact/sword damage should be scaled by
-// ivanDamageMultiplier (Ivan co-op possession or SM64 Mario active). Centralizes the
-// condition that was duplicated in the AC-apply and sword-damage paths below.
+// Skijer's NEI: damage scaled by ivanDamageMultiplier (Ivan co-op or SM64 Mario)
 static u8 NEI_PlayerDamageBoostActive(void) {
     extern u8 gIvanPossessActive;
     extern u8 Sm64Mario_IsReady(void);
@@ -3040,11 +3038,7 @@ void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCt
         if (damage < 4)
             damage = 4; // Minimum 4 damage regardless of resistance
     }
-    // DMG_FIXED_DAMAGE (NEI transformation forms): use the toucher's damage
-    // value verbatim, discarding whatever the enemy's damage table produced.
-    // This makes a form's attack deal a CONSTANT amount regardless of the
-    // enemy table or Link's equipped sword class. Runs after the table lookup
-    // (and after the UNBLOCKABLE floor) so it has the final say.
+    // Skijer's NEI: DMG_FIXED_DAMAGE (forms) uses toucher damage verbatim
     if (info->acHitInfo->toucher.dmgFlags & DMG_FIXED_DAMAGE) {
         damage = (f32)info->acHitInfo->toucher.damage;
     }

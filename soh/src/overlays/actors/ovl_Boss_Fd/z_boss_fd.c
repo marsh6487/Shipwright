@@ -1705,10 +1705,7 @@ void BossFd_Draw(Actor* thisx, PlayState* play) {
     BossFd_DrawEffects(this->effects, play);
     osSyncPrintf("FD DRAW END2\n");
 
-    // FD / Pika Gigantamax electric glow on the flying serpent. The 19 JntSph collider
-    // spheres were refreshed during BossFd_DrawBody (Collider_UpdateSpheres) and run
-    // head→tail, so their world centers blanket the whole serpent — ideal spark anchors.
-    // No-op when the spark timer is 0 (not recently hit by a super attack).
+    // Skijer's NEI: FD/Pika electric glow
     BossSuperDamage_DrawGlowFromSpheres(&this->actor, play, &this->collider, 19, 1.5f);
 }
 

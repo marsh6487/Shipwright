@@ -3477,8 +3477,7 @@ s32 func_80835884(Player* this, PlayState* play) {
     if (LinkAnimation_Update(play, &this->upperSkelAnime)) {
         Player_SetUpperActionFunc(this, func_808358F0);
         {
-            // NEI anim override (Zora boomerang throw-wait). Handler:
-            // RegisterPlayerAnimOverrideNEI in customequipment.cpp.
+            // Skijer's NEI: anim override (Zora boomerang throw-wait)
             LinkAnimationHeader* anim = &gPlayerAnim_link_boom_throw_waitR;
             GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_ZORA_BOOMERANG_WAIT, 0, &anim,
                                   this);
@@ -3612,8 +3611,7 @@ s32 func_80835B60(Player* this, PlayState* play) {
     if (!(this->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN)) {
         Player_SetUpperActionFunc(this, func_80835C08);
         {
-            // NEI anim override (Zora boomerang catch). Handler:
-            // RegisterPlayerAnimOverrideNEI in customequipment.cpp.
+            // Skijer's NEI: anim override (Zora boomerang catch)
             LinkAnimationHeader* anim = &gPlayerAnim_link_boom_catch;
             GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_ZORA_BOOMERANG_CATCH, 0, &anim,
                                   this);
@@ -4860,10 +4858,7 @@ void func_80837948(PlayState* play, Player* this, s32 arg2) {
         }
     }
 
-    // MHR moveset (Skijer's NEI > MHR Anims): user-bound animation for this
-    // melee slot. Note arg2 already includes the +2 combo promotion above, so
-    // first-swing and combo bindings hit different slots. Runs LAST: an
-    // explicit user binding wins over form defaults.
+    // Skijer's NEI: MHR moveset melee binding (arg2 includes +2 combo promotion); wins over form defaults
     {
         extern LinkAnimationHeader* MhrMoveset_GetMeleeAnim(s32 mwa);
         LinkAnimationHeader* mhrAnim = MhrMoveset_GetMeleeAnim(arg2);
@@ -6889,8 +6884,7 @@ void Player_SetupRoll(Player* this, PlayState* play) {
 
     Player_SetupAction(play, this, Player_Action_Roll, 0);
     {
-        // NEI anim override (roll). Handler: RegisterPlayerAnimOverrideNEI in
-        // customequipment.cpp (MHR moveset user-bound roll animation).
+        // Skijer's NEI: anim override (roll)
         LinkAnimationHeader* rollAnim = GET_PLAYER_ANIM(PLAYER_ANIMGROUP_landing_roll, this->modelAnimType);
         GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_ROLL, 0, &rollAnim, this);
         LinkAnimation_PlayOnceSetSpeed(play, &this->skelAnime, rollAnim, 1.25f * sWaterSpeedFactor);
@@ -6909,13 +6903,10 @@ s32 Player_TryRoll(Player* this, PlayState* play) {
 }
 
 void func_8083BCD0(Player* this, PlayState* play, s32 controlStickDirection) {
-    // MHR moveset: user-bound dodge-hop animation (moveId 0..3 matches the
-    // controlStickDirection index of D_80853D4C: fwd/right/backflip/left).
-    // Only the main hop anim is overridable — the landing anims stay vanilla.
+    // Skijer's NEI: MHR moveset dodge-hop (moveId 0..3 = direction); main hop anim only
     LinkAnimationHeader* hopAnim;
     {
-        // NEI anim override (dodge hop). Handler: RegisterPlayerAnimOverrideNEI
-        // in customequipment.cpp (MHR moveset hop binding keyed on direction).
+        // Skijer's NEI: anim override (dodge hop)
         hopAnim = D_80853D4C[controlStickDirection][0];
         GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_DODGE_HOP, controlStickDirection,
                               &hopAnim, this);
@@ -7283,9 +7274,7 @@ s32 Player_ActionHandler_11(Player* this, PlayState* play) {
                 anim = &gPlayerAnim_clink_normal_defense_ALL;
             }
 
-            // NEI anim override (shield raise). Handler:
-            // RegisterPlayerAnimOverrideNEI in customequipment.cpp (MHR moveset
-            // user-bound shield raise animation).
+            // Skijer's NEI: anim override (shield raise)
             GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_SHIELD_RAISE, 0, &anim, this);
 
             if (anim != this->skelAnime.animation) {
@@ -10142,9 +10131,7 @@ s32 func_80842DF4(PlayState* play, Player* this) {
 void Player_Action_80843188(Player* this, PlayState* play) {
     if (LinkAnimation_Update(play, &this->skelAnime)) {
         if (!Player_IsChildWithHylianShield(this)) {
-            // NEI anim override (shield hold loop). Handler:
-            // RegisterPlayerAnimOverrideNEI in customequipment.cpp (MHR moveset
-            // user-bound shield hold loop).
+            // Skijer's NEI: anim override (shield hold loop)
             LinkAnimationHeader* shieldLoop = GET_PLAYER_ANIM(PLAYER_ANIMGROUP_defense_wait, this->modelAnimType);
             GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_SHIELD_LOOP, 0, &shieldLoop, this);
             Player_AnimPlayLoop(play, this, shieldLoop);
@@ -13811,28 +13798,13 @@ void Player_Draw(Actor* thisx, PlayState* play2) {
     Vec3s rot;
     f32 scale;
 
-    // NEI player-draw fork: the custom-model intercepts that ran at the top of
-    // this function (PakLoader_FrameBegin, Harpoon Prop Hunt prop draw, SM64
-    // Mario draw/hide, Dragon Scale swim barrier, fully-loaded MM transformation
-    // form) live in the VB_PLAYER_DRAW_BEGIN handler (soh/Enhancements/
-    // customequipment.cpp). Returning false means a custom model was drawn (or
-    // Link must be hidden) and the entire vanilla Player_Draw body is skipped;
-    // true falls through into the vanilla draw. The skeleton-swap (PakLoader /
-    // O2rLoader) and post-draw additive draws below remain inline because they
-    // thread the pakActive/o2rActive locals across the vanilla draw.
+    // Skijer's NEI: custom-model draw fork (RegisterPlayerDrawForkNEI). false = custom
+    // model drawn / Link hidden, skip vanilla draw. Pak/O2r skeleton swap stays inline below.
     if (!GameInteractor_Should(VB_PLAYER_DRAW_BEGIN, true, play, this)) {
         return;
     }
 
-    // PAK Loader: Swap skeleton before vanilla draw, restore after.
-    // This lets the ENTIRE vanilla draw pipeline run (equipment, eyes, boots, gauntlets)
-    // but with the custom model's body DLs. Only the skelAnime.skeleton pointer is swapped.
-    //
-    // Applies to BOTH the local player and remote dummy players: for remotes,
-    // HarpoonDummyPlayer_Draw calls PakLoader_BeginRemoteRender before Player_Draw,
-    // which sets sForcedModelIndex so PakLoader_HasActiveModel() returns true here
-    // with the remote's skin. The transformation-masks exclusion is LOCAL-only —
-    // remote dummies in an MM form never reach this branch (DrawMmForm intercepts).
+    // Skijer's NEI: pak skeleton swap (local + remote dummies); transform exclusion is local-only.
     u8 isLocalPlayer = (thisx == &GET_PLAYER(play2)->actor);
     u8 transformBlocks = isLocalPlayer && (TransformMasks_IsTransformed() || TransformMasks_IsFDSkinMode());
     u8 pakActive = 0;
@@ -13841,27 +13813,14 @@ void Player_Draw(Actor* thisx, PlayState* play2) {
         pakActive = 1;
     }
 
-    // O2R Loader: same skeleton-swap mechanism as PakLoader but reading from any
-    // .o2r in the resource manager (e.g. nei/garo.o2r). Independent of pak_loader;
-    // pak takes priority when both are forced. Skip when MM-transformed (form system
-    // owns the draw in that case).
+    // Skijer's NEI: O2r skeleton swap (pak takes priority when both forced).
     u8 o2rActive = 0;
     if (!pakActive && O2rLoader_HasActiveModel() && !transformBlocks) {
         O2rLoader_SwapSkeleton(this);
         o2rActive = 1;
     }
 
-    // Gerudo Form rides on the same O2rLoader path as Garo — when the
-    // gerudo_form.cpp mask-edge hook calls O2rLoader_ForceModel("gerudo"),
-    // O2rLoader_SwapSkeleton above already replaced player->skelAnime.skeleton
-    // with the native GeldB 23-bone skel from oot.o2r. No separate swap.
-    //
-    // NOTE: the Dragon Scale swim barrier and the fully-loaded MM transformation
-    // form draw (which used to run here, before the vanilla draw) moved into the
-    // VB_PLAYER_DRAW_BEGIN handler at the top of this function. They are mutually
-    // exclusive with the skeleton swap above (the swap is gated on
-    // !transformBlocks), so running them before the swap is behavior-identical:
-    // whenever the MM-transformed return path fires, pakActive/o2rActive are 0.
+    // Skijer's NEI: Gerudo form rides the O2r path (no separate swap).
 
     if (LINK_AGE_IN_YEARS == YEARS_CHILD) {
         pos.x = 2.0f;
@@ -16678,10 +16637,7 @@ void Player_Action_808502D0(Player* this, PlayState* play) {
                     sp3C = &gPlayerAnim_link_fighter_power_jump_kiru_end;
                 }
 
-                // NEI anim override (jump-slash recovery). Handler:
-                // RegisterPlayerAnimOverrideNEI in customequipment.cpp. The
-                // original IsTransformed + meleeWeaponAnimation range gate is
-                // reproduced inside the handler (reads this->meleeWeaponAnimation).
+                // Skijer's NEI: anim override (jump-slash recovery)
                 GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_JUMPSLASH_RECOVERY, 0, &sp3C,
                                       this);
 

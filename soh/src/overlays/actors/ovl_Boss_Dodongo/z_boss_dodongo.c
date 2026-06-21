@@ -1397,10 +1397,7 @@ void BossDodongo_Draw(Actor* thisx, PlayState* play) {
 
     BossDodongo_DrawEffects(play);
 
-    // FD / Pika Gigantamax electric glow. The 19 JntSph collider spheres were just
-    // refreshed during the skeleton draw (Collider_UpdateSpheres in PostLimbDraw)
-    // and their world-space centers blanket Dodongo's whole body — ideal anchors
-    // for the light-orb shell. No-op when the spark timer is 0 (not recently hit).
+    // Skijer's NEI: FD/Pika electric glow
     BossSuperDamage_DrawGlowFromSpheres(&this->actor, play, &this->collider, 19, 1.3f);
 }
 

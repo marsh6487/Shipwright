@@ -6,11 +6,30 @@
  */
 #include "objects/object_vase/object_vase.h"
 
-extern Gfx jar_body_dl[];
-extern Gfx jar_decoration_dl[];
+// Jar body/decoration DLs now live in soh.o2r (object_nei_gust_jar). Loaded once,
+// gated so a missing archive skips the draw instead of crashing.
+extern u8 ResourceMgr_FileExists(const char* resName);
+extern Gfx* ResourceMgr_LoadGfxByName(const char* path);
+
+static Gfx* GustJarPot_GetDL(const char* otr) {
+    if (!ResourceMgr_FileExists(otr))
+        return NULL;
+    return ResourceMgr_LoadGfxByName(otr);
+}
 
 static void GustJarPot_Draw(Player* player, PlayState* play) {
     if (!gCustomItemState.gustJarEquipped)
+        return;
+
+    static Gfx* sBodyDL = NULL;
+    static Gfx* sDecorDL = NULL;
+    static u8 sTried = 0;
+    if (!sTried) {
+        sTried = 1;
+        sBodyDL = GustJarPot_GetDL("__OTR__objects/object_nei_gust_jar/jar_body_dl");
+        sDecorDL = GustJarPot_GetDL("__OTR__objects/object_nei_gust_jar/jar_decoration_dl");
+    }
+    if (sBodyDL == NULL || sDecorDL == NULL)
         return;
 
     OPEN_DISPS(play->state.gfxCtx);
@@ -39,7 +58,7 @@ static void GustJarPot_Draw(Player* player, PlayState* play) {
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
 
     // 4. Draw body (gray/base)
-    gSPDisplayList(POLY_OPA_DISP++, jar_body_dl);
+    gSPDisplayList(POLY_OPA_DISP++, sBodyDL);
 
     // 5. Draw decoration (recolorable) — color by SUCK/BLOW direction.
     //    SUCK = blue, BLOW = red. Brightness scales with heat (more charge →
@@ -65,7 +84,7 @@ static void GustJarPot_Draw(Player* player, PlayState* play) {
         gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, r, g, b, 255);
     }
 
-    gSPDisplayList(POLY_OPA_DISP++, jar_decoration_dl);
+    gSPDisplayList(POLY_OPA_DISP++, sDecorDL);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

@@ -3033,9 +3033,7 @@ void BossSst_DrawHead(Actor* thisx, PlayState* play) {
     SkinMatrix_Vec3fMtxFMultXYZ(&play->viewProjectionMtxF, &this->actor.focus.pos, &this->center);
     BossSst_DrawEffect(&this->actor, play);
 
-    // FD / Pika Gigantamax electric glow on the head. The 11 JntSph collider spheres were
-    // refreshed during the skeleton draw (Collider_UpdateSpheres in BossSst_PostHeadDraw)
-    // and blanket the head. No-op when the spark timer is 0 (not recently hit).
+    // Skijer's NEI: FD/Pika electric glow
     BossSuperDamage_DrawGlowFromSpheres(&this->actor, play, &this->colliderJntSph, 11, 1.4f);
 }
 

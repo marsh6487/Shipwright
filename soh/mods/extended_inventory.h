@@ -27,11 +27,23 @@ typedef int32_t (*ItemActionUpdateFunc)(struct Player* player, struct PlayState*
 typedef void (*ItemActionInitFunc)(struct PlayState* play, struct Player* player);
 #endif
 
+// Skijer's NEI — rando draw-func ptr type. Same signature/type as ItemTableTypes.h's
+// CustomDrawFunc (typedef redefinition to the same type is legal in C11/C++), so
+// includers of this header don't have to pull in the item-tables header.
+#ifndef NEI_CUSTOM_DRAW_FUNC_TYPE
+#define NEI_CUSTOM_DRAW_FUNC_TYPE
+struct GetItemEntry;
+typedef void (*CustomDrawFunc)(struct PlayState*, struct GetItemEntry*);
+#endif
+
 // Skijer's NEI — unified custom-item registry row (single source of truth).
 // item: ITEM_xxx (or NEI_NO_ITEM for IA-only rows). slot: page-2/3 inventory
 // slot, or NEI_NO_SLOT. ageReq: AGE_REQ_*. iconTex: page-2 icon (NULL = dynamic).
+// rg: RandomizerGet for this item (NEI_NO_RG if none / non-uniform). drawFunc:
+// rando get-item 3D model (NULL = none). name*: textbox message strings (NULL = none).
 #define NEI_NO_ITEM ((int16_t)-1)
 #define NEI_NO_SLOT ((uint8_t)0xFF)
+#define NEI_NO_RG ((int16_t)0) // RG_NONE
 
 typedef struct {
     int16_t item;
@@ -42,10 +54,16 @@ typedef struct {
     void* iconTex;
     ItemActionUpdateFunc updateFn;
     ItemActionInitFunc initFn;
+    CustomDrawFunc drawFunc; // Skijer's NEI
+    int16_t rg;              // Skijer's NEI
+    const char* nameEn;      // Skijer's NEI
+    const char* nameFr;      // Skijer's NEI
+    const char* nameDe;      // Skijer's NEI
 } NeiItem;
 
 const NeiItem* Nei_FindByItem(int32_t item);
 const NeiItem* Nei_FindBySlot(uint8_t slot);
+const NeiItem* Nei_FindByRg(int16_t rg); // Skijer's NEI
 
 typedef struct {
     int currentPage;         // 0 = vanilla, 1 = custom items, 2 = MM masks
