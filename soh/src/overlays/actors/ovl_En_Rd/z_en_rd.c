@@ -3,10 +3,11 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ResourceManagerHelpers.h"
 
-// Returns 1 when Link is currently wearing the MM Gibdo Mask (sCurrentMmMask
-// in mm_mask_wear.cpp). When true, Redeads/Gibdos drop into a friendly dance
-// state instead of attacking — mirrors MM's EnRd_ShouldNotDance pattern.
-extern s32 MmMaskWear_IsGibdoMaskWorn(void);
+// Returns 1 when Link wears any mask that pacifies Redeads/Gibdos: Gibdo Mask,
+// Captain's Hat (both MM), or the vanilla Skull / Spooky masks. When true,
+// Redeads/Gibdos drop into a friendly dance state instead of attacking —
+// mirrors MM's EnRd_ShouldNotDance pattern.
+extern s32 MmMaskWear_MakesRedeadsFriendly(void);
 
 #define FLAGS                                                                                 \
     (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE | ACTOR_FLAG_UPDATE_CULLING_DISABLED | \
@@ -185,7 +186,7 @@ static void EnRd_FriendlyDance(EnRd* this, PlayState* play) {
     SkelAnime_Update(&this->skelAnime);
 
     // Mask removed → snap back to hostile idle setup so they re-engage Link.
-    if (!MmMaskWear_IsGibdoMaskWorn()) {
+    if (!MmMaskWear_MakesRedeadsFriendly()) {
         this->collider.base.acFlags |= AC_ON;
         EnRd_SetupIdle(this);
         return;
@@ -323,7 +324,7 @@ void EnRd_Idle(EnRd* this, PlayState* play) {
     } else {
         // Gibdo Mask gate: while worn, redirect to friendly dance instead of
         // detecting / freezing the player. Mirrors MM's EnRd_ShouldNotDance.
-        if (MmMaskWear_IsGibdoMaskWorn()) {
+        if (MmMaskWear_MakesRedeadsFriendly()) {
             EnRd_SetupFriendlyDance(this);
             return;
         }
@@ -405,7 +406,7 @@ void EnRd_SetupWalkToPlayer(EnRd* this, PlayState* play) {
 
 void EnRd_WalkToPlayer(EnRd* this, PlayState* play) {
     // Gibdo Mask gate: drop the chase + grab and switch to friendly dance.
-    if (MmMaskWear_IsGibdoMaskWorn()) {
+    if (MmMaskWear_MakesRedeadsFriendly()) {
         EnRd_SetupFriendlyDance(this);
         return;
     }
@@ -588,7 +589,7 @@ void EnRd_Grab(EnRd* this, PlayState* play) {
     // Gibdo Mask gate: if Link puts on the mask mid-grab, release immediately
     // and switch to friendly dance. Without this, an in-progress grab would
     // keep damaging the player even though the mask is worn.
-    if (MmMaskWear_IsGibdoMaskWorn()) {
+    if (MmMaskWear_MakesRedeadsFriendly()) {
         // Release Link from the grab (mirrors the case-2 release path).
         player->stateFlags2 &= ~PLAYER_STATE2_GRABBED_BY_ENEMY;
         this->actor.flags |= ACTOR_FLAG_ATTENTION_ENABLED;

@@ -105,3 +105,30 @@ static void Byrna_Cleanup(void) {
 
 // Draw is now handled by PostLimbDraw in z_player_lib.c via ExtEquip_DrawSwordDL
 // This ensures the cane follows the exact same rotation as the sword during swings
+
+// ---------------------------------------------------------------------------
+// Great Fairy's Sword (NEI progressive BGS level 2) — same combat perks as the
+// Cane of Byrna, but it IS the player's real Biggoron Sword (no sword-slot hijack).
+// Driven by WeaponUpgrade_HasGreatFairy() from ExtEquip_UpdateBehavior, independent
+// of the extended-equipment cheat. We only top up swordHealth/bgsFlag (so charge/spin
+// always work and a Giant's Knife never "breaks") and recover HP+MP on each melee hit.
+// ---------------------------------------------------------------------------
+static void GreatFairySword_Behavior(Player* player, PlayState* play) {
+    if (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
+                               PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_GETTING_ITEM)) {
+        return;
+    }
+    // Only while actually wielding the Biggoron Sword.
+    if (player->heldItemAction != PLAYER_IA_SWORD_BIGGORON) {
+        return;
+    }
+    gSaveContext.bgsFlag = 1;
+    if (gSaveContext.swordHealth <= 0.0f) {
+        gSaveContext.swordHealth = 8.0f;
+    }
+}
+
+static void GreatFairySword_OnMeleeHit(Player* player, PlayState* play) {
+    // Same HP/MP recovery as the Cane of Byrna.
+    Byrna_OnMeleeHit(player, play);
+}

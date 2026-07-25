@@ -23,6 +23,7 @@
 #include "behaviors/equip_pendant.c"
 #include "behaviors/equip_divine_shield.c"
 #include "behaviors/equip_champion.c"
+#include "behaviors/equip_snowquill.c"
 #include "behaviors/equip_foursword.c"
 
 // ---------------------------------------------------------------------------
@@ -62,16 +63,17 @@ static void ExtEquip_Behavior_Shield3(Player* player, PlayState* play) {
 // ---------------------------------------------------------------------------
 // Tunic behaviors (stubs)
 // ---------------------------------------------------------------------------
+// Tunic slots remapped (Skijer 2026-07-16): 1 = Champion's Tunic, 2 = Spirit Tunic, 3 = Snowquill.
 static void ExtEquip_Behavior_Tunic1(Player* player, PlayState* play) {
-    MagicCape_Behavior(player, play);
+    Champion_Behavior(player, play);
 }
 
 static void ExtEquip_Behavior_Tunic2(Player* player, PlayState* play) {
-    Breastplate_Behavior(player, play);
+    Spirit_Behavior(player, play); // renamed Breastplate — rupee-immunity + fire/water timer skip
 }
 
 static void ExtEquip_Behavior_Tunic3(Player* player, PlayState* play) {
-    Champion_Behavior(player, play);
+    Snowquill_Behavior(player, play); // white recolor + total ice immunity (mostly gate-based)
 }
 
 // ---------------------------------------------------------------------------
@@ -82,11 +84,17 @@ static void ExtEquip_Behavior_Boots1(Player* player, PlayState* play) {
 }
 
 static void ExtEquip_Behavior_Boots2(Player* player, PlayState* play) {
-    Pendant_Behavior(player, play);
+    // Boots slot 2 is FREE (reserved for new boots) — the Pendant of Memories moved to the upgrade
+    // column; its moveset runs when its toggle is ON (see ExtEquip_DispatchBehavior).
+    (void)player;
+    (void)play;
 }
 
 static void ExtEquip_Behavior_Boots3(Player* player, PlayState* play) {
-    DragonScale_Behavior(player, play);
+    // Boots slot 3 is FREE (reserved for Gravity Boots). The Water Dragon Scale item is gone — its
+    // Zora swim now runs unconditionally as the Zora Tunic effect (see ExtEquip_DispatchBehavior).
+    (void)player;
+    (void)play;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +127,21 @@ static const ExtEquipBehaviorFunc sExtBootsBehaviors[3] = {
 };
 
 static void ExtEquip_DispatchBehavior(Player* player, PlayState* play) {
+    // ZORA TUNIC swim (formerly Water Dragon Scale): runs every frame, self-gated on the worn tunic.
+    DragonScale_Behavior(player, play);
+
+    // Upgrade-column passives (Skijer 2026-07-15) — decoupled from the ext slots:
+    // Magic Cape: the HALF-COST passive lives at the magic-cost sites (Magic_RequestChange /
+    // ItemMagic_* / MAGIC_REQ) and is always active once owned; the cloth physics only run
+    // while the cape is set visible (kaleido upgrade-cell toggle).
+    if (ExtEquip_CapeVisible()) {
+        MagicCape_Behavior(player, play);
+    }
+    // Pendant of Memories: its moveset runs while its effect toggle is ON.
+    if (ExtEquip_PendantActive()) {
+        Pendant_Behavior(player, play);
+    }
+
     // Always run cleanup for behaviors that need it (cape boost removal, etc.)
     MagicCape_Cleanup();
 
@@ -134,8 +157,8 @@ static void ExtEquip_DispatchBehavior(Player* player, PlayState* play) {
     if (gExtEquipState.currentExtSword != 2) {
         FourSword_Cleanup();
     }
-    // Champion's Tunic cleanup: clear forced model + screen tint when slot 3 is lost
-    if (gExtEquipState.currentExtTunic != 3) {
+    // Champion's Tunic cleanup: clear screen tint when the Champion slot (now 1) is lost
+    if (gExtEquipState.currentExtTunic != 1) {
         Champion_Cleanup(play);
     }
 
@@ -161,8 +184,8 @@ static void ExtEquip_OnMeleeHitDispatch(Player* player, PlayState* play) {
     if (gExtEquipState.currentExtSword == 1) {
         Byrna_OnMeleeHit(player, play);
     }
-    // Champion's Tunic: count hits during Flurry Rush window
-    if (gExtEquipState.currentExtTunic == 3) {
+    // Champion's Tunic: count hits during Flurry Rush window (slot 1 now)
+    if (gExtEquipState.currentExtTunic == 1) {
         Champion_OnMeleeHit(player, play);
     }
 }
@@ -176,12 +199,11 @@ static void ExtEquip_DrawDispatch(Player* player, PlayState* play) {
     if (gExtEquipState.currentExtBoots == 1) {
         Pegasus_Draw(player, play);
     }
-    // Water Dragon Scale: water barrier
-    if (gExtEquipState.currentExtBoots == 3) {
-        DScale_Draw(player, play);
-    }
-    // Magic Cape: Ganondorf cloth physics cape
-    if (gExtEquipState.currentExtTunic == 1) {
+    // Zora Tunic swim: blue water-entry sparkles (self-timed; triggered on swim entry)
+    DScale_Draw(player, play);
+    // Magic Cape: Ganondorf cloth physics cape — draws whenever owned and set visible (the effect
+    // itself is passive; this is only the look)
+    if (ExtEquip_CapeVisible()) {
         MagicCape_Draw(player, play);
     }
     // Four Sword: ghost clone Links

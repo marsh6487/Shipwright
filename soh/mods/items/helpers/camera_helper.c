@@ -6,7 +6,9 @@
 #include "functions.h"
 #include "macros.h"
 #include "objects/object_link_boy/object_link_boy.h"
+#include "soh/cvar_prefixes.h" // CVAR_SETTING / CVAR_ENHANCEMENT for the aim invert options
 
+extern s32 CVarGetInteger(const char* name, s32 defaultValue);
 extern int Player_IsZTargeting(Player* this);
 
 // Champion's Tunic Bullet Time factor (defined in extended_equipment.c).
@@ -235,19 +237,34 @@ void Projectile_UpdateDirectionFromStick(s16* yaw, s16* pitch, PlayState* play, 
 
 void Projectile_UpdateRotationFromStick(s16* yaw, s16* pitch, PlayState* play, s16 turnSpeed, s16 pitchMax) {
     Input* input = &play->state.input[0];
-    f32 relX = input->rel.stick_x;
-    f32 relY = input->rel.stick_y;
-    f32 magnitude = sqrtf(SQ(relX) + SQ(relY));
+    f32 rawX = input->rel.stick_x;
+    f32 rawY = input->rel.stick_y;
+    f32 magnitude = sqrtf(SQ(rawX) + SQ(rawY));
 
     if (magnitude > 20.0f) {
-        s16 stickAngle = Math_Atan2S(relY, -relX);
-        f32 scaledSpeed = (magnitude / 60.0f) * turnSpeed;
+        // Steer 1:1 with OoT's first-person AIM controls (func_8084ABD8, z_player.c): stick X → yaw,
+        // stick Y → pitch, honoring the SAME invert options the aim camera uses (Controls.InvertAiming
+        // X/Y-Axis, defined exactly like z_player.c:14187-14193, MirroredWorld folded into X). The old
+        // angle-decomposition math (Math_Atan2S(relY, -relX) + sin/cos) had SWAPPED the axes (horizontal
+        // moved pitch, vertical moved yaw). Default Y is negated so pushing UP flies UP; the consumer's
+        // +pitch means DOWN (Beetle_Move: pos.y -= sin(pitch)). Users flip either axis with the
+        // First-Person Aim invert options. Skijer's NEI
+        s8 invertXAxisMulti = ((CVarGetInteger(CVAR_SETTING("Controls.InvertAimingXAxis"), 0) &&
+                                !CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0)) ||
+                               (!CVarGetInteger(CVAR_SETTING("Controls.InvertAimingXAxis"), 0) &&
+                                CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0)))
+                                  ? -1
+                                  : 1;
+        s8 invertYAxisMulti = CVarGetInteger(CVAR_SETTING("Controls.InvertAimingYAxis"), 1) ? 1 : -1;
 
-        s16 targetYaw = *yaw + (s16)(Math_SinS(stickAngle) * scaledSpeed);
-        s16 targetPitch = *pitch + (s16)(Math_CosS(stickAngle) * scaledSpeed);
+        // Match OoT's first-person aim EXACTLY (z_player.c:14203/14222): yaw ∝ -stick_x * invertX,
+        // pitch ∝ +stick_y * invertY. (The first port had both signs flipped, so the beetle steered
+        // inverted relative to the bow aim.) Skijer's NEI
+        f32 relX = rawX * invertXAxisMulti;
+        f32 relY = rawY * invertYAxisMulti;
 
-        *yaw = targetYaw;
-        *pitch = targetPitch;
+        *yaw += (s16)((-relX / 60.0f) * turnSpeed);
+        *pitch += (s16)((relY / 60.0f) * turnSpeed);
 
         if (*pitch > pitchMax)
             *pitch = pitchMax;

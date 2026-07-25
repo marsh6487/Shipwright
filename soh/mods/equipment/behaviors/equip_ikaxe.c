@@ -1,7 +1,7 @@
 /**
  * equip_ikaxe.c - Hammer Upgrade: Iron Knuckle's Axe
  *
- * A true upgrade ON the Megaton Hammer (RG_HAMMER_UPGRADE / weaponUpgrades bit).
+ * Level 2 of the progressive Hammer (RG_PROGRESSIVE_HAMMER / weaponUpgrades bit).
  * The player wields their real hammer on a C-button; this only ENHANCES it — no
  * sword-slot hijack, no forced equip. Driven by WeaponUpgrade_HasHammerAxe()
  * from ExtEquip_UpdateBehavior (independent of the extended-equipment cheat).
@@ -22,8 +22,17 @@
 
 #include "overlays/actors/ovl_En_Boom/z_en_boom.h"
 
-// FirstPerson aim helpers (from items/helpers/camera_helper.c, linked separately)
-// Used by equip_ikaxe_throw.inc.c for C-Up aim mode
+// First-person aim (FirstPerson_*) and equipped-button polling (ItemInput_*), used by
+// equip_ikaxe_throw.inc.c for the rod-style C-Up aim + equipped-C launch.
+#include "items/helpers/camera_helper.h"
+#include "items/helpers/equip_helper.h"
+
+// z_player.c helper: plays Link's boomerang throw animation and drops him into the vanilla
+// handsfree boomerang-out state while the axe is in the air (no spawn — the mod spawns the axe).
+extern void Player_StartIKAxeThrow(Player* this, PlayState* play);
+// z_player.c helper: on catch, restore the hammer's melee upper-action (the boomerang catch chain
+// leaves the ranged-item upper-action, which makes the next C-press fire a bow).
+extern void Player_EndIKAxeThrow(Player* this);
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -94,10 +103,15 @@ static void IKAxe_Behavior(Player* player, PlayState* play) {
     // Signal draw system: hide vanilla sword DL only when hammer is out
     gExtEquipBehavior.ikAxeDrawing = isHolding || (sIKAxeThrowState == IKAXE_THROW_CHARGING);
 
-    // Double damage only when holding
+    // Double damage only when holding. When NOT holding, restore the vanilla melee-quad damage
+    // (D_80854650 init = 1) so the doubled value doesn't follow Link onto the sword after the
+    // hammer is put away — a stale value here changes the sword's hit and can break feel.
     if (isHolding) {
         player->meleeWeaponQuads[0].info.toucher.damage = 4 * IKAXE_DOUBLE_DAMAGE;
         player->meleeWeaponQuads[1].info.toucher.damage = 4 * IKAXE_DOUBLE_DAMAGE;
+    } else {
+        player->meleeWeaponQuads[0].info.toucher.damage = 1;
+        player->meleeWeaponQuads[1].info.toucher.damage = 1;
     }
 
     // Tomahawk throw (R + B hold) — only when holding hammer
@@ -140,7 +154,7 @@ static void IKAxe_DrawAxe(PlayState* play) {
 
     // Free mode (putaway) — no axe in hand
     Player* drawPlayer = GET_PLAYER(play);
-    if (drawPlayer->heldItemAction != PLAYER_IA_HAMMER && sIKAxeThrowState != IKAXE_THROW_CHARGING) {
+    if (drawPlayer->heldItemAction != PLAYER_IA_HAMMER) {
         return;
     }
 
@@ -150,13 +164,7 @@ static void IKAxe_DrawAxe(PlayState* play) {
 
     Matrix_Translate(-100.0f, -350.0f, 0.0f, MTXMODE_APPLY);
     Matrix_RotateZYX(0x4000, 0, 0, MTXMODE_APPLY);
-
-    if (sIKAxeThrowState == IKAXE_THROW_CHARGING) {
-        // Small axe in hand during aim
-        Matrix_Scale(0.07f, 0.07f, 0.07f, MTXMODE_APPLY);
-    } else {
-        Matrix_Scale(0.15f, 0.15f, 0.15f, MTXMODE_APPLY);
-    }
+    Matrix_Scale(0.15f, 0.15f, 0.15f, MTXMODE_APPLY);
 
     gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPDisplayList(POLY_XLU_DISP++, gIKAxeInlineDL);

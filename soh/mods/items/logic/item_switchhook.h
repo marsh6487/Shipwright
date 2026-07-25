@@ -26,7 +26,8 @@
 // CONFIGURATION
 // ============================================================================
 
-#define SWITCHHOOK_TIMER 26       // Longshot distance (frames)
+#define SWITCHHOOK_TIMER 26       // Longshot distance (frames). Skijer's NEI: reach now lives in
+                                  // z_arms_hook.c's variant table (20 * 26); this define is legacy.
 #define SWITCHHOOK_SPEED 20.0f    // Projectile speed
 #define SWITCHHOOK_SWAP_FRAMES 15 // Frames for swap animation
 #define SWITCHHOOK_DAMAGE 1       // Damage dealt to non-swappable actors
@@ -70,37 +71,6 @@
 #endif
 
 // ============================================================================
-// SWAP TABLE - Actors that can be swapped with
-// ============================================================================
-
-static const s16 sSwitchHookSwapTable[] = {
-    // Objects (no pots or small crates)
-    ACTOR_OBJ_KIBAKO2,  // Large crates
-    ACTOR_EN_KANBAN,    // Signs
-    ACTOR_OBJ_SYOKUDAI, // Torches
-    ACTOR_EN_BOX,       // Chests
-
-    // Enemies
-    ACTOR_EN_POH,      // Poes/Ghosts
-    ACTOR_EN_RR,       // Like Likes
-    ACTOR_EN_AM,       // Armos
-    ACTOR_EN_TITE,     // Tektites
-    ACTOR_EN_ZF,       // Lizalfos/Dinolfos
-    ACTOR_EN_RD,       // ReDeads/Gibdos
-    ACTOR_EN_FLOORMAS, // Floormasters
-    ACTOR_EN_WALLMAS,  // Wallmasters
-    ACTOR_EN_FZ,       // Freezards
-    ACTOR_EN_ANUBICE,  // Anubis
-
-    // Special
-    ACTOR_EN_KAKASI,  // Scarecrow
-    ACTOR_EN_KAKASI2, // Scarecrow 2
-    ACTOR_EN_KAKASI3, // Scarecrow 3
-    ACTOR_EN_NIW,     // Cuccos
-};
-#define SWITCHHOOK_SWAP_COUNT (sizeof(sSwitchHookSwapTable) / sizeof(sSwitchHookSwapTable[0]))
-
-// ============================================================================
 // COLLIDER INIT
 // ============================================================================
 
@@ -134,8 +104,6 @@ static ColliderQuadInit sSwitchHookQuadInit = {
  * @return 1 if swappable, 0 otherwise
  */
 static inline s32 SwitchHook_CanSwap(Actor* actor) {
-    u32 i;
-
     if (actor == NULL)
         return 0;
 
@@ -144,11 +112,12 @@ static inline s32 SwitchHook_CanSwap(Actor* actor) {
         return 1;
     }
 
-    // Check swap table
-    for (i = 0; i < SWITCHHOOK_SWAP_COUNT; i++) {
-        if (actor->id == sSwitchHookSwapTable[i]) {
-            return 1;
-        }
+    // Skijer's NEI switchhook overhaul: no more hand-picked item list — switch positions with ANY
+    // prop (pots, crates, torches, signs...) or NON-BOSS enemy. ACTORCAT_ENEMY excludes bosses;
+    // props/enemies are the only categories that swap here — player, background, items are ignored.
+    // (z_arms_hook.c's own ArmsHook_IsSwappable additionally accepts chests/NPCs.)
+    if (actor->category == ACTORCAT_ENEMY || actor->category == ACTORCAT_PROP) {
+        return 1;
     }
 
     return 0;

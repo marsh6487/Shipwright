@@ -31,6 +31,11 @@
 #include "overlays/actors/ovl_Bg_Spot18_Basket/z_bg_spot18_basket.h"
 #include "overlays/actors/ovl_Bg_Haka_Tubo/z_bg_haka_tubo.h"
 #include "objects/object_haka_objects/object_haka_objects.h"
+#include "overlays/actors/ovl_Bg_Ice_Turara/z_bg_ice_turara.h"
+#include "overlays/actors/ovl_En_Fz/z_en_fz.h"
+// Non-static in their .c but not exposed in their headers. Skijer's NEI
+extern void EnFz_SetupMelt(EnFz* this);
+extern void BgIceTurara_Break(BgIceTurara* this, PlayState* play, f32 arg2);
 
 // =============================================================================
 // Static Data
@@ -151,6 +156,53 @@ static void BallChain_CheckHit(Vec3f* pos) {
                                &gSfxDefaultReverb);
         bcCollider.base.atFlags &= ~AT_HIT;
     }
+}
+
+// Motion trail (EffectBlure) for the spinning/flying ball — a subtle cool-white streak, fed SPARSER
+// than the sword (every 2nd frame + shorter duration) so it reads as heavy metal, not a blade. Same
+// EFFECT_BLURE2 / EffectBlure_AddVertex system as the Gerudo scimitar trail (mm_player_form). SoH's
+// EffectBlureInit2 has the trailType field. Skijer's NEI
+static void BallChain_FeedTrail(PlayState* play, Vec3f* ballPos) {
+    Vec3f tip, base;
+
+    if (!bcTrailActive) {
+        EffectBlureInit2 init = {
+            0,                      // calcMode
+            8,                      // flags
+            0,                      // addAngleChange
+            { 255, 255, 255, 255 }, // p1StartColor (white — clearly visible)
+            { 200, 220, 255, 128 }, // p2StartColor (cool tint, softer edge)
+            { 255, 255, 255, 0 },   // p1EndColor
+            { 200, 220, 255, 0 },   // p2EndColor
+            4,                      // elemDuration
+            0,                      // unkFlag
+            2,                      // drawMode (smooth strip)
+            0,                      // mode4Param
+            { 235, 235, 245, 200 }, // altPrimColor
+            { 180, 190, 210, 96 },  // altEnvColor
+            TRAIL_TYPE_SWORDS,      // trailType (SoH-only field)
+        };
+        Effect_Add(play, &bcTrailIndex, EFFECT_BLURE2, 0, 0, &init);
+        bcTrailActive = 1;
+        bcTrailTick = 0;
+    }
+
+    // Feed a segment EVERY frame (like the sword) so consecutive vertices form a continuous strip.
+    // Feeding sparser left fewer than 2 live elements at a time, so the blure drew nothing — the
+    // subtler-than-sword look comes from the short elemDuration + softer alpha instead. Skijer's NEI
+    tip = *ballPos;
+    tip.y += 14.0f;
+    base = *ballPos;
+    base.y -= 14.0f;
+    EffectBlure_AddVertex((EffectBlure*)Effect_GetByIndex(bcTrailIndex), &tip, &base);
+}
+
+static void BallChain_KillTrail(PlayState* play) {
+    if (bcTrailActive) {
+        Effect_Delete(play, bcTrailIndex);
+        bcTrailActive = 0;
+    }
+    bcTrailIndex = -1;
 }
 
 // Helper: Drop all Goron Pot (Bg_Spot18_Basket) rewards and destroy
@@ -330,6 +382,33 @@ static void BallChain_CheckDestructibles(PlayState* play, Vec3f* ballPos) {
                 BallChain_DestroyGoronPot(play, actor);
             }
         }
+        // Ice Cavern icicles — proximity so the fast throw doesn't tunnel past. Stalagmites break on
+        // an AC hit (native break + item drop); hanging stalactites shatter directly. Skijer's NEI
+        else if (actor->id == ACTOR_BG_ICE_TURARA) {
+            dist = Math_Vec3f_DistXYZ(ballPos, &actor->world.pos);
+            if (dist < BALLCHAIN_ICE_REACH) {
+                BgIceTurara* tur = (BgIceTurara*)actor;
+                if (tur->dyna.actor.params == TURARA_STALAGMITE) {
+                    tur->collider.base.acFlags |= AC_HIT; // native break + drop
+                } else {
+                    BgIceTurara_Break(tur, play, 40.0f);
+                    Actor_Kill(actor);
+                }
+            }
+        }
+    }
+
+    // Freezards live in ACTORCAT_ENEMY — drive their native fire-melt (melt + loot drop) by proximity
+    // so the fast throw/retract can't tunnel past them. No fire flag needed. Skijer's NEI
+    for (actor = play->actorCtx.actorLists[ACTORCAT_ENEMY].head; actor != NULL; actor = next) {
+        next = actor->next;
+        if (actor->id == ACTOR_EN_FZ) {
+            EnFz* fz = (EnFz*)actor;
+            dist = Math_Vec3f_DistXYZ(ballPos, &actor->world.pos);
+            if ((dist < BALLCHAIN_ICE_REACH) && (fz->state != 3)) { // state 3 = already melting
+                EnFz_SetupMelt(fz);
+            }
+        }
     }
 }
 
@@ -362,6 +441,25 @@ static void BallChain_ApplySpeedPenalty(Player* p) {
     p->linearVelocity *= BALLCHAIN_SPEED_MULT;
 }
 
+// HARD INTERRUPTS — StateSpinning/StateThrown pin Link's speed to 0 and re-stamp his yaw EVERY
+// frame, so anything that takes control away from him MUST drop the item or he stays frozen and
+// softlocks. ItemInput_CheckDamage only fires on a POSITIVE invincibilityTimer edge, but a real hit
+// drives the timer NEGATIVE for the whole damage/knockback reaction (z64player.h: "negative are
+// invulnerability") and it may never go positive — so a big knockback slipped past it entirely.
+// Skijer's NEI
+static u8 BallChain_ShouldInterrupt(Player* p, PlayState* play) {
+    if (p->invincibilityTimer < 0) { // damage / knockback reaction in progress
+        return 1;
+    }
+    if (p->stateFlags1 & PLAYER_STATE1_IN_WATER) { // fell in water / swimming — let go
+        return 1;
+    }
+    if (Player_InBlockingCsMode(play, p)) { // cutscene / forced state
+        return 1;
+    }
+    return 0;
+}
+
 static void BallChain_Stop(Player* p, PlayState* play) {
     if (bcFirstPerson) {
         FirstPerson_Exit(p, play);
@@ -373,7 +471,16 @@ static void BallChain_Stop(Player* p, PlayState* play) {
     bcCharge = 0;
     bcSpinAngle = 0;
     sBallChainThrownFirstFrame = 0;
+    // TP ballistic-throw state. Skijer's NEI
+    bcPhase = BALLCHAIN_PHASE_FLY;
+    bcBounces = 0;
+    bcRestTimer = 0;
+    bcBallVel.x = bcBallVel.y = bcBallVel.z = 0.0f;
+    BallChain_KillTrail(play); // drop the motion streak — Skijer's NEI
     BallChain_ResetPose(p);
+    // The states above pin playSpeed at 0 every frame; if we let go mid-freeze (knockback, water)
+    // Link's animation would stay stuck. Hand it back so he can move again. Skijer's NEI
+    p->skelAnime.playSpeed = 1.0f;
     // Stop looping sounds
     Audio_StopSfxById(NA_SE_IT_SWORD_SWING);
     Audio_StopSfxById(NA_SE_PL_WALK_GROUND);
@@ -400,13 +507,26 @@ static void StateEquip(Player* p, PlayState* play, ItemInputState* in) {
     Vec3f* leftHand = &p->bodyPartsPos[PLAYER_BODYPART_L_HAND];
     Vec3f* rightHand = &p->bodyPartsPos[PLAYER_BODYPART_R_HAND];
 
+    // Clear the motion streak once the ball is back in the hand (covers throw-return + timeout). Skijer's NEI
+    if (bcTrailActive) {
+        BallChain_KillTrail(play);
+    }
+
     BallChain_ApplySpeedPenalty(p);
     p->skelAnime.playSpeed = 0.0f;
     BallChain_SetEquipPose(p);
 
+    // TWO-HANDED grip: the ball sits at the MIDPOINT of both hands (same point the chain is drawn
+    // from in CustomItems_DrawBallChain), so it stays centered between Link's hands. Skijer's NEI
     bcBallPos.x = (leftHand->x + rightHand->x) * 0.5f;
     bcBallPos.y = (leftHand->y + rightHand->y) * 0.5f + BALLCHAIN_EQUIP_Y_OFFSET;
     bcBallPos.z = (leftHand->z + rightHand->z) * 0.5f;
+
+    // Collider stays live even while just holding the ball (TP style — it's always a weapon), so it
+    // keeps hitting whatever it contacts through the whole cycle, including right after it returns to
+    // the hand. Contact-only here (no ranged ice sweep while idle). Skijer's NEI
+    BallChain_UpdateCollider(play, p, &bcBallPos);
+    BallChain_CheckHit(&bcBallPos);
 
     if (in->isPressed) {
         bcState = BALLCHAIN_STATE_SPINNING;
@@ -431,13 +551,16 @@ static void StateSpinning(Player* p, PlayState* play, ItemInputState* in) {
     f32 orbitX, orbitZ, orbitY, heightMod, sideMod;
     s16 spinSpeed, yaw;
 
-    if (isZTarget) {
-        BallChain_ApplySpeedPenalty(p);
-        p->skelAnime.playSpeed = 0.5f;
-    } else {
+    // Heavy movement: Link can shuffle SLOWLY while spinning (MM feel), except while aiming in first
+    // person. The multiplier caps whatever speed the normal player movement built up this frame. Skijer's NEI
+    if (bcFirstPerson) {
         p->actor.speedXZ = 0.0f;
         p->linearVelocity = 0.0f;
         p->skelAnime.playSpeed = 0.0f;
+    } else {
+        p->actor.speedXZ *= BALLCHAIN_SPIN_WALK_MULT;
+        p->linearVelocity *= BALLCHAIN_SPIN_WALK_MULT;
+        p->skelAnime.playSpeed = (fabsf(p->linearVelocity) > 0.3f) ? 0.5f : 0.0f;
     }
 
     if (CHECK_BTN_ALL(play->state.input[0].press.button, BTN_CUP)) {
@@ -495,32 +618,65 @@ static void StateSpinning(Player* p, PlayState* play, ItemInputState* in) {
     BallChain_CheckDestructibles(play, &bcBallPos);
     BallChain_CheckHit(&bcBallPos);
     BallChain_ApplyDamageBonus(play);
+    BallChain_FeedTrail(play, &bcBallPos); // spin streak — Skijer's NEI
 
     func_8002F974(&p->actor, BALLCHAIN_SFX_WHOOSH);
 
     if (!in->isHeld) {
-        f32 throwDistMax;
-        s16 throwYaw;
-
-        bcState = BALLCHAIN_STATE_THROWN;
-        throwDistMax = BALLCHAIN_THROW_DIST_MIN + (BALLCHAIN_THROW_DIST_MAX - BALLCHAIN_THROW_DIST_MIN) * chargeRatio;
-        bcThrowDist = (s32)throwDistMax;
+        // RELEASE: violent ballistic launch in the aimed direction (TP arc). Skijer's NEI
+        f32 launchSpeed =
+            BALLCHAIN_LAUNCH_SPEED_MIN + (BALLCHAIN_LAUNCH_SPEED_MAX - BALLCHAIN_LAUNCH_SPEED_MIN) * chargeRatio;
+        s16 throwYaw = bcThrowYaw;
+        s16 throwPitch = 0;
 
         if (bcFirstPerson) {
             throwYaw = FirstPerson_GetAimYaw(p);
-            bcThrowPitch = FirstPerson_GetAimPitch(p);
+            throwPitch = FirstPerson_GetAimPitch(p);
             FirstPerson_Exit(p, play);
             bcFirstPerson = 0;
         } else if (isZTarget && p->focusActor != NULL) {
             throwYaw = Math_Vec3f_Yaw(&p->actor.world.pos, &p->focusActor->focus.pos);
-            bcThrowPitch = 0;
+            throwPitch = 0;
         } else {
             throwYaw = p->actor.shape.rot.y + (s16)(stickX * BALLCHAIN_THROW_YAW_MAX);
-            bcThrowPitch = (s16)(-stickY * BALLCHAIN_THROW_PITCH_MAX);
+            throwPitch = (s16)(-stickY * BALLCHAIN_THROW_PITCH_MAX);
+        }
+
+        // Launch origin: over Link's shoulder, slightly forward.
+        bcBallPos.x = p->actor.world.pos.x + Math_SinS(throwYaw) * 20.0f;
+        bcBallPos.y = p->actor.world.pos.y + 45.0f;
+        bcBallPos.z = p->actor.world.pos.z + Math_CosS(throwYaw) * 20.0f;
+
+        if (isZTarget && p->focusActor != NULL && p->focusActor->update != NULL) {
+            // Lock-on: ballistic lead — aim the arc so gravity drops the ball ON the target.
+            Vec3f* tPos = &p->focusActor->focus.pos;
+            f32 dx = tPos->x - bcBallPos.x;
+            f32 dy = tPos->y - bcBallPos.y;
+            f32 dz = tPos->z - bcBallPos.z;
+            f32 flightT = sqrtf(SQ(dx) + SQ(dz)) / launchSpeed;
+
+            if (flightT < 1.0f) {
+                flightT = 1.0f;
+            }
+            bcBallVel.x = dx / flightT;
+            bcBallVel.z = dz / flightT;
+            bcBallVel.y = (dy / flightT) - (0.5f * BALLCHAIN_GRAVITY * flightT); // gravity compensation
+            throwYaw = Math_Vec3f_Yaw(&bcBallPos, tPos);
+        } else {
+            bcBallVel.x = Math_SinS(throwYaw) * Math_CosS(throwPitch) * launchSpeed;
+            bcBallVel.z = Math_CosS(throwYaw) * Math_CosS(throwPitch) * launchSpeed;
+            // Positive pitch aims down (same convention as FirstPerson_GetAimPitch).
+            bcBallVel.y = BALLCHAIN_LAUNCH_VY - Math_SinS(throwPitch) * launchSpeed;
         }
 
         bcThrowYaw = throwYaw;
-        sBallChainThrownFirstFrame = 1;
+        bcThrowPitch = throwPitch;
+        bcState = BALLCHAIN_STATE_THROWN;
+        bcPhase = BALLCHAIN_PHASE_FLY;
+        bcBounces = 0;
+        bcRestTimer = 0;
+        bcCharge = 0; // reused as the thrown-safety frame counter
+        sBallChainThrownFirstFrame = 0;
 
         ItemVoice_Play(p, BALLCHAIN_SFX_VOICE_ADULT, BALLCHAIN_SFX_VOICE_CHILD);
         Audio_PlaySoundGeneral(BALLCHAIN_SFX_SWING, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
@@ -532,8 +688,9 @@ static void StateSpinning(Player* p, PlayState* play, ItemInputState* in) {
 // State: Thrown
 // =============================================================================
 
+// TP thrown ball: real gravity arc -> hard floor bounces (thud) -> wall RICOCHET (reflect off the
+// wall normal) -> rest a beat -> retract along the chain. Link is braced the whole time. Skijer's NEI
 static void StateThrown(Player* p, PlayState* play) {
-    Vec3f target;
     f32 dist, dx, dy, dz, norm;
     CollisionPoly* poly = NULL;
     Vec3f prevPos, resultPos;
@@ -549,53 +706,104 @@ static void StateThrown(Player* p, PlayState* play) {
     BallChain_SetSpinPose(p, 0.0f, 0.0f);
     p->upperLimbRot.x = BALLCHAIN_THROW_LEAN;
 
-    if (sBallChainThrownFirstFrame) {
-        bcBallPos = p->actor.world.pos;
-        bcBallPos.y += 60.0f;
-        sBallChainThrownFirstFrame = 0;
+    // Hard safety: never leave Link braced forever (bcCharge = thrown frame counter).
+    bcCharge++;
+    if (bcCharge > BALLCHAIN_THROWN_TIMEOUT) {
+        bcState = BALLCHAIN_STATE_EQUIP;
+        return;
     }
 
-    if (bcThrowDist > 0) {
-        if (Player_IsZTargeting(p) && p->focusActor != NULL && p->focusActor->update != NULL) {
-            target = p->focusActor->focus.pos;
-        } else {
-            f32 throwDist = (f32)bcThrowDist;
-            f32 hDist = throwDist * Math_CosS(bcThrowPitch);
-            target.x = p->actor.world.pos.x + Math_SinS(bcThrowYaw) * hDist;
-            target.y = p->actor.world.pos.y + 60.0f - Math_SinS(bcThrowPitch) * throwDist;
-            target.z = p->actor.world.pos.z + Math_CosS(bcThrowYaw) * hDist;
+    if (bcPhase == BALLCHAIN_PHASE_FLY) {
+        CollisionPoly* floorPoly = NULL;
+        s32 bgId;
+        Vec3f probe;
+        f32 floorY, xzDist;
+
+        prevPos = bcBallPos;
+
+        // Heavy ballistic integration (20fps logic frames).
+        bcBallVel.y += BALLCHAIN_GRAVITY;
+        if (bcBallVel.y < -BALLCHAIN_TERMINAL_VY) {
+            bcBallVel.y = -BALLCHAIN_TERMINAL_VY;
+        }
+        bcBallPos.x += bcBallVel.x;
+        bcBallPos.y += bcBallVel.y;
+        bcBallPos.z += bcBallVel.z;
+
+        // Chain taut: the ball can never fly past the chain length.
+        dx = bcBallPos.x - p->actor.world.pos.x;
+        dz = bcBallPos.z - p->actor.world.pos.z;
+        xzDist = sqrtf(SQ(dx) + SQ(dz));
+        if (xzDist > BALLCHAIN_CHAIN_MAX) {
+            f32 clamp = BALLCHAIN_CHAIN_MAX / xzDist;
+
+            bcBallPos.x = p->actor.world.pos.x + dx * clamp;
+            bcBallPos.z = p->actor.world.pos.z + dz * clamp;
+            bcBallVel.x = 0.0f;
+            bcBallVel.z = 0.0f;
         }
 
-        dist = Math_Vec3f_DistXYZ(&bcBallPos, &target);
-
-        if (dist > 10.0f) {
-            dx = target.x - bcBallPos.x;
-            dy = target.y - bcBallPos.y;
-            dz = target.z - bcBallPos.z;
-
-            norm = BALLCHAIN_THROW_SPEED / dist;
-            prevPos = bcBallPos;
-
-            bcBallPos.x += dx * norm;
-            bcBallPos.y += dy * norm;
-            bcBallPos.z += dz * norm;
-
-            resultPos = bcBallPos;
-            if (BgCheck_EntitySphVsWall1(&play->colCtx, &resultPos, &bcBallPos, &prevPos, BALLCHAIN_WALL_RADIUS, &poly,
-                                         BALLCHAIN_WALL_HEIGHT)) {
-                bcThrowDist = 0;
+        // Wall hit: RICOCHET — reflect the horizontal velocity off the wall normal (TP feel) instead
+        // of dropping dead against it. Metal clank on a solid hit. Skijer's NEI
+        resultPos = bcBallPos;
+        if (BgCheck_EntitySphVsWall1(&play->colCtx, &resultPos, &bcBallPos, &prevPos, BALLCHAIN_WALL_RADIUS, &poly,
+                                     BALLCHAIN_WALL_HEIGHT)) {
+            bcBallPos = resultPos;
+            if (fabsf(bcBallVel.x) + fabsf(bcBallVel.z) > 1.0f) {
                 Audio_PlaySoundGeneral(BALLCHAIN_SFX_WALL_BOUNCE, &bcBallPos, 4, &gSfxDefaultFreqAndVolScale,
                                        &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
             }
-        } else {
-            bcThrowDist = 0;
+            if (poly != NULL) {
+                // v' = v - 2(v·n)n, then damp — reflect XZ across the wall's horizontal normal.
+                f32 nx = COLPOLY_GET_NORMAL(poly->normal.x);
+                f32 nz = COLPOLY_GET_NORMAL(poly->normal.z);
+                f32 dot = (bcBallVel.x * nx) + (bcBallVel.z * nz);
+
+                bcBallVel.x = (bcBallVel.x - (2.0f * dot * nx)) * BALLCHAIN_WALL_BOUNCE_FACTOR;
+                bcBallVel.z = (bcBallVel.z - (2.0f * dot * nz)) * BALLCHAIN_WALL_BOUNCE_FACTOR;
+            } else {
+                bcBallVel.x = 0.0f;
+                bcBallVel.z = 0.0f;
+            }
         }
-    } else {
+
+        // Ground bounce: heavy thud, invert velocity.y, up to MAX_BOUNCES, then rest before retract.
+        probe = bcBallPos;
+        probe.y += 20.0f;
+        floorY = BgCheck_EntityRaycastFloor5(play, &play->colCtx, &floorPoly, &bgId, &p->actor, &probe);
+        if ((floorY > BGCHECK_Y_MIN) && (bcBallPos.y - BALLCHAIN_BALL_RADIUS <= floorY) && (bcBallVel.y <= 0.0f)) {
+            bcBallPos.y = floorY + BALLCHAIN_BALL_RADIUS;
+            bcBounces++;
+
+            Audio_PlaySoundGeneral(BALLCHAIN_SFX_HIT, &bcBallPos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+
+            if ((bcBounces >= BALLCHAIN_MAX_BOUNCES) || (fabsf(bcBallVel.y) < 3.0f)) {
+                bcBallVel.x = bcBallVel.y = bcBallVel.z = 0.0f;
+                bcPhase = BALLCHAIN_PHASE_REST;
+                bcRestTimer = BALLCHAIN_REST_FRAMES;
+            } else {
+                bcBallVel.y = -bcBallVel.y * BALLCHAIN_BOUNCE_FACTOR;
+                bcBallVel.x *= BALLCHAIN_BOUNCE_XZ_KEEP;
+                bcBallVel.z *= BALLCHAIN_BOUNCE_XZ_KEEP;
+            }
+        } else if (bcBallPos.y < p->actor.world.pos.y - 500.0f) {
+            // Thrown into the void — just reel it back in.
+            bcPhase = BALLCHAIN_PHASE_RETRACT;
+            bcRestTimer = 0;
+        }
+    } else if (bcPhase == BALLCHAIN_PHASE_REST) {
+        bcRestTimer--;
+        if (bcRestTimer <= 0) {
+            bcPhase = BALLCHAIN_PHASE_RETRACT;
+            bcRestTimer = 0;
+        }
+    } else { // BALLCHAIN_PHASE_RETRACT
         dist = Math_Vec3f_DistXYZ(&bcBallPos, &p->actor.world.pos);
 
         if (dist > BALLCHAIN_RETURN_DIST) {
             dx = p->actor.world.pos.x - bcBallPos.x;
-            dy = (p->actor.world.pos.y + 60.0f) - bcBallPos.y;
+            dy = (p->actor.world.pos.y + 45.0f) - bcBallPos.y;
             dz = p->actor.world.pos.z - bcBallPos.z;
             norm = sqrtf(SQ(dx) + SQ(dy) + SQ(dz));
 
@@ -605,6 +813,7 @@ static void StateThrown(Player* p, PlayState* play) {
                 bcBallPos.y += dy * norm;
                 bcBallPos.z += dz * norm;
             }
+            // Retract clink — func_8002F974 is a flagged (auto-stopping) sfx, so no lingering loop.
             func_8002F974(&p->actor, BALLCHAIN_SFX_RETRACT);
         } else {
             bcState = BALLCHAIN_STATE_EQUIP;
@@ -616,6 +825,9 @@ static void StateThrown(Player* p, PlayState* play) {
     BallChain_CheckDestructibles(play, &bcBallPos);
     BallChain_CheckHit(&bcBallPos);
     BallChain_ApplyDamageBonus(play);
+    if (bcPhase != BALLCHAIN_PHASE_REST) {
+        BallChain_FeedTrail(play, &bcBallPos); // streak while airborne (fly + retract), not while resting — Skijer's NEI
+    }
 }
 
 // =============================================================================
@@ -631,7 +843,8 @@ void Handle_BallAndChain(Player* p, PlayState* play) {
 
     ItemInput_Update(&in, ITEM_BALL_AND_CHAIN, p, play);
 
-    if (!in.wasEquipped || ItemInput_IsBlocked(p, play) || ItemInput_CheckDamage(p, &sBallChainPrevInvinc)) {
+    if (!in.wasEquipped || ItemInput_IsBlocked(p, play) || ItemInput_CheckDamage(p, &sBallChainPrevInvinc) ||
+        BallChain_ShouldInterrupt(p, play)) {
         if (bcActive)
             BallChain_Stop(p, play);
         return;
@@ -673,4 +886,12 @@ void Player_InitBallAndChainIA(PlayState* play, Player* p) {
     bcState = BALLCHAIN_STATE_INACTIVE;
     bcThrowDist = 0;
     sBallChainThrownFirstFrame = 0;
+    // TP ballistic-throw state. Skijer's NEI
+    bcPhase = BALLCHAIN_PHASE_FLY;
+    bcBounces = 0;
+    bcRestTimer = 0;
+    bcBallVel.x = bcBallVel.y = bcBallVel.z = 0.0f;
+    // Motion trail starts inactive. Skijer's NEI
+    bcTrailActive = 0;
+    bcTrailIndex = -1;
 }

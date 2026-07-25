@@ -26,7 +26,7 @@ extern "C" {
 
 // Custom PLAYER_IA range
 #define CUSTOM_PLAYER_IA_START 0x43 // PLAYER_IA_ROCS_FEATHER_SKIJER
-#define CUSTOM_PLAYER_IA_END 0x75   // PLAYER_IA_BOTTLE_MAGIC_MUSHROOM
+#define CUSTOM_PLAYER_IA_END 0x7F   // PLAYER_IA_BOTTOMLESS_BOTTLE
 
 // MM Mask PLAYER_IA values (0x5D-0x74) — all no-op, transformation handled by item ID check
 #define PLAYER_IA_MM_MASK_POSTMAN 0x5D
@@ -58,6 +58,21 @@ extern "C" {
 // Placed past the MM-mask range so it doesn't collide with PLAYER_IA_MM_MASK_POSTMAN
 // (which used to be 0x5D, same as the original enum slot).
 #define PLAYER_IA_BOTTLE_MAGIC_MUSHROOM 0x75
+
+// MM bottle-content custom items (Bottle Randomizer, Skijer's NEI). Generic no-op IAs — the
+// per-content behavior is dispatched from mm_bottles_behavior when the bottle is used. (Chateau
+// Romani + Magic Mushroom already exist with their own IAs and are not re-added here.)
+#define PLAYER_IA_BOTTLE_GOLD_DUST 0x76
+#define PLAYER_IA_BOTTLE_HOT_SPRING_WATER 0x77
+#define PLAYER_IA_BOTTLE_DEKU_PRINCESS 0x78
+#define PLAYER_IA_BOTTLE_SEAHORSE 0x79
+#define PLAYER_IA_BOTTLE_SPRING_WATER 0x7A
+#define PLAYER_IA_BOTTLE_ZORA_EGG 0x7B
+#define PLAYER_IA_BOTTLE_HYLIAN_LOACH 0x7C
+#define PLAYER_IA_BOTTLE_OBABA_DRINK 0x7D
+// Bottle Randomizer extra items (Net + Bottomless Bottle) — behavior deferred.
+#define PLAYER_IA_NET 0x7E
+#define PLAYER_IA_BOTTOMLESS_BOTTLE 0x7F
 
 // ============================================================================
 // FUNCTION POINTER TYPES

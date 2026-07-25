@@ -24,9 +24,7 @@
 #include "overlays/actors/ovl_En_Tk/z_en_tk.h"
 #include "../objects/shovel_hole_DL/model.inc.c"
 
-// Include animation
-#include "../anim/dampe_dig/gLinkAdultSkel_001Gdampediganim_002_retargetAnim.c"
-#include "../anim/dampe_dig/gLinkAdultSkel_001Gdampediganim_002_retargetAnimData.c"
+#include "../anim/nei_anims.h" // dig animation now loads from soh.o2r — Skijer's NEI
 
 extern EnItem00* Item_DropCollectible(PlayState* play, Vec3f* spawnPos, s16 params);
 extern void DoorAna_WaitOpen(DoorAna* this, PlayState* play);
@@ -227,12 +225,22 @@ static void Shovel_Stop(Player* p, PlayState* play) {
 }
 
 static void Shovel_Start(Player* p, PlayState* play) {
+    // Dig animation is loaded from soh.o2r. The dig is driven by this animation's progress, so if the
+    // resource is missing we must not enter the animating state at all. Skijer's NEI
+    LinkAnimationHeader* anim;
+
     if (shActive)
         return;
+
+    anim = NeiAnim_Load(NEI_ANIM_DAMPE_DIG);
+    if (anim == NULL) {
+        return;
+    }
+
     shActive = 1;
     shAnimating = 1;
     shAnimTimer = 0;
-    LinkAnimation_PlayOnce(play, &p->upperSkelAnime, &gLinkAdultSkel_001Gdampediganim_002_retargetAnim);
+    LinkAnimation_PlayOnce(play, &p->upperSkelAnime, anim);
     ItemEquip_PlayEquipSFX(play, p);
 }
 

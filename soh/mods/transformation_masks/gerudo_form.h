@@ -57,6 +57,9 @@ s32 GerudoForm_TryDrawSmoothSkin(PlayState* play, Player* player);
 Gfx* GerudoForm_GetSwordDL_L(void);
 Gfx* GerudoForm_GetSwordDL_R(void);
 
+// Hand/sheath DL for the active Gerudo Form; returns 1 if it claimed limbIndex (caller skips vanilla). Skijer's NEI
+u8 GerudoForm_ResolveLimbDL(s32 limbIndex, Gfx** dList);
+
 // MM Gerudo combo bridge — implemented in mm_player_form.cpp. Called from
 // Player_PostLimbDrawGameplay (z_player_lib.c) at the L_HAND / R_HAND limbs,
 // where the bone matrix is in scope for Matrix_MultVec3f. PunchActiveThisFrame

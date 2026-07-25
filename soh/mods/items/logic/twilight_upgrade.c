@@ -9,53 +9,54 @@
 #include "twilight_upgrade.h"
 #include "macros.h"
 #include "functions.h"
+#include "../../nei_save.h" // Skijer's NEI
 #include "../../extended_inventory.h" // ExtInv_GetItemSlot — custom items must NOT use vanilla SLOT()/INV_CONTENT()
 
 u8 TwilightUpgrade_HasClawshot(void) {
-    return (gSaveContext.ship.twilightUpgrade & TWILIGHT_UPGRADE_CLAWSHOT) != 0;
+    return (Nei_Save()->twilightUpgrade & TWILIGHT_UPGRADE_CLAWSHOT) != 0;
 }
 
 u8 TwilightUpgrade_HasBombArrows(void) {
-    return (gSaveContext.ship.twilightUpgrade & TWILIGHT_UPGRADE_BOMB_ARROWS) != 0;
+    return (Nei_Save()->twilightUpgrade & TWILIGHT_UPGRADE_BOMB_ARROWS) != 0;
 }
 
 u8 TwilightUpgrade_HasGaleBoomerang(void) {
-    return (gSaveContext.ship.twilightUpgrade & TWILIGHT_UPGRADE_GALE_BOOMERANG) != 0;
+    return (Nei_Save()->twilightUpgrade & TWILIGHT_UPGRADE_GALE_BOOMERANG) != 0;
 }
 
 u8 TwilightUpgrade_IsObtained(void) {
-    return gSaveContext.ship.twilightUpgrade != 0;
+    return Nei_Save()->twilightUpgrade != 0;
 }
 
 u8 TwilightUpgrade_IsFullyObtained(void) {
-    return (gSaveContext.ship.twilightUpgrade & TWILIGHT_UPGRADE_ALL) == TWILIGHT_UPGRADE_ALL;
+    return (Nei_Save()->twilightUpgrade & TWILIGHT_UPGRADE_ALL) == TWILIGHT_UPGRADE_ALL;
 }
 
 void TwilightUpgrade_Grant(void) {
-    gSaveContext.ship.twilightUpgrade |= TWILIGHT_UPGRADE_ALL;
+    Nei_Save()->twilightUpgrade |= TWILIGHT_UPGRADE_ALL;
 }
 
 void TwilightUpgrade_SetClawshot(u8 on) {
     if (on) {
-        gSaveContext.ship.twilightUpgrade |= TWILIGHT_UPGRADE_CLAWSHOT;
+        Nei_Save()->twilightUpgrade |= TWILIGHT_UPGRADE_CLAWSHOT;
     } else {
-        gSaveContext.ship.twilightUpgrade &= ~TWILIGHT_UPGRADE_CLAWSHOT;
+        Nei_Save()->twilightUpgrade &= ~TWILIGHT_UPGRADE_CLAWSHOT;
     }
 }
 
 void TwilightUpgrade_SetBombArrows(u8 on) {
     if (on) {
-        gSaveContext.ship.twilightUpgrade |= TWILIGHT_UPGRADE_BOMB_ARROWS;
+        Nei_Save()->twilightUpgrade |= TWILIGHT_UPGRADE_BOMB_ARROWS;
     } else {
-        gSaveContext.ship.twilightUpgrade &= ~TWILIGHT_UPGRADE_BOMB_ARROWS;
+        Nei_Save()->twilightUpgrade &= ~TWILIGHT_UPGRADE_BOMB_ARROWS;
     }
 }
 
 void TwilightUpgrade_SetGaleBoomerang(u8 on) {
     if (on) {
-        gSaveContext.ship.twilightUpgrade |= TWILIGHT_UPGRADE_GALE_BOOMERANG;
+        Nei_Save()->twilightUpgrade |= TWILIGHT_UPGRADE_GALE_BOOMERANG;
     } else {
-        gSaveContext.ship.twilightUpgrade &= ~TWILIGHT_UPGRADE_GALE_BOOMERANG;
+        Nei_Save()->twilightUpgrade &= ~TWILIGHT_UPGRADE_GALE_BOOMERANG;
     }
 }
 
@@ -75,7 +76,7 @@ u8 TwilightUpgrade_BombArrowsAvailable(void) {
     // ITEM_BOMB_ARROWS is a NEI custom item (0xAE); INV_CONTENT()/SLOT() would index
     // gItemSlots[56] out of bounds. Resolve the real extended-inventory slot instead.
     u8 baSlot = ExtInv_GetItemSlot(ITEM_BOMB_ARROWS);
-    return (baSlot != 0xFF) && (gSaveContext.inventory.items[baSlot] == ITEM_BOMB_ARROWS);
+    return (baSlot != 0xFF) && (ExtInv_GetSlotItem(baSlot) == ITEM_BOMB_ARROWS); // Skijer's NEI
 }
 
 u8 TwilightUpgrade_GaleBoomerangAvailable(void) {
@@ -93,20 +94,45 @@ u8 TwilightUpgrade_IsClawshotActive(void) {
     if (!TwilightUpgrade_HasClawshot()) {
         return 0;
     }
-    return gSaveContext.ship.clawshotModeActive != 0;
+    return Nei_Save()->clawshotModeActive != 0;
 }
 
 u8 TwilightUpgrade_IsGaleBoomerangActive(void) {
     if (!TwilightUpgrade_HasGaleBoomerang()) {
         return 0;
     }
-    return gSaveContext.ship.galeBoomerangModeActive != 0;
+    return Nei_Save()->galeBoomerangModeActive != 0;
 }
 
 void TwilightUpgrade_SetClawshotActive(u8 active) {
-    gSaveContext.ship.clawshotModeActive = active ? 1 : 0;
+    Nei_Save()->clawshotModeActive = active ? 1 : 0;
 }
 
 void TwilightUpgrade_SetGaleBoomerangActive(u8 active) {
-    gSaveContext.ship.galeBoomerangModeActive = active ? 1 : 0;
+    Nei_Save()->galeBoomerangModeActive = active ? 1 : 0;
+}
+
+// Clawshot-mode R-hand DL: compound the resolved OOT closed-hand DL (ootHand) with MM's hookshot
+// body, rebuilt only when the pointers change. No-op (leaves *dList) unless clawshot active. Skijer's NEI
+void TwilightUpgrade_ApplyClawshotHandDL(Gfx** dList, void* ootHand) {
+    if (!TwilightUpgrade_IsClawshotActive()) {
+        return;
+    }
+    extern void* MmAssets_LoadHookshotBodyDL(void);
+    void* mmBody = MmAssets_LoadHookshotBodyDL();
+    if (mmBody == NULL) {
+        return;
+    }
+    static Gfx sClawshotHandBodyDL[3];
+    static void* sLastOotHand = NULL;
+    static void* sLastMmBody = NULL;
+    if (sLastOotHand != ootHand || sLastMmBody != mmBody) {
+        Gfx* dl = sClawshotHandBodyDL;
+        gSPDisplayList(dl++, ootHand);
+        gSPDisplayList(dl++, mmBody);
+        gSPEndDisplayList(dl);
+        sLastOotHand = ootHand;
+        sLastMmBody = mmBody;
+    }
+    *dList = sClawshotHandBodyDL;
 }

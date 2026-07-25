@@ -9,6 +9,7 @@
 #include "soh/cvar_prefixes.h"
 #include <soh/Enhancements/item-tables/ItemTableManager.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/FleetShipCombo/FleetShipCombo.h"
 #include "soh/Enhancements/cosmetics/CosmeticsEditor.h"
 #include "soh/Enhancements/audio/AudioEditor.h"
 #include "soh/Enhancements/randomizer/logic.h"
@@ -32,6 +33,8 @@ extern "C" {
 #include "macros.h"
 extern PlayState* gPlayState;
 }
+
+#include "mods/nei_save.h" // Skijer's NEI
 
 #include <libultraship/bridge.h>
 #include <libultraship/libultraship.h>
@@ -214,14 +217,24 @@ static bool SetPosHandler(std::shared_ptr<Ship::Console> Console, const std::vec
     return 0;
 }
 
+// The raw reset, callable WITHOUT signaling the combo (used by the responder pump so a paired reset
+// never ping-pongs). extern "C" so FleetSync's cross-game restart pump can call it.
+extern "C" void FleetCombo_DoLocalReset(void) {
+    if (gGameState == nullptr) {
+        return;
+    }
+    SET_NEXT_GAMESTATE(gGameState, TitleSetup_Init, GameState);
+    gGameState->running = false;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnExitGame>(gSaveContext.fileNum);
+}
+
 static bool ResetHandler(std::shared_ptr<Ship::Console> Console, std::vector<std::string> args, std::string* output) {
     if (gGameState == nullptr) {
         ERROR_MESSAGE("gGameState == nullptr");
         return 1;
     }
-    SET_NEXT_GAMESTATE(gGameState, TitleSetup_Init, GameState);
-    gGameState->running = false;
-    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnExitGame>(gSaveContext.fileNum);
+    FleetCombo_DoLocalReset();
+    FleetShipCombo_SignalRestart(); // combo: restart the paired game too (no-op outside the combo)
     return 0;
 }
 
@@ -377,7 +390,15 @@ static bool ItemHandler(std::shared_ptr<Ship::Console> Console, const std::vecto
         return 1;
     }
 
-    gSaveContext.inventory.items[std::stoi(args[1])] = std::stoi(args[2]);
+    { // Skijer's NEI: dispatch so custom slots (>=24) hit gNeiSave, not OOB
+        int neiSlot = std::stoi(args[1]);
+        u8 neiItem = static_cast<u8>(std::stoi(args[2]));
+        if (neiSlot >= 0 && neiSlot < 24) {
+            gSaveContext.inventory.items[neiSlot] = neiItem;
+        } else if (neiSlot >= 24 && neiSlot < 72) {
+            Nei_SetOwnedItem((uint8_t)neiSlot, neiItem);
+        }
+    }
 
     return 0;
 }

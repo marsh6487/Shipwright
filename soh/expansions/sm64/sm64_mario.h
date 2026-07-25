@@ -72,6 +72,12 @@ u8 Sm64Remote_CanRender(void);
 u8 Sm64Remote_DrawPuppet(PlayState* play, f32 x, f32 y, f32 z, s16 faceYaw, s32 animId,
                          s16 animFrame, u32 marioFlags, u8 tintR, u8 tintG, u8 tintB);
 
+// Kaleido equipment-page doll: when the local player is in Mario mode, draws a real
+// libsm64 Mario into the pause framebuffer in place of the Link model and returns 1.
+// Returns 0 when not in Mario mode / libsm64 can't render, so the caller draws the
+// normal Link doll. One-line hook from KaleidoScope_DrawPlayerWork.
+u8 Sm64Kaleido_DrawForm(PlayState* play);
+
 // True only while the Vanish Cap is worn. Forces NoClip (z_bgcheck.c) so Mario
 // phases walls but floor-based loading zones still trigger.
 u8 Sm64Mario_IsVanishActive(void);

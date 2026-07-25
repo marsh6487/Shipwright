@@ -2018,6 +2018,22 @@ typedef enum {
     // - `PlayState*` play
     VB_PLAYER_OVERRIDE_LIMB_DRAW_PAUSE,
 
+    // Fired from Player_OverrideLimbDrawGameplayDefault (gameplay, L_HAND). Lets a custom item
+    // request that Link's held-weapon DL be hidden because it draws its own model. Skijer's NEI
+    // #### `args`
+    // - `void*` player (Player*)
+    // #### `result`
+    // - default false; set true to hide the held-weapon DL
+    VB_PLAYER_SHOULD_HIDE_HELD_WEAPON,
+
+    // Fired from Player_HoldsTwoHandedWeapon. A custom item/form can mark the held item two-handed
+    // (disables shield, enables two-handed attack patterns). Skijer's NEI
+    // #### `args`
+    // - `void*` player (Player*)
+    // #### `result`
+    // - default = vanilla two-handed check (Biggoron..Hammer); set true to force two-handed
+    VB_PLAYER_HOLDS_TWO_HANDED_WEAPON,
+
     // #### `result`
     // ```c
     // item == ITEM_SAW
@@ -3149,6 +3165,34 @@ typedef enum {
     // - `*PlayState` (play)
     // - `*Actor`     (actor)
     VB_ACTOR_POST_DRAW,
+
+    // Skijer's NEI: SM64-Mario pre-pass, positioned in Player_Update inside the
+    // Player_UpdateNoclip() block. Fires BEFORE any IsActive/IsReady check (right
+    // after the input-filter setup of sp44). Mutates nothing by default; handler
+    // runs Sm64Mario_TickTransitionSuspend + Sm64MarioMask_ForceAndToggle.
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*PlayState` (play)
+    // - `*Player`    (this)
+    // - `*Input`     (&sp44)
+    VB_SM64_PLAYER_PRE_ACTION,
+
+    // Skijer's NEI: SM64-Mario pre-pass, positioned in Player_Update immediately
+    // BEFORE Player_UpdateCommon (the same frame UpdateCommon consumes the result).
+    // Handler runs Sm64Mario_InterceptDamage + Pikachu status read + the A<->B
+    // swap on the local sp44 that is passed straight into Player_UpdateCommon.
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*PlayState` (play)
+    // - `*Player`    (this)
+    // - `*Input`     (&sp44)
+    VB_SM64_PLAYER_PRE_UPDATE_COMMON,
 } GIVanillaBehavior;
 
 #endif

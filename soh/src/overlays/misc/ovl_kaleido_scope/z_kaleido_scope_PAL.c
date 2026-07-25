@@ -246,6 +246,45 @@ static void* sQuestStatusTexs[] = {
     sQuestStatusJPNTexs,
 };
 
+// Skijer's NEI: MM's QUEST STATUS page background (companion mm.o2r) — the same 15-tile system
+// (IA8 80x32, column-major, ENG title tiles in row 0), so the L-flipped MM quest page renders 1:1.
+// The paths resolve through the resource manager, so texture packs can retexture them (mod support).
+// Mirror of 2ship's sNeiOotQuestPageBgTextures/KaleidoNei_GetQuestPageBgTextures.
+static void* sNeiMmQuestPageBgTexs[] = {
+    "__OTR__icon_item_jpn_static/gPauseQuestStatus00ENGTex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus01Tex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus02Tex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus03Tex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus04Tex",
+    "__OTR__icon_item_jpn_static/gPauseQuestStatus10ENGTex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus11Tex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus12Tex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus13Tex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus14Tex",
+    "__OTR__icon_item_jpn_static/gPauseQuestStatus20ENGTex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus21Tex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus22Tex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus23Tex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus24Tex",
+};
+
+// Picks MM's quest-page background when the MM quest page is flipped on (L) and mm.o2r provides it
+// (cached probe); otherwise OoT's own parchment for the current language. Skijer's NEI.
+static void* KaleidoNei_GetQuestStatusTexs(void) {
+    static s8 sHasMmQuestBg = -1;
+
+    if (sHasMmQuestBg == -1) {
+        // NOTE: ResourceMgr_FileExists checks the boot-time ExtensionCache, which does NOT contain
+        // the later-mounted mm.o2r entries — probe by actually resolving the texture instead.
+        sHasMmQuestBg =
+            (ResourceMgr_LoadTexOrDListByName("icon_item_static_yar/gPauseQuestStatus01Tex") != NULL) ? 1 : 0;
+    }
+    if (sHasMmQuestBg && CVarGetInteger(CVAR_ENHANCEMENT("SkijerNEI.MmQuestPage"), 0)) {
+        return sNeiMmQuestPageBgTexs;
+    }
+    return sQuestStatusTexs[gSaveContext.language];
+}
+
 static void* sSaveTexs[] = {
     sSaveENGTexs,
     sSaveGERTexs,
@@ -879,10 +918,10 @@ void KaleidoScope_SetDefaultCursor(PlayState* play) {
     switch (pauseCtx->pageIndex) {
         case PAUSE_ITEM:
             s = pauseCtx->cursorSlot[PAUSE_ITEM];
-            if (gSaveContext.inventory.items[ExtInv_GetInventorySlot(s)] == ITEM_NONE) {
+            if (ExtInv_GetSlotItem(ExtInv_GetInventorySlot(s)) == ITEM_NONE) { // Skijer's NEI
                 i = s + 1;
                 while (true) {
-                    if (gSaveContext.inventory.items[ExtInv_GetInventorySlot(i)] != ITEM_NONE) {
+                    if (ExtInv_GetSlotItem(ExtInv_GetInventorySlot(i)) != ITEM_NONE) { // Skijer's NEI
                         break;
                     }
                     i++;
@@ -894,7 +933,7 @@ void KaleidoScope_SetDefaultCursor(PlayState* play) {
                         return;
                     }
                 }
-                pauseCtx->cursorItem[PAUSE_ITEM] = gSaveContext.inventory.items[ExtInv_GetInventorySlot(i)];
+                pauseCtx->cursorItem[PAUSE_ITEM] = ExtInv_GetSlotItem(ExtInv_GetInventorySlot(i)); // Skijer's NEI
                 pauseCtx->cursorSlot[PAUSE_ITEM] = i;
             }
             break;
@@ -1297,7 +1336,7 @@ void KaleidoScope_DrawPages(PlayState* play, GraphicsContext* gfxCtx) {
                 RandoKaleido_DrawMiscCollectibles(play);
             } else {
                 POLY_OPA_DISP = KaleidoScope_DrawPageSections(POLY_OPA_DISP, pauseCtx->questPageVtx,
-                                                              sQuestStatusTexs[gSaveContext.language]);
+                                                              KaleidoNei_GetQuestStatusTexs());
                 KaleidoScope_DrawQuestStatus(play, gfxCtx);
             }
         }
@@ -1392,7 +1431,7 @@ void KaleidoScope_DrawPages(PlayState* play, GraphicsContext* gfxCtx) {
                     RandoKaleido_DrawMiscCollectibles(play);
                 } else {
                     POLY_OPA_DISP = KaleidoScope_DrawPageSections(POLY_OPA_DISP, pauseCtx->questPageVtx,
-                                                                  sQuestStatusTexs[gSaveContext.language]);
+                                                                  KaleidoNei_GetQuestStatusTexs());
                     KaleidoScope_DrawQuestStatus(play, gfxCtx);
                 }
 
@@ -1552,10 +1591,46 @@ static const char* KaleidoScope_GetTwilightNameOverride(s32 namedItem) {
     extern u8 TwilightUpgrade_IsGaleBoomerangActive(void);
     static const char sClawshotName[] = "__OTR__textures/item_name_custom/gClawshotNameTex";
     static const char sGaleName[] = "__OTR__textures/item_name_custom/gGaleBoomerangNameTex";
+    // Skijer's NEI — Ultrashot: while owned, the Longshot keeps its ICON but the name reads
+    // "Ultrashot" (the Light-medallion corner marker is drawn at the icon sites). The Twilight
+    // clawshot MODE toggle still wins while active (the item shows the claw then).
+    static const char sUltrashotName[] = "__OTR__textures/item_name_custom/gUltrashotNameTex";
     if ((namedItem == ITEM_HOOKSHOT || namedItem == ITEM_LONGSHOT) && TwilightUpgrade_IsClawshotActive()) {
         return sClawshotName;
+    } else if (namedItem == ITEM_LONGSHOT && Nei_Save()->ultrashotOwned) { // Skijer's NEI hookshot overhaul
+        return sUltrashotName;
     } else if (namedItem == ITEM_BOOMERANG && TwilightUpgrade_IsGaleBoomerangActive()) {
         return sGaleName;
+    }
+    return NULL;
+}
+
+// NEI progressive weapon upgrades: swap the item name when the equipped base weapon is upgraded.
+// Razor/Gilded/Great Fairy names come straight from mm.o2r (item_name_static); the Iron Knuckle's
+// Axe has no MM name so it uses the custom-generated one. Respects the Custom Items appearance
+// CVars. Returns NULL when no upgrade applies.
+static const char* KaleidoScope_GetWeaponUpgradeNameOverride(s32 namedItem) {
+    extern u8 WeaponUpgrade_KokiriLevel(void);
+    extern u8 WeaponUpgrade_HasGilded(void);
+    extern u8 WeaponUpgrade_HasGreatFairy(void);
+    extern u8 WeaponUpgrade_HasHammerAxe(void);
+    static const char sRazorName[] = "__OTR__item_name_static/gItemNameRazorSwordENGTex";
+    static const char sGildedName[] = "__OTR__item_name_static/gItemNameGildedSwordENGTex";
+    static const char sGfsName[] = "__OTR__item_name_static/gItemNameGreatFairysSwordENGTex";
+    static const char sAxeName[] = "__OTR__textures/item_name_custom/gIronKnuckleAxeNameTex";
+    if (namedItem == ITEM_SWORD_KOKIRI && WeaponUpgrade_KokiriLevel() >= 1) {
+        u8 showGilded =
+            WeaponUpgrade_HasGilded() && CVarGetInteger("gEnhancements.SkijerNEI.GildedUsesGildedLook", 1);
+        return showGilded ? sGildedName : sRazorName;
+    }
+    // ITEM_HEART_PIECE_2 is the OOT sentinel the EQUIP page uses for the Biggoron Sword slot when
+    // bgsFlag is set (see z_kaleido_equipment.c) — that's the "named item" there, not ITEM_SWORD_BGS.
+    if ((namedItem == ITEM_SWORD_BGS || namedItem == ITEM_HEART_PIECE_2) && WeaponUpgrade_HasGreatFairy() &&
+        CVarGetInteger("gEnhancements.SkijerNEI.BgsUsesGfsLook", 1)) {
+        return sGfsName;
+    }
+    if (namedItem == ITEM_HAMMER && WeaponUpgrade_HasHammerAxe()) {
+        return sAxeName;
     }
     return NULL;
 }
@@ -1867,8 +1942,11 @@ void KaleidoScope_DrawInfoPanel(PlayState* play) {
             // slot left a stale vanilla name in nameSegment. Re-apply here so the
             // displayed name always matches the current mode.
             {
+                const char* weaponUpgradeOverrideDraw = KaleidoScope_GetWeaponUpgradeNameOverride(pauseCtx->namedItem);
                 const char* twilightOverrideDraw = KaleidoScope_GetTwilightNameOverride(pauseCtx->namedItem);
-                if (twilightOverrideDraw != NULL) {
+                if (weaponUpgradeOverrideDraw != NULL) {
+                    memcpy(pauseCtx->nameSegment, weaponUpgradeOverrideDraw, strlen(weaponUpgradeOverrideDraw) + 1);
+                } else if (twilightOverrideDraw != NULL) {
                     memcpy(pauseCtx->nameSegment, twilightOverrideDraw, strlen(twilightOverrideDraw) + 1);
                 }
             }
@@ -1981,8 +2059,8 @@ void KaleidoScope_DrawInfoPanel(PlayState* play) {
                 (CVarGetInteger(CVAR_ENHANCEMENT("PauseAnyCursor"), 0) == PAUSE_ANY_CURSOR_ALWAYS_ON);
             if (!pauseCtx->pageIndex &&
                 (!pauseAnyCursor ||
-                 (gSaveContext.inventory.items[ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])] !=
-                  ITEM_NONE))) { // pageIndex == PAUSE_ITEM
+                 (ExtInv_GetSlotItem(ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])) !=
+                  ITEM_NONE))) { // pageIndex == PAUSE_ITEM // Skijer's NEI
                 pauseCtx->infoPanelVtx[16].v.ob[0] = pauseCtx->infoPanelVtx[18].v.ob[0] = WREG(49 + languageOffset);
 
                 pauseCtx->infoPanelVtx[17].v.ob[0] = pauseCtx->infoPanelVtx[19].v.ob[0] =
@@ -2146,7 +2224,7 @@ void KaleidoScope_UpdateNamePanel(PlayState* play) {
               !CHECK_OWNED_EQUIP(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP] - 1) &&
               !(ExtEquip_GetPage() == 1)) ||
              (pauseCtx->pageIndex == PAUSE_ITEM &&
-              gSaveContext.inventory.items[ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])] == ITEM_NONE))) {
+              ExtInv_GetSlotItem(ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])) == ITEM_NONE))) { // Skijer's NEI
             pauseCtx->namedItem = PAUSE_ITEM_NONE;
         }
 
@@ -2174,6 +2252,7 @@ void KaleidoScope_UpdateNamePanel(PlayState* play) {
 
                 // Save original item ID before any modulo/offset operations
                 u16 originalItemId = sp2A;
+                extern unsigned char TradeAdult_IsMmTradeUseItem(int item); // Skijer's NEI
 
                 // Custom items: use OTR name textures like vanilla
                 if (originalItemId >= ITEM_ROCS_FEATHER_SKIJER && originalItemId <= ITEM_POKEBALL) {
@@ -2193,6 +2272,12 @@ void KaleidoScope_UpdateNamePanel(PlayState* play) {
                 } else if (originalItemId >= 0xE0 && originalItemId <= 0xEB) {
                     // Extended equipment items: use name texture from ext_equip_names.c
                     textureName = (const char*)ExtEquip_GetNameTex(originalItemId, gSaveContext.language);
+                    if (textureName == NULL) {
+                        textureName = iconNameTextures[0];
+                    }
+                } else if (TradeAdult_IsMmTradeUseItem(originalItemId)) {
+                    // MM adult trade-quest items (Skijer's NEI) — name from mm.o2r item_name_static.
+                    textureName = (const char*)ExtInv_GetCustomItemNameTex(originalItemId, gSaveContext.language);
                     if (textureName == NULL) {
                         textureName = iconNameTextures[0];
                     }
@@ -2220,8 +2305,11 @@ void KaleidoScope_UpdateNamePanel(PlayState* play) {
                 // the vanilla one. C-level override done here to keep the C-only
                 // unity build (no extra .cpp file needed).
                 const char* twilightOverride = KaleidoScope_GetTwilightNameOverride(pauseCtx->namedItem);
+                const char* weaponUpgradeOverride = KaleidoScope_GetWeaponUpgradeNameOverride(pauseCtx->namedItem);
 
-                if (twilightOverride != NULL) {
+                if (weaponUpgradeOverride != NULL) {
+                    memcpy(pauseCtx->nameSegment, weaponUpgradeOverride, strlen(weaponUpgradeOverride) + 1);
+                } else if (twilightOverride != NULL) {
                     memcpy(pauseCtx->nameSegment, twilightOverride, strlen(twilightOverride) + 1);
                 } else if (!GameInteractor_Should(VB_DRAW_CUSTOM_ITEM_NAME, false, pauseCtx->namedItem)) {
                     memcpy(pauseCtx->nameSegment, textureName, strlen(textureName) + 1);
@@ -2699,8 +2787,10 @@ s16 func_80823A0C(PlayState* play, Vtx* vtx, s16 pageIndex, s16 arg3) {
     return vtxIndex;
 }
 
-static s16 D_8082B11C[] = { 0, 4, 8, 12, 24, 32, 56 };
-
+// Item-grid vtx indices (slot*4) that get an ammo-count quad allocated in the default renderer. Last
+// entry 52 = the Lens slot (13*4), so the Pictograph Box can show its 0/1 photo counter. Skijer's NEI
+// Compact default ammo-slot list retired: the ammo layout is now always the full 24-slot set below so
+// slots past the default 8 (e.g. the Bottomless Bottle counter) always have vertices. Skijer's NEI
 static s16 D_8082B11C_all[] = { 0,  4,  8,  12, 16, 20, 24, 28, 32, 36, 40, 44,
                                 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 96 };
 
@@ -2825,12 +2915,11 @@ void KaleidoScope_InitVertices(PlayState* play, GraphicsContext* gfxCtx) {
     pauseCtx->cursorVtx[17].v.tc[0] = pauseCtx->cursorVtx[18].v.tc[1] = pauseCtx->cursorVtx[19].v.tc[0] =
         pauseCtx->cursorVtx[19].v.tc[1] = 0x400;
 
-    // 24 items, 7 "item selected" backgrounds, 14 ammo digits (2 each for 7 items) -- then 4 vertices for each
-    pauseCtx->itemVtx = Graph_Alloc(
-        gfxCtx, (24 + 7 +
-                 2 * (CVarGetInteger(CVAR_ENHANCEMENT("BetterAmmoRendering"), 0) ? ARRAY_COUNT(D_8082B11C_all)
-                                                                                 : ARRAY_COUNT(D_8082B11C))) *
-                    4 * sizeof(Vtx));
+    // 24 items, 7 "item selected" backgrounds, then 2 ammo-digit quads per ammo slot (4 vtx each).
+    // Always lay out the FULL 24-slot ammo table (not the compact default 8-slot set) so slots past
+    // the default list — e.g. the Bottomless Bottle use-counter (SLOT_BOTTLE_4) — always have their
+    // ammo vertices. BetterAmmoRendering now only controls WHICH slots draw a count. Skijer's NEI
+    pauseCtx->itemVtx = Graph_Alloc(gfxCtx, (24 + 7 + 2 * ARRAY_COUNT(D_8082B11C_all)) * 4 * sizeof(Vtx));
 
     for (phi_t4 = 0, phi_t2 = 0, phi_t5 = 58; phi_t4 < 4; phi_t4++, phi_t5 -= 32) {
         for (phi_t1 = -96, phi_t3 = 0; phi_t3 < 6; phi_t3++, phi_t2 += 4, phi_t1 += 32) {
@@ -2924,11 +3013,9 @@ void KaleidoScope_InitVertices(PlayState* play, GraphicsContext* gfxCtx) {
         }
     }
 
-    u8 gBetterAmmoRendering = CVarGetInteger(CVAR_ENHANCEMENT("BetterAmmoRendering"), 0);
-
-    for (phi_t3 = 0; phi_t3 < (gBetterAmmoRendering ? ARRAY_COUNT(D_8082B11C_all) : ARRAY_COUNT(D_8082B11C));
-         phi_t3++) {
-        phi_t4 = gBetterAmmoRendering ? D_8082B11C_all[phi_t3] : D_8082B11C[phi_t3];
+    // Always set up all 24 ammo-quad positions (see the itemVtx allocation above). Skijer's NEI
+    for (phi_t3 = 0; phi_t3 < ARRAY_COUNT(D_8082B11C_all); phi_t3++) {
+        phi_t4 = D_8082B11C_all[phi_t3];
 
         pauseCtx->itemVtx[phi_t2 + 0].v.ob[0] = pauseCtx->itemVtx[phi_t2 + 2].v.ob[0] =
             pauseCtx->itemVtx[phi_t4].v.ob[0];

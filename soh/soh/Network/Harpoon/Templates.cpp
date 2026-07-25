@@ -22,6 +22,8 @@ extern "C" {
 #include "variables.h"
 }
 
+#include "mods/nei_save.h" // Skijer's NEI
+
 namespace HarpoonTemplates {
 
 namespace {
@@ -286,8 +288,8 @@ const Template* Find(const std::string& name) {
 }
 
 void CaptureLocalState(Template& t) {
-    for (size_t i = 0; i < (size_t)ARRAY_COUNT(t.items); i++) {
-        t.items[i] = gSaveContext.inventory.items[i];
+    for (size_t i = 0; i < (size_t)ARRAY_COUNT(t.items); i++) { // Skijer's NEI
+        t.items[i] = (i < 24) ? gSaveContext.inventory.items[i] : Nei_GetOwnedItem((uint8_t)i);
     }
     for (size_t i = 0; i < (size_t)ARRAY_COUNT(t.ammo); i++) {
         t.ammo[i] = gSaveContext.inventory.ammo[i];
@@ -478,8 +480,9 @@ bool Delete(const std::string& name) {
 
 namespace {
 void ApplyToSave(const Template& t) {
-    for (size_t i = 0; i < (size_t)ARRAY_COUNT(t.items); i++) {
-        gSaveContext.inventory.items[i] = t.items[i];
+    for (size_t i = 0; i < (size_t)ARRAY_COUNT(t.items); i++) { // Skijer's NEI
+        if (i < 24) gSaveContext.inventory.items[i] = t.items[i];
+        else        Nei_SetOwnedItem((uint8_t)i, t.items[i]);
     }
     for (size_t i = 0; i < (size_t)ARRAY_COUNT(t.ammo); i++) {
         gSaveContext.inventory.ammo[i] = t.ammo[i];

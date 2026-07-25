@@ -32,9 +32,7 @@ extern s32 HarpoonPropHunt_IsActive(void);
 // Include object (for draw function) - original staff model for Link's hand
 #include "../objects/object_cane_of_somaria.c"
 
-// Include animation
-#include "../anim/somaria_cane/somaria_anim.c"
-#include "../anim/somaria_cane/somaria_anim_data.c"
+#include "../anim/nei_anims.h" // cast animation now loads from soh.o2r — Skijer's NEI
 
 // Static state like Fire Rod
 static ItemEquipState sSomariaEquipState = { 0 };
@@ -165,13 +163,20 @@ static void Somaria_SpawnBlock(Player* p, PlayState* play) {
 // ANIMATION
 // ============================================================================
 
-// Animation uses upperSkelAnime with gSomariaAnim (60 frames)
+// Animation uses upperSkelAnime with the somaria cast anim from soh.o2r (60 frames)
 // Spawn block at frame 30 (midpoint of the casting animation)
 #define SOMARIA_SPAWN_FRAME 30
 
 static void Somaria_StartCastAnim(Player* p, PlayState* play) {
-    // Play the somaria casting animation
-    LinkAnimation_PlayOnce(play, &p->upperSkelAnime, &gSomariaAnim);
+    // Play the somaria casting animation (loaded from soh.o2r). The block spawn is driven by this
+    // animation's progress, so if the resource is missing we must not enter the animating state at
+    // all — otherwise the cast would never complete. Skijer's NEI
+    LinkAnimationHeader* anim = NeiAnim_Load(NEI_ANIM_SOMARIA);
+
+    if (anim == NULL) {
+        return;
+    }
+    LinkAnimation_PlayOnce(play, &p->upperSkelAnime, anim);
     shSomariaAnimating = 1;
     shSomariaAnimTimer = 0;
 }

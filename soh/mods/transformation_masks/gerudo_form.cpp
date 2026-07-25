@@ -354,6 +354,30 @@ extern "C" Gfx* GerudoForm_GetSwordDL_R(void) {
     return SafeLoadGfx(kGerudoSword);
 }
 
+// Gerudo Form dual-wield: hand = scimitar DL, sheath hidden. Returns 1 if it claimed limbIndex. Skijer's NEI
+extern "C" u8 GerudoForm_ResolveLimbDL(s32 limbIndex, Gfx** dList) {
+    if (!GerudoForm_IsActive()) {
+        return 0;
+    }
+    if (limbIndex == PLAYER_LIMB_L_HAND) {
+        Gfx* swordL = GerudoForm_GetSwordDL_L();
+        if (swordL != nullptr) {
+            *dList = swordL;
+            return 1;
+        }
+    } else if (limbIndex == PLAYER_LIMB_R_HAND) {
+        Gfx* swordR = GerudoForm_GetSwordDL_R();
+        if (swordR != nullptr) {
+            *dList = swordR;
+            return 1;
+        }
+    } else if (limbIndex == PLAYER_LIMB_SHEATH) {
+        *dList = nullptr; // no sheath in Gerudo Form
+        return 1;
+    }
+    return 0;
+}
+
 extern "C" void GerudoForm_GetTunicColor(s32 tunic, Color_RGB8* out) {
     if (out == nullptr) {
         return;
@@ -687,19 +711,13 @@ extern "C" void GerudoForm_Update(PlayState* play, Player* player) {
             player->heldItemAction = desiredIA;
             player->itemAction = desiredIA;
         }
-        // Gerudo blocks the shield equip slot, so if the player hadn't equipped
-        // a shield before transforming we default to MIRROR EVERY frame —
-        // otherwise R-press would silently no-op on the first frame
-        // (currentShield == NONE fails the ActionHandler_11 gate). If a real
-        // shield IS equipped (Deku / Hylian / Mirror) we leave it alone — the
-        // "respective model" intent — so the equipped one draws. Doing this
-        // pre-actionFunc would be ideal, but TransformMasks_Update runs after
-        // Player_UpdateCommon; forcing it here still wins because
-        // currentShield persists frame-to-frame and ActionHandler_11 reads
-        // the value set at the end of the previous tick.
-        if (player->currentShield == PLAYER_SHIELD_NONE) {
-            player->currentShield = PLAYER_SHIELD_MIRROR;
-        }
+        // MHR Dual Blades rework: Gerudo can no longer block — the wirebug
+        // replaces the shield. Force the shield OFF every frame so OOT's
+        // vanilla R-press shield (Player_ActionHandler_11) never engages; R is
+        // now the wirebug modifier owned by MmForm_GerudoMhrUpdate. (With no
+        // shield, PLAYER_STATE1_SHIELDING never sets, so the legacy shield
+        // branches in GerudoForm_GetSwordDL_L/R go dead naturally.)
+        player->currentShield = PLAYER_SHIELD_NONE;
     }
 
     // === Sword visibility state machine (FREE / COMBAT) ===

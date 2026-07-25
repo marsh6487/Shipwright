@@ -1,66 +1,23 @@
 /**
- * equip_dragonscale.c - Water Dragon Scale (Extended Boots Slot 3)
+ * equip_dragonscale.c - ZORA TUNIC swim (formerly the Water Dragon Scale item)
  *
- * Activates REAL Zora swim mechanics (1:1) for Adult Link via public wrappers
- * in mm_player_form.cpp. Calls the same swim actions (idle, surface walk,
- * fast swim, dolphin jump) + barrier, buoyancy, speed ramp, barrel roll.
- * Link keeps his OOT model — formSkelAnime joints are synced to player->skelAnime.
+ * The Water Dragon Scale no longer exists as an equipment item (Skijer, 2026-07-15): 1:1 MM Zora
+ * swimming is now a PERMANENT vanilla effect of wearing the ZORA TUNIC. Activates the REAL Zora swim
+ * mechanics via the public wrappers in mm_player_form.cpp — the same swim actions (idle, surface
+ * walk, fast swim/barrel roll, dolphin jump) + the electric water barrier, buoyancy and speed ramp.
+ * Link keeps his OOT model (formSkelAnime joints are synced to player->skelAnime).
  *
- * NO boot toggle (uses Iron Boots for sinking instead).
- * NO Zora tunic effect, NO stop timer.
- * Adult Link only.
+ * SCOPE — swim + water barrier ONLY:
+ *   NO iron-style manual sink toggle (already excluded: MmForm_CheckBootToggle bails on
+ *   zoraSwimEnabled; use Iron Boots to sink).
+ *   NO Zora punch/boomerang (the ocean-floor block in MmForm_Action_SwimIdle is gated to the FULL
+ *   Zora form; the tunic swim never reaches it).
+ *   NO land anims / model swap (never sets currentForm; MmForm_ApplyFormProperties never runs).
  *
- * Included by ext_equip_behavior.c (unity build).
+ * The Zora tunic is adult-only in vanilla OoT, which keeps the old "Adult Link only" property.
+ * Included by ext_equip_behavior.c (unity build); ZoraTunicSwim_Update is called UNCONDITIONALLY
+ * from the behavior update (not slot-gated — the gate is the worn tunic itself).
  */
-
-// ---------------------------------------------------------------------------
-// Blue sapphire scale color DL (replaces silver/golden color DLs)
-// ---------------------------------------------------------------------------
-static Gfx gfx_dragon_scale_color[] = {
-    gsDPPipeSync(),
-    gsDPSetPrimColor(0, 0x80, 30, 80, 200, 180), // Blue sapphire frame (semi-transparent)
-    gsDPSetEnvColor(10, 40, 120, 0),             // Dark blue env
-    gsSPEndDisplayList(),
-};
-
-static Gfx gfx_dragon_scale_water_color[] = {
-    gsDPPipeSync(),
-    gsDPSetPrimColor(0, 0x80, 60, 140, 255, 255), // Bright sapphire blue interior
-    gsDPSetEnvColor(20, 80, 200, 0),              // Blue env
-    gsSPEndDisplayList(),
-};
-
-// ---------------------------------------------------------------------------
-// Draw scale pendant at waist (called from PostLimbDraw PLAYER_LIMB_WAIST)
-// ---------------------------------------------------------------------------
-static void DScale_DrawWaistScale(PlayState* play) {
-    OPEN_DISPS(play->state.gfxCtx);
-
-    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-
-    Matrix_Push();
-    // Offset: forward from belt, slightly down, centered
-    Matrix_Translate(0.0f, -200.0f, -500.0f, MTXMODE_APPLY);
-    Matrix_Scale(0.5f, 0.5f, 0.5f, MTXMODE_APPLY);
-
-    // Animated water texture scroll (same as GetItem_DrawScale)
-    u32 frames = play->gameplayFrames;
-    gSPSegment(POLY_XLU_DISP++, 0x08,
-               Gfx_TwoTexScroll(play->state.gfxCtx, 0, (s32)(frames * 2), -(s32)(frames * 2), 64, 64, 1,
-                                (s32)(frames * 4), -(s32)(frames * 4), 32, 32));
-
-    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-
-    // Draw: blue frame color → scale geometry → blue water color → water geometry
-    gSPDisplayList(POLY_XLU_DISP++, gfx_dragon_scale_color);
-    gSPDisplayList(POLY_XLU_DISP++, ResourceMgr_LoadGfxByName("__OTR__objects/object_gi_scale/gGiScaleDL"));
-    gSPDisplayList(POLY_XLU_DISP++, gfx_dragon_scale_water_color);
-    gSPDisplayList(POLY_XLU_DISP++, ResourceMgr_LoadGfxByName("__OTR__objects/object_gi_scale/gGiScaleWaterDL"));
-
-    Matrix_Pop();
-
-    CLOSE_DISPS(play->state.gfxCtx);
-}
 
 // ---------------------------------------------------------------------------
 // Blue sparkles when entering water with Dragon Scale
@@ -98,9 +55,17 @@ static void DScale_Draw(Player* p, PlayState* play) {
 }
 
 // ---------------------------------------------------------------------------
-// Main Behavior Entry
+// Main Behavior Entry — runs EVERY frame (not slot-gated); the gate is the worn ZORA TUNIC.
 // ---------------------------------------------------------------------------
 static void DragonScale_Behavior(Player* player, PlayState* play) {
+    // ZORA TUNIC is the activation condition now (the Water Dragon Scale item is gone). When the
+    // tunic comes off mid-swim, exit cleanly back to OoT swimming.
+    if (CUR_EQUIP_VALUE(EQUIP_TYPE_TUNIC) != EQUIP_VALUE_TUNIC_ZORA) {
+        if (TransformMasks_IsZoraSwimEnabled())
+            TransformMasks_DragonScaleExitSwim(player);
+        return;
+    }
+
     // If a real transformation mask is active, don't interfere
     if (TransformMasks_IsTransformed()) {
         if (TransformMasks_IsZoraSwimEnabled())

@@ -467,141 +467,10 @@ static void Pegasus_Draw(Player* p, PlayState* play) {
 }
 
 // ---------------------------------------------------------------------------
-// Anklet pendulum physics (wing charm swings with movement)
+// Anklet custom model REMOVED (Skijer 2026-07-15): the Pegasus Anklet now shows as the
+// vanilla HOVER BOOTS recolored red, drawn with the body in Player_DrawImpl
+// (z_player_lib.c). Behavior (dash + wind barrier) is untouched.
 // ---------------------------------------------------------------------------
-#define PEGASUS_PENDULUM_GRAVITY 0.015f
-#define PEGASUS_PENDULUM_DAMPING 0.92f
-#define PEGASUS_PENDULUM_ACCEL 0.003f
-#define PEGASUS_PENDULUM_MAX 0.6f // Max swing angle (radians, ~34 degrees)
-
-static void Pegasus_UpdateWingPhysics(Player* player) {
-    f32 accel = player->actor.speedXZ * PEGASUS_PENDULUM_ACCEL;
-
-    // Pendulum: gravity restores to center, movement pushes it
-    gExtEquipBehavior.pegasusWingVel += (-sinf(gExtEquipBehavior.pegasusWingAngle) * PEGASUS_PENDULUM_GRAVITY) + accel;
-    gExtEquipBehavior.pegasusWingVel *= PEGASUS_PENDULUM_DAMPING;
-
-    gExtEquipBehavior.pegasusWingAngle += gExtEquipBehavior.pegasusWingVel;
-
-    // Clamp
-    if (gExtEquipBehavior.pegasusWingAngle > PEGASUS_PENDULUM_MAX)
-        gExtEquipBehavior.pegasusWingAngle = PEGASUS_PENDULUM_MAX;
-    if (gExtEquipBehavior.pegasusWingAngle < -PEGASUS_PENDULUM_MAX)
-        gExtEquipBehavior.pegasusWingAngle = -PEGASUS_PENDULUM_MAX;
-}
-
-// ---------------------------------------------------------------------------
-// Anklet torus DL (golden ring)
-// ---------------------------------------------------------------------------
-static Vtx sAnkletTorusVtx[] = {
-    // 16-segment torus: outer ring (radius 300, tube radius 40)
-    // Top ring (y=40)
-    VTX(300, 40, 0, 0, 0, 0, 127, 0, 255),
-    VTX(212, 40, 212, 0, 0, 0, 127, 0, 255),
-    VTX(0, 40, 300, 0, 0, 0, 127, 0, 255),
-    VTX(-212, 40, 212, 0, 0, 0, 127, 0, 255),
-    VTX(-300, 40, 0, 0, 0, 0, 127, 0, 255),
-    VTX(-212, 40, -212, 0, 0, 0, 127, 0, 255),
-    VTX(0, 40, -300, 0, 0, 0, 127, 0, 255),
-    VTX(212, 40, -212, 0, 0, 0, 127, 0, 255),
-    // Bottom ring (y=-40)
-    VTX(300, -40, 0, 0, 0, 0, -127, 0, 255),
-    VTX(212, -40, 212, 0, 0, 0, -127, 0, 255),
-    VTX(0, -40, 300, 0, 0, 0, -127, 0, 255),
-    VTX(-212, -40, 212, 0, 0, 0, -127, 0, 255),
-    VTX(-300, -40, 0, 0, 0, 0, -127, 0, 255),
-    VTX(-212, -40, -212, 0, 0, 0, -127, 0, 255),
-    VTX(0, -40, -300, 0, 0, 0, -127, 0, 255),
-    VTX(212, -40, -212, 0, 0, 0, -127, 0, 255),
-};
-
-static Gfx gfx_anklet_torus[] = {
-    gsDPPipeSync(),
-    gsDPSetCycleType(G_CYC_1CYCLE),
-    gsDPSetRenderMode(G_RM_AA_ZB_XLU_SURF, G_RM_AA_ZB_XLU_SURF2),
-    gsDPSetCombineMode(G_CC_PRIMITIVE, G_CC_PRIMITIVE),
-    gsSPLoadGeometryMode(G_ZBUFFER | G_SHADE | G_SHADING_SMOOTH),
-    gsDPSetPrimColor(0, 0, 220, 180, 50, 255), // Gold
-    gsSPVertex(sAnkletTorusVtx, 16, 0),
-    gsSP2Triangles(0, 1, 9, 0, 0, 9, 8, 0),
-    gsSP2Triangles(1, 2, 10, 0, 1, 10, 9, 0),
-    gsSP2Triangles(2, 3, 11, 0, 2, 11, 10, 0),
-    gsSP2Triangles(3, 4, 12, 0, 3, 12, 11, 0),
-    gsSP2Triangles(4, 5, 13, 0, 4, 13, 12, 0),
-    gsSP2Triangles(5, 6, 14, 0, 5, 14, 13, 0),
-    gsSP2Triangles(6, 7, 15, 0, 6, 15, 14, 0),
-    gsSP2Triangles(7, 0, 8, 0, 7, 8, 15, 0),
-    gsSPEndDisplayList(),
-};
-
-// ---------------------------------------------------------------------------
-// Wing DL (golden stylized wing shape - 4 triangles)
-// ---------------------------------------------------------------------------
-static Vtx sAnkletWingVtx[] = {
-    // Wing shape: base at origin, extends outward (+Z) and upward (+Y)
-    VTX(0, 0, 0, 0, 0, 0, 0, 127, 255),     // 0: base center
-    VTX(0, 100, 150, 0, 0, 0, 0, 127, 255), // 1: upper tip
-    VTX(0, 50, 300, 0, 0, 0, 0, 127, 255),  // 2: far tip
-    VTX(0, -30, 200, 0, 0, 0, 0, 127, 255), // 3: lower mid
-    VTX(0, -50, 80, 0, 0, 0, 0, 127, 255),  // 4: lower base
-    VTX(20, 30, 100, 0, 0, 0, 0, 127, 255), // 5: thickness (front)
-};
-
-static Gfx gfx_anklet_wing[] = {
-    gsDPPipeSync(),
-    gsDPSetCycleType(G_CYC_1CYCLE),
-    gsDPSetRenderMode(G_RM_AA_ZB_XLU_SURF, G_RM_AA_ZB_XLU_SURF2),
-    gsDPSetCombineMode(G_CC_PRIMITIVE, G_CC_PRIMITIVE),
-    gsSPLoadGeometryMode(G_ZBUFFER | G_SHADE | G_SHADING_SMOOTH),
-    gsDPSetPrimColor(0, 0, 255, 220, 100, 200), // Golden translucent
-    gsSPVertex(sAnkletWingVtx, 6, 0),
-    gsSP2Triangles(0, 1, 5, 0, 1, 2, 5, 0), // Upper wing
-    gsSP2Triangles(0, 5, 4, 0, 5, 2, 3, 0), // Lower wing
-    gsSPEndDisplayList(),
-};
-
-// ---------------------------------------------------------------------------
-// Draw anklet on foot limb (called from PostLimbDraw in z_player_lib.c)
-// ---------------------------------------------------------------------------
-static void Pegasus_DrawAnklet(PlayState* play, s32 isRightFoot) {
-    OPEN_DISPS(play->state.gfxCtx);
-
-    // === Golden ring at ankle (inline torus — avoids segment 6 dependency on object_light_ring) ===
-    f32 zOffset = isRightFoot ? 0.0f : -50.0f;
-    Matrix_Push();
-    Matrix_Translate(0.0f, -300.0f, zOffset, MTXMODE_APPLY);
-    Matrix_RotateX(M_PI / 2.0f, MTXMODE_APPLY); // Lay flat around the ankle
-    Matrix_Scale(0.015f, 0.015f, 0.015f, MTXMODE_APPLY);
-
-    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_XLU_DISP++, gfx_anklet_torus);
-    Matrix_Pop();
-
-    // === Golden wings (inline geometry, pendulum physics) ===
-    // Position wings on the outer side of the shin
-    f32 sideOffset = isRightFoot ? -200.0f : 200.0f;
-
-    Matrix_Push();
-    Matrix_Translate(sideOffset, -300.0f, 0.0f, MTXMODE_APPLY);
-
-    // Apply pendulum swing
-    Matrix_RotateZ(gExtEquipBehavior.pegasusWingAngle, MTXMODE_APPLY);
-
-    // Wing scale
-    Matrix_Scale(1.0f, 1.0f, 1.0f, MTXMODE_APPLY);
-
-    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_XLU_DISP++, gfx_anklet_wing);
-
-    // Mirror wing on other side
-    Matrix_Scale(1.0f, 1.0f, -1.0f, MTXMODE_APPLY);
-    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_XLU_DISP++, gfx_anklet_wing);
-
-    Matrix_Pop();
-
-    CLOSE_DISPS(play->state.gfxCtx);
-}
 
 // ---------------------------------------------------------------------------
 // Main Behavior Entry
@@ -622,7 +491,6 @@ static void Pegasus_Behavior(Player* player, PlayState* play) {
     }
 
     // Always update wing pendulum physics (even when not dashing)
-    Pegasus_UpdateWingPhysics(player);
 
     switch (gExtEquipBehavior.pegasusState) {
         case PEGASUS_IDLE:

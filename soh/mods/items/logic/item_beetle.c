@@ -24,10 +24,15 @@
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
+#include "objects/gameplay_keep/gameplay_keep.h" // gGlowCircleDL for our own target indicator
 #include "assets/objects/gameplay_keep/gameplay_keep.h"
 
 static u8 sBeetleColInitialized = 0;
 static s8 sBeetlePrevInvinc = 0;
+static Actor* sBeetleTarget = NULL;    // Z-locked enemy (NULL = no lock). Skijer's NEI
+static Actor* sBeetleCandidate = NULL; // nearest lockable actor each frame (drives the "offer" reticle)
+static u8 sBeetleKamikaze = 0;         // B-released: home hard at the target to hit it, then return
+static u8 sBeetleAutonomous = 0;       // B pressed: camera+control back to Link; beetle flies on its own
 
 static void Beetle_DropGrabbedActor(Player* p);
 
@@ -126,6 +131,10 @@ static void Beetle_Stop(Player* p, PlayState* play) {
     beetleActive = 0;
     beetleState = BEETLE_STATE_IDLE;
     beetleGrabbed = NULL;
+    sBeetleTarget = NULL; // drop lock + reticle
+    sBeetleKamikaze = 0;
+    sBeetleAutonomous = 0;
+    p->focusActor = NULL;
     // Stop looping fly sound
     Audio_StopSfxById(BEETLE_SFX_FLY);
     ItemEquip_PlayUnequipSFX(play, p);
@@ -152,6 +161,9 @@ static void Beetle_Launch(Player* p, PlayState* play) {
     beetleState = BEETLE_STATE_FLYING;
     beetleTimer = BEETLE_MAX_TIME;
     beetleStartPos = p->actor.world.pos;
+    sBeetleTarget = NULL; // fresh flight: no lock yet
+    sBeetleKamikaze = 0;
+    sBeetleAutonomous = 0;
 
     s16 launchYaw = FirstPerson_GetAimYaw(p);
     s16 launchPitch = FirstPerson_GetAimPitch(p);
@@ -176,6 +188,10 @@ static void Beetle_Launch(Player* p, PlayState* play) {
 
 static void Beetle_StartReturn(Player* p, PlayState* play) {
     beetleState = BEETLE_STATE_RETURNING;
+    sBeetleTarget = NULL; // clear the Z-lock / kamikaze so the next flight starts fresh
+    sBeetleKamikaze = 0;
+    sBeetleAutonomous = 0;
+    p->focusActor = NULL; // drop the lock-on reticle
     Beetle_DestroySubCam(play);
     p->stateFlags1 &= ~PLAYER_STATE1_BOOMERANG_THROWN;
     p->stateFlags2 &= ~PLAYER_STATE2_DISABLE_ROTATION_Z_TARGET;
@@ -205,6 +221,34 @@ static void Beetle_Move(f32 speed) {
     beetlePos.z += cosY * cosP * speed;
 }
 
+// Reliable proximity grab for collectibles the AT pass can miss: the silver rupee (En_G_Switch)'s AC
+// reacts to specific dmgFlags the beetle's AT doesn't set, so AT-AC never fires — grab it (and rupees)
+// by distance instead, then carry it to Link. Skijer's NEI
+static void Beetle_ProximityGrab(PlayState* play) {
+    static const u8 sCats[] = { ACTORCAT_ITEMACTION, ACTORCAT_PROP };
+    s32 c;
+
+    if (beetleGrabbed != NULL) {
+        return;
+    }
+    for (c = 0; c < ARRAY_COUNT(sCats); c++) {
+        Actor* actor = play->actorCtx.actorLists[sCats[c]].head;
+        while (actor != NULL) {
+            u8 grabbable = (actor->id == ACTOR_EN_ITEM00) ||
+                           (actor->id == ACTOR_EN_G_SWITCH && (actor->params >> 0xC & 0xF) == ENGSWITCH_SILVER_RUPEE);
+            if ((actor->update != NULL) && grabbable &&
+                (Math_Vec3f_DistXYZ(&beetlePos, &actor->world.pos) < BEETLE_GRAB_RADIUS * 2.0f)) {
+                beetleGrabbed = actor;
+                if (actor->id == ACTOR_EN_G_SWITCH) {
+                    actor->flags |= ACTOR_FLAG_HOOKSHOT_ATTACHED;
+                }
+                return;
+            }
+            actor = actor->next;
+        }
+    }
+}
+
 static u8 Beetle_CheckActorCollision(Player* p, PlayState* play) {
     if (!(beetleCollider.base.atFlags & AT_HIT))
         return 0;
@@ -214,7 +258,7 @@ static u8 Beetle_CheckActorCollision(Player* p, PlayState* play) {
 
     if (hitActor != NULL) {
         if (hitActor->id == ACTOR_EN_ITEM00 || hitActor->id == ACTOR_EN_SI ||
-            (hitActor->id == ACTOR_EN_G_SWITCH && (hitActor->params & 0x0F) == ENGSWITCH_SILVER_RUPEE)) {
+            (hitActor->id == ACTOR_EN_G_SWITCH && (hitActor->params >> 0xC & 0xF) == ENGSWITCH_SILVER_RUPEE)) {
             beetleGrabbed = hitActor;
             if (hitActor->id == ACTOR_EN_SI) {
                 hitActor->flags |= ACTOR_FLAG_HOOKSHOT_ATTACHED;
@@ -316,9 +360,110 @@ static void Beetle_StateAiming(Player* p, PlayState* play, ItemInputState* in) {
     }
 }
 
-static void Beetle_StateFlying(Player* p, PlayState* play) {
-    // Animation update is handled by Player_UpperAction_Beetle
+// Only actors the beetle can actually DAMAGE (attention-enabled enemies/bosses) or COLLECT/interact
+// with (rupees/items, En_Si, silver-rupee switch) are valid targets — no random props. Skijer's NEI
+static u8 Beetle_IsTargetable(Actor* a) {
+    if ((a->category == ACTORCAT_ENEMY) || (a->category == ACTORCAT_BOSS)) {
+        return (a->flags & ACTOR_FLAG_ATTENTION_ENABLED) ? 1 : 0; // already-targetable enemies
+    }
+    // Collectibles the beetle grabs (rupees, stray-fairy token, silver rupee).
+    if (a->id == ACTOR_EN_ITEM00 || a->id == ACTOR_EN_SI ||
+        (a->id == ACTOR_EN_G_SWITCH && (a->params >> 0xC & 0xF) == ENGSWITCH_SILVER_RUPEE)) {
+        return 1;
+    }
+    // Switches a NORMAL beetle hit can trip: crystal / eye switches (Obj_Switch params&7 = 2 EYE /
+    // 3 CRYSTAL / 4 CRYSTAL_TARGETABLE — NOT 0/1 floor/weight switches), and the Jabu heavy switch.
+    if (a->id == ACTOR_OBJ_SWITCH) {
+        u8 t = a->params & 7;
+        return (t == 2 || t == 3 || t == 4) ? 1 : 0;
+    }
+    if (a->id == ACTOR_BG_BDAN_SWITCH) {
+        return 1;
+    }
+    return 0;
+}
 
+// Nearest targetable actor within range AND roughly in front of the beetle — the Z-target candidate.
+static Actor* Beetle_FindTarget(PlayState* play) {
+    static const u8 sCats[] = { ACTORCAT_ENEMY, ACTORCAT_BOSS,   ACTORCAT_ITEMACTION, ACTORCAT_PROP,
+                                ACTORCAT_MISC,  ACTORCAT_SWITCH, ACTORCAT_BG };
+    Actor* best = NULL;
+    f32 bestDist = BEETLE_TARGET_RANGE;
+    s32 c;
+
+    for (c = 0; c < ARRAY_COUNT(sCats); c++) {
+        Actor* actor = play->actorCtx.actorLists[sCats[c]].head;
+        while (actor != NULL) {
+            if ((actor->update != NULL) && Beetle_IsTargetable(actor)) {
+                // Nearest targetable in range (no front-cone filter — it was excluding everything if
+                // the yaw convention didn't line up; nearest-in-range is simpler and reliable). NEI
+                f32 dist = Math_Vec3f_DistXYZ(&beetlePos, &actor->world.pos);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = actor;
+                }
+            }
+            actor = actor->next;
+        }
+    }
+    return best;
+}
+
+// Turn beetleRot toward the locked target by up to `step` binang/frame (homing). Skijer's NEI
+static void Beetle_HomeToTarget(s16 step) {
+    Vec3f tgt = sBeetleTarget->world.pos;
+    s16 wantYaw = Math_Vec3f_Yaw(&beetlePos, &tgt);
+    s16 wantPitch = Math_Vec3f_Pitch(&beetlePos, &tgt);
+    Math_SmoothStepToS(&beetleRot.y, wantYaw, 4, step, 0x10);
+    Math_SmoothStepToS(&beetleRot.x, wantPitch, 4, step, 0x10);
+}
+
+static void Beetle_StateFlying(Player* p, PlayState* play) {
+    Input* input = &play->state.input[0];
+    u8 aHeld;
+
+    // Drop a lock whose enemy died/despawned.
+    if ((sBeetleTarget != NULL) && (sBeetleTarget->update == NULL)) {
+        sBeetleTarget = NULL;
+        sBeetleKamikaze = 0;
+    }
+
+    // ── AUTONOMOUS mode (B was pressed) ───────────────────────────────────────────────────────────
+    // Camera + control are back with Link (subcam gone, no player freeze). The beetle flies on its
+    // OWN — no stick input. If it has a locked enemy it homes in to hit it, otherwise it heads home.
+    // A hit / max distance / timeout returns it to Link. Skijer's NEI
+    if (sBeetleAutonomous) {
+        u8 hit = Beetle_CheckActorCollision(p, play);
+        Beetle_ProximityGrab(play);
+
+        if ((sBeetleTarget != NULL) && (sBeetleTarget->update != NULL)) {
+            Beetle_HomeToTarget(BEETLE_KAMIKAZE_STEP);
+        } else {
+            Beetle_StartReturn(p, play); // nothing to chase → fly back to Link
+            return;
+        }
+
+        Beetle_Move(BEETLE_SPEED * BEETLE_BOOST_MULT);
+        Beetle_UpdateCollider(play, &beetlePos);
+        Beetle_UpdateWingAnimation(&beetleWingScale, &beetleWingDir);
+        Beetle_UpdateGrabbedActor(); // NOTE: no Beetle_UpdateSubCam — the camera is Link's now
+
+        if (hit || Beetle_CheckGeometryCollision(play)) {
+            Beetle_StartReturn(p, play);
+            return;
+        }
+        if ((Math_Vec3f_DistXYZ(&beetlePos, &beetleStartPos) > BEETLE_MAX_DISTANCE) || (DECR(beetleTimer) == 0)) {
+            Beetle_StartReturn(p, play);
+            return;
+        }
+        Beetle_PlayLoopSound(&p->actor, BEETLE_SFX_FLY);
+        return;
+    }
+
+    // ── PILOTED mode (beetle subcam, Link frozen, you steer) ──────────────────────────────────────
+    aHeld = CHECK_BTN_ALL(input->cur.button, BTN_A);
+
+    // Animation update is handled by Player_UpperAction_Beetle
     Player_ZeroSpeedXZ(p);
     p->stateFlags1 |= PLAYER_STATE1_BOOMERANG_THROWN;
     p->stateFlags2 |= PLAYER_STATE2_DISABLE_ROTATION_Z_TARGET;
@@ -327,15 +472,59 @@ static void Beetle_StateFlying(Player* p, PlayState* play) {
     // Camera_SetParam — Link's actor is always valid.
     p->boomerangActor = &p->actor;
 
-    if (CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B)) {
-        Beetle_StartReturn(p, play);
-        return;
+    // Z: toggle the enemy lock (locks the nearest attention-enabled enemy, like Link's Z-target).
+    if (CHECK_BTN_ALL(input->press.button, BTN_Z)) {
+        if (sBeetleTarget != NULL) {
+            sBeetleTarget = NULL; // Z again = untarget
+            sBeetleKamikaze = 0;
+        } else {
+            sBeetleTarget = Beetle_FindTarget(play);
+        }
     }
 
-    u8 hitActor = Beetle_CheckActorCollision(p, play);
+    // B: hand the camera + control back to Link and let the beetle fly on its OWN. If a target is
+    // locked it kamikaze-homes to hit it (then returns); otherwise it flies straight back to Link.
+    if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
+        sBeetleAutonomous = 1;
+        Beetle_DestroySubCam(play);                        // camera back to Link
+        p->stateFlags1 &= ~PLAYER_STATE1_BOOMERANG_THROWN; // control back to Link
+        p->stateFlags2 &= ~PLAYER_STATE2_DISABLE_ROTATION_Z_TARGET;
+        p->focusActor = NULL; // drop the lock reticle
+        if (sBeetleTarget != NULL) {
+            sBeetleKamikaze = 1;
+        }
+        return; // the autonomous branch takes over next frame
+    }
 
-    Projectile_UpdateRotationFromStick(&beetleRot.y, &beetleRot.x, play, BEETLE_TURN_SPEED, BEETLE_PITCH_MAX);
-    Beetle_Move(BEETLE_SPEED);
+    // Track the nearest lockable actor each frame so the reticle can show as an "offer" even before
+    // you press Z (drawn via Beetle_DrawOffer). Skijer's NEI
+    sBeetleCandidate = Beetle_FindTarget(play);
+
+    u8 hitActor = Beetle_CheckActorCollision(p, play);
+    Beetle_ProximityGrab(play);
+
+    if (sBeetleKamikaze && (sBeetleTarget != NULL)) {
+        // Locked-in: home hard at the target, ignore the stick.
+        Beetle_HomeToTarget(BEETLE_KAMIKAZE_STEP);
+    } else {
+        // Normal stick steering; while locked, a gentle homing pull keeps the enemy in your path but
+        // you stay in control. Holding A while locked redirects harder toward it (the "Z+A" redirect).
+        Projectile_UpdateRotationFromStick(&beetleRot.y, &beetleRot.x, play, BEETLE_TURN_SPEED, BEETLE_PITCH_MAX);
+        if (sBeetleTarget != NULL) {
+            Beetle_HomeToTarget(aHeld ? BEETLE_TARGET_HOMING_STEP_A : BEETLE_TARGET_HOMING_STEP);
+        }
+    }
+
+    // While flying + locked, point OoT's lock-on reticle (targetCtx.targetedActor) at our enemy by
+    // driving player->focusActor. SoH runs CustomItems_Update AFTER Player_UpdateCommon, so setting it
+    // here survives into the next Target_Update (no late hook needed, unlike MM). Skijer's NEI
+    if ((sBeetleTarget != NULL) && (sBeetleTarget->update != NULL)) {
+        p->focusActor = sBeetleTarget;
+        p->zTargetActiveTimer = 15;
+    }
+
+    // A = fly faster; kamikaze always boosts to close the gap.
+    Beetle_Move((aHeld || sBeetleKamikaze) ? (BEETLE_SPEED * BEETLE_BOOST_MULT) : BEETLE_SPEED);
     Beetle_UpdateCollider(play, &beetlePos);
     Beetle_UpdateWingAnimation(&beetleWingScale, &beetleWingDir);
     Beetle_UpdateSubCam(play);
@@ -353,6 +542,34 @@ static void Beetle_StateFlying(Player* p, PlayState* play) {
     }
 
     Beetle_PlayLoopSound(&p->actor, BEETLE_SFX_FLY);
+}
+
+// Runs in the DRAW phase (from CustomItems_OverrideDraw, which draws before the HUD targeting draw).
+// Points OoT's automatic "offer" arrow (targetCtx.arrowPointedActor) at the nearest candidate while
+// flying and NOT locked — so you see which actor Z would grab, without an auto-lock. Suppressed while
+// autonomous. Skijer's NEI
+void Beetle_DrawOffer(Player* p, PlayState* play) {
+    // Draw the game's NATIVE offer arrow over the beetle's candidate while flying and NOT locked. The
+    // arrow (gZTargetArrowDL, the spinning yellow arrow) is drawn by func_8002C124 over targetCtx->unk_94
+    // — NOT over arrowPointedActor (that field only drives Navi/En_Elf, which is hidden during flight).
+    // unk_94 is normally filled by func_80032AF0 searching near LINK, which finds nothing while the
+    // beetle is off flying, so it stays NULL → no arrow. We set it here in the DRAW phase (this runs
+    // before func_8002C124, same as MM's arrowHoverActor override). It's the same world-space arrow the
+    // game uses, correctly sized. Skijer's NEI
+    if (beetleActive && (beetleState == BEETLE_STATE_FLYING) && !sBeetleAutonomous && (sBeetleTarget == NULL) &&
+        (sBeetleCandidate != NULL) && (sBeetleCandidate->update != NULL)) {
+        play->actorCtx.targetCtx.unk_94 = sBeetleCandidate;
+    }
+}
+
+// DISABLED. This drew a custom world-space gGlowCircleDL ring, which (a) rendered as an untextured
+// dark quad because that DL needs a combiner/texture setup Gfx_SetupDL_25Xlu doesn't provide, and (b)
+// ballooned when close to the camera. We now use the game's NATIVE screen-space indicators exactly like
+// MM: the lock reticle over player->focusActor (set inline in Beetle_StateFlying) and the offer arrow
+// over targetCtx.arrowPointedActor (Beetle_DrawOffer). Kept as a no-op so callers stay valid. NEI
+void Beetle_DrawTargetVfx(Player* p, PlayState* play) {
+    (void)p;
+    (void)play;
 }
 
 static void Beetle_StateReturning(Player* p, PlayState* play) {

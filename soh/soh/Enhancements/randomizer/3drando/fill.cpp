@@ -1259,6 +1259,10 @@ void VanillaFill() {
 void ClearProgress() {
 }
 
+// Fleet Ship Combo (FleetComboRando.cpp): pre-colocación cross-game de la seed combinada.
+// No-op (returns true) salvo que haya una generación combo activa. false = reintentar el fill.
+bool FleetCombo_PrePlacementHook();
+
 int Fill() {
     auto ctx = Rando::Context::GetInstance();
     int retries = 0;
@@ -1295,6 +1299,14 @@ int Fill() {
             return Rando::StaticData::RetrieveItem(item).GetItemType() == ITEMTYPE_SHOP;
         });
         StopPerformanceTimer(PT_ENTRANCE_SHUFFLE);
+
+        // Fleet Ship Combo: coloca items compartidos FC + toda la progresión de MM (vía oráculo)
+        // ANTES de las etapas nativas; el resto del fill de OoT continúa normal sobre lo que queda.
+        if (!FleetCombo_PrePlacementHook()) {
+            retries++;
+            ClearProgress();
+            continue;
+        }
 
         // ctx->showItemProgress = true;
         // Place shop items first, since a buy shield is needed to place a dungeon reward on Gohma due to access

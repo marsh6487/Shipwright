@@ -51,6 +51,7 @@ void Player_AnimPlayLoop(PlayState* play, Player* this, LinkAnimationHeader* ani
 // CUSTOM ITEMS IMPLEMENTATION
 // ============================================================================
 #include "mods/items/custom_items.h"
+#include "mods/items/custom_bottles.h" // Net spin-catch (Skijer's NEI)
 #include "mods/extended_player.h"
 #include "mods/extended_player.c"
 #include "mods/items/logic/custom_items.c"
@@ -1853,6 +1854,17 @@ void Player_PlayVoiceSfx(Player* this, u16 sfxId) {
     }
 
     if (this->actor.category == ACTORCAT_PLAYER) {
+        // Giant's Mask: deepen Link's voice (MM Audio_PlaySfx_GiantsMask). It's a
+        // worn-mask buff, not a transform, so it falls through to the vanilla Link
+        // voice here — play the same voice slot at a lowered frequency for the
+        // giant register. Skijer's NEI
+        extern s32 MmMaskWear_IsGiantMaskActive(void);
+        if (MmMaskWear_IsGiantMaskActive()) {
+            static f32 sGiantVoiceFreq = 0.6f;
+            Audio_PlaySoundGeneral((u16)(sfxId + this->ageProperties->unk_92), &this->actor.projectedPos, 4,
+                                   &sGiantVoiceFreq, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            return;
+        }
         Player_PlaySfx(this, sfxId + this->ageProperties->unk_92);
     } else {
         func_800F4190(&this->actor.projectedPos, sfxId);
@@ -2399,6 +2411,15 @@ void Player_InitExplosiveIA(PlayState* play, Player* this) {
     ExplosiveInfo* explosiveInfo;
     Actor* spawnedActor;
 
+    // NEI: Power Keg shares the Bomb slot — when keg mode is on, pull out and hold the keg instead of a
+    // bomb (spawn-as-child + carry state, then throw). Returns 1 when it took over the pull. Skijer's NEI
+    {
+        extern unsigned char PowerKeg_TryPull(PlayState * play, Player * this);
+        if (PowerKeg_TryPull(play, this)) {
+            return;
+        }
+    }
+
     if (this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) {
         Player_PutAwayHeldItem(play, this);
         return;
@@ -2685,14 +2706,25 @@ void Player_ProcessItemButtons(Player* this, PlayState* play) {
             }
         }
 
-        if (!maskOnButton && this->currentMask == PLAYER_MASK_BUNNY) {
-            maskOnButton = Player_ItemIsItemAction(gSaveContext.equips.buttonItems[1], PLAYER_IA_MM_MASK_BUNNY) ||
-                           Player_ItemIsItemAction(gSaveContext.equips.buttonItems[2], PLAYER_IA_MM_MASK_BUNNY) ||
-                           Player_ItemIsItemAction(gSaveContext.equips.buttonItems[3], PLAYER_IA_MM_MASK_BUNNY);
-            if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
-                for (int buttonIndex = 0; buttonIndex < 4; buttonIndex++) {
-                    maskOnButton |= Player_ItemIsItemAction(gSaveContext.equips.buttonItems[5 + buttonIndex],
-                                                            PLAYER_IA_MM_MASK_BUNNY);
+        // MM-counterpart masks (Bunny / Keaton / Mask of Truth) wear the OOT mask
+        // via their page-3 MM item (see Player_UseItem ITEM_MM_MASK_* branch). That
+        // item's action isn't PLAYER_IA_MASK_*, so the maskItemAction scan above
+        // misses it and would strip the mask every frame. Accept the MM item action
+        // for whichever counterpart is currently worn. Skijer's NEI
+        if (!maskOnButton) {
+            s32 mmMaskAction = (this->currentMask == PLAYER_MASK_BUNNY)    ? PLAYER_IA_MM_MASK_BUNNY
+                               : (this->currentMask == PLAYER_MASK_KEATON) ? PLAYER_IA_MM_MASK_KEATON
+                               : (this->currentMask == PLAYER_MASK_TRUTH)  ? PLAYER_IA_MM_MASK_TRUTH
+                                                                           : PLAYER_IA_NONE;
+            if (mmMaskAction != PLAYER_IA_NONE) {
+                maskOnButton = Player_ItemIsItemAction(gSaveContext.equips.buttonItems[1], mmMaskAction) ||
+                               Player_ItemIsItemAction(gSaveContext.equips.buttonItems[2], mmMaskAction) ||
+                               Player_ItemIsItemAction(gSaveContext.equips.buttonItems[3], mmMaskAction);
+                if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
+                    for (int buttonIndex = 0; buttonIndex < 4; buttonIndex++) {
+                        maskOnButton |=
+                            Player_ItemIsItemAction(gSaveContext.equips.buttonItems[5 + buttonIndex], mmMaskAction);
+                    }
                 }
             }
         }
@@ -2912,7 +2944,9 @@ s32 func_8083442C(Player* this, PlayState* play) {
                     if ((magicArrowType >= 0) && (magicArrowType <= 5)) {
                         if (GameInteractor_Should(VB_PLAYER_ARROW_MAGIC_CONSUMPTION, true, this, magicArrowType,
                                                   &arrowType)) {
-                            if (!Magic_RequestChange(play, sMagicArrowCosts[magicArrowType], MAGIC_CONSUME_NOW)) {
+                            // Magic Cape (Skijer): fire/ice/light arrows cost half.
+                            if (!Magic_RequestChange(play, MAGIC_REQ(sMagicArrowCosts[magicArrowType]),
+                                                     MAGIC_CONSUME_NOW)) {
                                 arrowType = ARROW_NORMAL;
                             }
                         }
@@ -3174,6 +3208,21 @@ int func_80834E7C(PlayState* play) {
 }
 
 s32 func_80834EB8(Player* this, PlayState* play) {
+    // Skijer's NEI switchhook — free-fire in THIRD person (Ultrahand style): never enter the
+    // bow/hookshot aim camera (the "first-person" aim). Returning 1 here is the same path
+    // Z-targeting takes, so Link fires the hook straight in his facing/camera direction with
+    // no aim-mode zoom. EXCEPTION: while the C-Up MANUAL AIM is up (item_switchhook.c) fall
+    // through so the vanilla path keeps unk_6AD = 2 / the aim camera alive. Only the Switch
+    // Hook (variant 4).
+    {
+        extern u8 Nei_ArmsHookVariant(Player* player);
+        if (Nei_ArmsHookVariant(this) == 4) {
+            extern u8 SwitchHook_IsAimingManual(void);
+            if (!SwitchHook_IsAimingManual()) {
+                return 1;
+            }
+        }
+    }
     if ((this->unk_6AD == 0) || (this->unk_6AD == 2)) {
         if (Player_IsZTargeting(this) || (Camera_CheckValidMode(Play_GetCamera(play, 0), 7) == 0)) {
             return 1;
@@ -3262,6 +3311,19 @@ s32 func_808350A4(PlayState* play, Player* this) {
 
             Player_RequestRumble(this, 150, 10, 150, 0);
         } else {
+            // Skijer's NEI switchhook — out of charges: the launch simply never happens. Bail BEFORE
+            // any state is touched (parent/heldActor stay intact), so the player just keeps holding
+            // the hook — aborting later, from the hook actor, left heldActor NULL and softlocked.
+            {
+                extern u8 Nei_ArmsHookVariant(Player* player);
+                extern u8 SwitchHook_GetCharges(void);
+
+                if ((Nei_ArmsHookVariant(this) == 4) && (SwitchHook_GetCharges() == 0)) {
+                    Audio_PlaySoundGeneral(NA_SE_SY_ERROR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                    return 0;
+                }
+            }
             Player_RequestRumble(this, 255, 20, 150, 0);
         }
 
@@ -3639,6 +3701,34 @@ s32 func_80835C08(Player* this, PlayState* play) {
     return true;
 }
 
+// Skijer's NEI: hands-free Iron Knuckle's Axe throw. Mirrors the boomerang throw upper-action
+// (func_808359FC) but WITHOUT the frame-6 spawn — the axe is spawned by the mod in the aimed
+// direction, so this only plays Link's throw animation and then hands the upper body to the
+// vanilla handsfree boomerang-out state (func_80835B60), letting Link move while the axe flies.
+static s32 Player_UpperAction_IKAxeThrow(Player* this, PlayState* play) {
+    if (LinkAnimation_Update(play, &this->upperSkelAnime)) {
+        Player_SetUpperActionFunc(this, func_80835B60);
+    }
+    return true;
+}
+
+void Player_StartIKAxeThrow(Player* this, PlayState* play) {
+    Player_SetUpperActionFunc(this, Player_UpperAction_IKAxeThrow);
+    LinkAnimation_PlayOnce(play, &this->upperSkelAnime,
+                           (this->unk_870 < 0.5f) ? &gPlayerAnim_link_boom_throwR : &gPlayerAnim_link_boom_throwL);
+}
+
+// Skijer's NEI: called when the thrown axe is caught. The boomerang catch chain
+// (func_80835B60 → func_80835C08 → func_80835800) leaves the upper-action in the RANGED-item
+// state (func_80835800), so the next C-press fires a bow draw instead of swinging the hammer.
+// Restore the melee/idle upper-action (func_8083485C) and re-assert the hammer — the same restore
+// the Deku-bubble exit (func_8083501C) uses to prevent a wrong action on the next frame.
+void Player_EndIKAxeThrow(Player* this) {
+    Player_SetUpperActionFunc(this, func_8083485C);
+    this->heldItemAction = PLAYER_IA_HAMMER;
+    this->itemAction = PLAYER_IA_HAMMER;
+}
+
 s32 Player_SetupAction(PlayState* play, Player* this, PlayerActionFunc actionFunc, s32 flags) {
     if (actionFunc == this->actionFunc) {
         return 0;
@@ -3754,6 +3844,44 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
 
     itemAction = Player_ItemToItemAction(item);
 
+    // Skijer's NEI — using an MM trade-quest item (Moon's Tear, Title Deeds, Room Key, letters): present
+    // it in hand like an adult trade item, but pop the "time and place" gag message instead of any real
+    // effect. (The OoT trade items and the Pendant keep their own behavior.)
+    {
+        extern unsigned char TradeAdult_IsMmTradeUseItem(s32 item);
+        extern void TradeAdult_PresentAndMessage(PlayState * play, Player * player, s32 item);
+        if (TradeAdult_IsMmTradeUseItem(item)) {
+            TradeAdult_PresentAndMessage(play, this, item);
+            return;
+        }
+    }
+
+    // Skijer's NEI — MM bottle-content USE behaviors (decided in mods/items/mm_bottles_behavior.cpp):
+    // a content with no OoT function presents the bottle + "time and place" gag (the bottle STAYS
+    // filled); Hot Spring Water acts as Blue Fire; NATIVE contents fall through to their own flow.
+    {
+        extern void TradeAdult_PresentAndMessage(PlayState * play, Player * player, s32 item);
+        extern int MmBottle_FromItemId(unsigned short ootItemId);       // MmBottleContent
+        extern int MmBottle_GetUseBehavior(int content);                // MmBottleUseBehavior
+        int mmBottleContent = MmBottle_FromItemId((unsigned short)item);
+        if (mmBottleContent >= 0) {
+            int mmBottleBeh = MmBottle_GetUseBehavior(mmBottleContent);
+            if (mmBottleBeh == 0 /* MM_BOTTLE_USE_CANT_USE */) {
+                TradeAdult_PresentAndMessage(play, this, item);
+                return;
+            }
+            if (mmBottleBeh == 1 /* MM_BOTTLE_USE_BLUE_FIRE */) {
+                item = ITEM_BLUE_FIRE; // pour as Blue Fire (the vanilla flow empties the used slot)
+                itemAction = Player_ItemToItemAction(item);
+            }
+            // MM_BOTTLE_USE_NATIVE / CUSTOM: fall through to the vanilla dispatch below.
+        }
+    }
+
+    // Power Keg shares the Bomb slot: when its mode is selected (kaleido wheel) it is pulled out and held
+    // exactly like a bomb. That is handled downstream in Player_InitExplosiveIA (PowerKeg_TryPull), so the
+    // normal bomb flow runs here unchanged. Skijer's NEI
+
     if (((this->heldItemAction == this->itemAction) &&
          (!(this->stateFlags1 & PLAYER_STATE1_SHIELDING) || (Player_ActionToMeleeWeapon(itemAction) != 0) ||
           (itemAction == PLAYER_IA_NONE))) ||
@@ -3774,16 +3902,27 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
                 // Also prevent explosives from being used if there are 3 or more active (outside of bombchu bowling)
                 Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
             } else if (itemAction == PLAYER_IA_LENS_OF_TRUTH) {
-                // Handle Lens of Truth
-                if (Magic_RequestChange(play, 0, MAGIC_CONSUME_LENS)) {
-                    if (play->actorCtx.lensActive) {
-                        Actor_DisableLens(play);
-                    } else {
-                        play->actorCtx.lensActive = true;
-                    }
-                    Sfx_PlaySfxCentered((play->actorCtx.lensActive) ? NA_SE_SY_GLASSMODE_ON : NA_SE_SY_GLASSMODE_OFF);
+                // Pictograph Box shares the Lens slot (Gust-Jar-element style). When its mode is
+                // selected, the Lens C-button enters the photo viewfinder instead of the Lens, and
+                // the Lens itself does NOT activate. Skijer's NEI
+                extern unsigned char Picto_IsOwned(void);
+                extern unsigned char Picto_IsOnLensActive(void);
+                extern void Picto_EnterAimMode(PlayState * play);
+                if (Picto_IsOwned() && Picto_IsOnLensActive()) {
+                    Picto_EnterAimMode(play);
                 } else {
-                    Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
+                    // Handle Lens of Truth
+                    if (Magic_RequestChange(play, 0, MAGIC_CONSUME_LENS)) {
+                        if (play->actorCtx.lensActive) {
+                            Actor_DisableLens(play);
+                        } else {
+                            play->actorCtx.lensActive = true;
+                        }
+                        Sfx_PlaySfxCentered((play->actorCtx.lensActive) ? NA_SE_SY_GLASSMODE_ON
+                                                                        : NA_SE_SY_GLASSMODE_OFF);
+                    } else {
+                        Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
+                    }
                 }
             } else if (itemAction == PLAYER_IA_DEKU_NUT) {
                 // Handle Deku Nuts
@@ -3798,7 +3937,9 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
                 if (((itemAction == PLAYER_IA_FARORES_WIND) && (gSaveContext.respawn[RESPAWN_MODE_TOP].data > 0) &&
                      !isMedallionSpell) ||
                     ((gSaveContext.magicCapacity != 0) && (gSaveContext.magicState == MAGIC_STATE_IDLE) &&
-                     (gSaveContext.magic >= sMagicSpellCosts[temp]))) {
+                     // Magic Cape (Skijer): castable with HALF the magic — matches the halved consume
+                     // in func_8083AF44 (MAGIC_REQ(sMagicSpellCosts[...])).
+                     (gSaveContext.magic >= MAGIC_REQ(sMagicSpellCosts[temp])))) {
                     this->itemAction = itemAction;
                     this->unk_6AD = 4;
                     sSw97SpellActive = isMedallionSpell;
@@ -4441,15 +4582,10 @@ s32 Player_GetMovementSpeedAndYaw(Player* this, f32* outSpeedTarget, s16* outYaw
     } else {
         *outYawTarget += Camera_GetInputDirYaw(GET_ACTIVE_CAM(play));
 
-        // Fierce Deity and Pikachu: 1.5x speed target (from MM z_player.c:5116-5118)
-        // Applied here (inside Player_GetMovementSpeedAndYaw) so it affects ALL actions:
-        // walking, running, swimming, midair — same as MM's Player_CalcSpeedAndYawFromControlStick.
-        // Use IsTransformedAny() because FD skin mode returns false for IsTransformed().
+        // Fierce Deity / Pikachu: 1.5x speed target, affecting ALL actions (walk/run/swim/midair). Skijer's NEI
         if (TransformMasks_IsTransformedAny()) {
-            s32 form = (s32)MmForm_GetCurrentForm();
-            if (form == 0 /* FIERCE_DEITY */ || form == 5 /* PIKACHU */) {
-                *outSpeedTarget *= 1.5f;
-            }
+            extern f32 MmForm_GetSpeedMultiplier(void);
+            *outSpeedTarget *= MmForm_GetSpeedMultiplier();
         }
 
         return true;
@@ -4809,6 +4945,11 @@ s32 func_80837818(Player* this) {
 }
 
 void func_80837918(Player* this, s32 quadIndex, u32 dmgFlags) {
+    // Giant's Mask: Link's strikes land as hammer blows (MM behavior). Skijer's NEI
+    extern s32 MmMaskWear_IsGiantMaskActive(void);
+    if (MmMaskWear_IsGiantMaskActive()) {
+        dmgFlags = DMG_HAMMER_SWING;
+    }
     this->meleeWeaponQuads[quadIndex].info.toucher.dmgFlags = dmgFlags;
 
     if (dmgFlags == 2) {
@@ -4889,6 +5030,15 @@ void func_80837948(PlayState* play, Player* this, s32 arg2) {
         dmgFlags = D_80854488[temp][0];
     }
 
+    // NEI Gilded Sword: the Kokiri Sword + Gilded keeps Master-Sword reach/trail (set in
+    // Player_GetMeleeWeaponHeld) but hits as hard as the Biggoron's Sword — swap to the
+    // Biggoron damage-flag row (index 2). Razor (no Gilded) keeps Master damage.
+    if (this->heldItemAction == PLAYER_IA_SWORD_KOKIRI && WeaponUpgrade_HasGilded()) {
+        dmgFlags = ((arg2 >= PLAYER_MWA_FLIPSLASH_START) && (arg2 <= PLAYER_MWA_JUMPSLASH_FINISH))
+                       ? D_80854488[2][1]
+                       : D_80854488[2][0];
+    }
+
     func_80837918(this, 0, dmgFlags);
     func_80837918(this, 1, dmgFlags);
 
@@ -4941,6 +5091,49 @@ void func_80837948(PlayState* play, Player* this, s32 arg2) {
             if (gSaveContext.magic < 0) {
                 gSaveContext.magic = 0;
             }
+        }
+    }
+
+    // NEI Real Master Sword: at FULL health a Master Sword swing fires the same FD thunder
+    // beam (homes on the lock-on / nearest enemy). Independent of FD form; no magic cost —
+    // it's a full-health perk, mirroring the classic full-HP sword beam.
+    // ONLY the REAL Master Sword: the IA alone isn't enough — the Net aliases to the Master IA
+    // (heldItemId == ITEM_NET), and other swords can end up with this IA through NEI forcing paths —
+    // so also require the actual Master Sword on B. Skijer's NEI
+    if (this->heldItemAction == PLAYER_IA_SWORD_MASTER && (this->heldItemId != ITEM_NET) &&
+        (gSaveContext.equips.buttonItems[0] == ITEM_SWORD_MASTER) && WeaponUpgrade_HasTrueMaster() &&
+        gSaveContext.health >= gSaveContext.healthCapacity) {
+        Actor* msTarget =
+            (this->focusActor != NULL) ? this->focusActor : play->actorCtx.targetCtx.arrowPointedActor;
+        s16 msBeamPitch;
+        if (msTarget == NULL) {
+            s32 msCat;
+            f32 msBestDist = 800.0f;
+            for (msCat = 0; msCat < 2; msCat++) {
+                s32 msCatId = (msCat == 0) ? ACTORCAT_ENEMY : ACTORCAT_BOSS;
+                Actor* msActor = play->actorCtx.actorLists[msCatId].head;
+                while (msActor != NULL) {
+                    if (msActor->update != NULL) {
+                        f32 msDist =
+                            Math_Vec3f_DistXYZ(&this->bodyPartsPos[PLAYER_BODYPART_WAIST], &msActor->world.pos);
+                        if (msDist < msBestDist) {
+                            msBestDist = msDist;
+                            msTarget = msActor;
+                        }
+                    }
+                    msActor = msActor->next;
+                }
+            }
+        }
+        msBeamPitch = (msTarget != NULL)
+                          ? Math_Vec3f_Pitch(&this->bodyPartsPos[PLAYER_BODYPART_WAIST], &msTarget->focus.pos)
+                          : 0;
+        Actor* msBeam =
+            Actor_Spawn(&play->actorCtx, play, ACTOR_EN_M_THUNDER, this->bodyPartsPos[PLAYER_BODYPART_WAIST].x,
+                        this->bodyPartsPos[PLAYER_BODYPART_WAIST].y, this->bodyPartsPos[PLAYER_BODYPART_WAIST].z,
+                        msBeamPitch, 0, 0, 0x80);
+        if (msBeam != NULL) {
+            ((EnMThunder*)msBeam)->homingTarget = msTarget;
         }
     }
 }
@@ -4999,6 +5192,12 @@ s32 func_80837B18_modified(PlayState* play, Player* this, s32 damage, u8 modifie
     // compounding bug.
     if (modifiedDamage < 0) {
         f32 mult = MmForm_GetIncomingDamageMult();
+        // Giant's Mask is a worn-mask buff (not a form), so it isn't covered by
+        // MmForm_GetIncomingDamageMult — apply its 1/4 damage here (MM z_player.c:5841). Skijer's NEI
+        extern s32 MmMaskWear_IsGiantMaskActive(void);
+        if (MmMaskWear_IsGiantMaskActive()) {
+            mult *= 0.25f;
+        }
         if (mult != 1.0f) {
             modifiedDamage = (s32)((f32)modifiedDamage * mult - 0.5f);
         }
@@ -5053,6 +5252,13 @@ void func_80837C0C(PlayState* play, Player* this, s32 damageResponseType, f32 sp
     }
 
     Player_SetIntangibility(this, invincibilityTimer);
+
+    // Snowquill Tunic (Skijer 2026-07-16): total ice/freeze immunity. Downgrade the freeze response to
+    // "none" so Link never enters the frozen state — covers enemy ice hits, rando ice traps, and the
+    // raw GameInteractor FreezePlayer, INCLUDING the freeze animation. Single gate for everything.
+    if ((damageResponseType == PLAYER_HIT_RESPONSE_ICE_TRAP) && ExtEquip_IsSnowquillTunic()) {
+        damageResponseType = PLAYER_HIT_RESPONSE_NONE;
+    }
 
     if (damageResponseType == PLAYER_HIT_RESPONSE_ICE_TRAP) {
         Player_SetupAction(play, this, Player_Action_8084FB10, 0);
@@ -6105,11 +6311,18 @@ void func_8083A0F4(PlayState* play, Player* this) {
         } else {
             LinkAnimationHeader* anim;
 
+            // Giant's Mask: max body strength, so the heavy silver-rock lift uses
+            // the light/fast one-handed carry like the small rocks instead of the
+            // slow overhead silver carry. Skijer's NEI
+            extern s32 MmMaskWear_IsGiantMaskActive(void);
+            u8 giantLightLift = MmMaskWear_IsGiantMaskActive();
+
             if (interactActorId == ACTOR_BG_HEAVY_BLOCK) {
                 Player_SetupAction(play, this, Player_Action_80846120, 0);
                 this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
                 anim = &gPlayerAnim_link_normal_heavy_carry;
-            } else if ((interactActorId == ACTOR_EN_ISHI) && ((interactRangeActor->params & 0xF) == 1)) {
+            } else if ((interactActorId == ACTOR_EN_ISHI) && ((interactRangeActor->params & 0xF) == 1) &&
+                       !giantLightLift) {
                 Player_SetupAction(play, this, Player_Action_80846260, 0);
                 anim = &gPlayerAnim_link_silver_carry;
             } else if (GameInteractor_Should(VB_PREVENT_STRENGTH, ((interactActorId == ACTOR_EN_BOMBF) ||
@@ -6474,7 +6687,9 @@ void func_8083AF44(PlayState* play, Player* this, s32 magicSpell) {
     //! When `MAGIC_STATE_CONSUME_SETUP` is set in `Player_Action_808507F4`, magic will eventually be
     //! consumed to a stale target value. If that stale target value is higher than the current
     //! magic value, it will be consumed to zero.
-    Magic_RequestChange(play, sMagicSpellCosts[magicSpell], MAGIC_CONSUME_WAIT_PREVIEW);
+    // Magic Cape (Skijer): Din's/Farore's/Nayru's (+ SW97 medallions) cost half. Matches the gate at
+    // ~3941 so the spell is castable AND consumes at the halved cost.
+    Magic_RequestChange(play, MAGIC_REQ(sMagicSpellCosts[magicSpell]), MAGIC_CONSUME_WAIT_PREVIEW);
 
     u8 isFastFarores = CVarGetInteger(CVAR_ENHANCEMENT("FastFarores"), 0) && this->itemAction == PLAYER_IA_FARORES_WIND;
 
@@ -7982,12 +8197,10 @@ void func_8083DFE0(Player* this, f32* arg1, s16* arg2) {
             maxSpeed *= 1.5f;
         }
 
-        // Fierce Deity and Pikachu: 1.5x jump velocity (matches MM FD speed boost)
+        // Fierce Deity / Pikachu: 1.5x jump velocity. Skijer's NEI
         if (TransformMasks_IsTransformedAny()) {
-            s32 form = (s32)MmForm_GetCurrentForm();
-            if (form == 0 /* FIERCE_DEITY */ || form == 5 /* PIKACHU */) {
-                maxSpeed *= 1.5f;
-            }
+            extern f32 MmForm_GetSpeedMultiplier(void);
+            maxSpeed *= MmForm_GetSpeedMultiplier();
         }
 
         if (CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f) != 1.0f &&
@@ -13282,6 +13495,13 @@ void Player_Update(Actor* thisx, PlayState* play) {
     Input sp44;
     Actor* dog;
 
+    // Skijer's NEI "Pause Play": after the MM quest page closes itself for a song, this pulls out
+    // the ocarina and instant-plays it in-world (machine in z_kaleido_collect.c; idle no-op).
+    {
+        extern void NeiPausePlay_Update(PlayState* play, Player* player);
+        NeiPausePlay_Update(play, this);
+    }
+
     if (Player_UpdateNoclip(this, play)) {
         if (gSaveContext.dogParams < 0) {
             // Disable object dependency to prevent losing dog in scenes other than market
@@ -13370,18 +13590,9 @@ void Player_Update(Actor* thisx, PlayState* play) {
             }
         }
 
-        // SM64: tick the post-scene-transition suspend countdown. Must run
-        // BEFORE any IsActive / IsReady check so a scene change mutes Mario
-        // for ~30 frames before we re-engage — forces the Reset→Init cycle
-        // that reliably gets actors interacting with Mario afterwards.
-        Sm64Mario_TickTransitionSuspend(play, this);
-
-        // SM64: Mario Mask C-Down lock + toggle. When gSm64MarioMaskForce is
-        // set, ITEM_MARIO_MASK gets stamped onto C-Down each frame and
-        // pressing C-Down toggles gSm64Mario. Runs BEFORE Sm64Mario_HandleItems
-        // (called inside Sm64Mario_Update later) so the press is consumed
-        // before the item dispatcher can reach the mask slot.
-        Sm64MarioMask_ForceAndToggle(play, this);
+        // Skijer's NEI: SM64 pieces 1-2 (TickTransitionSuspend + mask force/toggle),
+        // moved to customequipment.cpp. Positioned BEFORE any IsActive/IsReady check.
+        GameInteractor_Should(VB_SM64_PLAYER_PRE_ACTION, true, play, this, &sp44);
 
         // SM64: Block OOT actionFunc only when Mario is actually driving Link
         // (IsReady = CVAR on AND sSm64MarioId >= 0). Yield (don't pause) when
@@ -13445,37 +13656,10 @@ void Player_Update(Actor* thisx, PlayState* play) {
             this->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
         }
 
-        // SM64: Steal any enemy/hazard damage BEFORE Player_UpdateCommon runs.
-        // Clears AC_HIT + colChkInfo.damage so vanilla's func_80837C0C never
-        // touches Link's health, state, or velocity — the damage is forwarded
-        // to Mario's libsm64 knockback animation instead.
-        Sm64Mario_InterceptDamage(play, this);
-
-        // Pikachu: read the damage TYPE (acHitEffect: 1=fire 2=ice 3=electric)
-        // before Player_UpdateCommon consumes it, to drive the Pokemon-style
-        // status chip on the Pikachu HUD (burned/freeze/paralyzed). Cosmetic
-        // only — never scrubs the hit.
-        {
-            extern u8 MmForm_IsPikachuActive(void);
-            extern void PikachuForm_InterceptStatus(PlayState* play, Player* player);
-            if (MmForm_IsPikachuActive()) {
-                PikachuForm_InterceptStatus(play, this);
-            }
-        }
-
-        // SM64 Mario: swap A<->B for OOT's action system only (this sp44 copy).
-        // OOT's A is the contextual button (talk / check / open / lift), so the
-        // swap makes those fire on real-B. libsm64 reads the REAL buttons from
-        // play->state.input[0] (Sm64Mario_Update), so Mario still jumps on A and
-        // punches on B. Net: B = punch + contextual interact, A = pure jump. The
-        // interaction handlers above (~13050) read sControlInput = this copy.
-        if (Sm64Mario_IsReady()) {
-#define SM64_SWAP_AB(b) (((b) & ~(BTN_A | BTN_B)) | (((b) & BTN_A) ? BTN_B : 0) | (((b) & BTN_B) ? BTN_A : 0))
-            sp44.cur.button = SM64_SWAP_AB(sp44.cur.button);
-            sp44.press.button = SM64_SWAP_AB(sp44.press.button);
-            sp44.rel.button = SM64_SWAP_AB(sp44.rel.button);
-#undef SM64_SWAP_AB
-        }
+        // Skijer's NEI: SM64 pieces 5-7 (InterceptDamage + Pikachu status read +
+        // A<->B swap on sp44), moved to customequipment.cpp. Positioned on the exact
+        // sp44 passed into Player_UpdateCommon, which consumes the result this frame.
+        GameInteractor_Should(VB_SM64_PLAYER_PRE_UPDATE_COMMON, true, play, this, &sp44);
 
         Player_UpdateCommon(this, play, &sp44);
 
@@ -13507,6 +13691,15 @@ void Player_Update(Actor* thisx, PlayState* play) {
         // CUSTOM ITEMS: Update standalone system (completely separate from vanilla)
         CustomItems_Update(this, play);
 
+        // PICTOGRAPH BOX: process the deferred photo capture state machine. Skijer's NEI
+        Picto_Update(play);
+
+        // POWER KEG: tick the dropped keg's fuse; explode when it runs out. Skijer's NEI
+        PowerKeg_Update(play);
+
+        // MM TRADE ITEMS: hold the "present" pose + release when the gag textbox closes. Skijer's NEI
+        TradeAdult_PresentUpdate(play);
+
         // EXTENDED EQUIPMENT: Update cooldown timer + behavior dispatch
         ExtEquip_Update();
         ExtEquip_UpdateBehavior(this, play);
@@ -13536,9 +13729,7 @@ void Player_Update(Actor* thisx, PlayState* play) {
     // their own update loop. This unconditional reset to 0.01f during cutscenes/ladders/doors/
     // crawlspaces was visibly shrinking FD back to Link size whenever one of those states fired.
     // FD skin returns false from TransformMasks_IsTransformed() (OOT handles its gameplay), so it
-    // needs its own explicit exemption here.
-    extern u8 TransformMasks_IsTransformed(void);
-    extern u8 TransformMasks_IsFDSkinMode(void);
+    // needs its own explicit exemption here. (Both decls come from transformation_masks.h.)
     // Minish tiny mode also owns actor.scale (0.001, re-applied every frame in
     // MinishTiny_Update). Without this exemption, brushing a crawlspace / a brief
     // cutscene flag fires the reset → tiny Link snaps back to 0.01 ("giant") and
@@ -13943,6 +14134,9 @@ void Player_Draw(Actor* thisx, PlayState* play2) {
         // CUSTOM ITEMS: Draw all
         CustomItems_OverrideDraw(this, play);
 
+        // MM TRADE ITEMS: draw the presented item's MM 3D model in Link's hand. Skijer's NEI
+        TradeAdult_PresentDraw(play);
+
         // EXTENDED EQUIPMENT: Draw barriers, auras, etc.
         ExtEquip_DrawBehavior(this, play);
 
@@ -13963,6 +14157,18 @@ void Player_Draw(Actor* thisx, PlayState* play2) {
             GaroForm_TryDrawSmoothSkin(play, this);
         }
         O2rLoader_RestoreSkeleton(this);
+    }
+
+    // PICTOGRAPH BOX: capture the framebuffer + draw the viewfinder/photo, BOTH on OVERLAY. OVERLAY is
+    // processed AFTER all of POLY_OPA/XLU, so the captured frame includes EVERY actor — enemies/NPCs are
+    // drawn after the player in the category order, so capturing on POLY_OPA here would miss them (only
+    // the scene showed up). The readback is emitted before we draw the viewfinder/photo, so those aren't
+    // in the photo. No-op when idle. Skijer's NEI
+    {
+        Gfx* pictoOvl = OVERLAY_DISP;
+        Picto_EmitCapture(play, &pictoOvl);
+        Picto_DrawPhoto(play, &pictoOvl);
+        OVERLAY_DISP = pictoOvl;
     }
 
     CLOSE_DISPS(play->state.gfxCtx);
@@ -14472,8 +14678,11 @@ void Player_Action_8084B898(Player* this, PlayState* play) {
     }
 
     if (this->stateFlags2 & PLAYER_STATE2_MOVING_DYNAPOLY) {
-        func_8084B840(play, this, 2.0f);
-        this->linearVelocity = 2.0f;
+        // Giant's Mask pushes blocks at double speed. Skijer's NEI
+        extern s32 MmMaskWear_IsGiantMaskActive(void);
+        f32 pushSpeed = MmMaskWear_IsGiantMaskActive() ? 4.0f : 2.0f;
+        func_8084B840(play, this, pushSpeed);
+        this->linearVelocity = pushSpeed;
     }
 }
 
@@ -14533,7 +14742,9 @@ void Player_Action_8084B9E4(Player* this, PlayState* play) {
             sp44.z = this->actor.world.pos.z;
             sp44.y = sp5C.y;
             if (!BgCheck_EntityLineTest1(&play->colCtx, &sp44, &sp5C, &sp38, &sp54, true, false, false, true, &sp50)) {
-                func_8084B840(play, this, -2.0f);
+                // Giant's Mask pulls blocks at double speed. Skijer's NEI
+                extern s32 MmMaskWear_IsGiantMaskActive(void);
+                func_8084B840(play, this, MmMaskWear_IsGiantMaskActive() ? -4.0f : -2.0f);
                 return;
             }
         }
@@ -16574,6 +16785,16 @@ s32 Player_ActionHandler_7(Player* this, PlayState* play) {
         if (!gerudoShielding) {
             return 0;
         }
+    }
+
+    // Skijer's NEI: while the thrown Iron Knuckle's Axe is in the air, lock out the hammer swing —
+    // you can't use it until it returns, exactly like the boomerang can't be re-thrown mid-flight.
+    // func_80834F2C gates the C-button item path on BOOMERANG_THROWN; this melee path doesn't, so
+    // gate it here. Scoped to hammer + BOOMERANG_THROWN (only the axe throw), so the child's sword
+    // swing while a real boomerang is out is unaffected.
+    if (WeaponUpgrade_HasHammerAxe() && (this->heldItemAction == PLAYER_IA_HAMMER) &&
+        (this->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN)) {
+        return 0;
     }
 
     if (func_8083C6B8(play, this) == 0) {

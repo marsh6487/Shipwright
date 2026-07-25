@@ -55,6 +55,10 @@
 #include "item_bombarrows.c"
 #include "twilight_upgrade.c"
 #include "weapon_upgrades.c"
+#include "snap.c"      // Skijer's NEI: Pictograph Box engine (MM-format flags for 2Ship)
+#include "picto_box.c" // Skijer's NEI: Pictograph Box image pipeline + capture
+#include "power_keg.c" // Skijer's NEI: Power Keg (Bomb-slot wheel, form/strength gated)
+#include "trade_items.c" // Skijer's NEI: MM adult trade-quest items (SLOT_TRADE_ADULT 2D-grid wheel)
 #include "item_gustjar.c"
 #include "item_beetle.c"
 #include "item_dominionrod.c"

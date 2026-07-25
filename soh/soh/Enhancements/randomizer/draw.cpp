@@ -1,5 +1,6 @@
 #include "draw.h"
 #include "soh/OTRGlobals.h"
+#include <spdlog/spdlog.h> // SPDLOG_INFO (MmSoul debug instrumentation)
 #include "soh/cvar_prefixes.h"
 #include "randomizerTypes.h"
 #include "soh_assets.h"
@@ -33,6 +34,8 @@ extern "C" {
 #include "objects/object_mamenoki/object_mamenoki.h"
 #include "objects/object_mo/object_mo.h"
 #include "objects/object_mori_objects/object_mori_objects.h"
+#include "objects/object_st/object_st.h" // native token DLs (MM GS tokens draw with OoT's own model)
+#include "objects/object_fr/object_fr.h" // native frog skeleton (MM healed frogs)
 #include "objects/object_sst/object_sst.h"
 #include "overlays/actors/ovl_Boss_Goma/z_boss_goma.h"
 #include "objects/object_tw/object_tw.h"
@@ -43,26 +46,17 @@ extern "C" {
 #include "objects/object_tk/object_tk.h"
 
 #include "mods/mm_sources/objects/object_gi_masks_all.h"
+#include "mods/mm_sources/objects/object_mm_rando_items.h"
 #include "mods/mm_sources/objects/object_gi_bottle_21.h"
 #include "mods/transformation_masks/assets/mm_asset_loader.h"
 
 #include "objects/object_poh/object_poh.h"
-#include "mods/items/objects/deku_leaf_giveDL/header.h"
-#include "mods/items/objects/deku_leaf_giveDL/model.inc.c"
 #include "mods/items/objects/ball_and_chainDL/header.h"
 #include "mods/items/objects/ball_and_chainDL/model.inc.c"
-#include "mods/items/objects/spinner_giveDL/header.h"
-#include "mods/items/objects/spinner_giveDL/model.inc.c"
 #include "mods/items/objects/beetle_giveDL/header.h"
 #include "mods/items/objects/beetle_giveDL/model.inc.c"
-#include "mods/items/objects/mogma_mittsDL/header.h"
-#include "mods/items/objects/mogma_mittsDL/model.inc.c"
 #include "mods/items/objects/magic_spell_giveDL/header.h"
 #include "mods/items/objects/magic_spell_giveDL/model.inc.c"
-#include "mods/items/objects/bombarrows_giveDL/header.h"
-#include "mods/items/objects/bombarrows_giveDL/model.inc.c"
-#include "mods/items/objects/time_gate_giveDL/header.h"
-#include "mods/items/objects/time_gate_giveDL/model.inc.c"
 #include "mods/items/objects/fire_rodDL/header.h"
 #include "mods/items/objects/fire_rodDL/model.inc.c"
 #include "mods/items/objects/ice_rodDL/header.h"
@@ -71,18 +65,17 @@ extern "C" {
 #include "mods/items/objects/light_rodDL/Cylinder_002.c"
 #include "mods/items/objects/shovel_giveDL/header.h"
 #include "mods/items/objects/shovel_giveDL/model.inc.c"
-#include "mods/items/objects/pokeballDL/ItmPokeBall.h"
-#include "mods/items/objects/pokeballDL/ItmPokeBall.c"
 
 // Vanilla GI equipment models (for ext equipment recolor draws)
 #include "objects/object_gi_sword_1/object_gi_sword_1.h"
+#include "objects/object_gi_hammer/object_gi_hammer.h"
+#include "objects/object_gi_longsword/object_gi_longsword.h"
 #include "objects/object_gi_shield_2/object_gi_shield_2.h"
 #include "objects/object_gi_clothes/object_gi_clothes.h"
 #include "objects/object_gi_hoverboots/object_gi_hoverboots.h"
 
 // Extended equipment models (DLs already compiled in equip_ikaxe.c / equip_breastplate.c)
 #include "mods/equipment/objects/ikaxe_DL/header.h"
-#include "mods/equipment/objects/breastplate_DL/header.h"
 
 extern PlayState* gPlayState;
 extern SaveContext gSaveContext;
@@ -1509,16 +1502,8 @@ Gfx gRandoRocsfeatherDL[] = {
         gsSPEndDisplayList(),                                                                                    \
     };
 
-Gfx gRandoDekuLeafDL[] = {
-    gsSPDisplayList(g_dekuleaf_dl),
-    gsSPEndDisplayList(),
-};
 Gfx gRandoBallandChainDL[] = {
     gsSPDisplayList(g_ball_and_chain_dl),
-    gsSPEndDisplayList(),
-};
-Gfx gRandoSpinnerDL[] = {
-    gsSPDisplayList(g_spinner_dl),
     gsSPEndDisplayList(),
 };
 Gfx gRandoBeetleDL[] = {
@@ -1528,10 +1513,6 @@ Gfx gRandoBeetleDL[] = {
 // Cane of Somaria / Cane of Byrna GetItem models now live in soh.o2r
 // (objects/object_somaria/g_somaria_cane_give_dl + g_byrna_cane_give_dl) and are
 // drawn directly via (Gfx*)gSomariaCaneGiveDL / (Gfx*)gByrnaCaneGiveDL.
-Gfx gRandoMogmamittsDL[] = {
-    gsSPDisplayList(gMogmaMittsGiveDL),
-    gsSPEndDisplayList(),
-};
 Gfx gRandoHyliagraceDL[] = {
     gsSPDisplayList(gHyliaGraceGiveDL),
     gsSPEndDisplayList(),
@@ -1542,14 +1523,6 @@ Gfx gRandoZonaipermafrostDL[] = {
 };
 Gfx gRandoDemisedestructionDL[] = {
     gsSPDisplayList(gDemiseDestructionGiveDL),
-    gsSPEndDisplayList(),
-};
-Gfx gRandoBombarrowsDL[] = {
-    gsSPDisplayList(gBombarrowsGiveDL),
-    gsSPEndDisplayList(),
-};
-Gfx gRandoTimegateDL[] = {
-    gsSPDisplayList(g_timegate_dl),
     gsSPEndDisplayList(),
 };
 Gfx gRandoFirerodDL[] = {
@@ -1631,7 +1604,7 @@ void Randomizer_DrawWhip(PlayState* play, GetItemEntry* getItemEntry) {
 }
 
 void Randomizer_DrawSpinner(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, gRandoSpinnerDL, 0.3f);
+    DrawCustomItemDiamond(play, (Gfx*)gNeiSpinnerDL, 0.3f);
 }
 
 void Randomizer_DrawBombArrows(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1647,7 +1620,7 @@ void Randomizer_DrawBombArrows(PlayState* play, GetItemEntry* getItemEntry) {
 
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, gRandoBombarrowsDL);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gNeiBombarrowsDL);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -1665,7 +1638,7 @@ void Randomizer_DrawLightRod(PlayState* play, GetItemEntry* getItemEntry) {
 }
 
 void Randomizer_DrawDekuLeaf(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, gRandoDekuLeafDL, 0.5f);
+    DrawCustomItemDiamond(play, (Gfx*)gNeiDekuLeafDL, 0.5f);
 }
 
 void Randomizer_DrawSwitchHook(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1673,7 +1646,7 @@ void Randomizer_DrawSwitchHook(PlayState* play, GetItemEntry* getItemEntry) {
 }
 
 void Randomizer_DrawMogmaMitts(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, gRandoMogmamittsDL, 0.5f);
+    DrawCustomItemDiamond(play, (Gfx*)gNeiMogmaMittsDL, 0.5f);
 }
 
 void Randomizer_DrawGustJar(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1693,7 +1666,7 @@ void Randomizer_DrawDominionRod(PlayState* play, GetItemEntry* getItemEntry) {
 }
 
 void Randomizer_DrawTimeGate(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, gRandoTimegateDL, 0.5f);
+    DrawCustomItemDiamond(play, (Gfx*)gNeiTimeGateDL, 0.5f);
 }
 
 void Randomizer_DrawDesireSensor(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1741,11 +1714,39 @@ void Randomizer_DrawCryonis(PlayState* play, GetItemEntry* getItemEntry) {
 void Randomizer_DrawPokeball(PlayState* play, GetItemEntry* getItemEntry) {
     // Vtx range is ±170 units (cull box), so model is ~340 native units across.
     // Get-item cylinder is ~60 units, so 60/340 ≈ 0.18 fits.
-    DrawCustomItemDiamond(play, ItmPokeBall_opaque_dl, 0.18f);
+    DrawCustomItemDiamond(play, (Gfx*)gNeiPokeballDL, 0.18f);
 }
 
 void Randomizer_DrawMinishCap(PlayState* play, GetItemEntry* getItemEntry) {
     DrawCustomItemDiamond(play, (Gfx*)gNeiMinishCapDL, 0.5f);
+}
+
+// Mario Mask — the mask the MM decomp XML literally labels "Mario Mask": mask_03
+// on the Happy Mask Salesman's backpack. All ten backpack masks live inline inside
+// one display list (gHappyMaskSalesmanBackpackDL), so object_nei_mario_mask/ carries
+// that chunk plus its own copy of the CI8 texture, the palette and the 12 verts —
+// self-contained like the other custom get-item models, no mm.o2r needed.
+// Verts are recentred on the mask (they originally sat ~2300 units off-origin,
+// where it hangs on the backpack) and span 1564 units, so 60/1564 ≈ 0.038.
+//
+// Two fixes over the generic helper: the plate is modelled lying flat (it hangs
+// facing up off the backpack), so tilt it upright to face the camera; and it is a
+// single-sided plate, so culling is disabled or it vanishes for half of the spin.
+void Randomizer_DrawMarioMask(PlayState* play, GetItemEntry* getItemEntry) {
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_Scale(0.038f, 0.038f, 0.038f, MTXMODE_APPLY);
+    Matrix_RotateX(-M_PIf / 2.0f, MTXMODE_APPLY);
+    Matrix_RotateY(play->gameplayFrames * 0x2 * 0.01f, MTXMODE_APPLY);
+
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPClearGeometryMode(POLY_OPA_DISP++, G_CULL_BOTH);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gNeiMarioMaskDL);
+    gSPSetGeometryMode(POLY_OPA_DISP++, G_CULL_BACK);
+
+    CLOSE_DISPS(play->state.gfxCtx);
 }
 
 // =============================================================================
@@ -1757,43 +1758,63 @@ void Randomizer_DrawExtCaneOfByrna(PlayState* play, GetItemEntry* getItemEntry) 
     DrawCustomItemDiamond(play, (Gfx*)gByrnaCaneGiveDL, 0.25f);
 }
 
+void Randomizer_DrawNet(PlayState* play, GetItemEntry* getItemEntry) {
+    // Bottle Randomizer Net (RG_NET) — the soh.o2r held model (object_nei_net). Opa DL is the
+    // handle/rim/wrap; Xlu DL is the semitransparent white netting, so it needs the XLU buffer
+    // (a plain DrawCustomItemDiamond would drop it). Model spans ~70 units grip->hoop, so a small
+    // scale keeps it in get-item presentation range. Same rotation as DrawCustomItemDiamond.
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Matrix_Scale(0.3f, 0.3f, 0.3f, MTXMODE_APPLY);
+    s16 netRotation = play->gameplayFrames * 0x2;
+    Matrix_RotateY(netRotation * 0.01f, MTXMODE_APPLY);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gNeiNetDL);
+
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gNeiNetXluDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 void Randomizer_DrawExtFourSword(PlayState* play, GetItemEntry* getItemEntry) {
     // Kokiri Sword model with green tint (Four Sword = green Zelda sword)
     DrawCustomItemDiamondTint(play, (Gfx*)gGiKokiriSwordDL, NULL, 0.55f, 0, 180, 80);
 }
 
-void Randomizer_DrawHammerUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
-    // Hammer upgrade = Iron Knuckle's Axe model (from equip_ikaxe.c) — inline DL is in
-    // actor-space scale, native ~1/50×
-    DrawCustomItemDiamond(play, gIKAxeInlineDL, 0.02f);
+// NEI Weapon Upgrades — progressive weapons. The get-item model shows the base weapon
+// (level 1); the upgrade variants are conveyed via name + the in-hand model/icon swap.
+void Randomizer_DrawProgressiveHammer(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawCustomItemDiamond(play, (Gfx*)gGiHammerDL, 0.5f);
 }
 
-// NEI Weapon Upgrades — placeholder get-item models (Kokiri Sword mesh recolored).
-// Behavior for these sword upgrades is plumbing-only for now; the models are stand-ins
-// until dedicated meshes are added.
 void Randomizer_DrawProgressiveKokiriSword(PlayState* play, GetItemEntry* getItemEntry) {
-    // Razor/Gilded — silvery-gold blade
-    DrawCustomItemDiamondTint(play, (Gfx*)gGiKokiriSwordDL, NULL, 0.55f, 230, 200, 120);
+    DrawCustomItemDiamond(play, (Gfx*)gGiKokiriSwordDL, 0.55f);
 }
 
-void Randomizer_DrawTrueMasterSword(PlayState* play, GetItemEntry* getItemEntry) {
-    // True Master Sword — bright sacred blue
+void Randomizer_DrawProgressiveMasterSword(PlayState* play, GetItemEntry* getItemEntry) {
+    // Master sword mesh, sacred-blue tint
     DrawCustomItemDiamondTint(play, (Gfx*)gGiKokiriSwordDL, NULL, 0.6f, 120, 180, 255);
 }
 
-void Randomizer_DrawGreatFairySword(PlayState* play, GetItemEntry* getItemEntry) {
-    // Great Fairy's Sword — fairy pink/violet
-    DrawCustomItemDiamondTint(play, (Gfx*)gGiKokiriSwordDL, NULL, 0.6f, 255, 130, 220);
+void Randomizer_DrawProgressiveBGS(PlayState* play, GetItemEntry* getItemEntry) {
+    // Biggoron's Sword mesh
+    DrawCustomItemDiamond(play, (Gfx*)gGiBiggoronSwordDL, 0.5f);
 }
 
 void Randomizer_DrawExtDivineShield(PlayState* play, GetItemEntry* getItemEntry) {
-    // Hylian Shield model with golden tint (Divine Shield = holy gold variant)
-    DrawCustomItemDiamondTint(play, (Gfx*)gGiHylianShieldDL, NULL, 0.5f, 255, 215, 0);
+    // Custom Divine Shield model from soh.o2r (object_nei_divine_shield)
+    DrawCustomItemDiamond(play, (Gfx*)gNeiDivineShieldDL, 0.5f);
 }
 
 void Randomizer_DrawExtSheikahShield(PlayState* play, GetItemEntry* getItemEntry) {
-    // Hylian Shield model with Sheikah teal/silver tint (Kite Shield)
-    DrawCustomItemDiamondTint(play, (Gfx*)gGiHylianShieldDL, NULL, 0.5f, 100, 200, 200); // teal/silver Sheikah palette
+    // Custom Kite Shield model from soh.o2r (object_nei_kite_shield)
+    DrawCustomItemDiamond(play, (Gfx*)gNeiKiteShieldDL, 0.5f);
 }
 
 extern void* TransformMasks_LoadMmDL(const char* path);
@@ -1834,39 +1855,14 @@ void Randomizer_DrawExtMagicCape(PlayState* play, GetItemEntry* getItemEntry) {
 }
 
 void Randomizer_DrawExtSpiritBreastplate(PlayState* play, GetItemEntry* getItemEntry) {
-    // Spirit Breastplate: chest + pauldrons composite model.
-    // Native model is in IK-axe coordinate space (huge units). Bumped 0.005 → 0.02 so
-    // the chest is actually visible in the get-item cylinder.
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_Scale(0.02f, 0.02f, 0.02f, MTXMODE_APPLY);
-    s16 rotation = play->gameplayFrames * 0x2;
-    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+    // Spirit Tunic (Skijer 2026-07-16): plain vanilla tunic get-item model tinted ORANGE — the armor
+    // composite is gone (recolor tunic now), same DrawCustomItemDiamondTint as Cape/Champion.
+    DrawCustomItemDiamondTint(play, (Gfx*)gGiTunicCollarDL, (Gfx*)gGiTunicDL, -1.0f, 235, 110, 20);
+}
 
-    // Chest plate (center)
-    Matrix_Push();
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gSpiritChestDL);
-    Matrix_Pop();
-
-    // Right pauldron
-    Matrix_Push();
-    Matrix_Translate(1900.0f, 0.0f, -1184.0f, MTXMODE_APPLY);
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gSpiritPauldronRDL);
-    Matrix_Pop();
-
-    // Left pauldron
-    Matrix_Push();
-    Matrix_Translate(1900.0f, 0.0f, 1184.0f, MTXMODE_APPLY);
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gSpiritPauldronLDL);
-    Matrix_Pop();
-
-    CLOSE_DISPS(play->state.gfxCtx);
+void Randomizer_DrawExtSnowquillTunic(PlayState* play, GetItemEntry* getItemEntry) {
+    // Snowquill Tunic: vanilla tunic model tinted WHITE.
+    DrawCustomItemDiamondTint(play, (Gfx*)gGiTunicCollarDL, (Gfx*)gGiTunicDL, -1.0f, 240, 244, 250);
 }
 
 void Randomizer_DrawExtChampionsTunic(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1958,6 +1954,14 @@ static MmMaskDrawEntry sMmMaskDrawTable[] = {
     /* FIERCE_DEITY  */ { gGiFierceDeityMaskFaceDL, gGiFierceDeityMaskHairAndHatDL, MM_MASK_DRAW_OPA01 },
 };
 
+// Raw OTR-path-as-pointer draw, the same mechanism the 24 MM masks have always used: the gfx
+// interpreter resolves "__OTR__..." string pointers at execution time against the mounted archives.
+// VERIFIED (2026-07-20, listing the user's mm.o2r): every path in the mm_sources headers exists in
+// the archive — resolution by exact path works, folder overlap with OoT is NOT a problem (only
+// exact duplicate paths go through archive priority). Do NOT gate this with ResourceMgr_FileExists:
+// that check does not see the mm.o2r mount and blanks every MM item.
+#define GSP_MM_DL(disp, path) gSPDisplayList((disp), (Gfx*)(path))
+
 void Randomizer_DrawMmMask(PlayState* play, GetItemEntry* getItemEntry) {
     if (!MmAssets_IsAvailable())
         return;
@@ -1975,19 +1979,19 @@ void Randomizer_DrawMmMask(PlayState* play, GetItemEntry* getItemEntry) {
         Gfx_SetupDL_25Opa(play->state.gfxCtx);
         gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
                   G_MTX_MODELVIEW | G_MTX_LOAD);
-        gSPDisplayList(POLY_OPA_DISP++, (Gfx*)entry->dl1);
+        GSP_MM_DL(POLY_OPA_DISP++, entry->dl1);
 
         Gfx_SetupDL_25Xlu(play->state.gfxCtx);
         gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
                   G_MTX_MODELVIEW | G_MTX_LOAD);
-        gSPDisplayList(POLY_XLU_DISP++, (Gfx*)entry->dl2);
+        GSP_MM_DL(POLY_XLU_DISP++, entry->dl2);
     } else {
         // Both DLs: Opaque (like MM GetItem_DrawOpa01)
         Gfx_SetupDL_25Opa(play->state.gfxCtx);
         gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
                   G_MTX_MODELVIEW | G_MTX_LOAD);
-        gSPDisplayList(POLY_OPA_DISP++, (Gfx*)entry->dl1);
-        gSPDisplayList(POLY_OPA_DISP++, (Gfx*)entry->dl2);
+        GSP_MM_DL(POLY_OPA_DISP++, entry->dl1);
+        GSP_MM_DL(POLY_OPA_DISP++, entry->dl2);
     }
 
     CLOSE_DISPS(play->state.gfxCtx);
@@ -2008,13 +2012,13 @@ void Randomizer_DrawChateauRomani(PlayState* play, GetItemEntry* getItemEntry) {
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
               G_MTX_MODELVIEW | G_MTX_LOAD);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiChateauRomaniBottleEmptyDL);
+    GSP_MM_DL(POLY_OPA_DISP++, gGiChateauRomaniBottleEmptyDL);
 
     // DL2: Translucent (liquid fill + label)
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
               G_MTX_MODELVIEW | G_MTX_LOAD);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gGiChateauRomaniBottleDL);
+    GSP_MM_DL(POLY_XLU_DISP++, gGiChateauRomaniBottleDL);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -2041,6 +2045,1451 @@ void Randomizer_DrawBottleWithMagicMushroom(PlayState* play, GetItemEntry* getIt
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPDisplayList(POLY_OPA_DISP++, mushroomDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// =============================================================================
+// MM Boss Remains — Get-Item Draw (from mm.o2r object_bsmask)
+// Single OPA display list per remains, scaled 0.02 (mirrors mm GetItem_DrawRemains).
+// The RG is carried in getItemEntry->getItemId (GetGIEntry stores randomizerGet there).
+// =============================================================================
+void Randomizer_DrawMmRemains(PlayState* play, GetItemEntry* getItemEntry) {
+    if (!MmAssets_IsAvailable())
+        return;
+
+    const char* dl;
+    switch ((RandomizerGet)getItemEntry->getItemId) {
+        case RG_MM_REMAINS_ODOLWA:
+            dl = gMmRemainsOdolwaDL;
+            break;
+        case RG_MM_REMAINS_GOHT:
+            dl = gMmRemainsGohtDL;
+            break;
+        case RG_MM_REMAINS_GYORG:
+            dl = gMmRemainsGyorgDL;
+            break;
+        case RG_MM_REMAINS_TWINMOLD:
+            dl = gMmRemainsTwinmoldDL;
+            break;
+        default:
+            return;
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_Scale(0.02f, 0.02f, 0.02f, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_OPA_DISP++, dl);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// =============================================================================
+// MM Stray Fairy — Get-Item Draw (REAL model from mm.o2r gameplay_keep)
+// -----------------------------------------------------------------------------
+// The stray fairy is a Flex SkelAnime (gStrayFairySkel, 9 limbs + gStrayFairy-
+// FlyingAnim), mirroring mm 2s2h Rando/DrawItem.cpp DrawStrayFairy.
+//
+// Loading: 2Ship writes skeletons/animations in EXACTLY SoH's binary resource
+// format (OSKL/OSLB/OANM v0, identical factories), so SoH parses them natively.
+// The load just has to be ARCHIVE-SCOPED to mm.o2r (MmAssets_LoadSkeleton /
+// MmAssets_LoadAnimation) so the global name index can't get in the way; the
+// fairy's limb/DL paths are MM-unique, so the limb sub-loads and the "__OTR__"
+// dList strings inside the limbs resolve into mm.o2r on their own.
+//
+// Tint: MM colors the fairy per dungeon with AnimatedMat color entries on
+// segment 0x08 (body prim/env) and 0x09 (glow prim/env) — the limb DLs branch
+// into those segments, so they MUST be set or the interpreter falls over. We
+// build the two tiny prim/env color DLs ourselves using the keyframe-0 colors
+// extracted from the real gStrayFairy<Dungeon>TexAnim resources in mm.o2r.
+// =============================================================================
+s32 Randomizer_OverrideLimbDrawStrayFairy(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
+                                          void* thisx, Gfx** gfx) {
+    // Hide the redundant right-facing head limb (mm StrayFairyOverrideLimbDraw does the same).
+    if (limbIndex == MM_STRAY_FAIRY_LIMB_RIGHT_FACING_HEAD) {
+        *dList = NULL;
+    }
+    return false;
+}
+
+// Keyframe-0 colors from the five gStrayFairy<Dungeon>TexAnim AnimatedMat color
+// entries in mm.o2r (body = segment 0x08 prim+env, glow = segment 0x09 prim+env).
+typedef struct {
+    u8 bodyPrim[3];
+    u8 bodyEnv[3];
+    u8 glowPrim[4]; // includes alpha (0x5A in every dungeon's TexAnim)
+    u8 glowEnv[3];
+} MmStrayFairyColors;
+
+void Randomizer_DrawMmStrayFairy(PlayState* play, GetItemEntry* getItemEntry) {
+    static SkelAnime sFairySkelAnime;
+    static Vec3s sFairyJointTable[MM_STRAY_FAIRY_LIMB_MAX];
+    static bool sFairyInitialized = false;
+    static u32 sFairyLastUpdate = 0;
+
+    if (!MmAssets_IsAvailable()) {
+        return;
+    }
+
+    if (!sFairyInitialized) {
+        FlexSkeletonHeader* skel = (FlexSkeletonHeader*)MmAssets_LoadSkeleton("objects/gameplay_keep/gStrayFairySkel");
+        AnimationHeader* anim =
+            (AnimationHeader*)MmAssets_LoadAnimation("objects/gameplay_keep/gStrayFairyFlyingAnim");
+        if (skel == NULL || anim == NULL) {
+            return; // mm.o2r not ready yet — retry next frame, never latch the failure
+        }
+        SkelAnime_InitFlex(play, &sFairySkelAnime, skel, anim, sFairyJointTable, sFairyJointTable,
+                           MM_STRAY_FAIRY_LIMB_MAX);
+        sFairyInitialized = true;
+    }
+
+    MmStrayFairyColors colors;
+    switch ((RandomizerGet)getItemEntry->getItemId) {
+        case RG_MM_STRAY_FAIRY_WOODFALL: // pink
+            colors = { { 255, 235, 255 }, { 170, 40, 100 }, { 255, 140, 220, 90 }, { 255, 140, 220 } };
+            break;
+        case RG_MM_STRAY_FAIRY_SNOWHEAD: // green
+            colors = { { 255, 255, 200 }, { 40, 90, 0 }, { 180, 230, 40, 90 }, { 180, 230, 40 } };
+            break;
+        case RG_MM_STRAY_FAIRY_GREAT_BAY: // violet-blue
+            colors = { { 225, 235, 255 }, { 60, 20, 160 }, { 200, 140, 255, 90 }, { 200, 140, 255 } };
+            break;
+        case RG_MM_STRAY_FAIRY_STONE_TOWER: // yellow
+            colors = { { 255, 255, 225 }, { 160, 160, 60 }, { 200, 200, 140, 90 }, { 255, 255, 140 } };
+            break;
+        default: // RG_MM_STRAY_FAIRY = Clock Town, orange
+            colors = { { 255, 255, 200 }, { 150, 50, 0 }, { 255, 180, 30, 90 }, { 255, 180, 30 } };
+            break;
+    }
+
+    // Advance the shared flying animation once per game frame (2ship does the same;
+    // all fairies drawn in one frame share the pose, which is fine for get-items).
+    if (sFairyLastUpdate != play->state.frames) {
+        sFairyLastUpdate = play->state.frames;
+        SkelAnime_Update(&sFairySkelAnime);
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+
+    // Stand-in for MM's AnimatedMat_Draw: tiny prim/env color DLs on the two
+    // segments the fairy limb DLs branch into.
+    Gfx* bodyColorDL = (Gfx*)Graph_Alloc(play->state.gfxCtx, 3 * sizeof(Gfx));
+    Gfx* glowColorDL = (Gfx*)Graph_Alloc(play->state.gfxCtx, 3 * sizeof(Gfx));
+    Gfx* colorGfx = bodyColorDL;
+    gDPSetPrimColor(colorGfx++, 0, 0x80, colors.bodyPrim[0], colors.bodyPrim[1], colors.bodyPrim[2], 255);
+    gDPSetEnvColor(colorGfx++, colors.bodyEnv[0], colors.bodyEnv[1], colors.bodyEnv[2], 255);
+    gSPEndDisplayList(colorGfx++);
+    colorGfx = glowColorDL;
+    gDPSetPrimColor(colorGfx++, 0, 0x80, colors.glowPrim[0], colors.glowPrim[1], colors.glowPrim[2],
+                    colors.glowPrim[3]);
+    gDPSetEnvColor(colorGfx++, colors.glowEnv[0], colors.glowEnv[1], colors.glowEnv[2], 255);
+    gSPEndDisplayList(colorGfx++);
+    gSPSegment(POLY_XLU_DISP++, 0x08, (uintptr_t)bodyColorDL);
+    gSPSegment(POLY_XLU_DISP++, 0x09, (uintptr_t)glowColorDL);
+
+    Matrix_Push();
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    Matrix_Scale(0.03f, 0.03f, 0.03f, MTXMODE_APPLY);
+
+    POLY_XLU_DISP = SkelAnime_DrawFlex(play, sFairySkelAnime.skeleton, sFairySkelAnime.jointTable,
+                                       sFairySkelAnime.dListCount, Randomizer_OverrideLimbDrawStrayFairy, NULL, NULL,
+                                       POLY_XLU_DISP);
+    Matrix_Pop();
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// =============================================================================
+// MM Enemy / Boss Souls — Get-Item Draw (REAL enemy/boss models from mm.o2r)
+// -----------------------------------------------------------------------------
+// 1:1 port of 2Ship's Rando/DrawFuncs.cpp soul draws: every soul renders the
+// actual enemy/boss skeleton (or DL composite) with the billboarded MM soul
+// flame (gameplay_keep_DL_01ACF0, MM-unique path) behind it, exactly like
+// DrawEnLight. Loading strategy (verified by walking mm.o2r/oot.o2r bytes):
+//  - Class A (MM-unique skeleton AND limb/DL paths, audited): archive-scoped
+//    MmAssets_LoadSkeleton/MmAssets_LoadAnimation — same proven mechanism as
+//    Randomizer_DrawMmStrayFairy above. Nested "__OTR__" limb-DL refs resolve
+//    globally to mm.o2r because those exact paths exist nowhere else.
+//  - Class B (exact skeleton path exists in BOTH archives with different
+//    bytes: Beamos, DekuBaba, Guay, IronKnuckle, Octorok, Redead, Shellblade,
+//    Skulltula, Stalchild, Tektite, Wallmaster, Wolfos): use OoT's OWN
+//    skeleton + a matching OoT animation via "__OTR__" path strings (the
+//    SkelAnime_Init*/Animation_PlayLoop SoH patches resolve them). MM reuses
+//    OoT's models for these, so the visual is faithful; MM anims are only used
+//    when byte-identical in both archives (never MM anim on OoT skel).
+//  - Standalone MM DLs/textures: MmAssets_LoadResource pointers (never raw MM
+//    path strings — those can fail global resolution and would be executed as
+//    a display list -> crash; see the Moon's Tear fix above).
+// Segment discipline (the #1 crash source): every skeleton's limb DLs were
+// byte-scanned for raw seg-branches (G_DL 0x0N000001) and raw seg texture
+// loads; each such segment is fed a valid DL / texture below. Segment 0x0D
+// (flex limb matrices) is set internally by SkelAnime_DrawFlexOpa.
+// =============================================================================
+
+// --- shared helpers ----------------------------------------------------------
+
+// Per-frame empty display list (Graph_Alloc'd like the fairy color DLs) used
+// for segments that MM feeds D_801AEFA0 / EnKnight_BuildEmptyDL.
+// Empty "branch catcher" DL for segments that limb DLs jump into (seg 0x08-0x0C).
+// STATIC (stable, long-lived address) on purpose: a Graph_Alloc'd empty DL lives in the
+// per-frame double-buffered gfx pool, so its address changes every frame and can point
+// at recycled memory by the time the deferred command stream (and SoH's frame
+// interpolation, which re-runs the buffer) actually executes the branch -> the segment
+// resolves to garbage -> crash. A file-static const DL never moves or gets recycled, so
+// the branch always lands on a valid ENDDL. Four ENDDLs mirror the vanilla
+// renderModeSetNoneDL used by Scene_SetRenderModeXlu.
+static Gfx* MmSoul_EmptyDL(GraphicsContext* gfxCtx) {
+    static Gfx sEmptyDL[] = {
+        gsSPEndDisplayList(),
+        gsSPEndDisplayList(),
+        gsSPEndDisplayList(),
+        gsSPEndDisplayList(),
+    };
+    (void)gfxCtx;
+    return sEmptyDL;
+}
+
+// prim+env color DL (stand-in for MM's AnimatedMat color entries / En_Ik's
+// func_80A761B0 armor-material DLs).
+static Gfx* MmSoul_ColorDL(GraphicsContext* gfxCtx, u8 pr, u8 pg, u8 pb, u8 pa, u8 er, u8 eg, u8 eb) {
+    Gfx* dl = (Gfx*)Graph_Alloc(gfxCtx, 3 * sizeof(Gfx));
+    Gfx* p = dl;
+    gDPSetPrimColor(p++, 0, 0, pr, pg, pb, pa);
+    gDPSetEnvColor(p++, er, eg, eb, 255);
+    gSPEndDisplayList(p++);
+    return dl;
+}
+
+// DrawEnLight (2ship DrawFuncs.cpp): billboarded MM soul flame behind the
+// model. Continues from the CURRENT matrix (already model-scaled), exactly
+// like 2ship — the per-soul flameSize values compensate the model scale.
+static void MmSoul_DrawFlame(PlayState* play, Color_RGB8 color, Vec3f size) {
+    static s8 sFlameCounter = 0;
+    static u32 sFlameLastUpdate = 0;
+    Gfx* flameDL = (Gfx*)MmAssets_LoadResource("objects/gameplay_keep/gameplay_keep_DL_01ACF0");
+    if (flameDL == NULL) {
+        return;
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    // seg 0x08: the only segment branch inside gameplay_keep_DL_01ACF0 (byte-scanned).
+    gSPSegment(POLY_XLU_DISP++, 0x08,
+               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 0x10, 0x20, 1, (sFlameCounter * 2) & 0x3F,
+                                             (sFlameCounter * -6) & 0x7F, 0x10, 0x20, 0, 0, 2, -6));
+    gDPSetPrimColor(POLY_XLU_DISP++, 0xC0, 0xC0, color.r, color.g, color.b, 0);
+    gDPSetEnvColor(POLY_XLU_DISP++, color.r, color.g, color.b, 0);
+    Matrix_Scale(size.x, size.y, size.z, MTXMODE_APPLY);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_XLU_DISP++, flameDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    if (sFlameLastUpdate != play->state.frames) {
+        sFlameLastUpdate = play->state.frames;
+        sFlameCounter++;
+    }
+}
+
+// Original tinted-flame fallback (OoT blue fire) — used while mm.o2r is not
+// ready and for any soul whose model resources fail to load.
+static void MmSoul_DrawFallbackFlame(PlayState* play, GetItemEntry* getItemEntry) {
+    s16 r, g, b;
+    switch ((RandomizerGet)getItemEntry->getItemId) {
+        case RG_MM_SOUL_GOHT:
+        case RG_MM_SOUL_GYORG:
+        case RG_MM_SOUL_MAJORA:
+        case RG_MM_SOUL_ODOLWA:
+        case RG_MM_SOUL_TWINMOLD:
+            r = 255;
+            g = 210;
+            b = 70;
+            break;
+        default:
+            r = 150;
+            g = 200;
+            b = 255;
+            break;
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPSegment(POLY_XLU_DISP++, 8,
+               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 16, 32, 1, play->state.frames,
+                                             -(play->state.frames * 8), 16, 32, 0, 0, 1, -8));
+    Matrix_Push();
+    Matrix_Translate(0.0f, -70.0f, 0.0f, MTXMODE_APPLY);
+    Matrix_Scale(5.0f, 5.0f, 5.0f, MTXMODE_APPLY);
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gDPSetGrayscaleColor(POLY_XLU_DISP++, r, g, b, 255);
+    gSPGrayscale(POLY_XLU_DISP++, true);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gGiBlueFireFlameDL);
+    gSPGrayscale(POLY_XLU_DISP++, false);
+    Matrix_Pop();
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// --- generic skeleton-soul engine -------------------------------------------
+
+typedef enum {
+    MMSOUL_SEG_END = 0,
+    MMSOUL_SEG_EMPTY,          // empty DL (branch target)
+    MMSOUL_SEG_MM_TEX,         // texture from mm.o2r (MmAssets_LoadResource)
+    MMSOUL_SEG_OOT_TEX,        // texture from oot.o2r ("__OTR__" path)
+    MMSOUL_SEG_COLOR,          // prim/env color DL (AnimatedMat color stand-in)
+    MMSOUL_SEG_SCROLL_EYEGORE, // gEyegoreEyeLaserTexAnim: 16x32 two-tex y-scroll
+} MmSoulSegKind;
+
+typedef struct {
+    u8 seg;
+    u8 kind;
+    const char* path;
+    u8 prim[4];
+    u8 env[3];
+} MmSoulSegSpec;
+
+typedef enum {
+    MMSOUL_SP_NONE = 0,
+    MMSOUL_SP_LEEVER, // reverse the spin animation (2ship: playSpeed = -1)
+    MMSOUL_SP_KEESE,  // post-limb: red eyes DL on the head limb
+    MMSOUL_SP_MAJORA, // extra tentacle-material DL after the skeleton
+} MmSoulSpecial;
+
+typedef struct {
+    RandomizerGet rg;
+    const char* skelPath; // NULL => fully custom draw (dispatched before the engine)
+    const char* animPath;
+    u8 fromMm; // 1 = Class A (MmAssets loaders), 0 = Class B (OoT "__OTR__" strings)
+    u8 flex;
+    f32 preTransY; // world-space translate applied BEFORE the scale (2ship order)
+    f32 scale;
+    f32 postTransY; // model-space translate applied AFTER the scale (2ship order)
+    u8 billboard;
+    s16 prim[4]; // prim[0] < 0 => unused
+    s16 env[4];  // env[0] < 0 => unused
+    MmSoulSegSpec segs[3];
+    u8 special;
+    Color_RGB8 flameColor;
+    Vec3f flameSize;
+} MmSoulSpec;
+
+typedef struct {
+    SkelAnime skelAnime;
+    bool initialized;
+    u32 lastUpdate;
+} MmSoulState;
+
+#define MMSOUL_GRAY \
+    { 155, 155, 155 }
+#define MMSOUL_NOCOL \
+    { -1, 0, 0, 0 }
+#define MMSOUL_NOSEG \
+    { 0, MMSOUL_SEG_END, NULL, { 0, 0, 0, 0 }, { 0, 0, 0 } }
+#define MMSOUL_SEG3_NONE \
+    { MMSOUL_NOSEG, MMSOUL_NOSEG, MMSOUL_NOSEG }
+
+// clang-format off
+static MmSoulSpec sMmSoulSpecs[] = {
+    // --- bosses ---
+    { RG_MM_SOUL_GOHT, "objects/object_boss_hakugin/gGohtSkel", "objects/object_boss_hakugin/gGohtRunAnim", 1, 1,
+      -20.0f, 0.005f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL,
+      { { 8, MMSOUL_SEG_MM_TEX, "objects/object_boss_hakugin/gGohtMetalPlateWithCirclePatternTex", { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, { 10, 138, 46 }, { 30.0f, 30.0f, 30.0f } },
+    { RG_MM_SOUL_GYORG, "objects/object_boss03/gGyorgSkel", "objects/object_boss03/gGyorgGentleSwimmingAnim", 1, 1,
+      -20.0f, 0.05f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, { 19, 99, 165 }, { 3.0f, 3.0f, 3.0f } },
+    { RG_MM_SOUL_MAJORA, "objects/object_boss07/gMajorasMaskSkel", "objects/object_boss07/gMajorasMaskFloatingAnim", 1, 0,
+      0.0f, 0.05f, 0.0f, 1, MMSOUL_NOCOL, MMSOUL_NOCOL,
+      { { 8, MMSOUL_SEG_MM_TEX, "objects/object_boss07/gMajorasMaskWithNormalEyesTex", { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_MAJORA, { 232, 128, 21 }, { 3.0f, 3.0f, 3.0f } },
+    { RG_MM_SOUL_ODOLWA, "objects/object_boss01/gOdolwaSkel", "objects/object_boss01/gOdolwaReadyAnim", 1, 1,
+      -20.0f, 0.005f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, { 145, 20, 133 }, { 25.0f, 25.0f, 25.0f } },
+    { RG_MM_SOUL_TWINMOLD, "objects/object_boss02/gTwinmoldHeadSkel", "objects/object_boss02/gTwinmoldHeadFlyAnim", 1, 0,
+      0.0f, 0.06f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL,
+      { { 8, MMSOUL_SEG_MM_TEX, "objects/object_boss02/gTwinmoldBlueSkinTex", { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, { 168, 180, 20 }, { 3.0f, 3.0f, 3.0f } },
+    // --- enemies (skeleton-based) ---
+    { RG_MM_SOUL_ALIEN, "objects/object_uch/gAlienSkel", "objects/object_uch/gAlienFloatAnim", 1, 1,
+      0.0f, 0.007f, 0.0f, 0, MMSOUL_NOCOL, { 255, 255, 255, 255 },
+      { { 8, MMSOUL_SEG_MM_TEX, "objects/object_uch/gAlienEyeTex", { 0 }, { 0 } },
+        { 12, MMSOUL_SEG_EMPTY, NULL, { 0 }, { 0 } }, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, { 10, 138, 46 }, { 30.0f, 30.0f, 30.0f } },
+    { RG_MM_SOUL_ARMOS, "objects/object_am/object_am_Skel_005948", "objects/object_am/gArmosHopAnim", 1, 0,
+      0.0f, 0.01f, -3100.0f, 0, MMSOUL_NOCOL, { 0, 0, 0, 255 }, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_BEAMOS, "__OTR__objects/object_vm/gBeamosSkel", "__OTR__objects/object_vm/gBeamosAnim", 0, 0,
+      0.0f, 0.01f, -3200.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_BUBBLE, "objects/object_bb/gBubbleSkel", "objects/object_bb/gBubbleFlyingAnim", 1, 0,
+      0.0f, 0.02f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_CAPTAIN_KEETA, "objects/object_bsb/object_bsb_Skel_00C3E0", "objects/object_bsb/object_bsb_Anim_004894", 1, 0,
+      0.0f, 0.01f, -3500.0f, 0, MMSOUL_NOCOL, { 0, 0, 0, 255 },
+      { { 12, MMSOUL_SEG_EMPTY, NULL, { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, { 255, 192, 0 }, { 5.0f, 10.0f, 5.0f } },
+    { RG_MM_SOUL_DEATH_ARMOS, "objects/object_famos/gFamosSkel", "objects/object_famos/gFamosIdleAnim", 1, 0,
+      0.0f, 0.008f, -4100.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL,
+      // gFamosNormalGlowingEmblemTexAnim stand-in: seg 8 color DL (glowing red emblem)
+      { { 8, MMSOUL_SEG_COLOR, NULL, { 255, 0, 70, 255 }, { 255, 0, 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_DEEP_PYTHON, "objects/object_utubo/gDeepPythonSkel", "objects/object_utubo/gDeepPythonUnusedSideSwayAnim", 1, 1,
+      0.0f, 0.02f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_DEKU_BABA, "__OTR__objects/object_dekubaba/gDekuBabaSkel", "__OTR__objects/object_dekubaba/gDekuBabaFastChompAnim", 0, 0,
+      0.0f, 0.02f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 6.0f, 6.0f, 6.0f } },
+    { RG_MM_SOUL_DINOLFOS, "objects/object_dinofos/gDinolfosSkel", "objects/object_dinofos/gDinolfosIdleAnim", 1, 1,
+      0.0f, 0.014f, -2200.0f, 0, MMSOUL_NOCOL, { 20, 40, 40, 255 },
+      { { 8, MMSOUL_SEG_MM_TEX, "objects/object_dinofos/gDinolfosEyeOpenTex", { 0 }, { 0 } },
+        { 12, MMSOUL_SEG_EMPTY, NULL, { 0 }, { 0 } }, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_DODONGO, "objects/object_dodongo/object_dodongo_Skel_008318", "objects/object_dodongo/object_dodongo_Anim_004C20", 1, 0,
+      0.0f, 0.015f, -1500.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_DRAGONFLY, "objects/object_grasshopper/gDragonflySkel", "objects/object_grasshopper/gDragonflyFlyAnim", 1, 0,
+      0.0f, 0.01f, -700.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_EENO, "objects/object_snowman/gEenoSkel", "objects/object_snowman/gEenoIdleAnim", 1, 1,
+      0.0f, 0.01f, -3000.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, { 155, 155, 35 }, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_EYEGORE, "objects/object_eg/gEyegoreSkel", "objects/object_eg/gEyegoreUnusedWalkAnim", 1, 1,
+      0.0f, 0.006f, -4000.0f, 0, { 175, 255, 255, 255 }, { 255, 115, 155, 255 },
+      // gEyegoreEyeLaserTexAnim stand-in: seg 9 two-tex scroll (eyeball DL branches it)
+      { { 9, MMSOUL_SEG_SCROLL_EYEGORE, NULL, { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, { 192, 192, 64 }, { 20.0f, 20.0f, 20.0f } },
+    { RG_MM_SOUL_GARO, "objects/object_jso/gGaroSkel", "objects/object_jso/gGaroIdleAnim", 1, 1,
+      0.0f, 0.03f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL,
+      { { 12, MMSOUL_SEG_EMPTY, NULL, { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, { 150, 255, 150 }, { 8.0f, 8.0f, 8.0f } },
+    { RG_MM_SOUL_GEKKO, "objects/object_bigslime/gGekkoSkel", "objects/object_bigslime/gGekkoBoxingStanceAnim", 1, 1,
+      0.0f, 0.006f, -4100.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, { 150, 100, 255 }, { 20.0f, 20.0f, 20.0f } },
+    { RG_MM_SOUL_GIANT_BEE, "objects/object_bee/gBeeSkel", "objects/object_bee/gBeeFlyingAnim", 1, 0,
+      0.0f, 0.01f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_GOMESS, "objects/object_death/gGomessSkel", "objects/object_death/gGomessFloatAnim", 1, 1,
+      0.0f, 0.005f, 0.0f, 0, MMSOUL_NOCOL, { 30, 30, 0, 255 },
+      // gGomessBodyMatAnim/gGomessCoreMatAnim stand-in: seg 8 color DL
+      { { 8, MMSOUL_SEG_COLOR, NULL, { 235, 255, 125, 255 }, { 30, 70, 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, { 155, 0, 0 }, { 15.0f, 15.0f, 15.0f } },
+    { RG_MM_SOUL_GUAY, "__OTR__objects/object_crow/gGuaySkel", "__OTR__objects/object_crow/gGuayFlyAnim", 0, 1,
+      0.0f, 0.02f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 6.0f, 6.0f, 6.0f } },
+    { RG_MM_SOUL_HIPLOOP, "objects/object_pp/gHiploopSkel", "objects/object_pp/gHiploopChargeAnim", 1, 1,
+      0.0f, 0.02f, -1400.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_IGOS_DU_IKANA, "objects/object_knight/gIgosSkel", "objects/object_knight/gKnightIdleAnim", 1, 1,
+      0.0f, 0.01f, -2000.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL,
+      { { 9, MMSOUL_SEG_EMPTY, NULL, { 0 }, { 0 } }, { 10, MMSOUL_SEG_EMPTY, NULL, { 0 }, { 0 } }, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, { 0, 0, 0 }, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_IRON_KNUCKLE, "__OTR__objects/object_ik/gIronKnuckleSkel", "__OTR__objects/object_ik/gIronKnuckleWalkAnim", 0, 1,
+      0.0f, 0.01f, -2900.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL,
+      // OoT En_Ik armor-material color DLs (params == 0 palette)
+      { { 8, MMSOUL_SEG_COLOR, NULL, { 245, 225, 155, 255 }, { 30, 30, 0 } },
+        { 9, MMSOUL_SEG_COLOR, NULL, { 255, 40, 0, 255 }, { 40, 0, 0 } },
+        { 10, MMSOUL_SEG_COLOR, NULL, { 255, 255, 255, 255 }, { 20, 40, 30 } } },
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 12.0f, 12.0f, 12.0f } },
+    { RG_MM_SOUL_KEESE, "objects/object_firefly/gFireKeeseSkel", "objects/object_firefly/gFireKeeseFlyAnim", 1, 0,
+      0.0f, 0.01f, -700.0f, 0, MMSOUL_NOCOL, { 0, 0, 0, 0 }, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_KEESE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_LEEVER, "objects/object_rb/gLeeverSkel", "objects/object_rb/gLeeverSpinAnim", 1, 0,
+      0.0f, 0.05f, -700.0f, 0, { 255, 255, 255, 255 }, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_LEEVER, MMSOUL_GRAY, { 3.0f, 3.0f, 3.0f } },
+    { RG_MM_SOUL_MAD_SCRUB, "objects/object_dekunuts/gDekuScrubSkel", "objects/object_dekunuts/gDekuScrubLookAroundAnim", 1, 0,
+      0.0f, 0.01f, -2300.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_NEJIRON, "objects/object_gmo/gNejironSkel", "objects/object_gmo/gNejironIdleAnim", 1, 0,
+      0.0f, 0.015f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL,
+      { { 8, MMSOUL_SEG_MM_TEX, "objects/object_gmo/gNejironEyeOpenTex", { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 13.0f, 13.0f, 13.0f } },
+    { RG_MM_SOUL_OCTOROK, "__OTR__objects/object_okuta/gOctorokSkel", "__OTR__objects/object_okuta/gOctorokFloatAnim", 0, 0,
+      0.0f, 0.007f, -700.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_PEAHAT, "objects/object_ph/object_ph_Skel_001C80", "objects/object_ph/object_ph_Anim_0009C4", 1, 0,
+      0.0f, 0.01f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_PIRATE, "objects/object_kz/gFighterPirateSkel", "objects/object_kz/gFighterPirateFightingIdleAnim", 1, 1,
+      0.0f, 0.01f, -2000.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL,
+      { { 8, MMSOUL_SEG_MM_TEX, "objects/object_kz/gFighterPirateEyeOpenTex", { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_POE, "objects/object_po/gPoeSkel", "objects/object_po/gPoeFloatAnim", 1, 0,
+      0.0f, 0.0075f, -5000.0f, 0, MMSOUL_NOCOL, { 255, 255, 255, 255 },
+      { { 8, MMSOUL_SEG_EMPTY, NULL, { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_REDEAD, "__OTR__objects/object_rd/gRedeadSkel", "__OTR__objects/object_rd/gGibdoRedeadIdleAnim", 0, 1,
+      0.0f, 0.01f, -2900.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL,
+      { { 8, MMSOUL_SEG_EMPTY, NULL, { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_SHELLBLADE, "__OTR__objects/object_sb/object_sb_Skel_002BF0", "__OTR__objects/object_sb/object_sb_Anim_000194", 0, 1,
+      0.0f, 0.007f, -3500.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_SKULLFISH, "objects/object_pr/object_pr_Skel_004188", "objects/object_pr/object_pr_Anim_004340", 1, 1,
+      0.0f, 0.02f, 0.0f, 0, { 255, 255, 255, 255 }, { 0, 0, 0, 255 },
+      { { 12, MMSOUL_SEG_EMPTY, NULL, { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 5.0f, 5.0f, 5.0f } },
+    { RG_MM_SOUL_SKULLTULA, "__OTR__objects/object_st/object_st_Skel_005298", "__OTR__objects/object_st/object_st_Anim_000304", 0, 0,
+      0.0f, 0.03f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 5.0f, 5.0f, 5.0f } },
+    { RG_MM_SOUL_SNAPPER, "objects/object_tl/gSnapperSkel", "objects/object_tl/gSnapperIdleAnim", 1, 1,
+      0.0f, 0.01f, -3100.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL,
+      { { 8, MMSOUL_SEG_MM_TEX, "objects/object_tl/gSnapperEyeOpenTex", { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_STALCHILD, "__OTR__objects/object_skb/gStalchildSkel", "__OTR__objects/object_skb/gStalchildWalkingAnim", 0, 0,
+      0.0f, 0.01f, -3200.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_TAKKURI, "objects/object_thiefbird/gTakkuriSkel", "objects/object_thiefbird/gTakkuriFlyAnim", 1, 1,
+      0.0f, 0.01f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_TEKTITE, "__OTR__objects/object_tite/object_tite_Skel_003A20", "__OTR__objects/object_tite/object_tite_Anim_0012E4", 0, 0,
+      0.0f, 0.01f, -2900.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL,
+      { { 8, MMSOUL_SEG_OOT_TEX, "__OTR__objects/object_tite/object_tite_Tex_001300", { 0 }, { 0 } },
+        { 9, MMSOUL_SEG_OOT_TEX, "__OTR__objects/object_tite/object_tite_Tex_001700", { 0 }, { 0 } },
+        { 10, MMSOUL_SEG_OOT_TEX, "__OTR__objects/object_tite/object_tite_Tex_001900", { 0 }, { 0 } } },
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_WALLMASTER, "__OTR__objects/object_wallmaster/gWallmasterSkel", "__OTR__objects/object_wallmaster/gWallmasterWaitAnim", 0, 1,
+      0.0f, 0.01f, -3500.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_WART, "objects/object_boss04/gWartSkel", "objects/object_boss04/gWartIdleAnim", 1, 1,
+      0.0f, 0.02f, 0.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL, MMSOUL_SEG3_NONE,
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+    { RG_MM_SOUL_WIZROBE, "objects/object_wiz/gWizrobeSkel", "objects/object_wiz/gWizrobeIdleAnim", 1, 1,
+      -20.0f, 0.006f, 0.0f, 0, MMSOUL_NOCOL, { 255, 255, 255, 255 },
+      { { 8, MMSOUL_SEG_MM_TEX, "objects/object_wiz/gWizrobeEyeTex", { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 15.0f, 15.0f, 15.0f } },
+    { RG_MM_SOUL_WOLFOS, "__OTR__objects/object_wf/gWolfosNormalSkel", "__OTR__objects/object_wf/gWolfosWaitingAnim", 0, 1,
+      0.0f, 0.01f, -3000.0f, 0, MMSOUL_NOCOL, MMSOUL_NOCOL,
+      { { 8, MMSOUL_SEG_OOT_TEX, "__OTR__objects/object_wf/gWolfosNormalEyeOpenTex", { 0 }, { 0 } }, MMSOUL_NOSEG, MMSOUL_NOSEG },
+      MMSOUL_SP_NONE, MMSOUL_GRAY, { 10.0f, 10.0f, 10.0f } },
+};
+// clang-format on
+
+static MmSoulState sMmSoulStates[ARRAY_COUNT(sMmSoulSpecs)];
+
+// 2ship DrawEnFirefly_PostLimbDraw (eyes only; the dust sparkles are omitted).
+static void MmSoul_KeesePostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, void* arg) {
+    if (limbIndex == 0x1B) { // FIRE_KEESE_LIMB_HEAD
+        Gfx* eyesDL = (Gfx*)MmAssets_LoadResource("objects/object_firefly/gKeeseRedEyesDL");
+        if (eyesDL != NULL) {
+            OPEN_DISPS(play->state.gfxCtx);
+            gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                      G_MTX_MODELVIEW | G_MTX_LOAD);
+            gSPDisplayList(POLY_XLU_DISP++, eyesDL);
+            CLOSE_DISPS(play->state.gfxCtx);
+        }
+    }
+}
+
+// Generic skeleton-soul draw. Returns false when resources aren't ready yet
+// (caller falls back to the tinted flame for this frame; retried next frame).
+static bool MmSoul_DrawSkeletonSoul(PlayState* play, MmSoulSpec* spec, MmSoulState* st) {
+    if (!st->initialized) {
+        void* skel;
+        void* anim;
+        if (spec->fromMm) {
+            skel = MmAssets_LoadSkeleton(spec->skelPath);
+            anim = MmAssets_LoadAnimation(spec->animPath);
+            if (skel == NULL || anim == NULL) {
+                return false; // mm.o2r not ready — retry next frame, never latch
+            }
+        } else {
+            skel = (void*)spec->skelPath; // "__OTR__" strings; SkelAnime_Init* resolves them
+            anim = (void*)spec->animPath;
+        }
+        if (spec->flex) {
+            SkelAnime_InitFlex(play, &st->skelAnime, (FlexSkeletonHeader*)skel, (AnimationHeader*)anim, NULL, NULL, 0);
+        } else {
+            SkelAnime_Init(play, &st->skelAnime, (SkeletonHeader*)skel, (AnimationHeader*)anim, NULL, NULL, 0);
+        }
+        if (st->skelAnime.skeleton == NULL || st->skelAnime.jointTable == NULL) {
+            return false;
+        }
+        if (spec->special == MMSOUL_SP_LEEVER) {
+            st->skelAnime.playSpeed = -1.0f; // 2ship: reverse so the spin reads slower
+        }
+        st->initialized = true;
+    }
+
+    // Pre-resolve MM textures so a missing resource falls back cleanly.
+    void* mmTex[3] = { NULL, NULL, NULL };
+    for (s32 i = 0; i < 3; i++) {
+        if (spec->segs[i].kind == MMSOUL_SEG_MM_TEX) {
+            mmTex[i] = MmAssets_LoadResource(spec->segs[i].path);
+            if (mmTex[i] == NULL) {
+                return false;
+            }
+        }
+    }
+
+    if (st->lastUpdate != play->state.frames) {
+        st->lastUpdate = play->state.frames;
+        SkelAnime_Update(&st->skelAnime);
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+
+    for (s32 i = 0; i < 3; i++) {
+        MmSoulSegSpec* ss = &spec->segs[i];
+        switch (ss->kind) {
+            case MMSOUL_SEG_EMPTY:
+                gSPSegment(POLY_OPA_DISP++, ss->seg, (uintptr_t)MmSoul_EmptyDL(play->state.gfxCtx));
+                break;
+            case MMSOUL_SEG_MM_TEX:
+                gSPSegment(POLY_OPA_DISP++, ss->seg, (uintptr_t)mmTex[i]);
+                break;
+            case MMSOUL_SEG_OOT_TEX:
+                gSPSegment(POLY_OPA_DISP++, ss->seg, (uintptr_t)SEGMENTED_TO_VIRTUAL(ss->path));
+                break;
+            case MMSOUL_SEG_COLOR:
+                gSPSegment(POLY_OPA_DISP++, ss->seg,
+                           (uintptr_t)MmSoul_ColorDL(play->state.gfxCtx, ss->prim[0], ss->prim[1], ss->prim[2],
+                                                     ss->prim[3], ss->env[0], ss->env[1], ss->env[2]));
+                break;
+            case MMSOUL_SEG_SCROLL_EYEGORE:
+                // gEyegoreEyeLaserTexAnim keyframe motion: 16x32 two-layer scroll, y step -7
+                gSPSegment(POLY_OPA_DISP++, ss->seg,
+                           (uintptr_t)Gfx_TwoTexScroll(play->state.gfxCtx, 0, 0,
+                                                       (play->state.frames * -7) & 0x7F, 0x10, 0x20, 1, 0, 0, 0x10,
+                                                       0x20));
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (spec->preTransY != 0.0f) {
+        Matrix_Translate(0.0f, spec->preTransY, 0.0f, MTXMODE_APPLY);
+    }
+    if (spec->billboard) {
+        Matrix_ReplaceRotation(&play->billboardMtxF);
+    }
+    Matrix_Scale(spec->scale, spec->scale, spec->scale, MTXMODE_APPLY);
+    if (spec->postTransY != 0.0f) {
+        Matrix_Translate(0.0f, spec->postTransY, 0.0f, MTXMODE_APPLY);
+    }
+
+    if (spec->prim[0] >= 0) {
+        gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, spec->prim[0], spec->prim[1], spec->prim[2], spec->prim[3]);
+    }
+    if (spec->env[0] >= 0) {
+        gDPSetEnvColor(POLY_OPA_DISP++, spec->env[0], spec->env[1], spec->env[2], spec->env[3]);
+    }
+
+    PostLimbDrawOpa postLimb = (spec->special == MMSOUL_SP_KEESE) ? MmSoul_KeesePostLimbDraw : NULL;
+
+    if (spec->flex) {
+        SkelAnime_DrawFlexOpa(play, st->skelAnime.skeleton, st->skelAnime.jointTable, st->skelAnime.dListCount, NULL,
+                              postLimb, NULL);
+    } else {
+        SkelAnime_DrawOpa(play, st->skelAnime.skeleton, st->skelAnime.jointTable, NULL, postLimb, NULL);
+    }
+
+    if (spec->special == MMSOUL_SP_MAJORA) {
+        Gfx* tentacleDL = (Gfx*)MmAssets_LoadResource("objects/object_boss07/gMajorasMaskTentacleMaterialDL");
+        if (tentacleDL != NULL) {
+            gSPDisplayList(POLY_OPA_DISP++, tentacleDL);
+        }
+    }
+
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    MmSoul_DrawFlame(play, spec->flameColor, spec->flameSize);
+    return true;
+}
+
+// --- fully custom soul draws (DL composites, ports of 2ship DrawFuncs.cpp) ---
+
+// 2ship DrawBat: static body + 9-frame wing flip-book (all MM-unique DLs).
+static bool MmSoul_DrawBadBat(PlayState* play) {
+    static const char* sWingPaths[] = {
+        "objects/object_bat/gBadBatWingsFrame0DL", "objects/object_bat/gBadBatWingsFrame1DL",
+        "objects/object_bat/gBadBatWingsFrame2DL", "objects/object_bat/gBadBatWingsFrame3DL",
+        "objects/object_bat/gBadBatWingsFrame4DL", "objects/object_bat/gBadBatWingsFrame5DL",
+        "objects/object_bat/gBadBatWingsFrame6DL", "objects/object_bat/gBadBatWingsFrame7DL",
+        "objects/object_bat/gBadBatWingsFrame8DL",
+    };
+    static u32 sLastUpdate = 0;
+    static u32 sWingAnim = 0;
+
+    Gfx* setupDL = (Gfx*)MmAssets_LoadResource("objects/object_bat/gBadBatSetupDL");
+    Gfx* bodyDL = (Gfx*)MmAssets_LoadResource("objects/object_bat/gBadBatBodyDL");
+    Gfx* wingDL = (Gfx*)MmAssets_LoadResource(sWingPaths[sWingAnim]);
+    if (setupDL == NULL || bodyDL == NULL || wingDL == NULL) {
+        return false;
+    }
+
+    if (sLastUpdate != play->state.frames) {
+        sLastUpdate = play->state.frames;
+        sWingAnim = (sWingAnim + 1) % 9;
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_Scale(0.02f, 0.02f, 0.02f, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, setupDL);
+    gSPDisplayList(POLY_OPA_DISP++, bodyDL);
+    gSPDisplayList(POLY_OPA_DISP++, wingDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    MmSoul_DrawFlame(play, { 155, 155, 155 }, { 6.0f, 6.0f, 6.0f });
+    return true;
+}
+
+// 2ship DrawBoe: shadow blob (OPA) + billboarded body + double eyes (XLU).
+static bool MmSoul_DrawBoe(PlayState* play) {
+    Gfx* endDL = (Gfx*)MmAssets_LoadResource("objects/object_mkk/gBlackBoeEndDL");
+    Gfx* bodyMatDL = (Gfx*)MmAssets_LoadResource("objects/object_mkk/gBlackBoeBodyMaterialDL");
+    Gfx* bodyModelDL = (Gfx*)MmAssets_LoadResource("objects/object_mkk/gBlackBoeBodyModelDL");
+    Gfx* eyesDL = (Gfx*)MmAssets_LoadResource("objects/object_mkk/gBlackBoeEyesDL");
+    if (endDL == NULL || bodyMatDL == NULL || bodyModelDL == NULL || eyesDL == NULL) {
+        return false;
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Matrix_Scale(0.01f, 0.01f, 0.01f, MTXMODE_APPLY);
+    Matrix_Translate(0.0f, -1200.0f, 0.0f, MTXMODE_APPLY);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0xFF, 0, 0, 0, 255);
+    gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)MmSoul_EmptyDL(play->state.gfxCtx));
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, endDL);
+
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gDPSetEnvColor(POLY_XLU_DISP++, 255, 255, 255, 255);
+    gSPDisplayList(POLY_XLU_DISP++, bodyMatDL);
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_XLU_DISP++, bodyModelDL);
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0xFF, 245, 97, 0, 255);
+    gSPDisplayList(POLY_XLU_DISP++, eyesDL);
+    Matrix_Scale(0.009f, 0.009f, 0.009f, MTXMODE_APPLY);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0xFF, 245, 214, 0, 255);
+    gSPDisplayList(POLY_XLU_DISP++, eyesDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    // 2ship calls DrawEnLight after the 0.009 rescale — hence the huge size.
+    MmSoul_DrawFlame(play, { 155, 155, 155 }, { 1000.0f, 1000.0f, 1000.0f });
+    return true;
+}
+
+// 2ship DrawChuchu: pulsing jelly body + eyes. Byte-scan: gChuchuBodyDL
+// branches seg 0x0A (gChuchuSlimeFlowTexAnim two-tex scroll), gChuchuEyesDL
+// loads seg 0x09 (eye texture) and branches seg 0x0C (empty).
+static bool MmSoul_DrawChuchu(PlayState* play) {
+    static s16 sTimer = 25;
+    Gfx* bodyDL = (Gfx*)MmAssets_LoadResource("objects/object_slime/gChuchuBodyDL");
+    Gfx* eyesDL = (Gfx*)MmAssets_LoadResource("objects/object_slime/gChuchuEyesDL");
+    void* eyeTex = MmAssets_LoadResource("objects/object_slime/gChuchuEyeOpenTex");
+    if (bodyDL == NULL || eyesDL == NULL || eyeTex == NULL) {
+        return false;
+    }
+
+    f32 timerFactor = sqrtf((f32)sTimer) * 0.2f;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Matrix_Scale(0.01f,
+                 ((cosf(sTimer * (2.0f * M_PI / 5.0f)) * (0.07f * timerFactor)) + 1.0f) * 0.01f,
+                 0.01f, MTXMODE_APPLY);
+    Matrix_Translate(0.0f, -2700.0f, 0.0f, MTXMODE_APPLY);
+
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    // gChuchuSlimeFlowTexAnim: seg 0x0A two-tex scroll (layer1 static 64x64, layer2 y-scroll 32x32)
+    gSPSegment(POLY_XLU_DISP++, 0x0A,
+               (uintptr_t)Gfx_TwoTexScroll(play->state.gfxCtx, 0, 0, 0, 0x40, 0x40, 1, 0,
+                                           play->state.frames & 0x7F, 0x20, 0x20));
+    gSPSegment(POLY_XLU_DISP++, 0x0C, (uintptr_t)MmSoul_EmptyDL(play->state.gfxCtx));
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 100, 255, 255, 200, 255);
+    gDPSetEnvColor(POLY_XLU_DISP++, 255, 180, 0, 255);
+
+    if (sTimer <= 0) {
+        sTimer = 25;
+    }
+
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_XLU_DISP++, bodyDL);
+    gSPSegment(POLY_XLU_DISP++, 0x09, (uintptr_t)eyeTex);
+    gSPDisplayList(POLY_XLU_DISP++, eyesDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    MmSoul_DrawFlame(play, { 155, 155, 155 }, { 10.0f, 10.0f, 10.0f });
+    sTimer--;
+    return true;
+}
+
+// 2ship DrawFreezard: single XLU DL with seg 0x08 two-tex scroll + custom combine.
+static bool MmSoul_DrawFreezard(PlayState* play) {
+    Gfx* freezardDL = (Gfx*)MmAssets_LoadResource("objects/object_fz/object_fz_DL_001130");
+    if (freezardDL == NULL) {
+        return false;
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Matrix_Scale(0.006f, 0.006f, 0.006f, MTXMODE_APPLY);
+    Matrix_Translate(0.0f, -4100.0f, 0.0f, MTXMODE_APPLY);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+
+    gSPSegment(POLY_XLU_DISP++, 0x08,
+               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, play->state.frames % 128, 0x20, 0x20, 1, 0,
+                                             (play->state.frames * 2) % 128, 0x20, 0x20, 0, 1, 0, 2));
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gDPSetCombineLERP(POLY_XLU_DISP++, TEXEL1, PRIMITIVE, PRIM_LOD_FRAC, TEXEL0, TEXEL1, TEXEL0, PRIMITIVE, TEXEL0,
+                      PRIMITIVE, ENVIRONMENT, COMBINED, ENVIRONMENT, COMBINED, 0, ENVIRONMENT, 0);
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, 155, 255, 255, 255);
+    gDPSetEnvColor(POLY_XLU_DISP++, 200, 200, 200, 255);
+    gSPDisplayList(POLY_XLU_DISP++, freezardDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    MmSoul_DrawFlame(play, { 155, 155, 155 }, { 20.0f, 20.0f, 20.0f });
+    return true;
+}
+
+// 2ship DrawLikeLike: gLikeLikeDL (byte-identical in both archives) with the
+// seg 0x0C body-wave matrices and seg 0x08 texture scroll (mirrors OoT En_Rr).
+static bool MmSoul_DrawLikeLike(PlayState* play) {
+    static u32 sLastUpdate = 0;
+    static s16 sTextureScroll = 0;
+    static f32 sSegHeightMod[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    static Vec3s sSegRot[5] = { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } };
+
+    if (sLastUpdate != play->state.frames) {
+        sLastUpdate = play->state.frames;
+        sTextureScroll++;
+
+        f32 phase = play->state.frames * (2500.0f * (2.0f * M_PI / 65536.0f));
+        for (s32 j = 0; j < 5; j++) {
+            sSegHeightMod[j] = cosf(phase + (j * 0x4000) * (2.0f * M_PI / 65536.0f)) * 0.15f;
+        }
+        for (s32 j = 1; j < 5; j++) {
+            sSegRot[j].x = (s16)(cosf(phase + (j * 0x3000) * (2.0f * M_PI / 65536.0f)) * 2048.0f);
+            sSegRot[j].z = (s16)(sinf(phase + (j * 0x1000) * (2.0f * M_PI / 65536.0f)) * 2048.0f);
+        }
+    }
+
+    Mtx* segMtx = (Mtx*)Graph_Alloc(play->state.gfxCtx, 4 * sizeof(Mtx));
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    Matrix_Scale(0.01f, 0.01f, 0.01f, MTXMODE_APPLY);
+    Matrix_Translate(0.0f, -3000.0f, 0.0f, MTXMODE_APPLY);
+    Matrix_Push();
+
+    gSPSegment(POLY_XLU_DISP++, 0x0C, (uintptr_t)segMtx);
+    gSPSegment(POLY_XLU_DISP++, 0x08,
+               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 0x20, 0x10, 1, 0,
+                                             (sTextureScroll * -6) & 0x7F, 0x20, 0x10, 0, 0, 0, -6));
+
+    Matrix_Push();
+    Matrix_Scale((1.0f + sSegHeightMod[0]) * 0.8f, 1.0f, (1.0f + sSegHeightMod[0]) * 0.8f, MTXMODE_APPLY);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    Matrix_Pop();
+
+    for (s32 i = 1; i < 5; i++) {
+        f32 segScale = 0.8f * (sSegHeightMod[i] + 1.0f);
+
+        Matrix_Translate(0.0f, 1000.0f, 0.0f, MTXMODE_APPLY);
+        Matrix_RotateZYX(sSegRot[i].x, sSegRot[i].y, sSegRot[i].z, MTXMODE_APPLY);
+        Matrix_Push();
+        Matrix_Scale(segScale, 1.0f, segScale, MTXMODE_APPLY);
+        Matrix_ToMtx(segMtx, (char*)__FILE__, __LINE__);
+        Matrix_Pop();
+        segMtx++;
+    }
+
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)"__OTR__objects/object_rr/gLikeLikeDL");
+
+    CLOSE_DISPS(play->state.gfxCtx);
+    Matrix_Pop();
+
+    MmSoul_DrawFlame(play, { 155, 155, 155 }, { 10.0f, 10.0f, 10.0f });
+    return true;
+}
+
+// 2ship DrawDexihand: base + one arm segment (static DLs) + flex hand skeleton.
+static bool MmSoul_DrawDexihand(PlayState* play) {
+    static SkelAnime sSkelAnime;
+    static bool sInitialized = false;
+    static u32 sLastUpdate = 0;
+
+    Gfx* baseDL = (Gfx*)MmAssets_LoadResource("objects/object_wdhand/gDexihandBaseDL");
+    Gfx* armDL = (Gfx*)MmAssets_LoadResource("objects/object_wdhand/gDexihandArmSegmentDL");
+    if (baseDL == NULL || armDL == NULL) {
+        return false;
+    }
+
+    if (!sInitialized) {
+        FlexSkeletonHeader* skel = (FlexSkeletonHeader*)MmAssets_LoadSkeleton("objects/object_wdhand/gDexihandSkel");
+        AnimationHeader* anim = (AnimationHeader*)MmAssets_LoadAnimation("objects/object_wdhand/gDexihandIdleAnim");
+        if (skel == NULL || anim == NULL) {
+            return false;
+        }
+        SkelAnime_InitFlex(play, &sSkelAnime, skel, anim, NULL, NULL, 0);
+        if (sSkelAnime.skeleton == NULL || sSkelAnime.jointTable == NULL) {
+            return false;
+        }
+        sInitialized = true;
+    }
+
+    if (sLastUpdate != play->state.frames) {
+        sLastUpdate = play->state.frames;
+        SkelAnime_Update(&sSkelAnime);
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_Scale(0.015f, 0.015f, 0.015f, MTXMODE_APPLY);
+    Matrix_Translate(0.0f, -1000.0f, 0.0f, MTXMODE_APPLY);
+
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, baseDL);
+
+    Matrix_Push();
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, armDL);
+    Matrix_Pop();
+
+    Matrix_Translate(0.0f, 2500.0f, 0.0f, MTXMODE_APPLY);
+    SkelAnime_DrawFlexOpa(play, sSkelAnime.skeleton, sSkelAnime.jointTable, sSkelAnime.dListCount, NULL, NULL, NULL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    Matrix_Translate(0.0f, -1000.0f, 0.0f, MTXMODE_APPLY);
+    MmSoul_DrawFlame(play, { 155, 155, 70 }, { 6.0f, 6.0f, 6.0f });
+    return true;
+}
+
+void Randomizer_DrawMmSoul(PlayState* play, GetItemEntry* getItemEntry) {
+    RandomizerGet rg = (RandomizerGet)getItemEntry->getItemId;
+    bool drawn = false;
+
+    if (MmAssets_IsAvailable()) {
+        // Pre-set every segment an MM limb DL might branch/point into (0x08-0x0C) to a valid
+        // static empty DL, on BOTH buffers. MM actor DLs branch into these segments expecting
+        // the original actor's draw to have populated them; in this GI-draw context an unset
+        // segment resolves to a raw low address and the interpreter executes/reads garbage
+        // (crash in VTX/SETCIMG handlers). Per-soul spec segs below override as needed.
+        {
+            OPEN_DISPS(play->state.gfxCtx);
+            Gfx* emptyDL = MmSoul_EmptyDL(play->state.gfxCtx);
+            for (u32 seg = 0x08; seg <= 0x0C; seg++) {
+                gSPSegment(POLY_OPA_DISP++, seg, (uintptr_t)emptyDL);
+                gSPSegment(POLY_XLU_DISP++, seg, (uintptr_t)emptyDL);
+            }
+            CLOSE_DISPS(play->state.gfxCtx);
+        }
+        Matrix_Push();
+        switch (rg) {
+            // DL-composite souls (custom 2ship ports)
+            case RG_MM_SOUL_BAD_BAT:
+                drawn = MmSoul_DrawBadBat(play);
+                break;
+            case RG_MM_SOUL_BOE:
+                drawn = MmSoul_DrawBoe(play);
+                break;
+            case RG_MM_SOUL_CHUCHU:
+                drawn = MmSoul_DrawChuchu(play);
+                break;
+            case RG_MM_SOUL_FREEZARD:
+                drawn = MmSoul_DrawFreezard(play);
+                break;
+            case RG_MM_SOUL_LIKE_LIKE:
+                drawn = MmSoul_DrawLikeLike(play);
+                break;
+            case RG_MM_SOUL_DEXIHAND:
+                drawn = MmSoul_DrawDexihand(play);
+                break;
+            default:
+                for (size_t i = 0; i < ARRAY_COUNT(sMmSoulSpecs); i++) {
+                    if (sMmSoulSpecs[i].rg == rg) {
+                        drawn = MmSoul_DrawSkeletonSoul(play, &sMmSoulSpecs[i], &sMmSoulStates[i]);
+                        break;
+                    }
+                }
+                break;
+        }
+        Matrix_Pop();
+    }
+
+    if (!drawn) {
+        // mm.o2r missing/not ready or this soul's resources failed — tinted flame.
+        MmSoul_DrawFallbackFlame(play, getItemEntry);
+    }
+}
+
+// =============================================================================
+// MM Trade / Quest-chain items — Get-Item Draw (from mm.o2r)
+// -----------------------------------------------------------------------------
+// The non-mask trade/quest items (Moon's Tear, 4 Title Deeds, Room Key, the two
+// letters, Pendant of Memories, Pictograph Box, Powder Keg, Bomber's Notebook)
+// all draw via one of MM's simple get-item routines. Mirrors mm z_draw.c:
+//   OPA01     : both DLs opaque              (GetItem_DrawOpa01 — title deeds)
+//   OPA0_XLU1 : DL0 opaque, DL1 xlu          (GetItem_DrawOpa0Xlu1 — most)
+//   MOONS_TEAR: DL0 opaque, DL1 billboarded  (GetItem_DrawMoonsTear glow)
+// The Moon's Tear / potion-style animated-material tint is omitted (OoT has no
+// AnimatedMat_Draw); the baked textures render fine, matching the mask port.
+// =============================================================================
+typedef enum {
+    MM_TRADE_DRAW_OPA0_XLU1 = 0,
+    MM_TRADE_DRAW_OPA01 = 1,
+    MM_TRADE_DRAW_MOONS_TEAR = 2,
+} MmTradeDrawMode;
+
+typedef struct {
+    RandomizerGet rg;
+    const char* dl1;
+    const char* dl2;
+    MmTradeDrawMode mode;
+} MmTradeDrawEntry;
+
+static MmTradeDrawEntry sMmTradeDrawTable[] = {
+    { RG_MM_MOONS_TEAR, gGiMoonsTearItemDL, gGiMoonsTearGlowDL, MM_TRADE_DRAW_MOONS_TEAR },
+    { RG_MM_DEED_LAND, gGiTitleDeedEmptyDL, gGiTitleDeedLandColorDL, MM_TRADE_DRAW_OPA01 },
+    { RG_MM_DEED_SWAMP, gGiTitleDeedEmptyDL, gGiTitleDeedSwampColorDL, MM_TRADE_DRAW_OPA01 },
+    { RG_MM_DEED_MOUNTAIN, gGiTitleDeedEmptyDL, gGiTitleDeedMountainColorDL, MM_TRADE_DRAW_OPA01 },
+    { RG_MM_DEED_OCEAN, gGiTitleDeedEmptyDL, gGiTitleDeedOceanColorDL, MM_TRADE_DRAW_OPA01 },
+    { RG_MM_ROOM_KEY, gGiRoomKeyEmptyDL, gGiRoomKeyDL, MM_TRADE_DRAW_OPA0_XLU1 },
+    { RG_MM_LETTER_TO_KAFEI, gGiLetterToKafeiEnvelopeLetterDL, gGiLetterToKafeiInscriptionsDL,
+      MM_TRADE_DRAW_OPA0_XLU1 },
+    { RG_MM_LETTER_TO_MAMA, gGiLetterToMamaEnvelopeLetterDL, gGiLetterToMamaInscriptionsDL, MM_TRADE_DRAW_OPA0_XLU1 },
+    { RG_MM_PENDANT_OF_MEMORIES, gGiPendantOfMemoriesEmptyDL, gGiPendantOfMemoriesDL, MM_TRADE_DRAW_OPA0_XLU1 },
+    { RG_MM_PICTOGRAPH_BOX, gGiPictoBoxFrameDL, gGiPictoBoxBodyAndLensDL, MM_TRADE_DRAW_OPA0_XLU1 },
+    { RG_MM_POWDER_KEG, gGiPowderKegBarrelDL, gGiPowderKegGoronSkullAndFuseDL, MM_TRADE_DRAW_OPA0_XLU1 },
+    { RG_MM_BOMBERS_NOTEBOOK, gGiBombersNotebookEmptyDL, gGiBombersNotebookDL, MM_TRADE_DRAW_OPA0_XLU1 },
+    // Tingle's region maps — all 6 share the one field-map model (mm GID_TINGLE_MAP: both DLs opaque).
+    { RG_MM_TINGLE_MAP_CLOCK_TOWN, gGiTingleMapDL, gGiTingleMapEmptyDL, MM_TRADE_DRAW_OPA01 },
+    { RG_MM_TINGLE_MAP_WOODFALL, gGiTingleMapDL, gGiTingleMapEmptyDL, MM_TRADE_DRAW_OPA01 },
+    { RG_MM_TINGLE_MAP_SNOWHEAD, gGiTingleMapDL, gGiTingleMapEmptyDL, MM_TRADE_DRAW_OPA01 },
+    { RG_MM_TINGLE_MAP_ROMANI_RANCH, gGiTingleMapDL, gGiTingleMapEmptyDL, MM_TRADE_DRAW_OPA01 },
+    { RG_MM_TINGLE_MAP_GREAT_BAY, gGiTingleMapDL, gGiTingleMapEmptyDL, MM_TRADE_DRAW_OPA01 },
+    { RG_MM_TINGLE_MAP_STONE_TOWER, gGiTingleMapDL, gGiTingleMapEmptyDL, MM_TRADE_DRAW_OPA01 },
+};
+
+void Randomizer_DrawMmTradeQuest(PlayState* play, GetItemEntry* getItemEntry) {
+    if (!MmAssets_IsAvailable())
+        return;
+
+    MmTradeDrawEntry* entry = NULL;
+    for (size_t i = 0; i < ARRAY_COUNT(sMmTradeDrawTable); i++) {
+        if (sMmTradeDrawTable[i].rg == (RandomizerGet)getItemEntry->getItemId) {
+            entry = &sMmTradeDrawTable[i];
+            break;
+        }
+    }
+    if (entry == NULL)
+        return;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    // Same guard as Randomizer_DrawMmSoul: pre-set segments 0x08-0x0C on both buffers so any
+    // raw segment branch inside an MM GI DL lands on a valid empty DL instead of garbage.
+    {
+        Gfx* emptyDL = MmSoul_EmptyDL(play->state.gfxCtx);
+        for (u32 seg = 0x08; seg <= 0x0C; seg++) {
+            gSPSegment(POLY_OPA_DISP++, seg, (uintptr_t)emptyDL);
+            gSPSegment(POLY_XLU_DISP++, seg, (uintptr_t)emptyDL);
+        }
+    }
+
+    // DL0: opaque (shared across all three modes)
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    if (entry->mode == MM_TRADE_DRAW_MOONS_TEAR) {
+        // CRASH FIX (verified by walking the DL bytes in mm.o2r): gGiMoonsTearItemDL contains a
+        // raw gsSPDisplayList branch to SEGMENT 0x09 and gGiMoonsTearGlowDL one to SEGMENT 0x0A —
+        // MM's AnimatedMat_Draw(gGiMoonsTearTexAnim) populates those segments with per-frame
+        // texture-scroll DLs. With the segments unset, the interpreter jumps into garbage and dies
+        // in the vtx handler. Feed both segments a valid 32x32 tex-scroll like MM does.
+        gSPSegment(POLY_OPA_DISP++, 0x09,
+                   (uintptr_t)Gfx_TexScroll(play->state.gfxCtx, 0, play->state.frames & 0x7F, 32, 32));
+    }
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_OPA_DISP++, entry->dl1);
+
+    if (entry->mode == MM_TRADE_DRAW_OPA01) {
+        // Second DL also opaque (title deeds).
+        GSP_MM_DL(POLY_OPA_DISP++, entry->dl2);
+    } else {
+        // Second DL translucent.
+        Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+        if (entry->mode == MM_TRADE_DRAW_MOONS_TEAR) {
+            // Glow branches to segment 0x0A (see crash-fix note above).
+            gSPSegment(POLY_XLU_DISP++, 0x0A,
+                       (uintptr_t)Gfx_TexScroll(play->state.gfxCtx, 0, (play->state.frames * 2) & 0x7F, 32, 32));
+            // Moon's Tear glow is a billboarded sprite (mm GetItem_DrawMoonsTear).
+            Matrix_ReplaceRotation(&play->billboardMtxF);
+        }
+        gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                  G_MTX_MODELVIEW | G_MTX_LOAD);
+        GSP_MM_DL(POLY_XLU_DISP++, entry->dl2);
+    }
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// =============================================================================
+// MM Owl-Statue warp points — Get-Item Draw (MM owl model from mm.o2r)
+// -----------------------------------------------------------------------------
+// The 2Ship rando draws each owl-statue check with the opened owl-statue model
+// (object_sek "sek_open_model"), scaled 0.01 with a -3000 Y translate to bring
+// the tall statue down to get-item size (mm Rando/DrawItem.cpp DrawOwlStatue).
+// Single opaque DL, shared by all 10 owl statues.
+// =============================================================================
+void Randomizer_DrawMmOwlStatue(PlayState* play, GetItemEntry* getItemEntry) {
+    if (!MmAssets_IsAvailable())
+        return;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_Scale(0.01f, 0.01f, 0.01f, MTXMODE_APPLY);
+    Matrix_Translate(0.0f, -3000.0f, 0.0f, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_OPA_DISP++, gMmOwlStatueOpenedDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// =============================================================================
+// MM Time Items (clock halves) — Get-Item Draw (from mm.o2r object_obj_tokeidai)
+// -----------------------------------------------------------------------------
+// Static version of mm/2s2h/Rando/DrawFuncs.cpp DrawClock: the Clock Town clock
+// tower's rotating face assembly (minute ring + center/hand + clock face +
+// sun/moon panel), frozen at the 2Ship rotations — day variants show the clock
+// face at 0xC000 (panel at sun), night variants show the sun/moon panel flipped
+// 0x8000 (moon side). No animation: yTranslation / xRotation / minute-ring spin
+// / face Z-slide all held at 0, so the tower-opening translate/rotate pairs of
+// the 2Ship matrix chain cancel out and are omitted. The RG is carried in
+// getItemEntry->getItemId (GetGIEntry stores randomizerGet there).
+// object_obj_tokeidai is MM-unique (no OoT folder), so plain GSP_MM_DL is safe.
+// =============================================================================
+void Randomizer_DrawMmClock(PlayState* play, GetItemEntry* getItemEntry) {
+    if (!MmAssets_IsAvailable())
+        return;
+
+    f32 clockFaceRotation;   // Z rotation of the clock face
+    f32 sunMoonPanelRotation; // Y rotation of the sun/moon panel
+    switch ((RandomizerGet)getItemEntry->getItemId) {
+        case RG_MM_TIME_DAY_1:
+        case RG_MM_TIME_DAY_2:
+        case RG_MM_TIME_DAY_3:
+            // 2Ship: clockFaceRotation = 0xC000, drawn as RotateZS(-rot * 2) => s16 wrap = 180 deg
+            clockFaceRotation = M_PIf;
+            sunMoonPanelRotation = 0.0f;
+            break;
+        case RG_MM_TIME_NIGHT_1:
+        case RG_MM_TIME_NIGHT_2:
+        case RG_MM_TIME_NIGHT_3:
+            // 2Ship: sunMoonPanelRotation = 0x8000 => 180 deg (moon side forward)
+            clockFaceRotation = 0.0f;
+            sunMoonPanelRotation = M_PIf;
+            break;
+        default:
+            return;
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    // Get-item scale (2Ship draws the world check at 0.015; 0.01 matches the owl-statue get-item)
+    Matrix_Scale(0.01f, 0.01f, 0.01f, MTXMODE_APPLY);
+
+    // Minute ring (static: no spin)
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_OPA_DISP++, gMmClockTowerMinuteRingDL);
+
+    // Clock center + hand (static: no face Z-slide)
+    GSP_MM_DL(POLY_OPA_DISP++, gMmClockTowerClockCenterAndHandDL);
+
+    // Clock face (day = flipped 180 deg, night = neutral)
+    Matrix_RotateZ(clockFaceRotation, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_OPA_DISP++, gMmClockTowerClockFaceDL);
+
+    // Sun/moon panel (night = flipped 180 deg to the moon side)
+    Matrix_Translate(0.0f, -1112.0f, -19.6f, MTXMODE_APPLY);
+    Matrix_RotateY(sunMoonPanelRotation, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_OPA_DISP++, gMmClockTowerSunAndMoonPanelDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// =============================================================================
+// MM Dungeon Items — Get-Item Draw (from mm.o2r)
+// -----------------------------------------------------------------------------
+// The per-dungeon Small Keys, Boss Keys, Dungeon Maps and Compasses all reuse
+// MM's vanilla get-item dungeon-item models (one model per type; the RG name is
+// what distinguishes Woodfall vs. Snowhead vs. Great Bay vs. Stone Tower). One
+// shared draw func per type, mirroring mm z_draw.c sDrawItemTable:
+//   Small Key   : GetItem_DrawOpa0     (single opaque DL)
+//   Dungeon Map : GetItem_DrawOpa0     (single opaque DL)
+//   Boss Key    : GetItem_DrawOpa0Xlu1 (DL0 opaque body, DL1 xlu gem)
+//   Compass     : GetItem_DrawCompass  (DL0 opaque body, DL1 xlu glass — same shape)
+// =============================================================================
+void Randomizer_DrawMmSmallKey(PlayState* play, GetItemEntry* getItemEntry) {
+    if (!MmAssets_IsAvailable())
+        return;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_OPA_DISP++, gMmDungeonSmallKeyDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+void Randomizer_DrawMmDungeonMap(PlayState* play, GetItemEntry* getItemEntry) {
+    if (!MmAssets_IsAvailable())
+        return;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_OPA_DISP++, gMmDungeonMapDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+void Randomizer_DrawMmBossKey(PlayState* play, GetItemEntry* getItemEntry) {
+    if (!MmAssets_IsAvailable())
+        return;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    // DL0: opaque key body.
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_OPA_DISP++, gMmDungeonBossKeyDL);
+
+    // DL1: translucent gem.
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_XLU_DISP++, gMmDungeonBossKeyGemDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+void Randomizer_DrawMmCompass(PlayState* play, GetItemEntry* getItemEntry) {
+    if (!MmAssets_IsAvailable())
+        return;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    // DL0: opaque compass body.
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_OPA_DISP++, gMmDungeonCompassDL);
+
+    // DL1: translucent glass cover.
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_XLU_DISP++, gMmDungeonCompassGlassDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// =============================================================================
+// MM Swamp / Ocean Gold Skulltula Tokens — Get-Item Draw
+// -----------------------------------------------------------------------------
+// SHADOW VERDICT: MM's token model lives at objects/object_st/gSkulltulaTokenDL
+// (+FlameDL) — the EXACT paths OoT's own object_st uses, with the same symbol
+// names. Exact-duplicate paths resolve by archive priority to soh's native
+// copy, so this is drawn with OoT's OWN token DLs (the models are the same
+// token family; no mm.o2r needed and no MmAssets gate). The MM per-region
+// identity comes from 2ship's DrawSkulltulaToken flame tint: ocean = blue
+// (prim 0,255,255 / env 0,0,255), swamp = pink-green (prim 0,255,170 /
+// env 0,255,0), on the vanilla token flame scroll.
+// =============================================================================
+void Randomizer_DrawMmGsToken(PlayState* play, GetItemEntry* getItemEntry) {
+    OPEN_DISPS(play->state.gfxCtx);
+
+    // Same eye-visibility tilt 2ship applies (tokens parallel to the camera drop their eyes).
+    Matrix_RotateZYX(16, 0, 0, MTXMODE_APPLY);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gSkulltulaTokenDL);
+
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    if ((RandomizerGet)getItemEntry->getItemId == RG_MM_GS_TOKEN_OCEAN) {
+        gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, 0, 255, 255, 255);
+        gDPSetEnvColor(POLY_XLU_DISP++, 0, 0, 255, 255);
+    } else {
+        gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, 0, 255, 170, 255);
+        gDPSetEnvColor(POLY_XLU_DISP++, 0, 255, 0, 255);
+    }
+    gSPSegment(POLY_XLU_DISP++, 0x08,
+               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, -(play->state.frames * 5), 32, 32, 1, 0, 0, 32,
+                                             64, 0, -5, 0, 0));
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gSkulltulaTokenFlameDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// =============================================================================
+// MM Healed Frogs (Don Gero's choir) — Get-Item Draw
+// -----------------------------------------------------------------------------
+// SHADOW VERDICT: MM's minifrog is objects/object_fr gFrogSkel — OoT ALSO has
+// objects/object_fr with its own frog skeleton (the Zora's River choir frogs,
+// the same frog family MM reuses), so per the soul Class-B rule we draw OoT's
+// OWN skeleton + animation via "__OTR__" path strings (SoH's SkelAnime patches
+// resolve them natively; no mm.o2r involved). Mirrors 2ship's DrawMinifrog:
+// env tint per frog (same RGB values OoT's En_Fr uses for its five frogs),
+// eye limbs (7/8) hidden in the override and re-drawn billboarded in the post
+// (EnFr_OverrideLimbDraw/EnFr_PostLimbDraw replica), eye texture on segments
+// 0x08/0x09.
+// =============================================================================
+#define MM_FROG_LIMB_COUNT 24 // OoT object_fr skeleton (z_en_fr.c SkelAnime_InitFlex count)
+
+static s32 Randomizer_OverrideLimbDrawMmFrog(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
+                                             void* thisx, Gfx** gfx) {
+    if ((limbIndex == 7) || (limbIndex == 8)) { // eyes — drawn billboarded in the post-limb pass
+        *dList = NULL;
+    }
+    return false;
+}
+
+static void Randomizer_PostLimbDrawMmFrog(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, void* thisx,
+                                          Gfx** gfx) {
+    if (((limbIndex == 7) || (limbIndex == 8)) && (*dList != NULL)) {
+        Matrix_Push();
+        Matrix_ReplaceRotation(&play->billboardMtxF);
+        gSPMatrix((*gfx)++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList((*gfx)++, *dList);
+        Matrix_Pop();
+    }
+}
+
+void Randomizer_DrawMmFrog(PlayState* play, GetItemEntry* getItemEntry) {
+    static SkelAnime sFrogSkelAnime;
+    static Vec3s sFrogJointTable[MM_FROG_LIMB_COUNT];
+    static Vec3s sFrogMorphTable[MM_FROG_LIMB_COUNT];
+    static bool sFrogInitialized = false;
+    static u32 sFrogLastUpdate = 0;
+
+    if (!sFrogInitialized) {
+        SkelAnime_InitFlex(play, &sFrogSkelAnime, (FlexSkeletonHeader*)object_fr_Skel_00B498,
+                           (AnimationHeader*)object_fr_Anim_001534, sFrogJointTable, sFrogMorphTable,
+                           MM_FROG_LIMB_COUNT);
+        sFrogInitialized = true;
+    }
+
+    // MM frog tints (2ship DrawMinifrog — identical to OoT's own sEnFrColor palette).
+    Color_RGB8 envColor;
+    switch ((RandomizerGet)getItemEntry->getItemId) {
+        case RG_MM_FROG_CYAN:
+            envColor = { 0, 170, 200 };
+            break;
+        case RG_MM_FROG_PINK:
+            envColor = { 210, 120, 100 };
+            break;
+        case RG_MM_FROG_WHITE:
+            envColor = { 190, 190, 190 };
+            break;
+        default: // RG_MM_FROG_BLUE
+            envColor = { 120, 130, 230 };
+            break;
+    }
+
+    if (sFrogLastUpdate != play->state.frames) {
+        sFrogLastUpdate = play->state.frames;
+        SkelAnime_Update(&sFrogSkelAnime);
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_Push();
+    Matrix_Translate(0.0f, -20.0f, 0.0f, MTXMODE_APPLY);
+    Matrix_Scale(0.03f, 0.03f, 0.03f, MTXMODE_APPLY);
+
+    gDPSetEnvColor(POLY_OPA_DISP++, envColor.r, envColor.g, envColor.b, 255);
+    // Eye texture segments the eye limb DLs sample (open iris, both eyes).
+    gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)object_fr_Tex_0059A0);
+    gSPSegment(POLY_OPA_DISP++, 0x09, (uintptr_t)object_fr_Tex_0059A0);
+
+    POLY_OPA_DISP = SkelAnime_DrawFlex(play, sFrogSkelAnime.skeleton, sFrogSkelAnime.jointTable,
+                                       sFrogSkelAnime.dListCount, Randomizer_OverrideLimbDrawMmFrog,
+                                       Randomizer_PostLimbDrawMmFrog, NULL, POLY_OPA_DISP);
+    Matrix_Pop();
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// =============================================================================
+// MM Bottle with Gold Dust — Get-Item Draw (from mm.o2r)
+// -----------------------------------------------------------------------------
+// MM's vanilla get-item for ITEM_GOLD_DUST: OBJECT_GI_BOTTLE_16 drawn with
+// GetItem_DrawOpa0Xlu1 (bottle contents Opa + glass/cork Xlu). MM-unique
+// folder, so GSP_MM_DL resolves from mm.o2r (MmAssets gate like its peers).
+// =============================================================================
+void Randomizer_DrawMmGoldDustBottle(PlayState* play, GetItemEntry* getItemEntry) {
+    if (!MmAssets_IsAvailable())
+        return;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_OPA_DISP++, gMmGoldDustBottleEmptyDL);
+
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    GSP_MM_DL(POLY_XLU_DISP++, gMmGoldDustBottleGlassAndCorkDL);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

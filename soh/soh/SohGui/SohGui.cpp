@@ -123,6 +123,8 @@ void SetupGuiElements() {
 
     // Fleet Ship Combo: picture-in-picture window that shows 2ship (MM) inside Ship.
     FleetShipCombo_RegisterConsumerWindow();
+    // Fleet Ship Combo: ventana del tab "Shared" (tests del oráculo + opciones del rando de MM).
+    FleetShipCombo_RegisterSharedWindow();
 
     mConsoleWindow = std::make_shared<SohConsoleWindow>(CVAR_WINDOW("SohConsole"), "Console##SoH", ImVec2(820, 630));
     gui->AddGuiWindow(mConsoleWindow);

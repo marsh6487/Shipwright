@@ -16,6 +16,22 @@ static u8 sAdultUpgradeItemBases[] = { ITEM_QUIVER_30, ITEM_BOMB_BAG_20, ITEM_BR
 
 static u8 sUpgradeItemOffsets[] = { 0x00, 0x03, 0x06, 0x09 };
 
+// Skijer 2026-07-15: upgrade-column rows 0 and 1 no longer show the quiver/bullet-bag and bomb-bag
+// capacity icons — they now hold the MAGIC CAPE (row 0) and the PENDANT OF MEMORIES (row 1), moved
+// out of the ext-equipment grid. Their cells are landable when owned and A toggles them
+// (solid = on, half-transparent = off — the spiritual-stones visual from z_kaleido_collect.c).
+// Cape toggle = cloth VISIBILITY only (its magic refund is always active once owned);
+// Pendant toggle = its whole moveset on/off. Rows 2 (strength) and 3 (scale) are untouched.
+static s32 KaleidoEquip_UpgradeCellAvailable(s16 cursorY) {
+    if (cursorY == 0) {
+        return ExtEquip_CapeOwned();
+    }
+    if (cursorY == 1) {
+        return ExtEquip_PendantOwned();
+    }
+    return CUR_UPG_VALUE(cursorY) != 0; // strength / scale rows unchanged
+}
+
 static u8 sEquipmentItemOffsets[] = {
     0x00, 0x00, 0x01, 0x02, 0x00, 0x03, 0x04, 0x05, 0x00, 0x06, 0x07, 0x08, 0x00, 0x09, 0x0A, 0x0B,
 };
@@ -129,7 +145,16 @@ void KaleidoScope_DrawAButton(PlayState* play, Vtx* vtx, int16_t xTranslate, int
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Broken Modes: in Mario mode the equipment doll is a real libsm64 Mario, not Link.
+// Defined in expansions/sm64/sm64_mario.c; returns 1 when it drew Mario into the
+// pause framebuffer (then we skip the Link draw). All the work lives out of src/.
+u8 Sm64Kaleido_DrawForm(PlayState* play);
+
 void KaleidoScope_DrawPlayerWork(PlayState* play) {
+    // Mario-mode hook: hand the pause doll to libsm64 Mario. 0 → fall through to Link.
+    if (Sm64Kaleido_DrawForm(play)) {
+        return;
+    }
     PauseContext* pauseCtx = &play->pauseCtx;
     Vec3f pos;
     Vec3s rot;
@@ -411,14 +436,8 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                         pauseCtx->cursorPoint[PAUSE_EQUIP] -= 1;
 
                         if (pauseCtx->cursorX[PAUSE_EQUIP] == 0) {
-                            if (pauseCtx->cursorY[PAUSE_EQUIP] == 0) {
-                                if (CUR_UPG_VALUE(UPG_BULLET_BAG) != 0) {
-                                    cursorMoveResult = 1;
-                                }
-                            } else {
-                                if (CUR_UPG_VALUE(pauseCtx->cursorY[PAUSE_EQUIP]) != 0) {
-                                    cursorMoveResult = 1;
-                                }
+                            if (KaleidoEquip_UpgradeCellAvailable(pauseCtx->cursorY[PAUSE_EQUIP])) {
+                                cursorMoveResult = 1;
                             }
                         } else if ((gBitFlags[pauseCtx->cursorPoint[PAUSE_EQUIP] - 1] &
                                     gSaveContext.inventory.equipment) ||
@@ -453,7 +472,7 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                         pauseCtx->cursorPoint[PAUSE_EQUIP] += 1;
 
                         if (pauseCtx->cursorX[PAUSE_EQUIP] == 0) {
-                            if (CUR_UPG_VALUE(pauseCtx->cursorY[PAUSE_EQUIP]) != 0) {
+                            if (KaleidoEquip_UpgradeCellAvailable(pauseCtx->cursorY[PAUSE_EQUIP])) {
                                 cursorMoveResult = 1;
                             }
                         } else if ((gBitFlags[pauseCtx->cursorPoint[PAUSE_EQUIP] - 1] &
@@ -501,11 +520,7 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                         pauseCtx->cursorPoint[PAUSE_EQUIP] -= 4;
 
                         if (pauseCtx->cursorX[PAUSE_EQUIP] == 0) {
-                            if (pauseCtx->cursorY[PAUSE_EQUIP] == 0) {
-                                if (CUR_UPG_VALUE(UPG_BULLET_BAG) != 0) {
-                                    cursorMoveResult = 1;
-                                }
-                            } else if (CUR_UPG_VALUE(pauseCtx->cursorY[PAUSE_EQUIP]) != 0) {
+                            if (KaleidoEquip_UpgradeCellAvailable(pauseCtx->cursorY[PAUSE_EQUIP])) {
                                 cursorMoveResult = 1;
                             }
                         } else if ((gBitFlags[pauseCtx->cursorPoint[PAUSE_EQUIP] - 1] &
@@ -524,7 +539,7 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                         pauseCtx->cursorPoint[PAUSE_EQUIP] += 4;
 
                         if (pauseCtx->cursorX[PAUSE_EQUIP] == 0) {
-                            if (CUR_UPG_VALUE(pauseCtx->cursorY[PAUSE_EQUIP]) != 0) {
+                            if (KaleidoEquip_UpgradeCellAvailable(pauseCtx->cursorY[PAUSE_EQUIP])) {
                                 cursorMoveResult = 1;
                             }
                         } else if ((gBitFlags[pauseCtx->cursorPoint[PAUSE_EQUIP] - 1] &
@@ -635,22 +650,16 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
         if (pauseCtx->cursorX[PAUSE_EQUIP] == 0) {
             pauseCtx->cursorColorSet = 0;
 
-            if (LINK_AGE_IN_YEARS == YEARS_CHILD) {
-                if ((pauseCtx->cursorY[PAUSE_EQUIP] == 0) && (CUR_UPG_VALUE(UPG_BULLET_BAG) != 0)) {
-                    cursorItem = ITEM_BULLET_BAG_30 + CUR_UPG_VALUE(UPG_BULLET_BAG) - 1;
-                } else {
-                    cursorItem = ITEM_QUIVER_30 + sUpgradeItemOffsets[pauseCtx->cursorY[PAUSE_EQUIP]] +
-                                 CUR_UPG_VALUE(pauseCtx->cursorY[PAUSE_EQUIP]) - 1;
-                    osSyncPrintf("H_arrowcase_1 + non_equip_item_table = %d\n", cursorItem);
-                }
+            if (pauseCtx->cursorY[PAUSE_EQUIP] == 0) {
+                // Row 0 = Magic Cape (was quiver/bullet-bag capacity). Skijer 2026-07-15
+                cursorItem = ITEM_EXT_TUNIC_1;
+            } else if (pauseCtx->cursorY[PAUSE_EQUIP] == 1) {
+                // Row 1 = Pendant of Memories (was bomb-bag capacity)
+                cursorItem = ITEM_EXT_BOOTS_2;
             } else {
-                if ((pauseCtx->cursorY[PAUSE_EQUIP] == 0) && (CUR_UPG_VALUE(UPG_QUIVER) == 0)) {
-                    cursorItem = ITEM_BULLET_BAG_30 + CUR_UPG_VALUE(UPG_BULLET_BAG) - 1;
-                } else {
-                    cursorItem = ITEM_QUIVER_30 + sUpgradeItemOffsets[pauseCtx->cursorY[PAUSE_EQUIP]] +
-                                 CUR_UPG_VALUE(pauseCtx->cursorY[PAUSE_EQUIP]) - 1;
-                    osSyncPrintf("大人 H_arrowcase_1 + non_equip_item_table = %d\n", cursorItem);
-                }
+                cursorItem = ITEM_QUIVER_30 + sUpgradeItemOffsets[pauseCtx->cursorY[PAUSE_EQUIP]] +
+                             CUR_UPG_VALUE(pauseCtx->cursorY[PAUSE_EQUIP]) - 1;
+                osSyncPrintf("H_arrowcase_1 + non_equip_item_table = %d\n", cursorItem);
             }
         } else {
             if (extEquipPage) {
@@ -722,6 +731,29 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
             // Wait 10 frames before accepting input again
             pauseCtx->unk_1E4 = 7;
             sEquipTimer = 10;
+        }
+
+        // Skijer 2026-07-15: A on upgrade row 0 = toggle Magic Cape VISIBILITY (its magic refund is
+        // always active once owned); A on row 1 = toggle the Pendant of Memories moveset on/off.
+        // Same interaction as the strength toggle above; solid vs half-transparent icon shows state.
+        if ((pauseCtx->cursorSpecialPos == 0) && (pauseCtx->state == 6) && (pauseCtx->unk_1E4 == 0) &&
+            CHECK_BTN_ALL(input->press.button, BTN_A) && (pauseCtx->cursorX[PAUSE_EQUIP] == 0)) {
+            u8 upgradeToggled = false;
+
+            if ((pauseCtx->cursorY[PAUSE_EQUIP] == 0) && ExtEquip_CapeOwned()) {
+                ExtEquip_ToggleCapeVisibility();
+                upgradeToggled = true;
+            } else if ((pauseCtx->cursorY[PAUSE_EQUIP] == 1) && ExtEquip_PendantOwned()) {
+                ExtEquip_TogglePendantEffect();
+                upgradeToggled = true;
+            }
+
+            if (upgradeToggled) {
+                Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                       &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                pauseCtx->unk_1E4 = 7;
+                sEquipTimer = 10;
+            }
         }
 
         u16 buttonsToCheck = BTN_A | BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT;
@@ -1006,7 +1038,24 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
     for (rowStart = 0, j = 0, temp = 0, i = 0; i < 4; i++, rowStart += 4, j += 16) {
         gSPVertex(POLY_OPA_DISP++, &pauseCtx->equipVtx[j], 16, 0);
         bool drawGreyItems = !CVarGetInteger(CVAR_CHEAT("TimelessEquipment"), 0);
-        if (LINK_AGE_IN_YEARS == YEARS_CHILD) {
+        if (i == 0 || i == 1) {
+            // Skijer 2026-07-15: upgrade rows 0/1 = MAGIC CAPE / PENDANT OF MEMORIES (replacing the
+            // quiver/bullet-bag and bomb-bag capacity icons). Solid = toggle ON, half-transparent =
+            // OFF — the spiritual-stones visual (prim alpha halved, z_kaleido_collect.c pattern).
+            u8 upgOwned = (i == 0) ? ExtEquip_CapeOwned() : ExtEquip_PendantOwned();
+
+            if (upgOwned) {
+                u8 upgOn = (i == 0) ? ExtEquip_CapeVisible() : ExtEquip_PendantActive();
+                void* upgIcon = (i == 0) ? ExtEquip_GetCapeIcon() : ExtEquip_GetPendantIcon();
+
+                if (upgIcon != NULL) {
+                    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255,
+                                    upgOn ? pauseCtx->alpha : (pauseCtx->alpha >> 1));
+                    KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, upgIcon, 32, 32, 0);
+                    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
+                }
+            }
+        } else if (LINK_AGE_IN_YEARS == YEARS_CHILD) {
             point = CUR_UPG_VALUE(sChildUpgrades[i]);
             if ((point != 0) && (CUR_UPG_VALUE(sChildUpgrades[i]) != 0)) {
                 // Grey Out the Gauntlets as Child
@@ -1056,8 +1105,9 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
         for (k = 0, bit = rowStart, point = 4; k < 3; k++, point += 4, temp++, bit++) {
 
             if (extEquipPage) {
-                // Extended equipment page: only draw owned items
-                if (ExtEquip_HasItem(i, k + 1)) {
+                // Extended equipment page: only draw owned items in LIVE slots (retired slots —
+                // Cape/Pendant on the upgrade column, deleted Dragon Scale — stay empty)
+                if (ExtEquip_HasItem(i, k + 1) && !ExtEquip_SlotRetired(i, k + 1)) {
                     void* extIcon = ExtEquip_GetIcon(i, k + 1); // i=row(0-3), k+1=col(1-3)
                     if (extIcon) {
                         bool extAgeRestricted = !ExtEquip_CheckAgeReq(i, k + 1);
@@ -1079,7 +1129,9 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                     gSPGrayscale(POLY_OPA_DISP++, true);
                 }
                 if (((u32)i == 0) && (k == 2) && (gSaveContext.bgsFlag != 0)) {
-                    KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, gItemIconSwordBiggoronTex, 32, 32, point);
+                    // ExtInv_GetItemIcon so the Great Fairy's Sword upgrade icon shows here too
+                    // (falls back to the vanilla Biggoron Sword icon). Skijer's NEI
+                    KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, ExtInv_GetItemIcon(itemId), 32, 32, point);
                 } else if ((i == 0) && (k == 2) && (gBitFlags[bit + 1] & gSaveContext.inventory.equipment)) {
                     KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, gItemIconBrokenGiantsKnifeTex, 32, 32,
                                                        point);

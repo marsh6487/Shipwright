@@ -13,9 +13,41 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "z64item.h"
+#include "nei_save.h" // Skijer's NEI — custom-slot storage (24..71)
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Skijer's NEI — custom inventory slots 24..71 live in gNeiSave (NOT in the
+// vanilla SaveContext, which only has items[0..23]). These dispatch helpers
+// read/write the right backing store by slot index. Use them anywhere a slot
+// could be >= 24.
+static inline uint8_t ExtInv_GetSlotItem(int slot) {
+    extern SaveContext gSaveContext;
+    if (slot >= 0 && slot < 24) {
+        uint8_t item = gSaveContext.inventory.items[slot];
+        // Pictograph Box shares the Lens of Truth slot: when owned, the slot is selectable AND
+        // equippable even without the real Lens (the in-game C-button routes to the pictobox, and the
+        // icon swaps via ExtInv_GetItemIcon). Without this, an empty Lens slot can't be equipped at all.
+        // Skijer's NEI
+        if (slot == SLOT_LENS && item == ITEM_NONE) {
+            extern unsigned char Picto_IsOwned(void);
+            if (Picto_IsOwned()) {
+                return ITEM_LENS;
+            }
+        }
+        return item;
+    }
+    return Nei_GetOwnedItem((uint8_t)slot);
+}
+static inline void ExtInv_SetSlotItem(int slot, uint8_t itemId) {
+    extern SaveContext gSaveContext;
+    if (slot >= 0 && slot < 24) {
+        gSaveContext.inventory.items[slot] = itemId;
+    } else {
+        Nei_SetOwnedItem((uint8_t)slot, itemId);
+    }
+}
 
 // Skijer's NEI — item-action func ptr types (shared with extended_player.h via
 // the NEI_ITEM_ACTION_FUNC_TYPES guard so neither header redefines them).
@@ -231,7 +263,7 @@ extern const uint8_t gPage2ItemAgeReqs[24];
 #define SLOT_HYLIAS_GRACE 41
 #define SLOT_LANTERN 42
 #define SLOT_MINISH_CAP 43
-#define SLOT_PENDING_3 44
+#define SLOT_POKEBALL 44
 #define SLOT_CANE_OF_SOMARIA 45
 #define SLOT_SHOVEL 46
 #define SLOT_DOMINION_ROD 47
@@ -277,31 +309,27 @@ static inline bool ExtInv_CheckAgeReqForSlot(uint8_t slot, bool isAdult) {
 static inline bool ExtInv_ShouldRenderGrayscale(uint8_t slot, bool isAdult) {
     return !ExtInv_CheckAgeReqForSlot(slot, isAdult);
 }
-static inline void ExtInv_InitializePage2Items(void) {
-    extern SaveContext gSaveContext;
+static inline void ExtInv_InitializePage2Items(void) { // Skijer's NEI
     for (int i = 0; i < 24; i++) {
-        if (gSaveContext.inventory.items[24 + i] == ITEM_NONE) {
-            gSaveContext.inventory.items[24 + i] = gPage2Items[i];
+        if (Nei_GetOwnedItem((uint8_t)(24 + i)) == ITEM_NONE) {
+            Nei_SetOwnedItem((uint8_t)(24 + i), gPage2Items[i]);
         }
     }
 }
-static inline void ExtInv_ClearPage2Items(void) {
-    extern SaveContext gSaveContext;
+static inline void ExtInv_ClearPage2Items(void) { // Skijer's NEI
     for (int i = 24; i < 48; i++) {
-        gSaveContext.inventory.items[i] = ITEM_NONE;
+        Nei_SetOwnedItem((uint8_t)i, ITEM_NONE);
     }
 }
-static inline void ExtInv_GiveItem(uint8_t slot, uint8_t itemId) {
-    extern SaveContext gSaveContext;
+static inline void ExtInv_GiveItem(uint8_t slot, uint8_t itemId) { // Skijer's NEI
     if (slot >= 24 && slot < 48) {
-        gSaveContext.inventory.items[slot] = itemId;
+        Nei_SetOwnedItem(slot, itemId);
     }
 }
-static inline void ExtInv_SetItemById(uint8_t itemId) {
-    extern SaveContext gSaveContext;
+static inline void ExtInv_SetItemById(uint8_t itemId) { // Skijer's NEI
     uint8_t slot = ExtInv_GetItemSlot(itemId);
     if (slot != 0xFF) {
-        gSaveContext.inventory.items[slot] = itemId;
+        ExtInv_SetSlotItem(slot, itemId);
     }
 }
 
@@ -317,16 +345,14 @@ static inline void ExtInv_InitializePage3Masks(void) {
     // No-op: masks are given individually (save editor, randomizer, etc.)
     // This function exists for future initialization if needed
 }
-static inline void ExtInv_ClearPage3Masks(void) {
-    extern SaveContext gSaveContext;
+static inline void ExtInv_ClearPage3Masks(void) { // Skijer's NEI
     for (int i = 48; i < 72; i++) {
-        gSaveContext.inventory.items[i] = ITEM_NONE;
+        Nei_SetOwnedItem((uint8_t)i, ITEM_NONE);
     }
 }
-static inline void ExtInv_GiveMask(uint8_t slot, uint8_t itemId) {
-    extern SaveContext gSaveContext;
+static inline void ExtInv_GiveMask(uint8_t slot, uint8_t itemId) { // Skijer's NEI
     if (slot >= 48 && slot < 72) {
-        gSaveContext.inventory.items[slot] = itemId;
+        Nei_SetOwnedItem(slot, itemId);
     }
 }
 

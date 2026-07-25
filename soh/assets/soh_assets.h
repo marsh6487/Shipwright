@@ -80,6 +80,11 @@ static const ALIGN_ASSET(2) char gTitleRandomizerSubtitleTex[] = dgTitleRandomiz
 #define dgTitleBossRushSubtitleTex "__OTR__objects/object_mag/gTitleBossRushSubtitleTex"
 static const ALIGN_ASSET(2) char gTitleBossRushSubtitleTex[] = dgTitleBossRushSubtitleTex;
 
+// Fleet Ship Combo "COMBO" subtitle (OoT x MM). Source PNG (edit this, 128x32 RGBA):
+//   soh/assets/custom/objects/object_mag/gTitleOoTxMMSubtitleTex.rgba32.png
+#define dgTitleOoTxMMSubtitleTex "__OTR__objects/object_mag/gTitleOoTxMMSubtitleTex"
+static const ALIGN_ASSET(2) char gTitleOoTxMMSubtitleTex[] = dgTitleOoTxMMSubtitleTex;
+
 #define dgOcarinaAButtonDL "__OTR__objects/object_ocarina_a_button/gOcarinaAButtonDL"
 static const ALIGN_ASSET(2) char gOcarinaAButtonDL[] = dgOcarinaAButtonDL;
 
@@ -139,6 +144,10 @@ static const ALIGN_ASSET(2) char gNeiBeetleWingsDL[] = dgNeiBeetleWingsDL;
 static const ALIGN_ASSET(2) char gNeiDekuLeafDL[] = dgNeiDekuLeafDL;
 #define dgNeiDesireSensorDL "__OTR__objects/object_nei_desire_sensor/g_desire_sensor_dl"
 static const ALIGN_ASSET(2) char gNeiDesireSensorDL[] = dgNeiDesireSensorDL;
+#define dgNeiDivineShieldDL "__OTR__objects/object_nei_divine_shield/g_divine_shield_dl"
+static const ALIGN_ASSET(2) char gNeiDivineShieldDL[] = dgNeiDivineShieldDL;
+#define dgNeiKiteShieldDL "__OTR__objects/object_nei_kite_shield/g_kite_shield_dl"
+static const ALIGN_ASSET(2) char gNeiKiteShieldDL[] = dgNeiKiteShieldDL;
 #define dgNeiFireRodDL "__OTR__objects/object_nei_fire_rod/Cylinder_001_opaque_dl"
 static const ALIGN_ASSET(2) char gNeiFireRodDL[] = dgNeiFireRodDL;
 #define dgNeiGustJarDL "__OTR__objects/object_nei_gust_jar/jar_model_dl"
@@ -163,6 +172,20 @@ static const ALIGN_ASSET(2) char gNeiSwitchHookDL[] = dgNeiSwitchHookDL;
 static const ALIGN_ASSET(2) char gNeiTimeGateDL[] = dgNeiTimeGateDL;
 #define dgNeiWhipDL "__OTR__objects/object_nei_whip/whip_give_opaque_dl"
 static const ALIGN_ASSET(2) char gNeiWhipDL[] = dgNeiWhipDL;
+#define dgNeiSpinnerDL "__OTR__objects/object_nei_spinner/n0b0_opaque_dl"
+static const ALIGN_ASSET(2) char gNeiSpinnerDL[] = dgNeiSpinnerDL;
+#define dgNeiBombarrowsDL "__OTR__objects/object_nei_bombarrows/gBombarrowsGiveDL"
+static const ALIGN_ASSET(2) char gNeiBombarrowsDL[] = dgNeiBombarrowsDL;
+#define dgNeiMogmaMittsDL "__OTR__objects/object_nei_mogma_mitts/gMogmaMittsGiveDL"
+static const ALIGN_ASSET(2) char gNeiMogmaMittsDL[] = dgNeiMogmaMittsDL;
+#define dgNeiPokeballDL "__OTR__objects/object_nei_pokeball/ItmPokeBall_opaque_dl"
+static const ALIGN_ASSET(2) char gNeiPokeballDL[] = dgNeiPokeballDL;
+
+// Mario Mask — mask_03 off the Happy Mask Salesman's backpack (the MM decomp XML
+// labels it "Mario Mask"). Lifted out of object_osn with its texture, palette and
+// 12 verts, so it does not depend on mm.o2r. Skijer's NEI
+#define dgNeiMarioMaskDL "__OTR__objects/object_nei_mario_mask/g_mario_mask_dl"
+static const ALIGN_ASSET(2) char gNeiMarioMaskDL[] = dgNeiMarioMaskDL;
 
 #define dgRandoBushDL "__OTR__objects/gameplay_field_keep/gFieldBushRandomDL"
 static const ALIGN_ASSET(2) char gRandoBushDL[] = dgRandoBushDL;
@@ -636,6 +659,22 @@ static const ALIGN_ASSET(2) char gItemIconClawshotTex[] = dgItemIconClawshotTex;
 #define dgItemIconGaleBoomerangTex "__OTR__textures/icon_item_custom/gItemIconGaleBoomerangTex"
 static const ALIGN_ASSET(2) char gItemIconGaleBoomerangTex[] = dgItemIconGaleBoomerangTex;
 
+// Bottle Randomizer extra items (Skijer's NEI): Net + Bottomless Bottle icons.
+#define dgItemIconNetTex "__OTR__textures/icon_item_custom/gItemIconNetTex"
+static const ALIGN_ASSET(2) char gItemIconNetTex[] = dgItemIconNetTex;
+
+#define dgItemIconBottomlessBottleTex "__OTR__textures/icon_item_custom/gItemIconBottomlessBottleTex"
+static const ALIGN_ASSET(2) char gItemIconBottomlessBottleTex[] = dgItemIconBottomlessBottleTex;
+
+// Net held model DLs (object_nei_net, soh.o2r) — also used by the RG_NET get-item draw
+// (Randomizer_DrawNet). Opa = handle/rim/wrap, Xlu = semitransparent white netting.
+#define dgNeiNetDL "__OTR__objects/object_nei_net/g_net_dl"
+static const ALIGN_ASSET(2) char gNeiNetDL[] = dgNeiNetDL;
+
+#define dgNeiNetXluDL "__OTR__objects/object_nei_net/g_net_xlu_dl"
+static const ALIGN_ASSET(2) char gNeiNetXluDL[] = dgNeiNetXluDL;
+
+
 #define dgItemIconBallAndChainTex "__OTR__textures/icon_item_custom/gItemIconBallAndChainTex"
 static const ALIGN_ASSET(2) char gItemIconBallAndChainTex[] = dgItemIconBallAndChainTex;
 
@@ -776,6 +815,18 @@ static const ALIGN_ASSET(2) char gClawshotNameTex[] = dgClawshotNameTex;
 #define dgGaleBoomerangNameTex "__OTR__textures/item_name_custom/gGaleBoomerangNameTex"
 static const ALIGN_ASSET(2) char gGaleBoomerangNameTex[] = dgGaleBoomerangNameTex;
 
+// Skijer's NEI hookshot overhaul: "Ultrashot" name shown on the Longshot cell/panel while the
+// Ultrashot unlock is owned (the icon stays the Longshot + a Light-medallion corner marker).
+#define dgUltrashotNameTex "__OTR__textures/item_name_custom/gUltrashotNameTex"
+static const ALIGN_ASSET(2) char gUltrashotNameTex[] = dgUltrashotNameTex;
+
+// Bottle Randomizer extra items (Skijer's NEI): Net + Bottomless Bottle name textures.
+#define dgNetNameTex "__OTR__textures/item_name_custom/gNetNameTex"
+static const ALIGN_ASSET(2) char gNetNameTex[] = dgNetNameTex;
+
+#define dgBottomlessBottleNameTex "__OTR__textures/item_name_custom/gBottomlessBottleNameTex"
+static const ALIGN_ASSET(2) char gBottomlessBottleNameTex[] = dgBottomlessBottleNameTex;
+
 #define dgBallAndChainNameTex "__OTR__textures/item_name_custom/gBallAndChainNameTex"
 static const ALIGN_ASSET(2) char gBallAndChainNameTex[] = dgBallAndChainNameTex;
 
@@ -820,6 +871,9 @@ static const ALIGN_ASSET(2) char gPending2NameTex[] = dgPending2NameTex;
 
 #define dgPokeballNameTex "__OTR__textures/item_name_custom/gPokeballNameTex"
 static const ALIGN_ASSET(2) char gPokeballNameTex[] = dgPokeballNameTex;
+
+#define dgMarioMaskNameTex "__OTR__textures/item_name_custom/gMarioMaskNameTex"
+static const ALIGN_ASSET(2) char gMarioMaskNameTex[] = dgMarioMaskNameTex;
 
 // Extended equipment names (from item_name_custom/ in soh.o2r)
 #define dgCaneOfByrnaNameTex "__OTR__textures/item_name_custom/gCaneOfByrnaNameTex"
@@ -894,6 +948,12 @@ static const ALIGN_ASSET(2) char gItemIconMagicCapeTex[] = dgItemIconMagicCapeTe
 
 #define dgItemIconChampionsTunicTex "__OTR__textures/icon_item_custom/gItemIconChampionsTunicTex"
 static const ALIGN_ASSET(2) char gItemIconChampionsTunicTex[] = dgItemIconChampionsTunicTex;
+
+#define dgItemIconSpiritTunicTex "__OTR__textures/icon_item_custom/gItemIconSpiritTunicTex"
+static const ALIGN_ASSET(2) char gItemIconSpiritTunicTex[] = dgItemIconSpiritTunicTex;
+
+#define dgItemIconSnowquillTunicTex "__OTR__textures/icon_item_custom/gItemIconSnowquillTunicTex"
+static const ALIGN_ASSET(2) char gItemIconSnowquillTunicTex[] = dgItemIconSnowquillTunicTex;
 
 #define dgItemIconPegasusAnkletTex "__OTR__textures/icon_item_custom/gItemIconPegasusAnkletTex"
 static const ALIGN_ASSET(2) char gItemIconPegasusAnkletTex[] = dgItemIconPegasusAnkletTex;

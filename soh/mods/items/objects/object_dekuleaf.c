@@ -8,7 +8,6 @@
 #include "z64.h"
 #include "../custom_items.h"
 #include "../logic/item_dekuleaf.h"
-#include "deku_leaf_giveDL/header.h"
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
@@ -16,6 +15,23 @@
 
 // Angle to radians conversion for s16 angles
 #define DEKULEAF_ANGLE_TO_RAD (M_PI / 0x8000)
+
+// Leaf model now in soh.o2r (object_nei_deku_leaf). Cached gated load.
+extern u8 ResourceMgr_FileExists(const char* resName);
+extern Gfx* ResourceMgr_LoadGfxByName(const char* path);
+
+static Gfx* DekuLeaf_GetDL(void) {
+    static Gfx* sDL = NULL;
+    static u8 sTried = 0;
+    if (!sTried) {
+        sTried = 1;
+        const char* otr = "__OTR__objects/object_nei_deku_leaf/g_dekuleaf_dl";
+        if (ResourceMgr_FileExists(otr)) {
+            sDL = ResourceMgr_LoadGfxByName(otr);
+        }
+    }
+    return sDL;
+}
 
 static void DekuLeaf_SetupGeometryMode(GraphicsContext* gfxCtx) {
     OPEN_DISPS(gfxCtx);
@@ -42,7 +58,7 @@ static void DekuLeaf_DrawModel(PlayState* play, f32 posX, f32 posY, f32 posZ, s1
 
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, g_dekuleaf_dl);
+    gSPDisplayList(POLY_OPA_DISP++, DekuLeaf_GetDL());
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -59,7 +75,7 @@ static void DekuLeaf_DrawModelWithHandDir(PlayState* play, Vec3f* handPos, f32 h
 
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, g_dekuleaf_dl);
+    gSPDisplayList(POLY_OPA_DISP++, DekuLeaf_GetDL());
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -67,18 +83,23 @@ static void DekuLeaf_DrawModelWithHandDir(PlayState* play, Vec3f* handPos, f32 h
 void CustomItems_DrawDekuLeaf(Player* p, PlayState* play) {
     if (!dlGliding && !dlBlowing)
         return;
+    if (DekuLeaf_GetDL() == NULL)
+        return; // model not packed -> skip rather than draw a NULL DL
 
     DekuLeaf_SetupGeometryMode(play->state.gfxCtx);
 
     if (dlGliding) {
-        // Gliding: draw above Link at a fixed position
-        f32 posX = p->actor.world.pos.x;
-        f32 posY = p->actor.world.pos.y + 42.0f;
-        f32 posZ = p->actor.world.pos.z;
+        // Gliding: the leaf is a CANOPY held above Link's HANDS (paraglider look), NOT floating at his
+        // torso center — that made it clip into his chest as adult/other forms. Anchored to the
+        // midpoint of both hands; the offsets below were dialed in live and baked. Skijer's NEI
+        Vec3f* lHand = &p->bodyPartsPos[PLAYER_BODYPART_L_HAND];
+        Vec3f* rHand = &p->bodyPartsPos[PLAYER_BODYPART_R_HAND];
         s16 rotY = p->actor.shape.rot.y;
-        f32 scale = 0.2f;
+        f32 posX = (lHand->x + rHand->x) * 0.5f;
+        f32 posY = (lHand->y + rHand->y) * 0.5f + DEKULEAF_GLIDE_HAND_OFFSET;
+        f32 posZ = (lHand->z + rHand->z) * 0.5f;
 
-        DekuLeaf_DrawModel(play, posX, posY, posZ, rotY, scale);
+        DekuLeaf_DrawModel(play, posX, posY, posZ, rotY, DEKULEAF_GLIDE_SCALE);
     } else if (dlBlowing) {
         // Blowing: draw attached to LEFT hand with frame-based scale
         // Use forearm-to-hand direction for Y rotation only
@@ -92,7 +113,10 @@ void CustomItems_DrawDekuLeaf(Player* p, PlayState* play) {
 
         // Determine scale based on current animation frame
         f32 scale;
-        if (dlAnimTimer >= DEKULEAF_ATTACK_FRAME_START && dlAnimTimer <= DEKULEAF_ATTACK_FRAME_END) {
+        // Keyed off the ANIMATION frame (not a tick counter) so the big-leaf window tracks the swing
+        // at any playback speed. Skijer's NEI
+        if (p->upperSkelAnime.curFrame >= DEKULEAF_ATTACK_FRAME_START &&
+            p->upperSkelAnime.curFrame <= DEKULEAF_ATTACK_FRAME_END) {
             scale = DEKULEAF_ATTACK_SCALE;
         } else {
             scale = DEKULEAF_HOLD_SCALE;

@@ -266,9 +266,14 @@ static void emitTrisSingle(PlayState* play, struct SM64MarioGeometryBuffers* buf
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// modelMtx: NULL = vertices are emitted in OOT world space (gMtxClear identity
+// MODELVIEW) and the active camera's view-projection frames them — the normal
+// gameplay / Harpoon path. Non-NULL = use this matrix as the MODELVIEW (the kaleido
+// pause doll sets up its own projection + a scale/translate model matrix to frame a
+// puppet posed at the origin).
 void Sm64Render_DrawMarioMesh(PlayState* play, struct SM64MarioGeometryBuffers* buffers,
                                float cx, float cy, float cz, u8 translucent, u8 metalTint, u8 wingCap,
-                               u8 fireActive, u8 recolor, u8 tintR, u8 tintG, u8 tintB) {
+                               u8 fireActive, u8 recolor, u8 tintR, u8 tintG, u8 tintB, Mtx* modelMtx) {
     // Single-pass for all states. Standard combiner mix(SHADE, TEXEL0, T0_A).
     // emitTrisSingle decides what SHADE encodes per vertex:
     //   Normal: libsm64 baked lighting (red overalls / skin / blue shirt).
@@ -315,7 +320,8 @@ void Sm64Render_DrawMarioMesh(PlayState* play, struct SM64MarioGeometryBuffers* 
     // directly). No backface culling — single-sided wings.
     gSPClearGeometryMode((*dispList)++, G_LIGHTING | G_CULL_BOTH | G_FOG);
     gSPSetGeometryMode((*dispList)++, G_ZBUFFER | G_SHADE | G_SHADING_SMOOTH);
-    gSPMatrix((*dispList)++, &gMtxClear, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPMatrix((*dispList)++, (modelMtx != NULL) ? modelMtx : &gMtxClear,
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
 
     // Atlas binding (Mario's face / M-logo / eyes / buttons / wings live here).
     gSPTexture((*dispList)++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON);

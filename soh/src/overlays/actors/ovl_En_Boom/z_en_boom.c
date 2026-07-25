@@ -8,7 +8,6 @@
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "mods/transformation_masks/transformation_masks.h"
 #include "mods/extended_equipment.h"
-#include "mods/items/logic/weapon_upgrades.h"
 #include "mods/equipment/objects/ikaxe_DL/header.h"
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED)
@@ -70,13 +69,9 @@ void EnBoom_Init(Actor* thisx, PlayState* play) {
 
     Actor_ProcessInitChain(&this->actor, sInitChain);
 
-    // Hammer upgrade (Iron Knuckle's Axe): if spawned by the vanilla boomerang
-    // pipeline during throw mode, convert to tomahawk (params 99)
-    if (this->actor.params == 0 && WeaponUpgrade_HasHammerAxe()) {
-        this->actor.params = 99;
-    }
-
-    // IK Axe tomahawk (params 99): orange/red trail + hammer damage
+    // IK Axe tomahawk: params 99 is set ONLY by the explicit IKAxe throw (equip_ikaxe_throw.inc.c),
+    // exactly like the Zora fins spawn params 1/2 explicitly. A normal boomerang (params 0) stays a
+    // normal boomerang even while the hammer upgrade is owned — no global conversion.
     if (this->actor.params == 99) {
         blure.p1StartColor[0] = 255;
         blure.p1StartColor[1] = 150;
@@ -150,9 +145,11 @@ void EnBoom_Init(Actor* thisx, PlayState* play) {
     Collider_InitQuad(play, &this->collider);
     Collider_SetQuad(play, &this->collider, &this->actor, &sQuadInit);
 
-    // IK Axe tomahawk: hammer damage type
+    // IK Axe tomahawk: real Megaton-Hammer damage on the thrown axe (the old 0x2 was not a hammer
+    // flag, so the "boomerang" hit nothing as a hammer). DMG_HAMMER = swing | jump.
     if (this->actor.params == 99) {
-        this->collider.info.toucher.dmgFlags = 0x00000002; // DMG_HAMMER
+        this->collider.info.toucher.dmgFlags = DMG_HAMMER;
+        this->collider.info.toucher.damage = 8; // hammer-tier hit
     }
 
     // Zora cutter fins (params 1=left, 2=right): MM does 2 damage per fin
@@ -174,93 +171,6 @@ void EnBoom_Destroy(Actor* thisx, PlayState* play) {
     Collider_DestroyQuad(play, &this->collider);
 }
 
-// IK Axe tomahawk: parabolic arc out, then home back to Link
-static void EnBoom_FlyTomahawk(EnBoom* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
-    s32 shouldReturn = 0;
-
-    // ---- PHASE 1: Outgoing arc (returnTimer > 0) ----
-    if (this->returnTimer > 0) {
-        // First frame: set initial velocity from spawn angles
-        if (this->activeTimer <= 1) {
-            f32 speed = 14.0f;
-            f32 cosX = Math_CosS(this->actor.world.rot.x);
-            this->actor.velocity.x = Math_SinS(this->actor.world.rot.y) * cosX * speed;
-            this->actor.velocity.y = -Math_SinS(this->actor.world.rot.x) * speed;
-            this->actor.velocity.z = Math_CosS(this->actor.world.rot.y) * cosX * speed;
-        }
-
-        // Gravity for parabolic arc
-        this->actor.velocity.y -= 1.2f;
-
-        // Move by velocity
-        this->actor.world.pos.x += this->actor.velocity.x;
-        this->actor.world.pos.y += this->actor.velocity.y;
-        this->actor.world.pos.z += this->actor.velocity.z;
-
-        // Check AT hit (enemy)
-        if (this->collider.base.atFlags & AT_HIT) {
-            Audio_PlaySoundGeneral(NA_SE_IT_HAMMER_HIT, &this->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
-                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-            Math_Vec3f_Copy(&this->actor.world.pos, &this->actor.prevPos);
-            shouldReturn = 1;
-        }
-
-        // Check wall/floor collision
-        Vec3f hitPoint;
-        s32 hitDynaID;
-        if (BgCheck_EntityLineTest1(&play->colCtx, &this->actor.prevPos, &this->actor.world.pos, &hitPoint,
-                                    &this->actor.wallPoly, true, true, true, true, &hitDynaID)) {
-            CollisionCheck_SpawnShieldParticlesMetal(play, &hitPoint);
-            Audio_PlaySoundGeneral(NA_SE_IT_HAMMER_HIT, &this->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
-                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-            Math_Vec3f_Copy(&this->actor.world.pos, &hitPoint);
-            shouldReturn = 1;
-        }
-
-        // Timeout
-        if (DECR(this->returnTimer) == 0) {
-            shouldReturn = 1;
-        }
-
-        // Trigger return phase
-        if (shouldReturn) {
-            this->returnTimer = 0;
-            this->moveTo = &player->actor;
-            // Set rot toward player for return flight
-            this->actor.world.rot.y = Actor_WorldYawTowardActor(&this->actor, &player->actor);
-            this->actor.world.rot.x = Actor_WorldPitchTowardPoint(&this->actor, &player->actor.focus.pos);
-        }
-    }
-    // ---- PHASE 2: Return to Link (returnTimer == 0, moveTo == player) ----
-    else {
-        // Home toward player
-        s16 yawTarget = Actor_WorldYawTowardActor(&this->actor, &player->actor);
-        s16 pitchTarget = Actor_WorldPitchTowardPoint(&this->actor, &player->actor.focus.pos);
-
-        Math_ScaledStepToS(&this->actor.world.rot.y, yawTarget, 0x1000);
-        Math_ScaledStepToS(&this->actor.world.rot.x, pitchTarget, 0x1000);
-
-        Actor_SetProjectileSpeed(&this->actor, 16.0f);
-        Actor_MoveXZGravity(&this->actor);
-
-        // Close enough to catch
-        f32 dist = Math_Vec3f_DistXYZ(&this->actor.world.pos, &player->actor.focus.pos);
-        if (dist < 40.0f || player->boomerangQuickRecall) {
-            player->stateFlags1 &= ~PLAYER_STATE1_BOOMERANG_THROWN;
-            player->boomerangQuickRecall = false;
-            Actor_Kill(&this->actor);
-            return;
-        }
-    }
-
-    // Spinning rotation
-    this->actor.shape.rot.y += 0x1800;
-
-    // Sound: heavy whoosh
-    func_8002F974(&this->actor, NA_SE_IT_SWORD_SWING_HARD - SFX_FLAG);
-}
-
 void EnBoom_Fly(EnBoom* this, PlayState* play) {
     Actor* target;
     Player* player;
@@ -279,11 +189,8 @@ void EnBoom_Fly(EnBoom* this, PlayState* play) {
 
     player = GET_PLAYER(play);
 
-    // IK Axe tomahawk: separate flight path
-    if (this->actor.params == 99) {
-        EnBoom_FlyTomahawk(this, play);
-        return;
-    }
+    // IK Axe tomahawk (params 99) flies 1:1 like the vanilla boomerang (this same function) —
+    // only its model (axe DL) and damage type (hammer, set in Init) differ.
 
     target = this->moveTo;
 

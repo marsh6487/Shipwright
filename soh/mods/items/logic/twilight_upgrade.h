@@ -64,6 +64,9 @@ u8 TwilightUpgrade_IsGaleBoomerangActive(void);
 void TwilightUpgrade_SetClawshotActive(u8 active);
 void TwilightUpgrade_SetGaleBoomerangActive(u8 active);
 
+// Clawshot R-hand DL: ootHand (OOT closed hand) + MM hookshot body into *dList; no-op unless active. Skijer's NEI
+void TwilightUpgrade_ApplyClawshotHandDL(Gfx** dList, void* ootHand);
+
 #ifdef __cplusplus
 }
 #endif

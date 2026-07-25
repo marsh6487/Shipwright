@@ -192,6 +192,7 @@ static s32 sSm64PendingHealQuarters = 0;
 static s16 sSm64DoorAnimFrame = 0;
 static f32 sSm64DoorPrevX = 0.0f;
 static f32 sSm64DoorPrevZ = 0.0f;
+static s16 sSm64PushAnimFrame = 0; // #2 push/pull: loops Mario's SM64 pushing anim
 static uint8_t* sSm64RomData = NULL;
 static uint8_t* sSm64TextureAtlas = NULL;
 static s16 sSm64LastSceneNum = -1;
@@ -928,6 +929,10 @@ void Sm64Mario_QueueOotHeal(s16 healthChangeQuarters) {
 // identity is the ONLY signal that persists across the multi-frame door walk.
 extern void Player_Action_80845EF8(Player* this, PlayState* play); // knob door: open + walk-through
 extern void Player_Action_80845CA4(Player* this, PlayState* play); // sliding door + entrance/exit walk
+extern void Player_Action_8084B78C(Player* this, PlayState* play); // push/pull: grab + wait
+extern void Player_Action_8084B898(Player* this, PlayState* play); // pushing a block
+extern void Player_Action_8084B9E4(Player* this, PlayState* play); // pulling a block
+extern void func_8083F72C(Player* this, LinkAnimationHeader* anim, PlayState* play); // grab a pushable wall
 
 // TRUE when OOT must own the player this frame (a scripted sequence is running).
 // Used at BOTH enforcement points so they can never diverge:
@@ -960,8 +965,24 @@ s32 Sm64Mario_OotIsScriptingPlayer(PlayState* play, Player* p) {
     if (p->actionFunc == Player_Action_80845EF8 || p->actionFunc == Player_Action_80845CA4) {
         return 1;
     }
+    // #2 Push/pull blocks — hand the player to OOT while Link grabs + shoves an
+    // Obj_Oshihiki (push_wait / pushing / pulling). Player_ActionHandler_5 does the
+    // grab when A is pressed against a movable wall — it runs BEFORE the paused action
+    // func, so it still fires for Mario. We just un-pause the resulting action so OOT
+    // moves the block (via func_8084B840 → func_8002DFA4); libsm64 is parked and Mario
+    // plays the pushing anim (see the park block in Sm64Mario_Update).
+    if (p->actionFunc == Player_Action_8084B78C || p->actionFunc == Player_Action_8084B898 ||
+        p->actionFunc == Player_Action_8084B9E4) {
+        return 1;
+    }
     return 0;
 }
+
+// Mario's "yahoo!" voice clip — libsm64 audio_defines.h SOUND_MARIO_YAHOO =
+// SOUND_ARG_LOAD(2, 4, 0x04, 0x80, 8). Played from Sm64Kaleido_DrawForm the instant the
+// player selects Mario mode (with the SM64 audio producer pumped so it sounds during
+// the pause, not after un-pause).
+#define SM64_SOUND_MARIO_YAHOO 0x24048081
 
 void Sm64Mario_Update(PlayState* play, Player* player) {
     Camera* cam;
@@ -1093,6 +1114,29 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
     // anim during carries; the actor still gets visually pinned via OOT's
     // heldActor system or our own B-grab in TryGrabOrThrow.)
 
+    // #2 Push/pull blocks: OOT's grab handler (Player_ActionHandler_5) lives INSIDE
+    // the paused action func, so it never fires for Mario. Replicate just its
+    // Obj_Oshihiki grab here — when Mario stands grounded against a movable block
+    // holding B (Mario's action button — sp44 swaps A↔B, so raw B is OOT's grab "A",
+    // which is also what OOT's push/pull continuation reads), hand it to push_wait
+    // (it sets the push_wait action + anim + faces the wall + zeros speed). The yield
+    // predicate then un-pauses push_wait/pushing/pulling so OOT slides the block + Link
+    // (func_8084B840 → func_8002DFA4); libsm64 parks below and Mario plays the pushing
+    // anim. Heavy blocks (gauntlet lift) are skipped — Mario can't carry those.
+    // Grab uses BGCHECKFLAG_WALL (0x8, just touching a movable dyna), NOT 0x200
+    // (PLAYER_WALL_INTERACT) — the latter needs Link velocity into the wall, which is
+    // never set for a libsm64-driven Mario, so it was why the grab never fired.
+    if (!Sm64Mario_OotIsScriptingPlayer(play, player) &&
+        !(player->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) && (player->actor.bgCheckFlags & 1) &&
+        (player->actor.bgCheckFlags & 0x8) && (player->actor.wallBgId != BGCHECK_SCENE) &&
+        CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_B)) {
+        DynaPolyActor* block = DynaPoly_GetActor(&play->colCtx, player->actor.wallBgId);
+        if (block != NULL && block->actor.id != ACTOR_BG_HEAVY_BLOCK) {
+            player->unk_3C4 = &block->actor;
+            func_8083F72C(player, &gPlayerAnim_link_normal_push_wait, play);
+        }
+    }
+
     // =========================================================================
     // YIELD to OOT scripted-player sequences: door/exit walk-through, void-fall,
     // cutscenes, scene/room transitions, talk, item-get, ledge climb. ONE
@@ -1153,6 +1197,9 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
             // ~0 and the door-pose mesh draws right at Link.
             u8 inDoor = (player->actionFunc == Player_Action_80845EF8) ||
                         (player->actionFunc == Player_Action_80845CA4);
+            u8 inPushPull = (player->actionFunc == Player_Action_8084B78C) ||
+                            (player->actionFunc == Player_Action_8084B898) ||
+                            (player->actionFunc == Player_Action_8084B9E4);
             if (inDoor && p_sm64_set_mario_animation && p_sm64_set_mario_anim_frame &&
                 p_sm64_mario_tick_puppet && p_sm64_set_mario_faceangle) {
                 // On the first door frame, snap the travel reference to Link so the
@@ -1179,6 +1226,23 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
                 p_sm64_set_mario_anim_frame(sSm64MarioId, sSm64DoorAnimFrame);
                 if (sSm64DoorAnimFrame < 28) {
                     sSm64DoorAnimFrame++;
+                }
+                p_sm64_mario_tick_puppet(sSm64MarioId, &sSm64OutBuffers);
+                sSm64OutState.position[0] = px;
+                sSm64OutState.position[1] = py;
+                sSm64OutState.position[2] = pz;
+            } else if (inPushPull && p_sm64_set_mario_animation && p_sm64_set_mario_anim_frame &&
+                       p_sm64_mario_tick_puppet && p_sm64_set_mario_faceangle) {
+                // #2 Push/pull: Mario shoves the block. Face the wall (Link's yaw was
+                // turned to it on grab) and loop the SM64 pushing anim while OOT slides
+                // the Obj_Oshihiki + Link. Geometry-only puppet tick, same safe path as
+                // the door — running the physics tick at the scripted pos can NULL-deref.
+                p_sm64_set_mario_faceangle(sSm64MarioId,
+                                           (f32)player->actor.shape.rot.y * 3.14159f / 32768.0f);
+                p_sm64_set_mario_animation(sSm64MarioId, 0x6C); // MARIO_ANIM_PUSHING
+                p_sm64_set_mario_anim_frame(sSm64MarioId, sSm64PushAnimFrame);
+                if (++sSm64PushAnimFrame >= 28) {
+                    sSm64PushAnimFrame = 0;
                 }
                 p_sm64_mario_tick_puppet(sSm64MarioId, &sSm64OutBuffers);
                 sSm64OutState.position[0] = px;
@@ -1733,7 +1797,7 @@ void Sm64Mario_Draw(PlayState* play, Player* player) {
         }
     }
     Sm64Render_DrawMarioMesh(play, &sSm64OutBuffers, dx, dy, dz, translucent, metalTint, wingCap,
-                             fireActive, recolor, tintR, tintG, tintB);
+                             fireActive, recolor, tintR, tintG, tintB, /*modelMtx*/ NULL);
 
     // If the player is holding a deku stick C-button, render the lit stick
     // model floating at Mario's hand. State + render impl live in
@@ -1994,7 +2058,214 @@ u8 Sm64Remote_DrawPuppet(PlayState* play, f32 x, f32 y, f32 z, s16 faceYaw, s32 
     // lands them back at the OOT world pos we set, so no extra offset is needed.
     Sm64Render_DrawMarioMesh(play, &sSm64PuppetBuffers, 0.0f, 0.0f, 0.0f,
                              translucent, metalTint, wingCap, fireActive,
-                             /*recolor*/ 1, tintR, tintG, tintB);
+                             /*recolor*/ 1, tintR, tintG, tintB, /*modelMtx*/ NULL);
+    return 1;
+}
+
+// =============================================================================
+// Kaleido pause-doll Mario (Broken Modes equipment page)
+//
+// When the local player is in Mario mode, the equipment subscreen's 3D "doll"
+// (normally Link, drawn by KaleidoScope_DrawPlayerWork → Player_DrawPause) is
+// replaced by a real libsm64 Mario posed to the star-collect dance. The kaleido
+// calls this FIRST as a one-line hook; on success (return 1) it has already
+// rendered Mario into the same pause framebuffer the equip page composites, and
+// the caller skips the Link draw. Returns 0 (→ normal Link) when not in Mario mode
+// or libsm64 can't render, so nothing changes outside Mario mode.
+//
+// Frame the doll live with CVars (no recompile): gSm64Kaleido.Dist (zoom — smaller =
+// bigger Mario) / .AtY (raise/lower) / .RotY (facing, degrees) / .AnimId. Set e.g.
+// `set gSm64Kaleido.Dist 70` in the console until Mario is framed like Link was.
+// =============================================================================
+extern int gPauseLinkFrameBuffer; // SOH pause "Link" framebuffer (z_kaleido_equipment.c)
+static void Sm64Audio_RefillRing(void); // defined below — pumped here during the pause
+
+u8 Sm64Kaleido_DrawForm(PlayState* play) {
+    // The star-collect dance replays ONCE each time the player freshly switches INTO
+    // Mario mode (the equipment-page selection flips gSm64Mario 0→1) — not on every
+    // pause open. Detect that edge here, before the early-outs; the dance then holds
+    // its final pose until the next fresh switch.
+    static u8 sWasMarioMode = 0;
+    static s16 sKaleidoAnimFrame = 0;
+    static s16 sKaleidoAudioPump = 0;
+    u8 isMarioMode = (play != NULL && CVarGetInteger("gSm64Mario", 0) != 0);
+    if (isMarioMode && !sWasMarioMode) {
+        sKaleidoAnimFrame = 0; // freshly selected Mario → replay the dance from the start
+        // "Wahoo!" the instant Mario is selected. The SM64 audio PRODUCER normally runs
+        // on the game thread (frozen during the pause), so queue the sound here AND pump
+        // the producer for a window below — otherwise it wouldn't generate until unpause.
+        if (p_sm64_play_sound_global != NULL) {
+            p_sm64_play_sound_global(SM64_SOUND_MARIO_YAHOO);
+            sKaleidoAudioPump = 90;
+        }
+    }
+    sWasMarioMode = isMarioMode;
+
+    // Drive the SM64 audio producer during the pause so the queued wahoo actually
+    // generates PCM that the audio thread (Sm64Audio_MixInto) can play in the menu.
+    if (sKaleidoAudioPump > 0) {
+        sKaleidoAudioPump--;
+        Sm64Audio_RefillRing();
+    }
+
+    // Only take over the doll in Mario mode, and only if a Mario can actually be
+    // skinned (DLL + ROM present, puppet exports resolved). Else 0 → Link draws.
+    if (!isMarioMode || !Sm64Remote_CanRender()) {
+        return 0;
+    }
+
+    if (!sSm64PuppetBuffersInited) {
+        sSm64PuppetBuffers.position = sSm64PuppetPos;
+        sSm64PuppetBuffers.normal = sSm64PuppetNorm;
+        sSm64PuppetBuffers.color = sSm64PuppetColor;
+        sSm64PuppetBuffers.uv = sSm64PuppetUv;
+        sSm64PuppetBuffers.numTrianglesUsed = 0;
+        sSm64PuppetBuffersInited = 1;
+    }
+    if (sSm64PuppetId < 0) {
+        sSm64PuppetId = p_sm64_mario_create_puppet(0.0f, 0.0f, 0.0f);
+        if (sSm64PuppetId < 0) {
+            return 0;
+        }
+    }
+
+    // Pose the shared puppet at the ORIGIN (the tight projection below frames it),
+    // facing the camera (RotY default 180 — at 0 Mario shows his back). Advance the
+    // star dance a frame per redraw, holding the final pose once it finishes.
+    // Geometry-only tick — no physics, safe while the game is paused.
+    s32 animId = (s32)CVarGetFloat("gSm64Kaleido.AnimId", 0xCD); // 0xCD = MARIO_ANIM_STAR_DANCE
+    if (sKaleidoAnimFrame < 59) {
+        sKaleidoAnimFrame++;
+    }
+    p_sm64_set_mario_position(sSm64PuppetId, 0.0f, 0.0f, 0.0f);
+    p_sm64_set_mario_faceangle(sSm64PuppetId, CVarGetFloat("gSm64Kaleido.RotY", 180.0f) * (3.14159265f / 180.0f));
+    if (p_sm64_set_mario_state != NULL) {
+        p_sm64_set_mario_state(sSm64PuppetId, SM64_MARIO_NORMAL_CAP | SM64_MARIO_CAP_ON_HEAD);
+    }
+    p_sm64_set_mario_animation(sSm64PuppetId, animId);
+    p_sm64_set_mario_anim_frame(sSm64PuppetId, sKaleidoAnimFrame);
+    p_sm64_mario_tick_puppet(sSm64PuppetId, &sSm64PuppetBuffers);
+    if (sSm64PuppetBuffers.numTrianglesUsed == 0) {
+        return 0;
+    }
+
+    // The mesh lands in OOT object space near the origin (libsm64 ×SM64_SCALE → Mario
+    // ~40 units tall, feet at y≈0). Keep the PROVEN identity-MODELVIEW mesh path (the
+    // in-world Mario draw, modelMtx = NULL) and frame it purely with a tight front
+    // perspective — the eye sits close because the mesh is already small (no per-vertex
+    // world offset like Link's skeleton, which is why a model scale was the wrong tool
+    // and rendered nothing). Live-tunable:
+    //   gSm64Kaleido.Dist = camera distance (smaller → BIGGER Mario)
+    //   gSm64Kaleido.AtY  = look-at height (raise/lower Mario in the frame)
+    f32 dist = CVarGetFloat("gSm64Kaleido.Dist", 60.0f);
+    f32 atY  = CVarGetFloat("gSm64Kaleido.AtY", 22.0f);
+
+    s32 width  = PAUSE_EQUIP_PLAYER_WIDTH;
+    s32 height = PAUSE_EQUIP_PLAYER_HEIGHT;
+
+    Mtx* perspMtx  = Graph_Alloc(play->state.gfxCtx, sizeof(Mtx));
+    Mtx* lookAtMtx = Graph_Alloc(play->state.gfxCtx, sizeof(Mtx));
+    u16 perspNorm;
+    Gfx* opaRef; // reserved POLY_OPA slot — branches the normal flow PAST our sub-list
+    guPerspective(perspMtx, &perspNorm, 60.0f, (f32)width / (f32)height, 10.0f, 4000.0f, 1.0f);
+    guLookAt(lookAtMtx, 0.0f, atY, -dist, 0.0f, atY, 0.0f, 0.0f, 1.0f, 0.0f);
+
+    static Vp sViewport;
+    sViewport.vp.vscale[0] = sViewport.vp.vtrans[0] = width * ((1 << 2) / 2);
+    sViewport.vp.vscale[1] = sViewport.vp.vtrans[1] = height * ((1 << 2) / 2);
+    sViewport.vp.vscale[2] = sViewport.vp.vtrans[2] = G_MAXZ / 2;
+    sViewport.vp.vscale[3] = sViewport.vp.vtrans[3] = 0;
+
+    // --- Block 1: redirect to the pause FB, clear it, set viewport + projection. ---
+    {
+        OPEN_DISPS(play->state.gfxCtx);
+        gsSPSetFB(WORK_DISP++, gPauseLinkFrameBuffer);
+
+        // Make the following POLY_OPA commands a sub-list the WORK spine calls into
+        // *now* (inside the FB-redirect window), then branch the normal POLY_OPA flow
+        // past them at frame end so they don't re-run to the main framebuffer. Same
+        // display-list surgery Player_DrawPauseImpl uses for the Link doll. (OPA only —
+        // the doll mesh is never translucent, so nothing reaches POLY_XLU.)
+        opaRef = POLY_OPA_DISP;
+        POLY_OPA_DISP++;
+        gSPDisplayList(WORK_DISP++, POLY_OPA_DISP);
+
+        // The sub-list runs from the WORK spine mid-frame, BEFORE the normal POLY_OPA
+        // segment setup — so segment 0 may be stale here. Reset it to identity (like
+        // Player_DrawPauseImpl) so Mario's Graph_Alloc'd vertex pointers resolve. This
+        // was the likely reason the mesh was emitted but invisible.
+        gSPSegment(POLY_OPA_DISP++, 0x00, NULL);
+
+        gDPPipeSync(POLY_OPA_DISP++);
+        gSPLoadGeometryMode(POLY_OPA_DISP++, 0);
+        gSPTexture(POLY_OPA_DISP++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF);
+        gDPSetCombineMode(POLY_OPA_DISP++, G_CC_SHADE, G_CC_SHADE);
+        gDPSetScissor(POLY_OPA_DISP++, G_SC_NON_INTERLACE, 0, 0, width, height);
+        gSPClipRatio(POLY_OPA_DISP++, FRUSTRATIO_1);
+
+        // Clear depth then color (black) — same as Player_DrawPauseImpl. Depth FB
+        // sits right after the color FB (curFrameBuffer + width*height, u16 units).
+        gDPSetColorImage(POLY_OPA_DISP++, G_IM_FMT_RGBA, G_IM_SIZ_16b, width,
+                         play->state.gfxCtx->curFrameBuffer + (width * height));
+        gDPSetCycleType(POLY_OPA_DISP++, G_CYC_FILL);
+        gDPSetRenderMode(POLY_OPA_DISP++, G_RM_NOOP, G_RM_NOOP2);
+        gDPSetFillColor(POLY_OPA_DISP++, (GPACK_ZDZ(G_MAXFBZ, 0) << 16) | GPACK_ZDZ(G_MAXFBZ, 0));
+        gDPFillRectangle(POLY_OPA_DISP++, 0, 0, width - 1, height - 1);
+        gDPPipeSync(POLY_OPA_DISP++);
+
+        gDPSetColorImage(POLY_OPA_DISP++, G_IM_FMT_RGBA, G_IM_SIZ_16b, width,
+                         play->state.gfxCtx->curFrameBuffer);
+        gDPSetCycleType(POLY_OPA_DISP++, G_CYC_FILL);
+        gDPSetRenderMode(POLY_OPA_DISP++, G_RM_NOOP, G_RM_NOOP2);
+        gDPSetFillColor(POLY_OPA_DISP++, (GPACK_RGBA5551(0, 0, 0, 1) << 16) | GPACK_RGBA5551(0, 0, 0, 1));
+        gDPFillRectangle(POLY_OPA_DISP++, 0, 0, width - 1, height - 1);
+        gDPPipeSync(POLY_OPA_DISP++);
+
+        gDPSetDepthImage(POLY_OPA_DISP++, play->state.gfxCtx->curFrameBuffer + (width * height));
+        gSPViewport(POLY_OPA_DISP++, &sViewport);
+
+        gSPPerspNormalize(POLY_OPA_DISP++, perspNorm);
+        gSPMatrix(POLY_OPA_DISP++, perspMtx, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
+        gSPMatrix(POLY_OPA_DISP++, lookAtMtx, G_MTX_NOPUSH | G_MTX_MUL | G_MTX_PROJECTION);
+
+        // THE FIX: force per-pixel depth source. This sub-list runs from the WORK
+        // spine BEFORE the normal frame setup, so the RDP's depth source is stale here
+        // (prim-depth — a single fixed Z), which made Mario's Z-buffered mesh fail the
+        // depth test and vanish while the no-Z test drew fine. Player_DrawPauseImpl
+        // sets G_ZS_PIXEL the same way for the Link doll.
+        gDPSetDepthSource(POLY_OPA_DISP++, G_ZS_PIXEL);
+
+        CLOSE_DISPS(play->state.gfxCtx);
+    }
+
+    // --- Mario's full TEXTURED mesh (face, eyes, M-logo). Identity MODELVIEW
+    // (modelMtx = NULL, the proven in-world path); the tight projection above frames
+    // it. The earlier crash setting Mario's raw atlas here was collateral from a
+    // diagnostic overflowing the gfx pool (now gone) — the normal textured path works.
+    // Harpoon colour recolors his red just like the in-world Mario. ---
+    {
+        u8 recolor = 0, tintR = 0, tintG = 0, tintB = 0;
+        u8 hr, hg, hb;
+        if (Harpoon_GetLocalPlayerColor(&hr, &hg, &hb)) {
+            recolor = 1;
+            tintR = hr;
+            tintG = hg;
+            tintB = hb;
+        }
+        Sm64Render_DrawMarioMesh(play, &sSm64PuppetBuffers, 0.0f, 0.0f, 0.0f,
+                                 /*translucent*/ 0, /*metalTint*/ 0, /*wingCap*/ 0, /*fireActive*/ 0,
+                                 recolor, tintR, tintG, tintB, /*modelMtx*/ NULL);
+    }
+
+    // --- Block 2: cap the POLY_OPA sub-list, branch the normal frame-end flow past
+    // it (so it isn't re-drawn to the main FB), and restore the framebuffer. ---
+    {
+        OPEN_DISPS(play->state.gfxCtx);
+        gSPEndDisplayList(POLY_OPA_DISP++);
+        gSPBranchList(opaRef, POLY_OPA_DISP);
+        gsSPResetFB(WORK_DISP++);
+        CLOSE_DISPS(play->state.gfxCtx);
+    }
     return 1;
 }
 

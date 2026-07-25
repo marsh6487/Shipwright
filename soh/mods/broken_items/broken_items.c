@@ -97,6 +97,21 @@ static void BrokenItems_PlaySfx(u16 sfxId) {
                            &gSfxDefaultReverb);
 }
 
+// Whether a form may be equipped on this save file. Mario is gated behind
+// actually owning the Mario Mask (granted by the Peach's Castle set piece in
+// mods/mario_mask_scene/). Everything else is always available.
+//
+// This matters beyond the obvious: the mode CVars are GLOBAL, not per-save, so a
+// file that has never seen the mask could otherwise boot straight into Mario mode
+// just because another file left gSm64Mario set. BrokenItems_CurrentEquipped
+// below therefore treats a set-but-unearned CVar as LINK.
+s32 BrokenItems_FormUnlocked(s32 i) {
+    if (i == BROKEN_MODE_MARIO) {
+        return Flags_GetRandomizerInf(RAND_INF_OBTAINED_MARIO_MASK) != 0;
+    }
+    return 1;
+}
+
 // Which mode is currently equipped, derived from the persistent mode CVars.
 // (A pokeball-item transformation is intentionally NOT reflected here — that is
 // the other, transient system and doesn't change the equipped MODE.)
@@ -104,7 +119,10 @@ static s32 BrokenItems_CurrentEquipped(void) {
     if (CVarGetInteger(CVAR_PIKACHU_MODE, 0) != 0) {
         return BROKEN_MODE_PIKACHU;
     }
-    return (CVarGetInteger(CVAR_SM64_MARIO, 0) != 0) ? BROKEN_MODE_MARIO : BROKEN_MODE_LINK;
+    if (CVarGetInteger(CVAR_SM64_MARIO, 0) != 0) {
+        return BrokenItems_FormUnlocked(BROKEN_MODE_MARIO) ? BROKEN_MODE_MARIO : BROKEN_MODE_LINK;
+    }
+    return BROKEN_MODE_LINK;
 }
 
 s32 BrokenItems_Enabled(void) {
@@ -118,6 +136,12 @@ s32 BrokenItems_Enabled(void) {
 // C-Down, and we never touch the pokeball-item transform flow.
 static void BrokenItems_Equip(PlayState* play, s32 mode) {
     (void)play;
+    if (!BrokenItems_FormUnlocked(mode)) {
+        // Not earned yet — reject with the standard error blip and leave the
+        // current form alone.
+        BrokenItems_PlaySfx(NA_SE_SY_ERROR);
+        return;
+    }
     CVarSetInteger(CVAR_SM64_MARIO, (mode == BROKEN_MODE_MARIO) ? 1 : 0);
     CVarSetInteger(CVAR_PIKACHU_MODE, (mode == BROKEN_MODE_PIKACHU) ? 1 : 0);
     CVarSave();

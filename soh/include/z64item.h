@@ -412,6 +412,43 @@ typedef enum {
     // ITEM_BOTTLE_WITH_MAGIC_MUSHROOM is the filled bottle id stored in SLOT_BOTTLE_*.
     /* 0xDD */ ITEM_MAGIC_MUSHROOM,
     /* 0xDE */ ITEM_BOTTLE_WITH_MAGIC_MUSHROOM,
+    // MM bottle-content custom items (Bottle Randomizer, Skijer's NEI). Each is a STANDALONE custom
+    // item = 1 row in sNeiItems[] (own icon + own behavior), stored directly in SLOT_BOTTLE_* by the
+    // wheel; NO _BOTTLE_WITH_ id, NO vanilla bottle behavior. Icons are mm.o2r placeholders (TODO:
+    // exact names). NOTE: Chateau Romani (0xB6) + Magic Mushroom (0xDD) already exist — reused here.
+    // Placed at 0xEC+ to CLEAR the extended-equipment #defines (ITEM_EXT_* = 0xE0-0xEB in
+    // extended_equipment.h). If these raw values change, update custom_bottles.cpp + mm_bottles_behavior.cpp.
+    /* 0xEC */ ITEM_GOLD_DUST = 0xEC,
+    /* 0xED */ ITEM_HOT_SPRING_WATER,
+    /* 0xEE */ ITEM_DEKU_PRINCESS,
+    /* 0xEF */ ITEM_SEAHORSE,
+    /* 0xF0 */ ITEM_SPRING_WATER,
+    /* 0xF1 */ ITEM_ZORA_EGG,
+    /* 0xF2 */ ITEM_HYLIAN_LOACH,
+    /* 0xF3 */ ITEM_OBABA_DRINK,
+    // Bottle Randomizer extra slots (Skijer's NEI): Net + Bottomless Bottle, occupy SLOT_BOTTLE_3/4.
+    // Behavior DEFERRED; placeholder icons (textures/icon_item_custom/gItemIconPending2/4Tex).
+    /* 0xF4 */ ITEM_NET,
+    /* 0xF5 */ ITEM_BOTTOMLESS_BOTTLE,
+    // Power Keg (MM Goron's big bomb, Skijer's NEI): shares the Bomb slot via a kaleido wheel
+    // (A opens, stick cycles Bomb <-> Power Keg). Usable only as Fierce Deity / Goron, or
+    // Human/Gerudo with Silver Gauntlets+ (UPG_STRENGTH >= 2). Behavior TBD.
+    /* 0xF6 */ ITEM_POWER_KEG = 0xF6,
+    // MM adult trade-quest items (Skijer's NEI) — shown in the SLOT_TRADE_ADULT 2D-grid wheel. The u8
+    // inventory-id space is nearly full, so these reuse the remaining gaps (0xDF, 0xF7-0xFB) plus two
+    // unreferenced INVALID slots (0x7E, 0x7F). (0xFD is avoided: the C-button HUD draw gates on
+    // `item < ITEM_LAST_USED (0xFC)`, so an id >= 0xFC is invisible on a C-button.) The Pendant is NOT
+    // listed here — it IS the combat
+    // ITEM_EXT_BOOTS_2 (0xEA, equip_pendant.c), so the trade entry and the C-equippable moveset are the
+    // SAME item (granting the Pendant sets both the trade bit and the Ext Boots 2 ownership bit).
+    /* 0xDF */ ITEM_MM_MOONS_TEAR = 0xDF,
+    /* 0xF7 */ ITEM_MM_DEED_LAND = 0xF7,
+    /* 0xF8 */ ITEM_MM_DEED_SWAMP = 0xF8,
+    /* 0xF9 */ ITEM_MM_DEED_MOUNTAIN = 0xF9,
+    /* 0xFA */ ITEM_MM_DEED_OCEAN = 0xFA,
+    /* 0xFB */ ITEM_MM_ROOM_KEY = 0xFB,
+    /* 0x7F */ ITEM_MM_LETTER_KAFEI = 0x7F, // INVALID_5 slot; 0xFD would be hidden on C-buttons (see note above)
+    /* 0x7E */ ITEM_MM_SPECIAL_DELIVERY = 0x7E, // reuses the unreferenced ITEM_INVALID_4 slot
     /* 0xFC */ ITEM_LAST_USED = 0xFC,
     /* 0xFE */ ITEM_NONE_FE = 0xFE,
     /* 0xFF */ ITEM_NONE = 0xFF

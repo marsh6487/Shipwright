@@ -306,7 +306,32 @@ void ExtEquip_DrawShieldBackDL(void* play);
 /**
  * Draw Dragon Scale pendant at waist. Called from PostLimbDraw for PLAYER_LIMB_WAIST.
  */
-void ExtEquip_DrawWaistScale(void* play);
+// ExtEquip_DrawWaistScale removed — Water Dragon Scale item deleted (Zora swim = Zora Tunic effect).
+// Retired ext slots (Cape/Pendant moved to the upgrade column, Dragon Scale deleted): true = the
+// slot is dead in the grid (ownership bits still meaningful for the new systems).
+u8 ExtEquip_SlotRetired(s16 equipType, u8 index);
+
+// Extended recolor tunics (Skijer 2026-07-16) — currently-equipped predicates + Spirit money gate:
+u8 ExtEquip_IsChampionTunic(void);   // ext tunic 1 (blue) equipped
+u8 ExtEquip_IsSpiritTunic(void);     // ext tunic 2 (orange/black) equipped
+u8 ExtEquip_IsSnowquillTunic(void);  // ext tunic 3 (white) equipped
+u8 ExtEquip_SpiritHasMoney(void);    // Spirit equipped AND rupees > 0
+void ExtEquip_GiveCape(void);        // grant the Magic Cape (dedicated ownership flag)
+void* ExtEquip_GetCapeIcon(void);    // upgrade-column icon (decoupled from the ext grid slot)
+void* ExtEquip_GetPendantIcon(void);
+
+// Upgrade-column passives (Magic Cape / Pendant of Memories — Skijer 2026-07-15):
+// MAGIC_REQ — the Magic Cape's real effect (commit 10a66533): HALVES the magic cost, so a spell is
+// castable with only half the base magic. Applied at the shared ItemMagic_* helper (all custom magic
+// items), at Magic_RequestChange (vanilla spells + API users) and at the direct-writer sites (Four
+// Sword clones, Deku Leaf). Passive: active whenever the cape is OWNED, independent of visibility.
+#define MAGIC_REQ(cost) (ExtEquip_CapeOwned() ? ((cost) / 2) : (cost))
+u8 ExtEquip_CapeOwned(void);            // owns the Magic Cape (ext TUNIC 1 bit)
+u8 ExtEquip_CapeVisible(void);          // owned && not hidden (draw the cloth)
+void ExtEquip_ToggleCapeVisibility(void);
+u8 ExtEquip_PendantOwned(void);         // owns the Pendant of Memories (ext BOOTS 2 bit)
+u8 ExtEquip_PendantActive(void);        // owned && effect toggle ON
+void ExtEquip_TogglePendantEffect(void);
 
 /**
  * Draw the ext sword DL in the current matrix context (called from PostLimbDraw).
@@ -320,12 +345,12 @@ void ExtEquip_DrawSwordDL(void* play);
  * @param play PlayState
  * @param isRightFoot 1 for right foot, 0 for left foot
  */
-void ExtEquip_DrawAnklet(void* play, s32 isRightFoot);
+// ExtEquip_DrawAnklet removed — Pegasus model = red hover boots in Player_DrawImpl.
 
 /**
  * Update pendulum physics for anklet wings. Called from Pegasus_Behavior.
  */
-void ExtEquip_UpdateAnkletPhysics(void* player);
+// ExtEquip_UpdateAnkletPhysics removed with the anklet wing model.
 
 /**
  * Capture shoulder world positions for cloth physics (Magic Cape + Champion's Scarf).

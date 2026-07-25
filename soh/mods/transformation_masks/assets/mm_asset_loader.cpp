@@ -612,6 +612,46 @@ u8 MmAssets_ResourceExists(const char* path) {
 }
 
 /**
+ * Strip the "__OTR__" prefix if present (skeleton/anim callers often pass gfx-style paths).
+ */
+static const char* MmAssets_StripOtrPrefix(const char* path) {
+    if (path != nullptr && strncmp(path, "__OTR__", 7) == 0) {
+        return path + 7;
+    }
+    return path;
+}
+
+/**
+ * Load an MM skeleton (2Ship OSKL) archive-scoped from mm.o2r.
+ *
+ * Diagnosis (2026-07): 2Ship's exporter writes Skeleton/SkeletonLimb/Animation resources
+ * in EXACTLY SoH's binary format (same fourccs OSKL/OSLB/OANM, version 0, identical
+ * factory field order — the factories are line-for-line the same code in both repos).
+ * SoH's stock ResourceLoader therefore parses mm.o2r skeletons natively; no converter
+ * is needed. What we DO need is archive-scoped file loading (sMmArchive->LoadFile),
+ * because the global name index resolves shared paths to oot.o2r, and the global
+ * LoadResourceProcess(identifier) in this LUS version ignores the Parent archive
+ * (see MmAssets_LoadFromMmArchive).
+ *
+ * The parsed Skeleton keeps limb pointers whose dLists are "__OTR__<path>" strings —
+ * the proven gfx-interpreter mechanism resolves those at draw time.
+ *
+ * The shared_ptr is retained in sMmResourceCache so the SkeletonHeader stays alive
+ * for the lifetime of any SkelAnime initialized from it.
+ */
+void* MmAssets_LoadSkeleton(const char* path) {
+    return MmAssets_LoadFromMmArchive(MmAssets_StripOtrPrefix(path), nullptr);
+}
+
+/**
+ * Load an MM animation (2Ship OANM) archive-scoped from mm.o2r.
+ * Same format-compatibility rationale as MmAssets_LoadSkeleton.
+ */
+void* MmAssets_LoadAnimation(const char* path) {
+    return MmAssets_LoadFromMmArchive(MmAssets_StripOtrPrefix(path), nullptr);
+}
+
+/**
  * List files matching a pattern from mm.o2r
  * Same as ResourceMgr_ListFiles in 2Ship (load.c lines 1254-1258)
  *

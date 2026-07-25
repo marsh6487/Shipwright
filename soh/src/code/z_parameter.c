@@ -25,6 +25,7 @@
 #include "soh/ObjectExtension/ActorMaximumHealth.h"
 #include "mods/extended_inventory.h"
 #include "mods/transformation_masks/transformation_masks.h"
+#include "mods/items/custom_bottles.h" // Bottomless Bottle counter (Skijer's NEI)
 #include "expansions/sw97/sw97_config.h"
 
 #include "message_data_static.h"
@@ -3151,6 +3152,11 @@ void Magic_Reset(PlayState* play) {
 }
 
 s32 Magic_RequestChange(PlayState* play, s16 amount, s16 type) {
+    // NOTE (Skijer 2026-07-15): the Magic Cape's half-cost is applied at the individual CALL SITES
+    // (MAGIC_REQ on spells + magic arrows in z_player.c, ItemMagic_* for custom items, the Lens timer
+    // below) — NOT centrally here. A central halve also caught the sword SPIN ATTACK (En_M_Thunder,
+    // cost in actor params), whose preview+consume pair mis-drained (the reported "double"). Spin
+    // attack is a vanilla sword mechanic outside the cape's scope, so it stays full cost.
     if (!gSaveContext.isMagicAcquired) {
         return false;
     }
@@ -3432,7 +3438,11 @@ void Interface_UpdateMagicBar(PlayState* play) {
                 interfaceCtx->unk_230--;
                 if (interfaceCtx->unk_230 == 0) {
                     gSaveContext.magic--;
-                    interfaceCtx->unk_230 = 80;
+                    // Magic Cape (Skijer): the Lens drains via this timer with amount=0, so the
+                    // central Magic_RequestChange halving can't touch it — halve the drain RATE here
+                    // instead (drain once every 160 frames instead of 80 = half the magic over time).
+                    extern u8 ExtEquip_CapeOwned(void);
+                    interfaceCtx->unk_230 = ExtEquip_CapeOwned() ? 160 : 80;
                 }
             }
 
@@ -4736,6 +4746,43 @@ void Interface_DrawItemIconTexture(PlayState* play, void* texture, s16 button) {
     s32 isElementalWeapon =
         SW97_MEDALLIONS_ENABLED() && (btnItem >= ITEM_SW97_ARROW_FIRE && btnItem <= ITEM_SW97_ARROW_WIND);
 
+    // Skijer's NEI: Switch Hook grayed out while its charge pool recovers (spent the 5th shot).
+    s16 shGrayAlpha = -1;
+    {
+        extern u8 SwitchHook_IsDepleted(void);
+        if ((btnItem == ITEM_SWITCH_HOOK) && SwitchHook_IsDepleted()) {
+            switch (button) {
+                case 1:
+                    shGrayAlpha = interfaceCtx->cLeftAlpha;
+                    break;
+                case 2:
+                    shGrayAlpha = interfaceCtx->cDownAlpha;
+                    break;
+                case 3:
+                    shGrayAlpha = interfaceCtx->cRightAlpha;
+                    break;
+                case 4:
+                    shGrayAlpha = interfaceCtx->dpadUpAlpha;
+                    break;
+                case 5:
+                    shGrayAlpha = interfaceCtx->dpadDownAlpha;
+                    break;
+                case 6:
+                    shGrayAlpha = interfaceCtx->dpadLeftAlpha;
+                    break;
+                case 7:
+                    shGrayAlpha = interfaceCtx->dpadRightAlpha;
+                    break;
+                default:
+                    shGrayAlpha = interfaceCtx->bAlpha;
+                    break;
+            }
+            // Switch Hook depleted: the icon itself draws gray for the 2-minute recovery.
+            gDPPipeSync(OVERLAY_DISP++);
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 100, 100, 100, shGrayAlpha);
+        }
+    }
+
     if (isElementalWeapon) {
         s16 iconW = gItemIconWidth[button];
         s32 x0 = ItemIconPos[button][0];
@@ -4779,6 +4826,13 @@ void Interface_DrawItemIconTexture(PlayState* play, void* texture, s16 button) {
                                 (ItemIconPos[button][0] + gItemIconWidth[button]) << 2,
                                 (ItemIconPos[button][1] + gItemIconWidth[button]) << 2, G_TX_RENDERTILE, 0, 0,
                                 gItemIconDD[button] << 1, gItemIconDD[button] << 1);
+    }
+
+    // Skijer's NEI: restore the caller's expected prim state for whatever draws next (ammo digits,
+    // overlays, etc.) after the Switch Hook gray draw above.
+    if (shGrayAlpha >= 0) {
+        gDPPipeSync(OVERLAY_DISP++);
+        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, shGrayAlpha);
     }
 
     // Twilight L-badge — small `L` icon in the bottom-right corner of the
@@ -4847,6 +4901,55 @@ void Interface_DrawItemIconTexture(PlayState* play, void* texture, s16 button) {
                                         G_TX_RENDERTILE, 0, 0, ddOverlay, ddOverlay);
             }
         }
+    }
+
+    // Skijer's NEI — Ultrashot: Light-medallion marker on the equipped button's TOP-RIGHT corner
+    // (the Ultrashot keeps the Longshot ICON; the medallion is what tells it apart). 24x24 quest
+    // icon drawn at 12x12 over the icon's corner, at the button's own alpha. Suppressed while the
+    // Twilight clawshot MODE is toggled on (the icon shows the claw then, not the Longshot).
+    extern u8 TwilightUpgrade_IsClawshotActive(void);
+    if ((btnItem == ITEM_LONGSHOT) && Nei_Save()->ultrashotOwned && !TwilightUpgrade_IsClawshotActive()) {
+        s16 markSize = 12;
+        s16 markLeft = ItemIconPos[button][0] + gItemIconWidth[button] - markSize + 2;
+        s16 markTop = ItemIconPos[button][1] - 2;
+        s16 markAlpha;
+        s32 ddMark = 24 * 1024 / markSize; // 24x24 source drawn 12x12
+
+        switch (button) {
+            case 1:
+                markAlpha = interfaceCtx->cLeftAlpha;
+                break;
+            case 2:
+                markAlpha = interfaceCtx->cDownAlpha;
+                break;
+            case 3:
+                markAlpha = interfaceCtx->cRightAlpha;
+                break;
+            case 4:
+                markAlpha = interfaceCtx->dpadUpAlpha;
+                break;
+            case 5:
+                markAlpha = interfaceCtx->dpadDownAlpha;
+                break;
+            case 6:
+                markAlpha = interfaceCtx->dpadLeftAlpha;
+                break;
+            case 7:
+                markAlpha = interfaceCtx->dpadRightAlpha;
+                break;
+            default:
+                markAlpha = interfaceCtx->bAlpha;
+                break;
+        }
+
+        gDPPipeSync(OVERLAY_DISP++);
+        gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
+        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, markAlpha);
+        gDPLoadTextureBlock(OVERLAY_DISP++, (u8*)"__OTR__textures/icon_item_24_static/gQuestIconMedallionLightTex",
+                            G_IM_FMT_RGBA, G_IM_SIZ_32b, 24, 24, 0, G_TX_NOMIRROR | G_TX_WRAP,
+                            G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+        gSPWideTextureRectangle(OVERLAY_DISP++, markLeft << 2, markTop << 2, (markLeft + markSize) << 2,
+                                (markTop + markSize) << 2, G_TX_RENDERTILE, 0, 0, ddMark, ddMark);
     }
 
     CLOSE_DISPS(play->state.gfxCtx);
@@ -5094,16 +5197,65 @@ void Interface_DrawAmmoCount(PlayState* play, s16 button, s16 alpha) {
 
     i = gSaveContext.equips.buttonItems[button];
 
+    // Bottomless Bottle counter (Skijer's NEI): a multi-use content on SLOT_BOTTLE_4 shows its use-
+    // counter as "ammo" — this number is the ONLY thing that identifies a Bottomless Bottle. Always
+    // shown while owned: 0 when empty, else the remaining uses.
+    s16 bottomlessAmmo = -1;
+    if ((button >= 1) && (button <= 3) && (gSaveContext.equips.cButtonSlots[button - 1] == SLOT_BOTTLE_4) &&
+        Bottle_BottomlessOwned()) {
+        bottomlessAmmo = Bottle_BottomlessCount();
+    }
+
+    // Pictograph Box counter (Skijer's NEI): the Lens slot in pictobox mode shows 1 with a kept photo,
+    // else 0. The Lens isn't a vanilla ammo item, so force the counter on for it.
+    s16 pictoAmmo = -1;
+    {
+        extern unsigned char Picto_IsOwned(void);
+        extern unsigned char Picto_IsOnLensActive(void);
+        extern unsigned char Picto_HasPhoto(void);
+        if ((i == ITEM_LENS) && Picto_IsOwned() && Picto_IsOnLensActive()) {
+            pictoAmmo = Picto_HasPhoto() ? 1 : 0;
+        }
+    }
+
     if (GameInteractor_Should(VB_DRAW_AMMO_COUNT,
                               ((i == ITEM_STICK) || (i == ITEM_NUT) || (i == ITEM_BOMB) || (i == ITEM_BOW) ||
                                ((i >= ITEM_BOW_ARROW_FIRE) && (i <= ITEM_BOW_ARROW_LIGHT)) || (i == ITEM_SLINGSHOT) ||
-                               (i == ITEM_BOMBCHU) || (i == ITEM_BEAN)),
+                               (i == ITEM_BOMBCHU) || (i == ITEM_BEAN) ||
+                               (i == ITEM_SWITCH_HOOK)) || // Skijer's NEI: Switch Hook charge pool (5 shots)
+                                  (bottomlessAmmo >= 0) || (pictoAmmo >= 0),
                               &i)) {
         if ((i >= ITEM_BOW_ARROW_FIRE) && (i <= ITEM_BOW_ARROW_LIGHT)) {
             i = ITEM_BOW;
         }
 
-        ammo = AMMO(i);
+        if (i == ITEM_SWITCH_HOOK) {
+            // Skijer's NEI: shots left in the 5-charge pool (0 through the 2-minute gray-out).
+            // ITEM_SWITCH_HOOK (0xA5) is outside the vanilla AMMO()/SLOT() tables — never AMMO(i) it.
+            extern u8 SwitchHook_GetCharges(void);
+            ammo = SwitchHook_GetCharges();
+        } else {
+            ammo = AMMO(i);
+        }
+
+        if (bottomlessAmmo >= 0) {
+            ammo = bottomlessAmmo; // override with the Bottomless Bottle counter
+        }
+
+        // Power Keg counter (Skijer's NEI): the Bomb slot in keg mode carries its OWN ammo, so show the
+        // keg count instead of the regular bomb count.
+        {
+            extern unsigned char PowerKeg_IsOwned(void);
+            extern unsigned char PowerKeg_IsOnBombActive(void);
+            extern unsigned char PowerKeg_GetCount(void);
+            if ((i == ITEM_BOMB) && PowerKeg_IsOwned() && PowerKeg_IsOnBombActive()) {
+                ammo = PowerKeg_GetCount();
+            }
+        }
+
+        if (pictoAmmo >= 0) {
+            ammo = pictoAmmo; // Pictograph Box photo counter (0/1)
+        }
 
         gDPPipeSync(OVERLAY_DISP++);
 
@@ -5121,7 +5273,10 @@ void Interface_DrawAmmoCount(PlayState* play, s16 button, s16 alpha) {
                    ((i == ITEM_SLINGSHOT) && (AMMO(i) == CUR_CAPACITY(UPG_BULLET_BAG))) ||
                    ((i == ITEM_STICK) && (AMMO(i) == CUR_CAPACITY(UPG_STICKS))) ||
                    ((i == ITEM_NUT) && (AMMO(i) == CUR_CAPACITY(UPG_NUTS))) || ((i == ITEM_BOMBCHU) && (ammo == 50)) ||
-                   ((i == ITEM_BEAN) && (ammo == 15)) || GameInteractor_Should(VB_COLOR_AMMO_GREEN, false, i)) {
+                   ((i == ITEM_BEAN) && (ammo == 15)) ||
+                   // Skijer's NEI: Switch Hook at full charge (5/5) — green
+                   ((i == ITEM_SWITCH_HOOK) && (ammo == 5)) ||
+                   GameInteractor_Should(VB_COLOR_AMMO_GREEN, false, i)) {
             gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 120, 255, 0, alpha);
         }
 
@@ -5349,6 +5504,9 @@ extern void PikachuHud_DrawImGui(void);
 extern u8 PikaMode_IsActive(void);
 extern s32 PikaMode_HudStyle(void);
 extern void* PikaMode_ButtonIcon(s32 button, void* orig);
+// Gerudo MHR Dual Blades: wirebug + demon-meter HUD (gerudo_hud.cpp). Drawn
+// unconditionally (self-gates on the form) — Gerudo keeps Link's hearts.
+extern void GerudoHud_DrawImGui(void);
 
 void Interface_Draw(PlayState* play) {
     static s16 magicArrowEffectsR[] = { 255, 100, 255 };
@@ -5442,6 +5600,10 @@ void Interface_Draw(PlayState* play) {
         } else if (fullUi || gSaveContext.health != gSaveContext.healthCapacity) {
             HealthMeter_Draw(play);
         }
+
+        // Gerudo MHR Dual Blades HUD (wirebug pips + demon gauge). Self-gates on
+        // the form and draws over the normal UI without replacing the hearts.
+        GerudoHud_DrawImGui();
 
         Gfx_SetupDL_39Overlay(play->state.gfxCtx);
 
@@ -5837,7 +5999,7 @@ void Interface_Draw(PlayState* play) {
 
         // C-Left Button Icon & Ammo Count
         // SM64 Mario mode: C-buttons become moves (spin/dash), not items — hide the icon.
-        if (gSaveContext.equips.buttonItems[1] < 0xF0 && !CVarGetInteger("gSm64Mario", 0)) {
+        if (gSaveContext.equips.buttonItems[1] < ITEM_LAST_USED && !CVarGetInteger("gSm64Mario", 0)) {
             gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->cLeftAlpha);
             gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
             Interface_DrawItemIconTexture(play, PikaMode_ButtonIcon(1, ExtInv_GetItemIcon(gSaveContext.equips.buttonItems[1])), 1);
@@ -5850,7 +6012,7 @@ void Interface_Draw(PlayState* play) {
         gDPPipeSync(OVERLAY_DISP++);
 
         // C-Down Button Icon & Ammo Count
-        if (gSaveContext.equips.buttonItems[2] < 0xF0 && !CVarGetInteger("gSm64Mario", 0)) {
+        if (gSaveContext.equips.buttonItems[2] < ITEM_LAST_USED && !CVarGetInteger("gSm64Mario", 0)) {
             gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->cDownAlpha);
             gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
             Interface_DrawItemIconTexture(play, PikaMode_ButtonIcon(2, ExtInv_GetItemIcon(gSaveContext.equips.buttonItems[2])), 2);
@@ -5863,7 +6025,7 @@ void Interface_Draw(PlayState* play) {
         gDPPipeSync(OVERLAY_DISP++);
 
         // C-Right Button Icon & Ammo Count
-        if (gSaveContext.equips.buttonItems[3] < 0xF0 && !CVarGetInteger("gSm64Mario", 0)) {
+        if (gSaveContext.equips.buttonItems[3] < ITEM_LAST_USED && !CVarGetInteger("gSm64Mario", 0)) {
             gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->cRightAlpha);
             gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
             Interface_DrawItemIconTexture(play, PikaMode_ButtonIcon(3, ExtInv_GetItemIcon(gSaveContext.equips.buttonItems[3])), 3);
@@ -5932,7 +6094,7 @@ void Interface_Draw(PlayState* play) {
             }
 
             // DPad-Up Button Icon & Ammo Count
-            if (gSaveContext.equips.buttonItems[4] < 0xF0) {
+            if (gSaveContext.equips.buttonItems[4] < ITEM_LAST_USED) {
                 gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->dpadUpAlpha);
                 gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
                 Interface_DrawItemIconTexture(play, PikaMode_ButtonIcon(4, ExtInv_GetItemIcon(gSaveContext.equips.buttonItems[4])), 4);
@@ -5943,7 +6105,7 @@ void Interface_Draw(PlayState* play) {
             }
 
             // DPad-Down Button Icon & Ammo Count
-            if (gSaveContext.equips.buttonItems[5] < 0xF0) {
+            if (gSaveContext.equips.buttonItems[5] < ITEM_LAST_USED) {
                 gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->dpadDownAlpha);
                 gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
                 Interface_DrawItemIconTexture(play, PikaMode_ButtonIcon(5, ExtInv_GetItemIcon(gSaveContext.equips.buttonItems[5])), 5);
@@ -5954,7 +6116,7 @@ void Interface_Draw(PlayState* play) {
             }
 
             // DPad-Left Button Icon & Ammo Count
-            if (gSaveContext.equips.buttonItems[6] < 0xF0) {
+            if (gSaveContext.equips.buttonItems[6] < ITEM_LAST_USED) {
                 gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->dpadLeftAlpha);
                 gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
                 Interface_DrawItemIconTexture(play, PikaMode_ButtonIcon(6, ExtInv_GetItemIcon(gSaveContext.equips.buttonItems[6])), 6);
@@ -5965,7 +6127,7 @@ void Interface_Draw(PlayState* play) {
             }
 
             // DPad-Right Button Icon & Ammo Count
-            if (gSaveContext.equips.buttonItems[7] < 0xF0) {
+            if (gSaveContext.equips.buttonItems[7] < ITEM_LAST_USED) {
                 gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->dpadRightAlpha);
                 gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
                 Interface_DrawItemIconTexture(play, PikaMode_ButtonIcon(7, ExtInv_GetItemIcon(gSaveContext.equips.buttonItems[7])), 7);
@@ -6991,6 +7153,16 @@ void Interface_Update(PlayState* play) {
             CVarGetInteger(CVAR_CHEAT("SuperTunic"), 0) != 0) {
             sEnvHazard = PLAYER_ENV_HAZARD_NONE;
         }
+    }
+
+    // Spirit Tunic (Skijer 2026-07-16): with rupees in the wallet it also acts as Goron+Zora tunic —
+    // no hot-room or underwater-breath timer. Broke (0 rupees) = no protection (handled by the money
+    // gate in ExtEquip_SpiritHasMoney). Clearing sEnvHazard here stops the timer from ever starting
+    // (line ~7290) and forces a running one off, covering both fire and water.
+    if (((sEnvHazard == PLAYER_ENV_HAZARD_HOTROOM) ||
+         ((sEnvHazard >= PLAYER_ENV_HAZARD_UNDERWATER_FLOOR) && (sEnvHazard <= PLAYER_ENV_HAZARD_UNDERWATER_FREE))) &&
+        ExtEquip_SpiritHasMoney()) {
+        sEnvHazard = PLAYER_ENV_HAZARD_NONE;
     }
 
     HealthMeter_Update(play);

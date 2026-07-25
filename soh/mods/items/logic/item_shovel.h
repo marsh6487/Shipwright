@@ -24,8 +24,8 @@
 #define SHOVEL_DIG_FRAME 25
 #define SHOVEL_HOLE_LIFETIME 300
 
-// Animation extern (defined in anim/dampe_dig/)
-extern LinkAnimationHeader gLinkAdultSkel_001Gdampediganim_002_retargetAnim;
+// Dig animation is loaded from soh.o2r (see anim/nei_anims.h)
+// (dig animation now loads from soh.o2r — see anim/nei_anims.h)
 
 // Scene
 #ifndef SCENE_GRAVEYARD

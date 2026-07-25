@@ -66,20 +66,24 @@ void Randomizer_DrawDesireSensor(PlayState* play, GetItemEntry* getItemEntry);
 // Custom items - Pokeball & Minish Cap
 void Randomizer_DrawPokeball(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawMinishCap(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawMarioMask(PlayState* play, GetItemEntry* getItemEntry);
+// Bottle Randomizer Net (RG_NET) — soh.o2r object_nei_net held model as the get-item
+void Randomizer_DrawNet(PlayState* play, GetItemEntry* getItemEntry);
 
 // Extended Equipment Get-Item 3D Models
 void Randomizer_DrawExtCaneOfByrna(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawExtFourSword(PlayState* play, GetItemEntry* getItemEntry);
-void Randomizer_DrawHammerUpgrade(PlayState* play, GetItemEntry* getItemEntry);
-// NEI Weapon Upgrades
+// NEI Weapon Upgrades (progressive weapons)
+void Randomizer_DrawProgressiveHammer(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawProgressiveKokiriSword(PlayState* play, GetItemEntry* getItemEntry);
-void Randomizer_DrawTrueMasterSword(PlayState* play, GetItemEntry* getItemEntry);
-void Randomizer_DrawGreatFairySword(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawProgressiveMasterSword(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawProgressiveBGS(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawExtDivineShield(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawExtSheikahShield(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawExtShieldOfIkana(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawExtMagicCape(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawExtSpiritBreastplate(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawExtSnowquillTunic(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawExtChampionsTunic(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawExtPegasusAnklet(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawExtPendantOfMemories(PlayState* play, GetItemEntry* getItemEntry);
@@ -93,6 +97,27 @@ void Randomizer_DrawChateauRomani(PlayState* play, GetItemEntry* getItemEntry);
 
 // Bottle with Magic Mushroom (Mask of Scents reward, uses OOT Odd Mushroom DL)
 void Randomizer_DrawBottleWithMagicMushroom(PlayState* play, GetItemEntry* getItemEntry);
+
+// MM Boss Remains (single DL each, dispatches by RG) + Stray Fairy (Flex skeleton), from mm.o2r
+void Randomizer_DrawMmRemains(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawMmStrayFairy(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawMmSoul(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawMmTradeQuest(PlayState* play, GetItemEntry* getItemEntry);
+// MM owl-statue warp points (single-DL MM owl model from mm.o2r), shared by all 10 owls
+void Randomizer_DrawMmOwlStatue(PlayState* play, GetItemEntry* getItemEntry);
+// MM time items (6 clock halves): static Clock Town clock-tower face from mm.o2r object_obj_tokeidai,
+// day variants at face rotation 0xC000, night variants with sun/moon panel flipped 0x8000
+void Randomizer_DrawMmClock(PlayState* play, GetItemEntry* getItemEntry);
+// MM per-dungeon items (one shared MM get-item model per type; RG name distinguishes the dungeon)
+void Randomizer_DrawMmSmallKey(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawMmDungeonMap(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawMmBossKey(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawMmCompass(PlayState* play, GetItemEntry* getItemEntry);
+// Final MM cross items (third wave): Swamp/Ocean GS token (OoT's own token model + MM region flame
+// tint), healed frogs (OoT's own object_fr frog skeleton, env-tinted), Bottle with Gold Dust (mm.o2r)
+void Randomizer_DrawMmGsToken(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawMmFrog(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawMmGoldDustBottle(PlayState* play, GetItemEntry* getItemEntry);
 
 #define GET_ITEM_MYSTERY                                                                                 \
     {                                                                                                    \

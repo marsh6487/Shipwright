@@ -51,6 +51,8 @@ ALL_ITEMS = [
     ("gLanternNameTex", "Lantern"),
     ("gPokeballNameTex", "Pokeball"),
     ("gIronKnuckleAxeNameTex", "Iron Knuckle Axe"),
+    # NEI progressive sword upgrade names (Razor/Gilded/Great Fairy) come from mm.o2r
+    # (item_name_static/gItemName*SwordENGTex) — no custom textures needed for those.
     ("gSheikahShieldNameTex", "Sheikah Shield"),
     ("gSpiritBreastplateNameTex", "Spirit Breastplate"),
     ("gKiteShieldNameTex", "Kite Shield"),
@@ -59,6 +61,11 @@ ALL_ITEMS = [
     # via the A-button toggle on hookshot/longshot or boomerang).
     ("gClawshotNameTex", "Clawshot"),
     ("gGaleBoomerangNameTex", "Gale Boomerang"),
+    # Skijer's NEI hookshot overhaul: the Longshot becomes the Ultrashot when owned.
+    ("gUltrashotNameTex", "Ultrashot"),
+    # Bottle Randomizer extra items (Net + Bottomless Bottle).
+    ("gNetNameTex", "Net"),
+    ("gBottomlessBottleNameTex", "Bottomless Bottle"),
 ]
 
 

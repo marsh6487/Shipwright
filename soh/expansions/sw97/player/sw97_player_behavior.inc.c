@@ -283,47 +283,139 @@ void Sw97_TickBlindness(void) {
  * State is global so other systems (player draw hook, input intercept, egg
  * spawner) can query without threading through a parameter.
  */
-#define CUCCO_MODE_FRAMES   1800  // 30 sec @ 60fps tick
-#define CUCCO_FLAP_VELOCITY 8.0f   // upward burst per A press (Flappy Bird)
-#define CUCCO_GRAVITY      -0.7f   // soft fall — gets countered by flap
-#define CUCCO_HOVER         5.0f   // floor clamp margin (same as HGRACE_FAIRY_HOVER)
-#define CUCCO_SPEED         5.0f
-#define CUCCO_SPRINT_MULT   2.0f
-#define CUCCO_MAX_VY_DOWN  -6.0f
+#define CUCCO_MODE_FRAMES    1800  // 30 sec
+#define CUCCO_FLAP_VELOCITY  9.0f  // upward burst per A press while airborne
+#define CUCCO_GRAVITY       -1.2f  // Cucco terminal: gentle fall, not Link's -7
+#define CUCCO_MAX_VY_DOWN   -3.0f  // Cucco terminal velocity cap (float, not plummet)
+#define CUCCO_SPEED_MULT     1.15f // Slightly faster than Link
+#define CUCCO_SPEED_MAX      11.0f // Cap so flap doesn't compound forever
 
 s32 gSw97CuccoModeActive  = 0;
+// Pending → waiting for Link to leave PLAYER_STATE1_IN_ITEM_CS (the
+// first-person aim/throw cutscene). Same pattern as magic_soul.inc.c:117
+// where the diamond update returns until the player is free. Without this
+// the camera stays glued in first-person mode and breaks on entry.
+s32 gSw97CuccoModePending = 0;
 s32 gSw97CuccoModeTimer   = 0;
-// Puppet EN_NIW that mirrors Link's position so the player sees a Cucco
-// instead of Link. Pattern mirrors HGrace's Ivan possess mode.
-Actor* gSw97CuccoPuppet = NULL;
-// Saved player draw — restored on exit. NULL'd while active so Link is
-// invisible (the puppet provides the visual).
-void* gSw97CuccoSavedDraw = NULL;
-// Authoritative cucco position — saved at end of each tick, restored at the
-// start of the next so Actor_UpdateBgCheckInfo can't displace Link out of
-// our custom movement. Direct port of sFairyPos/sFairyPosValid from HGrace.
-Vec3f gSw97CuccoPos = { 0.0f, 0.0f, 0.0f };
-u8    gSw97CuccoPosValid = 0;
-Vec3f gSw97CuccoVel = { 0.0f, 0.0f, 0.0f };
+// Once-shot exit fx flag — guarantees the un-transform flash/sound only
+// plays once even though Sw97_TickCuccoMode keeps running on inactive.
+static s32 gSw97CuccoExitFx = 0;
+// 180° flip animation on egg throw — counts down each frame, used by
+// Sw97_DrawCuccoModel to rotate the model. ~12 frames = ~0.4s flip.
+s32   gSw97CuccoFlipTimer = 0;
+#define CUCCO_FLIP_FRAMES 12
+
+// Cucco draw — direct copy of HGrace's draw-override pattern (no actor
+// puppet). Skeleton inited once per cucco-mode session via Sw97_InitCuccoSkel,
+// rendered via Sw97_DrawCucco which Link's actor.draw points at.
+#include "objects/object_niw/object_niw.h"
+static SkelAnime sCuccoSkel;
+static Vec3s sCuccoJointTable[16];
+static Vec3s sCuccoMorphTable[16];
+static u8 sCuccoSkelInited = 0;
+
+static void Sw97_InitCuccoSkel(PlayState* play) {
+    if (sCuccoSkelInited) return;
+    SkelAnime_InitFlex(play, &sCuccoSkel, (FlexSkeletonHeader*)&gCuccoSkel,
+                       (AnimationHeader*)&gCuccoAnim,
+                       sCuccoJointTable, sCuccoMorphTable, 16);
+    sCuccoSkelInited = 1;
+}
+
+// Null-body override — used to walk Link's skeleton without rendering any
+// limb geometry. Same idea as GaroForm_OverrideLimbDraw in
+// garo_post_limb.cpp:47.
+static s32 Sw97_CuccoLinkOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList,
+                                          Vec3f* pos, Vec3s* rot, void* arg) {
+    (void)play; (void)limbIndex; (void)pos; (void)rot; (void)arg;
+    *dList = NULL;
+    return 0;
+}
+
+// PostLimbDraw — refreshes the per-frame Link tracking fields that vanilla
+// Player_Draw normally populates: bodyPartsPos[], focus.pos (Navi anchor),
+// feetPos[] (shadow anchor). Without this, shadow + Navi stay frozen at the
+// transformation point. Copied from GaroForm_PostLimbDraw (the essential
+// shadow/Navi/bodyParts bits — Garo's sword-trail / held-actor branches are
+// not needed for the cucco model swap).
+static void Sw97_CuccoLinkPostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList,
+                                       Vec3s* rot, void* thisx) {
+    (void)dList; (void)rot;
+    Player* player = (Player*)thisx;
+    Vec3f zeroVec = { 0.0f, 0.0f, 0.0f };
+
+    if (limbIndex > 0 && limbIndex < PLAYER_LIMB_MAX) {
+        s8 bodyPart = gPlayerLimbToBodyPart[limbIndex];
+        if (bodyPart >= 0) {
+            Matrix_MultVec3f(&zeroVec, &player->bodyPartsPos[bodyPart]);
+        }
+    }
+    if (limbIndex == PLAYER_LIMB_HEAD) {
+        Vec3f headOffset = { 1100.0f, -700.0f, 0.0f };
+        Matrix_MultVec3f(&headOffset, &player->actor.focus.pos);
+    }
+    if (limbIndex == PLAYER_LIMB_L_FOOT || limbIndex == PLAYER_LIMB_R_FOOT) {
+        Actor_SetFeetPos(&player->actor, limbIndex,
+                         PLAYER_LIMB_L_FOOT, &zeroVec,
+                         PLAYER_LIMB_R_FOOT, &zeroVec);
+    }
+}
+
+// Cucco visual at thisx->world.pos. Same scaled translate + Y-flip on egg
+// throws as before, called from Sw97_DrawCuccoForm after the null-body pass.
+static void Sw97_DrawCuccoModel(Actor* thisx, PlayState* play) {
+    if (!sCuccoSkelInited) return;
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_Translate(thisx->world.pos.x, thisx->world.pos.y, thisx->world.pos.z, MTXMODE_NEW);
+    f32 baseYaw = (f32)thisx->shape.rot.y * (M_PI / 32768.0f);
+    f32 flipYaw = 0.0f;
+    if (gSw97CuccoFlipTimer > 0) {
+        f32 t = (f32)gSw97CuccoFlipTimer / (f32)CUCCO_FLIP_FRAMES;
+        flipYaw = (1.0f - t) * M_PI;
+    }
+    Matrix_RotateY(baseYaw + flipYaw, MTXMODE_APPLY);
+    f32 s = 0.015f;
+    Matrix_Scale(s, s, s, MTXMODE_APPLY);
+    SkelAnime_DrawFlexOpa(play, sCuccoSkel.skeleton, sCuccoSkel.jointTable,
+                          sCuccoSkel.dListCount, NULL, NULL, NULL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// Public entry — called from customequipment.cpp's VB_PLAYER_DRAW_BEGIN hook
+// when cucco mode is active. Mirrors the GaroForm / MmForm pattern:
+//   Pass 1: walk Link's skeleton with nulled DLs so PostLimbDraw refreshes
+//           bodyPartsPos / focus.pos / feetPos[] → shadow + Navi follow
+//   Pass 2: render the cucco model at Link's world.pos
+void Sw97_DrawCuccoForm(PlayState* play, Player* player) {
+    if (player->skelAnime.skeleton != NULL && player->skelAnime.jointTable != NULL) {
+        SkelAnime_DrawFlexLod(play, player->skelAnime.skeleton, player->skelAnime.jointTable,
+                              player->skelAnime.dListCount, Sw97_CuccoLinkOverrideLimbDraw,
+                              Sw97_CuccoLinkPostLimbDraw, player, 0);
+    }
+    Sw97_DrawCuccoModel(&player->actor, play);
+}
 
 void Sw97_StartCuccoMode(void) {
-    if (gSw97CuccoModeActive) return; // idempotent
-    gSw97CuccoModeActive = 1;
-    gSw97CuccoModeTimer  = CUCCO_MODE_FRAMES;
-    gSw97CuccoPosValid   = 0;
-    gSw97CuccoVel.x = gSw97CuccoVel.y = gSw97CuccoVel.z = 0.0f;
-    // Puppet spawn + flag setup deferred to first tick — needs PlayState/Player.
+    if (gSw97CuccoModeActive || gSw97CuccoModePending) return; // idempotent
+    // Don't activate immediately — Link is in first-person aim CS right
+    // now. Set pending and let the per-frame tick activate once the
+    // first-person camera setting releases (mirror magic_soul.inc.c:117).
+    gSw97CuccoModePending = 1;
+}
+
+static void Sw97_ActivateCuccoMode(void) {
+    gSw97CuccoModePending = 0;
+    gSw97CuccoModeActive  = 1;
+    gSw97CuccoModeTimer   = CUCCO_MODE_FRAMES;
 }
 
 void Sw97_EndCuccoMode(void) {
-    if (!gSw97CuccoModeActive) return;
-    gSw97CuccoModeActive = 0;
-    gSw97CuccoModeTimer  = 0;
-    gSw97CuccoPosValid   = 0;
-    if (gSw97CuccoPuppet != NULL && gSw97CuccoPuppet->update != NULL) {
-        Actor_Kill(gSw97CuccoPuppet);
-    }
-    gSw97CuccoPuppet = NULL;
+    if (!gSw97CuccoModeActive && !gSw97CuccoModePending) return;
+    gSw97CuccoModeActive  = 0;
+    gSw97CuccoModePending = 0;
+    gSw97CuccoModeTimer   = 0;
+    gSw97CuccoExitFx      = 1;
     // Player flag cleanup + draw restoration happens in the inactive branch
     // of Sw97_TickCuccoMode on the next frame.
 }
@@ -332,23 +424,156 @@ s32 Sw97_IsCuccoModeActive(void) {
     return gSw97CuccoModeActive;
 }
 
-#include "overlays/actors/ovl_En_Niw/z_en_niw.h"
-
-// Scene tracking — clear stale puppet pointer when the scene changes,
-// otherwise the next tick reads through a freed actor pointer → crash.
+// Scene tracking — reset state on scene change so the next tick doesn't
+// reference a stale collision context / pos.
 static s32 gSw97CuccoLastScene = -1;
 
+// ───────────────────────────────────────────────────────────────────────
+// Cucco eggs — while cucco mode is active, ANY arrow Link fires via the
+// vanilla bow/slingshot aim+release CS gets swapped visually to a pocket
+// egg + throttled to a slow drift. Elemental params (fire/ice/light/dark/
+// soul/wind) are still respected — the SW97 hit hooks fire normally
+// because the underlying actor is still EnArrow. Aim behavior is 100%
+// vanilla: user pulls the bow, aims first-person, releases → egg flies.
+// ───────────────────────────────────────────────────────────────────────
+
+// Cucco egg tuning — vanilla arrows use Actor_SetProjectileSpeed(150), so
+// SPEED_MAX / 150 is the scale factor applied to speedXZ AND velocity.y on
+// the release frame (preserves the aim's pitch angle proportionally). Extra
+// timer beat keeps eggs airborne long enough to reach enemies at range,
+// which also fixes the "no damage" report — vanilla timer=12 was too short
+// once we slowed the egg down, so it died before hitting anything.
+#define CUCCO_EGG_SPEED_MAX  30.0f
+#define CUCCO_EGG_TIMER      40   // frames of flight (vanilla arrow = 12)
+#define CUCCO_EGG_ARC_BOOST  1.5f // extra +vY on release for a proper egg arc
+
+// Needed to bump EnArrow::timer from the update hook (extend flight time).
+#include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
+
+// Banjo-Kazooie style 3D egg — vanilla 3D bubble sphere (gEffBubbleDL) with:
+//   * ellipsoid scaling (Y taller than X = Z)
+//   * per-element primColor tint (fire=red, ice=cyan, light=gold, dark=purple,
+//     wind=green, soul=amber, neutral=white)
+//   * envColor darker shade for a soft outline highlight
+// The bubble DL expects a texture at segment 0x08; we bind gEffBubble1Tex so
+// the surface has a subtle patterned shading (like BK's slight egg noise).
+#include "objects/gameplay_keep/gameplay_keep.h"
+static void Sw97_CuccoEgg_GetColors(s16 arrowParams, Color_RGBA8* prim, Color_RGBA8* env) {
+    switch (arrowParams) {
+        case ARROW_SW97_FIRE:  *prim = (Color_RGBA8){ 255, 110,  40, 255 }; *env = (Color_RGBA8){ 180,  30,   0, 255 }; break;
+        case ARROW_SW97_ICE:   *prim = (Color_RGBA8){ 100, 210, 255, 255 }; *env = (Color_RGBA8){  10,  90, 200, 255 }; break;
+        case ARROW_SW97_LIGHT: *prim = (Color_RGBA8){ 255, 240, 130, 255 }; *env = (Color_RGBA8){ 200, 150,   0, 255 }; break;
+        case ARROW_SW97_0C:    *prim = (Color_RGBA8){ 150,  70, 210, 255 }; *env = (Color_RGBA8){  60,  10, 120, 255 }; break; // Dark
+        case ARROW_SW97_0D:    *prim = (Color_RGBA8){ 255, 200, 100, 255 }; *env = (Color_RGBA8){ 180, 130,   0, 255 }; break; // Soul
+        case ARROW_SW97_0E:    *prim = (Color_RGBA8){ 150, 255, 150, 255 }; *env = (Color_RGBA8){   0, 130,   0, 255 }; break; // Wind
+        default:               *prim = (Color_RGBA8){ 255, 255, 255, 255 }; *env = (Color_RGBA8){ 130, 130, 130, 255 }; break;
+    }
+}
+
+void Sw97_DrawCuccoEgg(Actor* thisx, PlayState* play) {
+    Color_RGBA8 prim, env;
+    Sw97_CuccoEgg_GetColors(thisx->params, &prim, &env);
+
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_Translate(thisx->world.pos.x, thisx->world.pos.y, thisx->world.pos.z, MTXMODE_NEW);
+    Matrix_RotateY((f32)thisx->shape.rot.y * (M_PI / 32768.0f), MTXMODE_APPLY);
+    // Ellipse: X = Z base, Y taller for the classic egg silhouette.
+    Matrix_Scale(0.02f, 0.028f, 0.02f, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++,
+              Matrix_NewMtx(play->state.gfxCtx, "cucco_egg", __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD | G_MTX_NOPUSH);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, prim.r, prim.g, prim.b, prim.a);
+    gDPSetEnvColor (POLY_OPA_DISP++, env.r, env.g, env.b, env.a);
+    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(gEffBubble1Tex));
+    gSPDisplayList(POLY_OPA_DISP++, gEffBubbleDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// Called from customequipment.cpp's OnActorInit hook when an EnArrow spawns
+// while cucco mode is active. Marks the arrow via home.rot.z (unused by
+// EnArrow) so the Update hook can identify + throttle it, and swaps its draw
+// to the pocket-egg model.
+#define CUCCO_EGG_MARKER 0x1E66
+void Sw97_TagCuccoEgg(Actor* arrow) {
+    arrow->draw = Sw97_DrawCuccoEgg;
+    arrow->home.rot.z = CUCCO_EGG_MARKER;
+}
+
+// Called from customequipment.cpp's OnActorUpdate hook every frame the
+// tagged arrow is alive.
+//
+// Vanilla release: Actor_SetProjectileSpeed(actor, 150) sets
+//   speedXZ    = cos(rot.x) * 150   (horizontal component from aim pitch)
+//   velocity.y = -sin(rot.x) * 150  (vertical component from aim pitch)
+// So the release is very fast (150 units/frame) and its pitch encodes the
+// aim direction. Vanilla timer = 12 frames → 1800-unit range.
+//
+// For a BK-style thrown egg we want ~⅕ speed BUT proportionally more
+// airtime so the range is still usable AND enemies can be hit (short
+// timer + slow speed = "no damage" report). On the release frame we:
+//   1. Scale BOTH speedXZ and velocity.y by SPEED_MAX/150 (preserves the
+//      aim pitch: steep aim still steep, flat still flat).
+//   2. Add a small upward boost so eggs always start with a clean arc
+//      instead of nose-diving on flat aim.
+//   3. Extend arrow->timer well past vanilla so the egg reaches enemies.
+// home.rot.z encodes state (MARKER = tagged pre-fire, MARKER+1 = scaled).
+#define CUCCO_EGG_VANILLA_RELEASE_SPEED 150.0f
+void Sw97_TickCuccoEggClamp(Actor* arrow) {
+    if (arrow->home.rot.z == 0) return;
+    EnArrow* enArrow = (EnArrow*)arrow;
+    if (arrow->home.rot.z == CUCCO_EGG_MARKER) {
+        // Pre-fire: wait for release frame (speedXZ jumps above vanilla
+        // "held" range — anything > 10 means the projectile-speed set fired).
+        if (arrow->speedXZ > 10.0f) {
+            f32 scale = CUCCO_EGG_SPEED_MAX / CUCCO_EGG_VANILLA_RELEASE_SPEED;
+            arrow->speedXZ    *= scale;
+            arrow->velocity.y *= scale;
+            arrow->velocity.y += CUCCO_EGG_ARC_BOOST;  // clean arc
+            enArrow->timer     = CUCCO_EGG_TIMER;      // extend flight
+            arrow->home.rot.z  = CUCCO_EGG_MARKER + 1;
+        }
+    } else {
+        // Post-fire: cap horizontal speed and keep the timer topped up so
+        // the slow egg has time to reach enemies at range. Bumping (not
+        // reset) — if a wall clamp already dropped it to 20, we don't want
+        // to make the arrow immortal, just make sure it lives long enough
+        // to hit its target at BK-style thrown-egg speed.
+        if (arrow->speedXZ > CUCCO_EGG_SPEED_MAX) {
+            arrow->speedXZ = CUCCO_EGG_SPEED_MAX;
+        }
+        if (enArrow->timer < CUCCO_EGG_TIMER - 1) {
+            enArrow->timer = CUCCO_EGG_TIMER - 1;
+        }
+    }
+}
+
 void Sw97_TickCuccoMode(PlayState* play, Player* player) {
-    // ─── INACTIVE: restore Link cleanly ─────────────────────────────────
+    // ─── PENDING: wait for first-person aim CS to end ───────────────────
+    // magic_soul.inc.c:117 pattern — defer activation until the player has
+    // left PLAYER_STATE1_IN_ITEM_CS. Activating mid-aim leaves the camera
+    // setting stuck in first-person mode and the next setting change
+    // glitches the angle.
+    if (gSw97CuccoModePending && player != NULL && play != NULL) {
+        if (!(player->stateFlags1 & PLAYER_STATE1_IN_ITEM_CS)) {
+            Sw97_ActivateCuccoMode();
+            // Flash + sound on actual entry (mirrors magic_soul's flash
+            // before kill on line 123).
+            func_800AA000(200.0f, 150, 20, 80);
+            Audio_PlayActorSound2(&player->actor, NA_SE_EV_CHICKEN_CRY_M);
+        }
+    }
+
+    // ─── INACTIVE: cleanup ──────────────────────────────────────────────
+    // The VB_PLAYER_DRAW_BEGIN hook in customequipment.cpp checks
+    // Sw97_IsCuccoModeActive() each frame, so just deactivating the flag
+    // is enough — no draw swap to undo. We only do the entry-exit flash
+    // once via gSw97CuccoExitFx.
     if (!gSw97CuccoModeActive) {
-        if (gSw97CuccoSavedDraw != NULL && player != NULL) {
-            player->actor.draw = (ActorFunc)gSw97CuccoSavedDraw;
-            gSw97CuccoSavedDraw = NULL;
-            player->cylinder.base.atFlags  |= AT_ON;
-            player->cylinder.base.acFlags  |= AC_ON;
-            player->cylinder.base.ocFlags1 |= OC1_ON;
-            player->stateFlags1 &= ~PLAYER_STATE1_INPUT_DISABLED;
+        if (gSw97CuccoExitFx && player != NULL) {
+            gSw97CuccoExitFx = 0;
             player->invincibilityTimer = 20;
+            sCuccoSkelInited = 0;
             Audio_PlayActorSound2(&player->actor, NA_SE_EV_CHICKEN_CRY_M);
             func_800AA000(200.0f, 150, 20, 80);
         }
@@ -363,149 +588,92 @@ void Sw97_TickCuccoMode(PlayState* play, Player* player) {
 
     if (player == NULL || play == NULL) return;
 
-    // Scene change → puppet memory is gone, force-reset our state cleanly.
+    // Scene change → skel seg pointers reference the old scene's gfxCtx; re-init.
     if (gSw97CuccoLastScene >= 0 && gSw97CuccoLastScene != play->sceneNum) {
-        gSw97CuccoPuppet   = NULL;
-        gSw97CuccoPosValid = 0;
-        gSw97CuccoVel.x = gSw97CuccoVel.y = gSw97CuccoVel.z = 0.0f;
+        sCuccoSkelInited = 0;
     }
     gSw97CuccoLastScene = play->sceneNum;
 
-    // ─── Restore authoritative position FIRST (HGrace pattern) ──────────
-    if (gSw97CuccoPosValid) {
-        player->actor.world.pos = gSw97CuccoPos;
+
+    // ─── First-frame setup: init the cucco skel ─────────────────────────
+    // We do NOT swap player->actor.draw — the customequipment.cpp
+    // VB_PLAYER_DRAW_BEGIN hook detects Sw97_IsCuccoModeActive() and routes
+    // through Sw97_DrawCuccoForm, which walks Link's skeleton (null body) to
+    // keep shadow + Navi tracking, then draws the cucco model on top.
+    if (!sCuccoSkelInited) {
+        Sw97_InitCuccoSkel(play);
     }
 
-    // ─── First-frame setup ──────────────────────────────────────────────
-    if (gSw97CuccoPuppet == NULL || gSw97CuccoPuppet->update == NULL) {
-        gSw97CuccoPuppet = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_NIW,
-                                       player->actor.world.pos.x,
-                                       player->actor.world.pos.y,
-                                       player->actor.world.pos.z,
-                                       0, 0, 0, 0xE);
-        if (gSw97CuccoPuppet != NULL && gSw97CuccoSavedDraw == NULL) {
-            gSw97CuccoSavedDraw = (void*)player->actor.draw;
-            player->actor.draw = NULL;
-            Camera_ChangeSetting(Play_GetCamera(play, 0), CAM_SET_NORMAL0);
-            Audio_PlayActorSound2(&player->actor, NA_SE_EV_CHICKEN_CRY_M);
-            func_800AA000(200.0f, 150, 20, 80);
-        }
+    // ─── Ivan-style: do NOT disable input/colliders, do NOT zero velocity
+    // and do NOT do manual position math. Vanilla Player movement runs
+    // normally — sword swings, walking anim, item C-buttons, doors, ladders,
+    // collision — and we only TWEAK the physics quantities the engine
+    // already produced.
+
+    // 1) Cucco fall: clamp downward velocity to terminal float speed.
+    // The engine added vanilla gravity (~-7) into velocity.y this frame;
+    // clipping it to -3 makes Link float instead of plummet, without
+    // touching `actor.gravity` (which gets stomped each frame by
+    // Player_StepHorizontalSpeed @ z_player.c:7870 anyway).
+    if (player->actor.velocity.y < CUCCO_MAX_VY_DOWN) {
+        player->actor.velocity.y = CUCCO_MAX_VY_DOWN;
     }
 
-    // ─── HGrace pattern: input disabled, custom movement ───────────────
-    player->stateFlags1 |= PLAYER_STATE1_INPUT_DISABLED;
-    player->stateFlags1 &= ~PLAYER_STATE1_IN_ITEM_CS;
+    // 2) Cucco speed: small horizontal boost over vanilla.
+    player->linearVelocity *= CUCCO_SPEED_MULT;
+    player->actor.speedXZ  *= CUCCO_SPEED_MULT;
+    if (player->linearVelocity > CUCCO_SPEED_MAX) {
+        player->linearVelocity = CUCCO_SPEED_MAX;
+    }
+    if (player->actor.speedXZ > CUCCO_SPEED_MAX) {
+        player->actor.speedXZ = CUCCO_SPEED_MAX;
+    }
 
-    player->actor.focus.pos.x = player->actor.world.pos.x;
-    player->actor.focus.pos.y = player->actor.world.pos.y + 20.0f;
-    player->actor.focus.pos.z = player->actor.world.pos.z;
+    // 3) A press → flap burst (Flappy Bird), ALWAYS — including on ground,
+    // so cucco never rolls. The A press is also cleared from Link's input
+    // in the customequipment.cpp VB_SM64_PLAYER_PRE_ACTION hook so his
+    // actionFunc doesn't trigger the roll before we get here.
+    u8 grounded = (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) != 0;
+    u8 aPress   = CHECK_BTN_ALL(play->state.input[0].press.button, BTN_A);
+    if (aPress) {
+        player->actor.velocity.y = CUCCO_FLAP_VELOCITY;
+        Audio_PlayActorSound2(&player->actor, NA_SE_EV_CHICKEN_CRY_A);
+    }
 
-    player->invincibilityTimer = -1;
-
-    player->linearVelocity = 0.0f;
-    player->actor.speedXZ = 0.0f;
-    player->actor.velocity.x = player->actor.velocity.y = player->actor.velocity.z = 0.0f;
-
-    player->cylinder.base.atFlags  &= ~AT_ON;
-    player->cylinder.base.acFlags  &= ~AC_ON;
-    player->cylinder.base.ocFlags1 &= ~OC1_ON;
-
-    // ─── Read input (raw, HGrace pattern) ───────────────────────────────
-    u8 aPress = CHECK_BTN_ALL(play->state.input[0].press.button, BTN_A);
-    u8 lBtn   = CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_L);
-
+    // 4) Face the camera when idle. OOT keeps shape.rot.y frozen when Link
+    // stops moving — the cucco would keep pointing at the last direction he
+    // walked. Smoothly turn to the camera's aim yaw whenever the stick is
+    // idle, so the cucco always looks at what the player looks at.
+    f32 hSpeed = fabsf(player->linearVelocity);
     f32 stickMag;
     s16 stickAngle;
     func_80077D10(&stickMag, &stickAngle, &play->state.input[0]);
-    s16 worldYaw = Camera_GetInputDirYaw(GET_ACTIVE_CAM(play)) + stickAngle;
-
-    f32 speed = CUCCO_SPEED;
-    if (lBtn) speed *= CUCCO_SPRINT_MULT;
-
-    f32 targetVX = 0.0f, targetVZ = 0.0f;
-    if (stickMag > 10.0f) {
-        f32 normMag = stickMag / 60.0f;
-        if (normMag > 1.0f) normMag = 1.0f;
-        targetVX = Math_SinS(worldYaw) * speed * normMag;
-        targetVZ = Math_CosS(worldYaw) * speed * normMag;
+    if (stickMag < 10.0f && hSpeed < 0.5f) {
+        s16 camYaw = Camera_GetInputDirYaw(GET_ACTIVE_CAM(play));
+        Math_SmoothStepToS(&player->actor.shape.rot.y, camYaw, 4, 0x800, 0x100);
     }
 
-    // Smooth XZ (same coefficients as HGrace).
-    f32 maxStep = speed * 0.5f;
-    Math_SmoothStepToF(&gSw97CuccoVel.x, targetVX, 0.3f, maxStep, 0.01f);
-    Math_SmoothStepToF(&gSw97CuccoVel.z, targetVZ, 0.3f, maxStep, 0.01f);
-
-    // Flappy Bird Y: A press = upward burst, otherwise integrate soft gravity.
-    if (aPress) {
-        gSw97CuccoVel.y = CUCCO_FLAP_VELOCITY;
-        Audio_PlayActorSound2(&player->actor, NA_SE_EV_CHICKEN_CRY_A);
-        if (gSw97CuccoPuppet != NULL) {
-            ((EnNiw*)gSw97CuccoPuppet)->unk_2A6 = 2;
-        }
+    // ─── Cucco wing animation rate, responsive to Link's state ──────────
+    // Only one cucco anim exists in vanilla OOT (gCuccoAnim) — a wing-flap
+    // loop. Modulate playSpeed to imply walking/running/flying visually:
+    //   Airborne + moving  → 4.0× (rapid flap)
+    //   Airborne + still   → 2.5×
+    //   Ground + running   → 2.0× (fast walking-like flap)
+    //   Ground + walking   → 1.4× (moderate)
+    //   Ground + idle      → 0.7× (subtle idle bob)
+    f32 rate;
+    if (!grounded) {
+        rate = (hSpeed > 1.5f) ? 4.0f : 2.5f;
+    } else if (hSpeed > 8.0f) {
+        rate = 2.0f;
+    } else if (hSpeed > 1.5f) {
+        rate = 1.4f;
     } else {
-        gSw97CuccoVel.y += CUCCO_GRAVITY;
-        if (gSw97CuccoVel.y < CUCCO_MAX_VY_DOWN) gSw97CuccoVel.y = CUCCO_MAX_VY_DOWN;
+        rate = 0.7f;
     }
+    sCuccoSkel.playSpeed = rate;
+    SkelAnime_Update(&sCuccoSkel);
 
-    // Face movement direction.
-    if (fabsf(gSw97CuccoVel.x) > 0.5f || fabsf(gSw97CuccoVel.z) > 0.5f) {
-        s16 moveYaw = Math_Atan2S(gSw97CuccoVel.x, gSw97CuccoVel.z);
-        Math_SmoothStepToS(&player->actor.shape.rot.y, moveYaw, 5, 0x1000, 0x100);
-        player->actor.world.rot.y = player->actor.shape.rot.y;
-    }
-
-    // ─── Position application + floor clamp (HGrace verbatim) ───────────
-    Vec3f desiredPos;
-    desiredPos.x = player->actor.world.pos.x + gSw97CuccoVel.x;
-    desiredPos.y = player->actor.world.pos.y + gSw97CuccoVel.y;
-    desiredPos.z = player->actor.world.pos.z + gSw97CuccoVel.z;
-
-    CollisionPoly* floorPoly = NULL;
-    s32 floorBgId;
-    f32 floor = BgCheck_EntityRaycastFloor5(play, &play->colCtx, &floorPoly, &floorBgId,
-                                            &player->actor, &desiredPos);
-    if (floor > BGCHECK_Y_MIN && desiredPos.y < floor + CUCCO_HOVER) {
-        desiredPos.y = floor + CUCCO_HOVER;
-        if (gSw97CuccoVel.y < 0.0f) gSw97CuccoVel.y = 0.0f;
-    }
-
-    player->actor.world.pos = desiredPos;
-    gSw97CuccoPos = desiredPos;
-    gSw97CuccoPosValid = 1;
-
-    // ─── Auto-exit on loading zone (mirrors HGrace's exit detection) ────
-    // Stepping onto a floor polygon with an exit index ends cucco mode
-    // cleanly so the puppet is killed before scene transition runs —
-    // otherwise the EnNiw pointer dangles into the next scene and the
-    // tick crashes when it derefs it.
-    if (floorPoly != NULL && play->transitionTrigger == TRANS_TRIGGER_OFF) {
-        s32 exitIndex = SurfaceType_GetSceneExitIndex(&play->colCtx, floorPoly, floorBgId);
-        if (exitIndex != 0) {
-            Sw97_EndCuccoMode();
-            return;
-        }
-    }
-
-    // ─── Mirror puppet + animate ────────────────────────────────────────
-    if (gSw97CuccoPuppet != NULL) {
-        gSw97CuccoPuppet->world.pos = desiredPos;
-        gSw97CuccoPuppet->shape.rot.y = player->actor.shape.rot.y;
-        gSw97CuccoPuppet->world.rot.y = player->actor.shape.rot.y;
-        gSw97CuccoPuppet->flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
-        gSw97CuccoPuppet->velocity.x = 0.0f;
-        gSw97CuccoPuppet->velocity.y = 0.0f;
-        gSw97CuccoPuppet->velocity.z = 0.0f;
-        gSw97CuccoPuppet->gravity = 0.0f;
-        gSw97CuccoPuppet->speedXZ = 0.0f;
-        EnNiw* niw = (EnNiw*)gSw97CuccoPuppet;
-        niw->collider.base.atFlags  = 0;
-        niw->collider.base.acFlags  = 0;
-        niw->collider.base.ocFlags1 = 0;
-        niw->collider.info.ocElemFlags = 0;
-        f32 speedMag = sqrtf(SQ(gSw97CuccoVel.x) + SQ(gSw97CuccoVel.z));
-        f32 animRate = 1.0f + speedMag * 0.2f;
-        if (animRate > 3.0f) animRate = 3.0f;
-        niw->skelAnime.playSpeed = animRate;
-        SkelAnime_Update(&niw->skelAnime);
-    }
+    // Tick down the 180° flip timer used by Sw97_DrawCuccoModel on egg throws.
+    if (gSw97CuccoFlipTimer > 0) gSw97CuccoFlipTimer--;
 }

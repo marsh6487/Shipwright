@@ -167,7 +167,22 @@ static Gfx sBlastMaskXluSeg9[] = {
 #define MM_MASK_IDX_ZORA 17
 #define MM_MASK_IDX_KAMARO 18
 #define MM_MASK_IDX_GIBDO 19
+#define MM_MASK_IDX_CAPTAIN 21
+#define MM_MASK_IDX_GIANT 22
 #define MM_MASK_IDX_FIERCE_DEITY 23
+
+// Giant's Mask: scale Link up, drain magic, auto-revert at 0 (MM z_player.c:3890).
+// Scale is held every frame (OOT default is 0.01). Drain 1 magic every N frames.
+#define GIANT_MASK_SCALE 0.025f
+#define GIANT_MASK_DEFAULT_SCALE 0.01f
+#define GIANT_MASK_MAGIC_DRAIN_INTERVAL 4
+
+// Giant's Mask transform (MM Player_Action_89 / func_80855218): Link plays the
+// 66-frame cl_setmask hands-to-face animation, the MM transform SFX fire on its
+// frames (D_8085D8F0), then near the climax the screen fills white and the giant
+// size snaps in behind it. Skipped entirely when InstantTransform is on. The fill
+// starts late so the full mask-on gesture is visible first.
+#define GIANT_TRANSFORM_FILL_START 56
 
 // Blast Mask cooldown: 310 frames matching MM (z_player.c line 3873: this->blastMaskTimer = 310)
 #define BLAST_MASK_COOLDOWN 310
@@ -191,6 +206,16 @@ static s32 sCouplesMaskTimer = 0;
 
 // Captain's Hat state
 static s32 sCaptainHatSpawnTimer = 0;
+
+// Giant's Mask state.
+static s32 sGiantMaskMagicTimer = 0;
+static s32 sGiantTransformTimer = -1;   // -1 = inactive; >=0 = transform cutscene frame
+static s16 sGiantFlashAlpha = 0;        // white screen-fill alpha (R_PLAY_FILL_SCREEN equivalent)
+static LinkAnimationHeader* sGiantSetMaskAnim = NULL;    // gPlayerAnim_cl_setmask (hands to face)
+static LinkAnimationHeader* sGiantSetMaskEndAnim = NULL; // gPlayerAnim_cl_setmaskend (hold)
+static f32 sGiantTransformFrame = 0.0f;
+static u8 sGiantSetMaskEnded = 0;       // 1 once cl_setmask finished → holding cl_setmaskend
+static u8 sGiantScaleSnapped = 0;       // 1 once the giant size snaps in behind the white fill
 
 // Kamaro's Mask state
 static s32 sKamaroDancing = 0;
@@ -892,9 +917,28 @@ extern "C" void MmMaskWear_Toggle(PlayState* play, Player* player, s32 itemId) {
         return;
     }
 
+    // Giant's Mask needs magic to power its buff — refuse to don it on an empty
+    // meter (mirrors MM's equip guard, z_player.c:4655).
+    if (idx == MM_MASK_IDX_GIANT && sCurrentMmMask != itemId && gSaveContext.magic <= 0) {
+        Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
+        return;
+    }
+
     if (sCurrentMmMask == itemId) {
         // Already wearing this mask - take it off
         sCurrentMmMask = ITEM_NONE;
+        if (idx == MM_MASK_IDX_GIANT) {
+            // Restore normal scale when removing the Giant's Mask (also aborts a
+            // transform-in-progress and releases the input freeze so Link isn't stuck).
+            sGiantMaskMagicTimer = 0;
+            sGiantTransformTimer = -1;
+            sGiantFlashAlpha = 0;
+            sGiantSetMaskEnded = 0;
+            sGiantScaleSnapped = 0;
+            sGiantTransformFrame = 0.0f;
+            player->stateFlags1 &= ~PLAYER_STATE1_INPUT_DISABLED;
+            Actor_SetScale(&player->actor, GIANT_MASK_DEFAULT_SCALE);
+        }
         if (sKamaroDancing) {
             // Kamaro BGM lives on BGM_MAIN now — restore the snapshotted
             // scene BGM instead of just stopping fanfare.
@@ -907,9 +951,36 @@ extern "C" void MmMaskWear_Toggle(PlayState* play, Player* player, s32 itemId) {
         sGreatFairyMenuOpen = 0;
         sCaptainHatSpawnTimer = 0;
     } else {
+        // Switching directly from the Giant's Mask to a different worn mask —
+        // drop the giant scale before swapping (the unequip branch above only
+        // runs when re-pressing the same mask).
+        if (sCurrentMmMask != ITEM_NONE && MaskItemToIndex(sCurrentMmMask) == MM_MASK_IDX_GIANT) {
+            sGiantMaskMagicTimer = 0;
+            sGiantTransformTimer = -1;
+            sGiantFlashAlpha = 0;
+            sGiantSetMaskEnded = 0;
+            sGiantScaleSnapped = 0;
+            sGiantTransformFrame = 0.0f;
+            player->stateFlags1 &= ~PLAYER_STATE1_INPUT_DISABLED;
+            Actor_SetScale(&player->actor, GIANT_MASK_DEFAULT_SCALE);
+        }
         // Put on this mask, clear any OOT mask
         sCurrentMmMask = itemId;
         player->currentMask = PLAYER_MASK_NONE;
+        if (idx == MM_MASK_IDX_GIANT) {
+            // Start the magic drain fresh on each don.
+            sGiantMaskMagicTimer = GIANT_MASK_MAGIC_DRAIN_INTERVAL;
+            // Begin the grow-into-giant cutscene unless instant transform is on
+            // (then case 22 snaps straight to the giant scale).
+            if (CVarGetInteger("gMods.TransformMasks.InstantTransform", 0)) {
+                sGiantTransformTimer = -1;
+            } else {
+                sGiantTransformTimer = 0;
+                sGiantFlashAlpha = 0;
+                player->stateFlags1 |= PLAYER_STATE1_INPUT_DISABLED;
+                player->linearVelocity = 0.0f;
+            }
+        }
         // Cross-gamemode PvP: broadcast the don-animation start so peers
         // can play the white-flash transformation effect on their dummy
         // before the worn-mask sync arrives. Only transformation masks
@@ -946,6 +1017,11 @@ static void RestoreTunicEnvColor(Player* player, Gfx** polyOpa) {
 
     gDPPipeSync((*polyOpa)++);
     gDPSetEnvColor((*polyOpa)++, c.r, c.g, c.b, 0);
+    // Some MM mask DLs (e.g. All-Night Mask / object_mask_yofukasi) leave the
+    // geometry mode in a state with lighting disabled, which makes the next limb
+    // (the chest/torso) render black. Restore the standard player-limb geometry
+    // mode — same fix weapon_upgrades.c uses after the MM sword-piece DLs. Skijer's NEI
+    gSPLoadGeometryMode((*polyOpa)++, G_ZBUFFER | G_SHADE | G_CULL_BACK | G_LIGHTING | G_SHADING_SMOOTH);
 }
 
 extern "C" void MmMaskWear_Draw(PlayState* play, Player* player) {
@@ -1722,8 +1798,126 @@ extern "C" void MmMaskWear_Update(PlayState* play, Player* player) {
                 sCaptainHatSpawnTimer = 0;
                 break;
             }
-            case 22: // Giant's Mask
+            case 22: // Giant's Mask — mask-on cutscene, then hold scale, drain magic, auto-revert at 0
+            {
+                // === Transform cutscene (MM Player_Action_89; skipped on InstantTransform) ===
+                if (sGiantTransformTimer >= 0) {
+                    sGiantTransformTimer++;
+                    s32 t = sGiantTransformTimer;
+
+                    // Freeze Link for the duration of the cutscene.
+                    player->stateFlags1 |= PLAYER_STATE1_INPUT_DISABLED;
+                    player->linearVelocity = 0.0f;
+
+                    // Lazy-load the MM mask-on anims (cl_setmask → cl_setmaskend).
+                    if (sGiantSetMaskAnim == NULL && MmAssets_IsAvailable()) {
+                        sGiantSetMaskAnim = MmAnim_Load(MM_ANIM_CL_SETMASK);
+                        sGiantSetMaskEndAnim = MmAnim_Load(MM_ANIM_CL_SETMASKEND);
+                    }
+
+                    // Drive the hands-to-face animation every frame (Scents/Kamaro
+                    // override pattern, so OOT's idle can't clobber it): play
+                    // cl_setmask once, then hold the last frame of cl_setmaskend.
+                    LinkAnimationHeader* anim = sGiantSetMaskEnded ? sGiantSetMaskEndAnim : sGiantSetMaskAnim;
+                    if (anim != NULL) {
+                        LinkAnimation_PlayLoop(play, &player->skelAnime, anim);
+                        player->skelAnime.curFrame = sGiantTransformFrame;
+                        AnimationContext_SetLoadFrame(play, anim, (s32)sGiantTransformFrame,
+                                                      player->skelAnime.limbCount, player->skelAnime.jointTable);
+                        sGiantTransformFrame += 1.0f;
+                        if (sGiantTransformFrame >= player->skelAnime.animLength) {
+                            if (!sGiantSetMaskEnded) {
+                                sGiantSetMaskEnded = 1;
+                                sGiantTransformFrame = 0.0f;
+                            } else {
+                                sGiantTransformFrame = player->skelAnime.animLength - 1.0f; // hold
+                            }
+                        }
+                    }
+
+                    // Transform SFX (MM D_8085D8F0), keyed to the cl_setmask frames.
+                    if (MmSfx_IsAvailable()) {
+                        switch (t) {
+                            case 2:
+                                MmSfx_PlayAtPos(MM_NA_SE_PL_PUT_OUT_ITEM, &player->actor.projectedPos);
+                                break;
+                            case 4:
+                                MmSfx_PlayAtPos(MM_NA_SE_IT_SET_TRANSFORM_MASK, &player->actor.projectedPos);
+                                break;
+                            case 11:
+                                MmSfx_PlayAtPos(MM_NA_SE_PL_FREEZE_S, &player->actor.projectedPos);
+                                break;
+                            case 20:
+                                MmSfx_PlayAtPos(MM_NA_SE_IT_TRANSFORM_MASK_BROKEN, &player->actor.projectedPos);
+                                break;
+                            case 30:
+                                MmSfx_PlayAtPos(MM_NA_SE_PL_TRANSFORM_VOICE, &player->actor.projectedPos);
+                                break;
+                        }
+                    }
+
+                    // After the voice, fill the screen white (MM R_PLAY_FILL_SCREEN),
+                    // snap the giant size in behind the white, then fade back in.
+                    if (t >= GIANT_TRANSFORM_FILL_START) {
+                        if (!sGiantScaleSnapped) {
+                            sGiantFlashAlpha += 45;
+                            if (sGiantFlashAlpha >= 255) {
+                                sGiantFlashAlpha = 255;
+                                sGiantScaleSnapped = 1;
+                                Actor_SetScale(&player->actor, GIANT_MASK_SCALE);
+                                if (MmSfx_IsAvailable()) {
+                                    MmSfx_PlayTransformFlash();
+                                }
+                            }
+                        } else {
+                            sGiantFlashAlpha -= 30;
+                            if (sGiantFlashAlpha <= 0) {
+                                sGiantFlashAlpha = 0;
+                                sGiantTransformTimer = -1;
+                                sGiantSetMaskEnded = 0;
+                                sGiantScaleSnapped = 0;
+                                sGiantTransformFrame = 0.0f;
+                                player->stateFlags1 &= ~PLAYER_STATE1_INPUT_DISABLED;
+                                Actor_SetScale(&player->actor, GIANT_MASK_SCALE);
+                            }
+                        }
+                    }
+
+                    // Stay normal-sized until the swap is hidden behind full white.
+                    if (!sGiantScaleSnapped) {
+                        Actor_SetScale(&player->actor, GIANT_MASK_DEFAULT_SCALE);
+                    }
+                    break; // don't drain magic during the cutscene
+                }
+
+                // Hold the giant scale every frame (OOT and other systems reset
+                // player scale; FD does the same trick for its 0.015 scale).
+                Actor_SetScale(&player->actor, GIANT_MASK_SCALE);
+
+                // Drain magic over time; revert when it runs out (MM z_player.c:3890).
+                if (sGiantMaskMagicTimer > 0) {
+                    sGiantMaskMagicTimer--;
+                } else {
+                    sGiantMaskMagicTimer = GIANT_MASK_MAGIC_DRAIN_INTERVAL;
+                    if (gSaveContext.magic > 0) {
+                        gSaveContext.magic--;
+                    }
+                }
+
+                if (gSaveContext.magic <= 0) {
+                    gSaveContext.magic = 0;
+                    sCurrentMmMask = ITEM_NONE;
+                    sGiantMaskMagicTimer = 0;
+                    sGiantTransformTimer = -1;
+                    sGiantFlashAlpha = 0;
+                    sGiantSetMaskEnded = 0;
+                    sGiantScaleSnapped = 0;
+                    sGiantTransformFrame = 0.0f;
+                    Actor_SetScale(&player->actor, GIANT_MASK_DEFAULT_SCALE);
+                    Player_PlaySfx(&player->actor, NA_SE_PL_CHANGE_ARMS);
+                }
                 break;
+            }
             case 23: // Fierce Deity Mask (transformation - shouldn't reach here)
                 break;
             default:
@@ -1757,6 +1951,12 @@ extern "C" void MmMaskWear_Clear(void) {
     sCaptainHatSpawnTimer = 0;
     sKamaroDancing = 0;
     sDaruniaDanceTimer = 0;
+    sGiantMaskMagicTimer = 0;
+    sGiantTransformTimer = -1;
+    sGiantFlashAlpha = 0;
+    sGiantSetMaskEnded = 0;
+    sGiantScaleSnapped = 0;
+    sGiantTransformFrame = 0.0f;
     sGreatFairyMenuOpen = 0;
     sGreatFairyMenuCursor = 0;
     sGreatFairyInputSkip = 0;
@@ -1838,6 +2038,33 @@ extern "C" s32 MmMaskWear_ShouldForceNightGS(void) {
 
 extern "C" s32 MmMaskWear_IsGibdoMaskWorn(void) {
     return (sCurrentMmMask != ITEM_NONE) && (MaskItemToIndex(sCurrentMmMask) == MM_MASK_IDX_GIBDO);
+}
+
+// Spooky / Skull are vanilla OOT masks (player->currentMask); Gibdo / Captain's
+// Hat are MM worn masks (sCurrentMmMask). All four pacify Redeads/Gibdos.
+extern "C" PlayState* gPlayState;
+extern "C" s32 MmMaskWear_MakesRedeadsFriendly(void) {
+    if (sCurrentMmMask != ITEM_NONE) {
+        s32 idx = MaskItemToIndex(sCurrentMmMask);
+        if (idx == MM_MASK_IDX_GIBDO || idx == MM_MASK_IDX_CAPTAIN) {
+            return 1;
+        }
+    }
+    if (gPlayState != NULL) {
+        Player* player = GET_PLAYER(gPlayState);
+        if (player != NULL &&
+            (player->currentMask == PLAYER_MASK_SKULL || player->currentMask == PLAYER_MASK_SPOOKY)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// True while the Giant's Mask is worn — used by Player_GetStrength (max-strength
+// lifting) and the incoming-damage chokepoint (1/4 damage), plus the melee
+// hammer-damage override.
+extern "C" s32 MmMaskWear_IsGiantMaskActive(void) {
+    return (sCurrentMmMask != ITEM_NONE) && (MaskItemToIndex(sCurrentMmMask) == MM_MASK_IDX_GIANT);
 }
 
 extern "C" s32 MmMaskWear_IsChateauRomaniActive(void) {
@@ -2034,6 +2261,20 @@ static void FairyOrbit_Draw(PlayState* play) {
 extern "C" void MmMaskWear_DrawOverlay(PlayState* play) {
     // Draw orbiting fairy sprites during warp animation
     FairyOrbit_Draw(play);
+
+    // Giant's Mask grow flash — white screen fill (same technique as the MmForm
+    // transform cutscene flash, mm_player_form.cpp:16054).
+    if (sGiantFlashAlpha > 0) {
+        OPEN_DISPS(play->state.gfxCtx);
+        Gfx_SetupDL_44Xlu(play->state.gfxCtx);
+        gDPPipeSync(POLY_XLU_DISP++);
+        gDPSetCombineLERP(POLY_XLU_DISP++, 0, 0, 0, PRIMITIVE, 0, 0, 0, PRIMITIVE, 0, 0, 0, PRIMITIVE, 0, 0, 0,
+                          PRIMITIVE);
+        gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 230, 230, 230, (u8)sGiantFlashAlpha);
+        gDPFillRectangle(POLY_XLU_DISP++, 0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
+        gDPPipeSync(POLY_XLU_DISP++);
+        CLOSE_DISPS(play->state.gfxCtx);
+    }
 
     if (!sGreatFairyMenuOpen)
         return;

@@ -25,6 +25,7 @@ s32 MmMaskWear_GetCurrent(void);
 // C++-safe (it self-wraps in extern "C" + #ifdef __cplusplus). Lives in
 // soh/mods/ which the project includes as a search root.
 #include "mods/items/custom_items.h"
+#include "mods/nei_save.h" // Skijer's NEI
 
 extern "C" {
 // SW97 actor IDs, runtime-assigned by sw97_init.cpp's ActorDB::AddEntry.
@@ -534,7 +535,7 @@ void Harpoon::RegisterHooks() {
                     // Only toggle if Adult + Water Dragon Scale equipped
                     // (extEquipBoots == 3 means Water Dragon Scale).
                     if (risingEdge && gSaveContext.linkAge == 0 &&
-                        gSaveContext.ship.extEquipBoots == 3) {
+                        Nei_Save()->extEquipBoots == 3) { // Skijer's NEI
                         myClient->combatZoraBarrierActive = !myClient->combatZoraBarrierActive;
                     }
                 }
@@ -738,7 +739,7 @@ void Harpoon::RegisterHooks() {
                 // Hard to detect without a dedicated client field. Best-
                 // effort: detect via extEquipSword == 1 (Cane of Byrna)
                 // + meleeWeaponState > 0. Constant 1♥ aura while attacking.
-                if (gSaveContext.ship.extEquipSword == 1 &&
+                if (Nei_Save()->extEquipSword == 1 && // Skijer's NEI
                     lp->meleeWeaponState > 0) {
                     forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                         if (distSqToPeer(c) > 40.0f * 40.0f) return;
@@ -748,7 +749,7 @@ void Harpoon::RegisterHooks() {
                 }
 
                 // --- Four Sword clone proximity (extEquipSword == 2) ---
-                if (gSaveContext.ship.extEquipSword == 2 &&
+                if (Nei_Save()->extEquipSword == 2 && // Skijer's NEI
                     lp->meleeWeaponState > 0) {
                     forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                         if (distSqToPeer(c) > 60.0f * 60.0f) return;
@@ -758,7 +759,7 @@ void Harpoon::RegisterHooks() {
                 }
 
                 // --- Pendant Mortal Draw (extEquipBoots == 2) ----------
-                if (gSaveContext.ship.extEquipBoots == 2 &&
+                if (Nei_Save()->extEquipBoots == 2 && // Skijer's NEI
                     lp->meleeWeaponState > 0) {
                     static s8 sMortalDrawPrev = 0;
                     if (sMortalDrawPrev == 0 && lp->meleeWeaponState > 5) {

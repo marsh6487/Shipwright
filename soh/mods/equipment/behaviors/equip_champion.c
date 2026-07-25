@@ -20,7 +20,6 @@
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-#define CHAMPION_PAK_PATH "nei/Adult_BOTWLink.pak"
 #define CHAMPION_FLURRY_DURATION 120 // real frames the slow window lasts (~2s)
 #define CHAMPION_FLURRY_HIT_MAX 7    // hits that end the window early
 #define CHAMPION_SLOW_FACTOR 0.15f   // world speed multiplier during both modes
@@ -51,7 +50,6 @@ typedef enum {
 // ---------------------------------------------------------------------------
 // Module-level statics
 // ---------------------------------------------------------------------------
-static u8 sChampionModelActive = 0;
 static ChampionState sChampionState = CHAMPION_IDLE;
 static s16 sChampionTimer = 0;
 static u8 sChampionHitCount = 0;
@@ -193,18 +191,8 @@ static void Champion_OnMeleeHit(Player* player, PlayState* play) {
 // Per-frame behavior
 // ---------------------------------------------------------------------------
 static void Champion_Behavior(Player* player, PlayState* play) {
-    // ---- Model forcing: adult-only; mechanics work for all ages ------------
-    if (LINK_AGE_IN_YEARS == YEARS_ADULT) {
-        if (!sChampionModelActive) {
-            PakLoader_ForceModel(CHAMPION_PAK_PATH);
-            sChampionModelActive = 1;
-        }
-    } else {
-        if (sChampionModelActive) {
-            PakLoader_ClearForcedModel();
-            sChampionModelActive = 0;
-        }
-    }
+    // Skijer 2026-07-16: the BOTW Link skin force is REMOVED — Champion's Tunic is now a plain recolor
+    // tunic (blue, painted in Player_DrawImpl). Only the flurry-rush + bullet-time mechanics remain.
 
     // ---- Guard: clean exit during cutscenes / death / loading --------------
     u32 blockedFlags = PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
@@ -324,10 +312,7 @@ static void Champion_Behavior(Player* player, PlayState* play) {
 // the screen tint (fillScreen) can be properly cleared immediately.
 // ---------------------------------------------------------------------------
 static void Champion_Cleanup(PlayState* play) {
-    if (sChampionModelActive) {
-        PakLoader_ClearForcedModel();
-        sChampionModelActive = 0;
-    }
+    // (BOTW skin force removed 2026-07-16 — nothing to clear model-side.)
     gChampionSlowFactor = 1.0f;
 
     if (play != NULL) {

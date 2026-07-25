@@ -25,6 +25,23 @@ extern SaveContext gSaveContext;
 // inline `extern` z_player.c previously used) to avoid pulling the Harpoon C++
 // headers into this TU. Returns 1 when it rendered a prop (suppress Link), else 0.
 s32 HarpoonPropHunt_TryDrawLocalProp(Actor* thisx, PlayState* play);
+
+// Skijer's NEI: Pikachu status intercept (mm_player_form.cpp / pikachu_form.cpp).
+// Forward-declared to match the inline `extern` z_player.c previously used.
+u8 MmForm_IsPikachuActive(void);
+void PikachuForm_InterceptStatus(PlayState* play, Player* player);
+
+// SW97 Cucco mode draw — Soul-arrow + cucco transformation. When active,
+// replaces Link's body with the cucco model while still walking Link's
+// skeleton (null limbs) so shadow + Navi keep tracking.
+s32 Sw97_IsCuccoModeActive(void);
+void Sw97_DrawCuccoForm(PlayState* play, Player* player);
+
+// Cucco-egg projectile hooks: while cucco is active, any bow/slingshot
+// arrow Link fires gets tagged so its draw becomes the pocket-egg model
+// and its horizontal speed is clamped to CUCCO_EGG_SPEED_MAX.
+void Sw97_TagCuccoEgg(Actor* arrow);
+void Sw97_TickCuccoEggClamp(Actor* arrow);
 }
 
 static const char* ResolveCustomChain(std::initializer_list<const char*> paths) {
@@ -592,6 +609,26 @@ static RegisterShipInitFunc initFunc(RegisterCustomEquipment, { CVAR_SETTING("Al
 // *should=false suppresses the vanilla draw. Pak/O2r skeleton swap stays inline in z_player.c.
 // Registered unconditionally (each block self-guards), NOT gated on AltAssets.
 static void RegisterPlayerDrawForkNEI() {
+    // Skijer's NEI: hide Link's held-weapon DL when a custom item draws its own model
+    // (Byrna / IK Axe via ExtEquip_ShouldHideSwordDL, or the Fire/Ice/Light rods).
+    REGISTER_VB_SHOULD(VB_PLAYER_SHOULD_HIDE_HELD_WEAPON, {
+        Player* player = (Player*)va_arg(args, void*);
+        if (ExtEquip_ShouldHideSwordDL() || player->itemAction == PLAYER_IA_ROD_FIRE ||
+            player->itemAction == PLAYER_IA_ROD_ICE || player->itemAction == PLAYER_IA_ROD_LIGHT) {
+            *should = true;
+        }
+    });
+
+    // Skijer's NEI: held item is two-handed for the FD-skin sword + custom Fire/Ice/Light rods (BGS-style)
+    REGISTER_VB_SHOULD(VB_PLAYER_HOLDS_TWO_HANDED_WEAPON, {
+        Player* player = (Player*)va_arg(args, void*);
+        if ((TransformMasks_IsFDSkinMode() && Player_ActionToMeleeWeapon(player->heldItemAction) > 0) ||
+            player->heldItemAction == PLAYER_IA_ROD_FIRE || player->heldItemAction == PLAYER_IA_ROD_ICE ||
+            player->heldItemAction == PLAYER_IA_ROD_LIGHT) {
+            *should = true;
+        }
+    });
+
     REGISTER_VB_SHOULD(VB_PLAYER_DRAW_BEGIN, {
         PlayState* play = va_arg(args, PlayState*);
         Player* player = va_arg(args, Player*);
@@ -625,6 +662,25 @@ static void RegisterPlayerDrawForkNEI() {
                 va_end(args);
                 return;
             }
+        }
+
+        // SW97 Cucco mode: draw cucco model instead of Link, but walk Link's
+        // skeleton with null limbs so shadow + Navi follow (same pattern as
+        // GaroForm_DrawNullBody / MmForm_Draw).
+        if (isLocalPlayer && Sw97_IsCuccoModeActive()) {
+            Sw97_DrawCuccoForm(play, player);
+            OPEN_DISPS(play->state.gfxCtx);
+            if (!(player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+                if (player->unk_862 > 0) {
+                    Player_DrawGetItem(play, player);
+                }
+                CustomItems_OverrideDraw(player, play);
+                ExtEquip_DrawBehavior(player, play);
+            }
+            CLOSE_DISPS(play->state.gfxCtx);
+            *should = false;
+            va_end(args);
+            return;
         }
 
         // Transformation Masks: draw MM form instead of Link; Dragon Scale swim draws barrier only
@@ -669,6 +725,64 @@ static void RegisterPlayerDrawForkNEI() {
 }
 
 static RegisterShipInitFunc initFuncPlayerDrawFork(RegisterPlayerDrawForkNEI, {});
+
+// Skijer's NEI: SW97 cucco egg hooks. While cucco mode is active, tag
+// EnArrow at Init (swap draw → pocket-egg DL) and clamp its speedXZ each
+// Update tick. Vanilla aim + release flow unchanged — only visuals + speed
+// are affected once the arrow is airborne.
+static void RegisterCuccoArrowEggHooks() {
+    COND_ID_HOOK(OnActorInit, ACTOR_EN_ARROW, true, [](void* actorPtr) {
+        if (Sw97_IsCuccoModeActive()) {
+            Sw97_TagCuccoEgg((Actor*)actorPtr);
+        }
+    });
+    COND_ID_HOOK(OnActorUpdate, ACTOR_EN_ARROW, true, [](void* actorPtr) {
+        Sw97_TickCuccoEggClamp((Actor*)actorPtr);
+    });
+}
+static RegisterShipInitFunc initFuncCuccoArrowEggHooks(RegisterCuccoArrowEggHooks, {});
+
+// Skijer's NEI: SM64 pre-UpdateCommon pre-pass (z_player pieces 1-2,5-7; 3-4 stay inline)
+#define SM64_SWAP_AB(b) (((b) & ~(BTN_A | BTN_B)) | (((b) & BTN_A) ? BTN_B : 0) | (((b) & BTN_B) ? BTN_A : 0))
+static void RegisterSm64PreUpdateCommonNEI() {
+    // Pieces 1-2: tick transition-suspend (before any IsActive/IsReady check),
+    // then the (now no-op) Mario-mask C-Down force/toggle.
+    REGISTER_VB_SHOULD(VB_SM64_PLAYER_PRE_ACTION, {
+        PlayState* play = va_arg(args, PlayState*);
+        Player* player = va_arg(args, Player*);
+        (void)va_arg(args, Input*); // &sp44 (unused by pieces 1-2)
+        Sm64Mario_TickTransitionSuspend(play, player);
+        Sm64MarioMask_ForceAndToggle(play, player);
+    });
+
+    // Pieces 5-7: steal damage, read Pikachu status, then swap A<->B on the exact
+    // sp44 that is passed straight into Player_UpdateCommon (OOT's contextual A).
+    REGISTER_VB_SHOULD(VB_SM64_PLAYER_PRE_UPDATE_COMMON, {
+        PlayState* play = va_arg(args, PlayState*);
+        Player* player = va_arg(args, Player*);
+        Input* in = va_arg(args, Input*);
+        Sm64Mario_InterceptDamage(play, player);
+        if (MmForm_IsPikachuActive()) {
+            PikachuForm_InterceptStatus(play, player);
+        }
+        // SW97 cucco mode: strip A from Link's input so his actionFunc doesn't
+        // roll on the ground / attack in air / trigger the sword slash. Our
+        // Sw97_TickCuccoMode reads the raw A press from play->state.input[0]
+        // (unaffected by this) to drive the flap burst on velocity.y.
+        if (Sw97_IsCuccoModeActive()) {
+            in->cur.button   &= ~BTN_A;
+            in->press.button &= ~BTN_A;
+        }
+        if (Sm64Mario_IsReady()) {
+            in->cur.button = SM64_SWAP_AB(in->cur.button);
+            in->press.button = SM64_SWAP_AB(in->press.button);
+            in->rel.button = SM64_SWAP_AB(in->rel.button);
+        }
+    });
+}
+
+static RegisterShipInitFunc initFuncSm64PreUpdateCommon(RegisterSm64PreUpdateCommonNEI, {});
+#undef SM64_SWAP_AB
 
 // Skijer's NEI: player anim-override fork (VB_PLAYER_ANIM_OVERRIDE). Each site stores the
 // vanilla anim in *animOut; a getter overwrites it only when non-NULL (else vanilla unchanged).

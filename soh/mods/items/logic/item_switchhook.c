@@ -27,6 +27,68 @@
 #include "objects/object_link_boy/object_link_boy.h"
 
 // ============================================================================
+// CHARGES — anti-spam (Skijer's NEI switchhook rework)
+//
+// The Switch Hook holds 5 charges; each fired swap spends one. Charges trickle
+// back Epona-carrot style: +1 every 20 seconds. Spending the LAST charge grays
+// the item out for 2 minutes, after which it returns at FULL charge.
+// (OoT gameplay logic runs at 20 fps.)
+// ============================================================================
+
+#define SWITCHHOOK_MAX_CHARGES 5
+#define SWITCHHOOK_RECHARGE_FRAMES (20 * 20)  // +1 charge / 20 s
+#define SWITCHHOOK_DEPLETED_FRAMES (120 * 20) // 2-minute gray-out, then full recharge
+
+static u8 sShCharges = SWITCHHOOK_MAX_CHARGES;
+static u16 sShRegenTimer = 0;
+static u16 sShDepletedTimer = 0;
+
+// Per-frame tick — called from CustomItems_Update so charges regenerate even with
+// the Switch Hook not in hand.
+void SwitchHook_ChargeTick(void) {
+    if (sShDepletedTimer > 0) {
+        sShDepletedTimer--;
+        if (sShDepletedTimer == 0) {
+            sShCharges = SWITCHHOOK_MAX_CHARGES; // gray-out over: back at FULL charge
+        }
+        return;
+    }
+    if (sShCharges < SWITCHHOOK_MAX_CHARGES) {
+        sShRegenTimer++;
+        if (sShRegenTimer >= SWITCHHOOK_RECHARGE_FRAMES) {
+            sShRegenTimer = 0;
+            sShCharges++;
+        }
+    } else {
+        sShRegenTimer = 0;
+    }
+}
+
+// Shots left (0 while grayed out) — the HUD counter reads this.
+u8 SwitchHook_GetCharges(void) {
+    return (sShDepletedTimer > 0) ? 0 : sShCharges;
+}
+
+// True during the 2-minute gray-out (the C-button icon draws gray).
+u8 SwitchHook_IsDepleted(void) {
+    return sShDepletedTimer > 0;
+}
+
+// Spend one charge on fire. Returns 0 (and fires nothing) when empty/grayed out;
+// spending the last charge starts the 2-minute gray-out.
+s32 SwitchHook_ConsumeCharge(void) {
+    if ((sShDepletedTimer > 0) || (sShCharges == 0)) {
+        return 0;
+    }
+    sShCharges--;
+    sShRegenTimer = 0;
+    if (sShCharges == 0) {
+        sShDepletedTimer = SWITCHHOOK_DEPLETED_FRAMES;
+    }
+    return 1;
+}
+
+// ============================================================================
 // STATIC VARIABLES
 // ============================================================================
 
@@ -513,7 +575,61 @@ static void SwitchHook_Retract(Player* p, PlayState* play) {
 // MAIN HANDLER - Following BombArrows pattern exactly
 // ============================================================================
 
+// ============================================================================
+// C-UP MANUAL AIM (Skijer's NEI switchhook rework)
+//
+// The Switch Hook is a held item: the first equipped-button press draws it.
+// With it in hand:
+//   - C-Up toggles MANUAL AIM — the vanilla hookshot aim camera (func_80834EB8
+//     keeps unk_6AD = 2 alive each frame; being set before the vanilla action
+//     handlers run also suppresses the vanilla C-Up peek).
+//   - Pressing the equipped C/D button LAUNCHES it: where you AIM while in
+//     C-Up mode (no auto-target), or at the blue live selection otherwise
+//     (z_arms_hook.c reads SwitchHook_IsAimingManual()).
+// ============================================================================
+
+static u8 sShAimManual = 0;
+
+// True while the C-Up manual-aim camera is up (arms_hook skips selection/auto-aim;
+// z_player.c's func_80834EB8 gate falls through to the vanilla aim path).
+u8 SwitchHook_IsAimingManual(void) {
+    return sShAimManual;
+}
+
+// Called by z_arms_hook.c the moment the hook launches — manual aim ends at the shot.
+void SwitchHook_OnFired(Player* p) {
+    if (sShAimManual) {
+        sShAimManual = 0;
+        p->unk_6AD = 0;
+    }
+}
+
 void Handle_SwitchHook(Player* p, PlayState* play) {
+    // Skijer's NEI switchhook rework: the firing/swap logic runs through the vanilla hookshot
+    // (ITEM_SWITCH_HOOK -> PLAYER_IA_HOOKSHOT in extended_player.c + arms_hook). This handler only
+    // owns the C-Up manual-aim toggle; the old custom first-person/projectile handler below is dead
+    // (it produced the boomerang pose and never aimed properly).
+    extern s32 func_80834EB8(Player* this, PlayState* play);
+
+    if (p->heldItemId != ITEM_SWITCH_HOOK) {
+        if (sShAimManual) { // put away mid-aim: drop the aim camera cleanly
+            sShAimManual = 0;
+            p->unk_6AD = 0;
+        }
+        return;
+    }
+
+    if (CHECK_BTN_ALL(play->state.input[0].press.button, BTN_CUP)) {
+        sShAimManual ^= 1;
+        if (!sShAimManual) {
+            p->unk_6AD = 0;
+        }
+    }
+    if (sShAimManual) {
+        func_80834EB8(p, play); // hold the vanilla hookshot aim camera each frame
+    }
+    return;
+
     ItemInputState in;
     ItemInput_Update(&in, ITEM_SWITCH_HOOK, p, play);
     shButtonMask = in.equippedButton;
@@ -635,6 +751,12 @@ s32 Player_UpperAction_SwitchHook(Player* this, PlayState* play) {
 void CustomItems_DrawSwitchHookInHand(Player* player, PlayState* play) {
     Vec3f handPos;
     s16 handYaw;
+
+    // Skijer's NEI switchhook rework: the in-hand hookshot model is now drawn by the normal
+    // right-hand limb DL (the Switch Hook routes to PLAYER_IA_HOOKSHOT, so the vanilla hookshot
+    // model group applies). This custom flipped-tip overlay would DOUBLE that model, so it's
+    // disabled — the switch hook simply shows the real hookshot in hand.
+    return;
 
     // Only draw when active and in aiming state
     if (!shActive)

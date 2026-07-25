@@ -582,8 +582,8 @@ void ApplyEquipChoice(const nlohmann::json& equipObj) {
 
 void ApplyClearInventoryIfRequested(const nlohmann::json& role) {
     if (!role.value("inventory_clear", false)) return;
-    for (size_t i = 0; i < ARRAY_COUNT(gSaveContext.inventory.items); i++) {
-        gSaveContext.inventory.items[i] = ITEM_NONE;
+    for (int i = 0; i < 72; i++) { // Skijer's NEI: vanilla 0..23 + custom 24..71
+        ExtInv_SetSlotItem(i, ITEM_NONE);
     }
 }
 
@@ -598,8 +598,8 @@ void ApplyItemsMap(const nlohmann::json& itemsObj) {
             slot = ResolveSlotName(key);
         }
         s32 item = NumOrItemName(it.value());
-        if (slot >= 0 && (size_t)slot < ARRAY_COUNT(gSaveContext.inventory.items)) {
-            gSaveContext.inventory.items[slot] = (u8)item;
+        if (slot >= 0 && slot < 72) { // Skijer's NEI
+            ExtInv_SetSlotItem(slot, (u8)item);
         }
     }
 }
@@ -607,15 +607,15 @@ void ApplyItemsMap(const nlohmann::json& itemsObj) {
 void ApplyPageStrategies(const nlohmann::json& role) {
     auto p2 = role.value("items_page2_strategy", std::string());
     if (p2 == "gPage2Items_with_RocsCape_at_24") {
-        for (int i = 0; i < 24; i++) {
-            if (i == 0) gSaveContext.inventory.items[24 + i] = ITEM_ROCS_CAPE;
-            else        gSaveContext.inventory.items[24 + i] = gPage2Items[i];
+        for (int i = 0; i < 24; i++) { // Skijer's NEI
+            if (i == 0) Nei_SetOwnedItem((u8)(24 + i), ITEM_ROCS_CAPE);
+            else        Nei_SetOwnedItem((u8)(24 + i), gPage2Items[i]);
         }
     }
     auto p3 = role.value("items_page3_strategy", std::string());
     if (p3 == "gPage3MaskItems") {
-        for (int i = 0; i < 24; i++) {
-            gSaveContext.inventory.items[48 + i] = gPage3MaskItems[i];
+        for (int i = 0; i < 24; i++) { // Skijer's NEI
+            Nei_SetOwnedItem((u8)(48 + i), gPage3MaskItems[i]);
         }
     }
 }

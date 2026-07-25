@@ -46,9 +46,9 @@ typedef struct {
 } ItemEquips; // size = 0x0A
 
 typedef struct {
-    /* 0x00 */ u8 items[72]; // Skijer's NEI: pages 0-23 vanilla, 24-47 custom, 48-71 MM masks
+    /* 0x00 */ u8 items[24];
     /* 0x18 */ s8 ammo[16];
-    /* 0x28 */ u32 equipment; // Skijer's NEI: low 16 bits vanilla; high 16 bits ext equip (3 bits each: swords/shields/tunics/boots)
+    /* 0x28 */ u16 equipment; // a mask where each nibble corresponds to a type of equipment `EquipmentType`, and each bit to an owned piece `EquipInv*`
     /* 0x2C */ u32 upgrades;
     /* 0x30 */ u32 questItems;
     /* 0x34 */ u8 dungeonItems[20];
@@ -233,17 +233,6 @@ typedef struct ShipSaveContextData {
     u8 filenameLanguage;
     //TODO: Move non-rando specific flags to a new sohInf and move the remaining randomizerInf to ShipRandomizerSaveContextData
     u16 randomizerInf[(RAND_INF_MAX + 15) / 16];
-    // Skijer's NEI
-    u8 lanternFireType;      // 0=none, 1=regular, 2=blue, 3=poe, 4=green
-    u8 lanternCapturedTypes; // bitfield: bit N = LanternFireType N ever captured
-    u8 twilightUpgrade;      // bit0 Clawshot, bit1 Bomb Arrows, bit2 Gale Boomerang
-    u8 clawshotModeActive;       // 0 = Hookshot/Longshot, 1 = Clawshot
-    u8 galeBoomerangModeActive;  // 0 = Boomerang, 1 = Gale Boomerang
-    u8 weaponUpgrades;       // bit0 Hammer→Axe, bit1/2 Kokiri Razor/Gilded, bit3 True Master, bit4 Great Fairy's
-    u8 extEquipSword;  // Currently equipped ext sword (0=none, 1-3)
-    u8 extEquipShield; // Currently equipped ext shield (0=none, 1-3)
-    u8 extEquipTunic;  // Currently equipped ext tunic (0=none, 1-3)
-    u8 extEquipBoots;  // Currently equipped ext boots (0=none, 1-3)
 } ShipSaveContextData;
 
 #pragma endregion
@@ -369,11 +358,18 @@ typedef enum {
     /* 01 */ QUEST_MASTER,
     /* 02 */ QUEST_RANDOMIZER,
     /* 03 */ QUEST_BOSSRUSH,
+    /* 04 */ QUEST_OOTXMM, // Fleet Ship Combo (OoT x MM): a randomizer save paired with a MM slot
 } Quest;
 
 #define IS_VANILLA (gSaveContext.ship.quest.id == QUEST_NORMAL)
 #define IS_MASTER_QUEST (gSaveContext.ship.quest.id == QUEST_MASTER)
-#define IS_RANDO (gSaveContext.ship.quest.id == QUEST_RANDOMIZER)
+// A COMBO (OoTxMM) save IS a randomizer run (it carries a generated seed) paired with a MM slot, so
+// IS_RANDO is TRUE for it too — every existing rando code path applies unchanged. Use IS_OOTXMM only
+// for the combo-SPECIFIC bits (file-select label, save-pair creation, which game boots). NOTE: code
+// that compares `quest.id == QUEST_RANDOMIZER` DIRECTLY (not via IS_RANDO) won't catch combo — those
+// few spots are the residual audit if combo ever misbehaves like plain rando.
+#define IS_OOTXMM (gSaveContext.ship.quest.id == QUEST_OOTXMM)
+#define IS_RANDO (gSaveContext.ship.quest.id == QUEST_RANDOMIZER || IS_OOTXMM)
 #define IS_BOSS_RUSH (gSaveContext.ship.quest.id == QUEST_BOSSRUSH)
 
 typedef enum {

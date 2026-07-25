@@ -20,9 +20,7 @@
 #include "functions.h"
 #include "variables.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
-#include "../anim/superhero/demise_anim.h"
-#include "../anim/superhero/demise_anim_data.c"
-#include "../anim/superhero/demise_anim.c"
+#include "../anim/nei_anims.h" // animation now loads from soh.o2r — Skijer's NEI
 
 static s8 sDemisePrevInvinc = 0;
 static FX_Color sDemiseDustColor = { 60, 0, 0, 255 };
@@ -80,8 +78,14 @@ static void Demise_StateWindup(Player* p, PlayState* play) {
     p->actor.velocity.x = p->actor.velocity.y = p->actor.velocity.z = 0.0f;
 
     if (ddTimer == 0) {
-        LinkAnimation_Change(play, &p->skelAnime, &gDemiseDestructionAnim, 0.65f, 0.0f,
-                             Animation_GetLastFrame(&gDemiseDestructionAnim), ANIMMODE_ONCE, -8.0f);
+        // Loaded from soh.o2r; skip the anim change if the resource is missing (the timer-driven
+        // effect below still runs). Skijer's NEI
+        LinkAnimationHeader* anim = NeiAnim_Load(NEI_ANIM_DEMISE_DESTRUCTION);
+
+        if (anim != NULL) {
+            LinkAnimation_Change(play, &p->skelAnime, anim, 0.65f, 0.0f, Animation_GetLastFrame(anim),
+                                 ANIMMODE_ONCE, -8.0f);
+        }
     }
 
     if (ddTimer >= 0) {

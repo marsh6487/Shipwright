@@ -26,6 +26,12 @@
 #include "../anim/ballchain/ballchain_anim_data.h"
 #include "assets/objects/gameplay_keep/gameplay_keep.h"
 
+// z_player.c internal: OoT's real sword jump-attack setup — plays the jumpslash anim, routes Link into
+// the jump-attack action, and launches him with linearVelocity (along shape.rot.y) + velocity.y. Used
+// by the whip's B-release so you let go INTO a jump slash. Non-static → linkable. (OoT twin of MM's
+// func_808395F0.) Skijer's NEI
+extern void func_8083BA90(PlayState* play, Player* this, s32 meleeWeaponAnim, f32 xzVelocity, f32 yVelocity);
+
 // =============================================================================
 // Static Data
 // =============================================================================
@@ -192,9 +198,60 @@ static Actor* Whip_FindNearbyEnemy(PlayState* play, Vec3f* pos, f32 radius) {
 }
 
 // =============================================================================
+// Swing camera (Wind-Waker-style behind-follow) — same subcam pattern as the beetle: take control from
+// MAIN_CAM, sit the eye BEHIND Link along the swing direction (elevated), look at Link, and let the cam
+// yaw CHASE the swing yaw slowly so it's "semi-fixed" and only medio-follows as you steer. Skijer's NEI
+// =============================================================================
+static void Whip_DestroySwingCam(PlayState* play) {
+    if (whipSwingSubCamId != SUBCAM_FREE) {
+        Camera_ChangeMode(Play_GetCamera(play, MAIN_CAM), CAM_MODE_NORMAL);
+        Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_ACTIVE);
+        Play_ClearCamera(play, whipSwingSubCamId);
+        whipSwingSubCamId = SUBCAM_FREE;
+    }
+}
+
+static void Whip_CreateSwingCam(Player* p, PlayState* play) {
+    if (whipSwingSubCamId == SUBCAM_FREE) {
+        whipSwingSubCamId = Play_CreateSubCamera(play);
+        Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_WAIT);
+        Play_ChangeCameraStatus(play, whipSwingSubCamId, CAM_STAT_ACTIVE);
+        whipSwingCamYaw = whipSwingYaw; // start already behind the swing dir so it doesn't snap frame 1
+    }
+}
+
+static void Whip_UpdateSwingCam(Player* p, PlayState* play) {
+    Vec3f at, eye;
+    f32 sinY, cosY;
+
+    if (whipSwingSubCamId == SUBCAM_FREE) {
+        return;
+    }
+
+    // Semi-follow: chase the swing plane's yaw a little each frame instead of snapping to it.
+    Math_SmoothStepToS(&whipSwingCamYaw, whipSwingYaw, WHIP_CAM_FOLLOW_FRAC, WHIP_CAM_FOLLOW_STEP, 0x10);
+
+    sinY = Math_SinS(whipSwingCamYaw);
+    cosY = Math_CosS(whipSwingCamYaw);
+
+    at = p->actor.world.pos;
+    at.y += WHIP_CAM_AT_HEIGHT;
+
+    // whipSwingYaw points anchor→Link (the came-from / backward dir). "Behind Link" relative to the
+    // grapple is FURTHER along that vector, so eye = Link + dir*DIST looks forward toward Link + the
+    // grapple beyond. (Link − dir*DIST put the cam on the anchor side aiming backward = a 180° flip.)
+    eye.x = p->actor.world.pos.x + sinY * WHIP_CAM_DISTANCE;
+    eye.y = p->actor.world.pos.y + WHIP_CAM_HEIGHT;
+    eye.z = p->actor.world.pos.z + cosY * WHIP_CAM_DISTANCE;
+
+    Play_CameraSetAtEye(play, whipSwingSubCamId, &at, &eye);
+}
+
+// =============================================================================
 // Stop / Start
 // =============================================================================
 static void Whip_Stop(Player* p, PlayState* play) {
+    Whip_DestroySwingCam(play);
     if (whipFirstPerson) {
         FirstPerson_Exit(p, play);
         whipFirstPerson = 0;
@@ -519,6 +576,9 @@ static void WhipStateAttached(Player* p, PlayState* play) {
 
     whipSwingVel = 0.0f;
     whipState = WHIP_STATE_SWINGING;
+
+    // Hand the camera to the dedicated Wind-Waker-style swing cam for the whole swing.
+    Whip_CreateSwingCam(p, play);
 }
 
 // =============================================================================
@@ -559,24 +619,18 @@ static void WhipStateSwinging(Player* p, PlayState* play, ItemInputState* in) {
     // Pendulum: angular acceleration from gravity
     angAccel = -WHIP_GRAVITY * sinf(whipSwingAngle);
 
-    // Camera-relative stick input: decompose into swing-forward and swing-lateral
+    // CAMERA/SCREEN-relative steering. Under the swing follow-cam the analog stick is already
+    // screen-relative, so use its two axes DIRECTLY and consistently — no swing-plane decomposition
+    // (that rotated the mapping with the plane and flipped on the back-swing):
+    //   • stick LEFT/RIGHT → rotate the swing plane (steer). Same on-screen meaning at all times.
+    //   • stick UP/DOWN    → pump. Up drives the swing forward/away from the camera, down back.
     stickInputX = (f32)play->state.input[0].cur.stick_x / 127.0f;
     stickInputY = (f32)play->state.input[0].cur.stick_y / 127.0f;
     {
         f32 stickMag = sqrtf(stickInputX * stickInputX + stickInputY * stickInputY);
         if (stickMag > 0.1f) {
-            if (stickMag > 1.0f)
-                stickMag = 1.0f;
-            s16 camYaw = Camera_GetCamDirYaw(GET_ACTIVE_CAM(play));
-            s16 stickAngle = Math_Atan2S(stickInputX, stickInputY);
-            s16 worldAngle = camYaw + stickAngle;
-
-            // Decompose world stick direction relative to swing plane
-            f32 relForward = Math_CosS(worldAngle - whipSwingYaw) * stickMag;
-            f32 relLateral = Math_SinS(worldAngle - whipSwingYaw) * stickMag;
-
-            angAccel += relForward * WHIP_INPUT_FORCE;
-            whipSwingYaw += (s16)(relLateral * WHIP_YAW_TURN_RATE);
+            angAccel += stickInputY * WHIP_INPUT_FORCE;
+            whipSwingYaw += (s16)(stickInputX * WHIP_YAW_TURN_RATE);
         }
     }
 
@@ -619,6 +673,9 @@ static void WhipStateSwinging(Player* p, PlayState* play, ItemInputState* in) {
 
     func_8002F974(&p->actor, WHIP_SFX_SWING);
 
+    // Keep the swing camera behind Link (semi-follows the swing yaw).
+    Whip_UpdateSwingCam(p, play);
+
     // Ground contact check: if Link touches the floor, unequip
     if (p->actor.world.pos.y <= p->actor.floorHeight + WHIP_FLOOR_THRESHOLD) {
         p->actor.world.pos.y = p->actor.floorHeight;
@@ -627,25 +684,54 @@ static void WhipStateSwinging(Player* p, PlayState* play, ItemInputState* in) {
         return;
     }
 
-    // Any button press: release with full linear momentum conservation
+    // Release the swing. Any of A / B / C-buttons / the whip button lets go, but A and B differ:
+    //   • B  → let go straight INTO a sword jump slash, carrying the full swing momentum.
+    //   • A  → let go keeping the FORWARD (horizontal) momentum, but only 1/4 of the vertical.
+    //   • whip button / C-buttons → plain release: full momentum coast + fall.
     {
         u16 pressed = play->state.input[0].press.button;
-        u8 anyRelease = in->isPressed || (pressed & (BTN_A | BTN_B | BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT | BTN_CUP));
+        u8 releaseB = (pressed & BTN_B) != 0;
+        u8 releaseA = (pressed & BTN_A) != 0;
+        u8 releasePlain = in->isPressed || (pressed & (BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT | BTN_CUP));
 
-        if (anyRelease) {
-            // Use pre-clamp velocity for true momentum
+        if (releaseA || releaseB || releasePlain) {
+            // Pre-clamp velocity for true momentum.
             f32 omega = releaseVel;
             f32 cosTheta = cosf(whipSwingAngle);
             f32 sinTheta = sinf(whipSwingAngle);
             f32 tangentialSpeed = omega * whipRopeLength * WHIP_RELEASE_BOOST;
             f32 hSpeed = cosTheta * tangentialSpeed; // Signed horizontal speed
+            f32 vSpeed = sinTheta * tangentialSpeed; // Vertical speed
 
-            // Set velocity components directly for reliable momentum
+            // Face the momentum direction (shared by every release path).
+            s16 momentumYaw = (hSpeed >= 0.0f) ? whipSwingYaw : (s16)(whipSwingYaw + 0x8000);
+            p->actor.shape.rot.y = momentumYaw;
+            p->actor.world.rot.y = momentumYaw;
+            p->yaw = momentumYaw;
+
+            if (releaseB) {
+                // --- B: release straight into a JUMP SLASH, carrying the swing momentum ---
+                f32 hMag = fabsf(hSpeed);
+                if (hMag > WHIP_MAX_RELEASE_SPEED) {
+                    hMag = WHIP_MAX_RELEASE_SPEED;
+                }
+                Whip_Stop(p, play); // fully drop the whip (subcam + camera back to Link, clears state)
+                p->actor.shape.rot.y = momentumYaw; // re-affirm facing (func_8083BA90 launches along it)
+                p->yaw = momentumYaw;
+                // OoT's real sword jump-attack: sets linearVelocity + velocity.y from these + enters the
+                // jump-attack action.
+                func_8083BA90(play, p, PLAYER_MWA_JUMPSLASH_START, hMag,
+                              (vSpeed < WHIP_MIN_LAUNCH_VY) ? WHIP_MIN_LAUNCH_VY : vSpeed);
+                whipTimer = WHIP_JUMPSLASH_LOCKOUT; // block a held-button re-equip while the jumpslash runs
+                sWhipAnimState = -1;
+                return;
+            }
+
+            // --- A / plain: set launch velocity, coast a few frames, then fall ---
             p->actor.velocity.x = hSpeed * swingDirX;
             p->actor.velocity.z = hSpeed * swingDirZ;
-            p->actor.velocity.y = sinTheta * tangentialSpeed;
+            p->actor.velocity.y = vSpeed;
 
-            // Also set speed/direction systems for ongoing movement
             p->actor.speedXZ = fabsf(hSpeed);
             if (p->actor.speedXZ > WHIP_MAX_RELEASE_SPEED) {
                 f32 scale = WHIP_MAX_RELEASE_SPEED / p->actor.speedXZ;
@@ -655,26 +741,23 @@ static void WhipStateSwinging(Player* p, PlayState* play, ItemInputState* in) {
             }
             p->linearVelocity = p->actor.speedXZ;
 
-            // Face the momentum direction
-            if (hSpeed >= 0.0f) {
-                p->actor.shape.rot.y = whipSwingYaw;
-            } else {
-                p->actor.shape.rot.y = whipSwingYaw + 0x8000;
-            }
-            p->actor.world.rot.y = p->actor.shape.rot.y;
-            p->yaw = p->actor.shape.rot.y;
-
-            // Minimum upward nudge so Link doesn't just drop
-            if (p->actor.velocity.y < WHIP_MIN_LAUNCH_VY) {
+            if (releaseA) {
+                // A: keep the forward momentum, quarter the vertical. No min-upward nudge — a flatter,
+                // forward launch (you carry your speed out, not a lob).
+                p->actor.velocity.y = vSpeed * WHIP_A_RELEASE_VY_FRAC;
+            } else if (p->actor.velocity.y < WHIP_MIN_LAUNCH_VY) {
+                // plain: minimum upward nudge so Link doesn't just drop.
                 p->actor.velocity.y = WHIP_MIN_LAUNCH_VY;
             }
 
-            // Enter coast state: keep whip active briefly so engine doesn't
-            // reset momentum before position integration picks it up
+            // Enter coast state: keep whip active briefly so the engine doesn't reset momentum before
+            // position integration picks it up.
             p->actor.gravity = -1.0f;
             whipState = WHIP_STATE_LAUNCHED;
             whipTimer = WHIP_LAUNCH_COAST_FRAMES;
             sWhipAnimState = -1;
+            // Give the camera back to Link so the launch arc uses the normal follow cam.
+            Whip_DestroySwingCam(play);
             return;
         }
     }
@@ -745,8 +828,10 @@ void Handle_Whip(Player* p, PlayState* play) {
             Whip_Stop(p, play);
         return;
     }
-    if (in.otherButtonPressed) {
-        // Don't interrupt the post-release coast — momentum must persist
+    if (in.otherButtonPressed && whipState != WHIP_STATE_SWINGING) {
+        // A/B/C pressed: normally stop the whip. BUT while SWINGING, do NOT stop-in-place here — fall
+        // through to WhipStateSwinging so it can release WITH momentum per button (B = jumpslash,
+        // A = forward launch, C/whip = plain launch). Also never interrupt the post-release coast.
         if (whipActive && whipState != WHIP_STATE_LAUNCHED) {
             Whip_Stop(p, play);
         }
@@ -754,6 +839,12 @@ void Handle_Whip(Player* p, PlayState* play) {
     }
 
     if (!whipActive) {
+        if (whipTimer > 0) {
+            // Post-jumpslash lockout: a held item button must not immediately re-equip the whip and
+            // cancel the sword jump-attack from a B-release. Skijer's NEI
+            whipTimer--;
+            return;
+        }
         if (in.isPressed || in.isHeld) {
             Whip_Start(p, play);
         }
@@ -800,6 +891,8 @@ void Player_InitWhipIA(PlayState* play, Player* p) {
     whipSwingVel = 0.0f;
     whipRopeLength = 0.0f;
     whipFirstPerson = 0;
+    whipSwingSubCamId = SUBCAM_FREE;
+    whipSwingCamYaw = 0;
     sWhipAnimState = -1;
 }
 

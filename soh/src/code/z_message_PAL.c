@@ -16,6 +16,7 @@
 #include "soh/ResourceManagerHelpers.h"
 #include "mods/extended_inventory.h"
 #include "mods/extended_equipment.h"
+#include "mods/nei_save.h" // Skijer's NEI: mmQuestItems (MM/custom song ownership for the MM quest page)
 
 // SOH [Enhancement] Text Speed which fills whole box in one frame
 #define TEXT_SPEED_INSTANT 6
@@ -48,7 +49,7 @@ s16 sHasSunsSong = false;
 
 s16 sMessageHasSetSfx = false;
 
-u16 sOcarinaSongBitFlags = 0; // ocarina bit flags
+u32 sOcarinaSongBitFlags = 0; // ocarina bit flags (Skijer's NEI: widened — MM/custom songs at param bits 16-25)
 
 MessageTableEntry* sNesMessageEntryTablePtr = NULL;
 MessageTableEntry* sGerMessageEntryTablePtr = NULL;
@@ -864,7 +865,11 @@ u16 Message_DrawItemIcon(PlayState* play, u16 itemId, Gfx** p, u16 i) {
         // into the 32x32 branch. Items beyond ITEM_EXT_BOOTS_3 (e.g. ITEM_LAST_USED, ITEM_NONE)
         // stay on the 24x24 path matching mainline so vanilla quest icons don't glitch.
         if (itemId >= ITEM_MEDALLION_FOREST &&
-            !(itemId >= ITEM_ROCS_FEATHER_SKIJER && itemId <= ITEM_EXT_BOOTS_3)) {
+            !(itemId >= ITEM_ROCS_FEATHER_SKIJER && itemId <= ITEM_EXT_BOOTS_3) &&
+            // Bottle Randomizer extras (0xF4/0xF5) sit past ITEM_EXT_BOOTS_3 but are NEI custom
+            // items with 32x32 icons (Message_LoadItemIcon's >= ITEM_ROCS_FEATHER_SKIJER branch),
+            // so they must draw on the 32x32 path too. Skijer's NEI
+            !(itemId == ITEM_NET || itemId == ITEM_BOTTOMLESS_BOTTLE)) {
             gDPLoadTextureBlock(gfx++, (uintptr_t)msgCtx->textboxSegment + MESSAGE_STATIC_TEX_SIZE, G_IM_FMT_RGBA,
                                 G_IM_SIZ_32b, 24, 24, 0, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP,
                                 G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
@@ -2971,6 +2976,24 @@ void Message_StartOcarina(PlayState* play, u16 ocarinaActionId) {
     if (gSaveContext.scarecrowSpawnSongSet) {
         sOcarinaSongBitFlags |= (1 << OCARINA_SONG_SCARECROW);
     }
+
+    // Skijer's NEI: MM songs + custom songs (ocarina slots 14-23) — expose their recognition bits
+    // (bits 14-29 of OoT's song-flag mask are free) gated on the NEI mmQuestItems store (FC_MMQ_*
+    // layout, FleetShipCombo/FleetComboIds.h). Slots 21-23 are the customs replacing the doubled
+    // Epona/Time/Storms rows, so they use those rows' FC bits.
+    {
+        // slot (OCARINA_SONG_MM_FIRST + i) ← FC_MMQ bit: Sonata 6, GoronLullaby 7, NewWave 8,
+        // Elegy 9, Oath 10, Soaring 15, Healing 13, Fugue(=Epona row) 14, Command(=Time row) 12,
+        // Ballad(=Storms row) 16.
+        static const u8 sNeiMmSongFcBit[10] = { 6, 7, 8, 9, 10, 15, 13, 14, 12, 16 };
+        u32 mmQuest = Nei_Save()->mmQuestItems;
+
+        for (i = 0; i < 10; i++) {
+            if (mmQuest & (1u << sNeiMmSongFcBit[i])) {
+                sOcarinaSongBitFlags |= (1u << (OCARINA_SONG_MM_FIRST + i + 2)); // param bits 16-25
+            }
+        }
+    }
     osSyncPrintf("ocarina_bit = %x\n", sOcarinaSongBitFlags);
     osSyncPrintf(VT_RST);
 
@@ -3463,6 +3486,19 @@ void Message_DrawMain(PlayState* play, Gfx** p) {
                 break;
             case MSGMODE_OCARINA_PLAYING:
                 msgCtx->ocarinaStaff = Audio_OcaGetPlayingStaff();
+
+                // Skijer's NEI "Pause Play": deterministic forced-success handoff (mirror of the 2ship
+                // side — the audio-side played-song latch survives only one ocarina-update tick, so the
+                // quest page hands the song here directly and we stamp it into the staff state, which
+                // the chain below consumes synchronously).
+                {
+                    extern s16 gNeiPausePlayForcedSong; // z_kaleido_collect.c
+                    if ((gNeiPausePlayForcedSong >= 0) && (msgCtx->ocarinaAction == OCARINA_ACTION_FREE_PLAY)) {
+                        msgCtx->ocarinaStaff->state = (u8)gNeiPausePlayForcedSong;
+                        gNeiPausePlayForcedSong = -1;
+                    }
+                }
+
                 if (msgCtx->ocarinaStaff->pos) {
                     osSyncPrintf("locate=%d  onpu_pt=%d\n", msgCtx->ocarinaStaff->pos, sOcarinaNoteBufPos);
                     if (msgCtx->ocarinaStaff->pos == 1 && sOcarinaNoteBufPos == 8) {
@@ -3476,6 +3512,25 @@ void Message_DrawMain(PlayState* play, Gfx** p) {
                     }
                 }
                 msgCtx->lastPlayedSong = msgCtx->ocarinaStaff->state;
+
+                // Skijer's NEI: MM songs + customs (slots 14-23). The vanilla chain below only knows
+                // songs < MEMORY_GAME (its owned-check indexes gOcarinaSongItemMap — OOB for 14+), so
+                // run the same FREE_PLAY success path for them here: generic ocarina textbox +
+                // MSGMODE_SONG_PLAYED, which then replays the melody like any other song.
+                if ((msgCtx->ocarinaAction == OCARINA_ACTION_FREE_PLAY) &&
+                    (msgCtx->ocarinaStaff->state >= OCARINA_SONG_MM_FIRST) &&
+                    (msgCtx->ocarinaStaff->state < OCARINA_SONG_MAX)) {
+                    sLastPlayedSong = msgCtx->unk_E3F2 = msgCtx->lastPlayedSong = msgCtx->ocarinaStaff->state;
+                    Message_ContinueTextbox(play, 0x86F); // Ocarina staff box
+                    msgCtx->msgMode = MSGMODE_SONG_PLAYED;
+                    msgCtx->textBoxType = TEXTBOX_TYPE_OCARINA;
+                    msgCtx->stateTimer = 10;
+                    Audio_PlaySoundGeneral(NA_SE_SY_TRE_BOX_APPEAR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                    Interface_ChangeAlpha(1);
+                    break;
+                }
+
                 if (msgCtx->ocarinaStaff->state < OCARINA_SONG_MEMORY_GAME) {
                     if (msgCtx->ocarinaStaff->state == OCARINA_SONG_SCARECROW ||
                         CHECK_QUEST_ITEM(QUEST_SONG_MINUET + gOcarinaSongItemMap[msgCtx->ocarinaStaff->state])) {
@@ -3687,6 +3742,15 @@ void Message_DrawMain(PlayState* play, Gfx** p) {
                                     sOcarinaEffectActorIds[msgCtx->lastPlayedSong - OCARINA_SONG_SARIAS],
                                     player->actor.world.pos.x, player->actor.world.pos.y, player->actor.world.pos.z, 0,
                                     0, 0, sOcarinaEffectActorParams[msgCtx->lastPlayedSong - OCARINA_SONG_SARIAS]);
+                    } else if (msgCtx->lastPlayedSong >= OCARINA_SONG_MM_FIRST &&
+                               msgCtx->lastPlayedSong < OCARINA_SONG_MAX) {
+                        // Skijer's NEI: MM + custom songs had NO "song played" visual — the vanilla
+                        // table above only covers Saria..Storms. Spawn OCEFF_WIPE (the rising colored
+                        // frustum around Link); its draw now loads the frustum assets from mm.o2r
+                        // (soh.o2r ships no OcEff assets in this combo build). Every MM/custom song
+                        // uses the one actor so the single mm.o2r-backed effect covers them all.
+                        Actor_Spawn(&play->actorCtx, play, ACTOR_OCEFF_WIPE, player->actor.world.pos.x,
+                                    player->actor.world.pos.y, player->actor.world.pos.z, 0, 0, 0, 0);
                     }
                 }
                 break;
@@ -3707,9 +3771,22 @@ void Message_DrawMain(PlayState* play, Gfx** p) {
                     Audio_OcaSetInstrument(1);
                     Audio_OcaSetInstrument(1);
                 }
-                if (msgCtx->lastPlayedSong != OCARINA_SONG_SCARECROW) {
+                // Skijer's NEI: sOcarinaSongFanfares has 12 entries — slots 12+ (scarecrow, memory
+                // game, MM songs 14-20, customs 21-23) must not index it. MM songs get their real MM
+                // fanfare sequence from mm.o2r via MmBgm (silent no-op if the sequence is missing);
+                // customs rely on the ocarina melody replay above (mod window pending, like 2ship).
+                if (msgCtx->lastPlayedSong < ARRAY_COUNT(sOcarinaSongFanfares)) {
                     Audio_PlayFanfare(sOcarinaSongFanfares[msgCtx->lastPlayedSong]);
                     Audio_SetSoundBanksMute(0x20);
+                } else if ((msgCtx->lastPlayedSong >= OCARINA_SONG_MM_FIRST) &&
+                           (msgCtx->lastPlayedSong <= OCARINA_SONG_MM_LAST)) {
+                    static const char* sNeiMmSongFanfareNames[7] = {
+                        "SonataOfAwakening(Ocarina)_4B", "GoronLullaby(Ocarina)_4C", "NewWaveBossaNova(Ocarina)_5D",
+                        "ElegyOfEmptiness(Ocarina)_5E",  "OathToOrder(Ocarina)_5F", "SongOfSoaring(Ocarina)_47",
+                        "SongOfHealing(Ocarina)_48",
+                    };
+                    extern void MmBgm_PlayFanfare(const char* mmBgmName); // mods/sound_translator
+                    MmBgm_PlayFanfare(sNeiMmSongFanfareNames[msgCtx->lastPlayedSong - OCARINA_SONG_MM_FIRST]);
                 }
                 play->msgCtx.ocarinaMode = OCARINA_MODE_01;
                 if (msgCtx->ocarinaAction == OCARINA_ACTION_FREE_PLAY) {
@@ -3750,7 +3827,18 @@ void Message_DrawMain(PlayState* play, Gfx** p) {
                 }
                 break;
             case MSGMODE_DISPLAY_SONG_PLAYED_TEXT_BEGIN:
-                Message_ContinueTextbox(play, msgCtx->lastPlayedSong + 0x893); // You played [song name]
+                // Skijer's NEI: the "You played [song name]" message is `lastPlayedSong + 0x893`, but
+                // those texts only exist for OoT's 12 native songs (0x893..0x89E). MM songs (14-20)
+                // and customs (21-23) would resolve to 0x8A1+ which is NOT in the message table →
+                // Message_FindMessage leaves msgOffset bogus → memcpy in Message_OpenText crashes
+                // (0xC0000005). Show the generic ocarina staff box for them instead (the song name
+                // already appears on the quest page; a per-song "You played" text is a later pass,
+                // mirroring the 2ship mod-window). See [[project_mm_songs_in_oot_mirror]].
+                if (msgCtx->lastPlayedSong >= OCARINA_SONG_MM_FIRST) {
+                    Message_ContinueTextbox(play, 0x86F); // Ocarina (generic, valid message)
+                } else {
+                    Message_ContinueTextbox(play, msgCtx->lastPlayedSong + 0x893); // You played [song name]
+                }
                 Message_Decode(play);
                 msgCtx->msgMode = MSGMODE_DISPLAY_SONG_PLAYED_TEXT;
 
@@ -4257,8 +4345,21 @@ void Message_DrawMain(PlayState* play, Gfx** p) {
             gDPSetCombineLERP(gfx++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0, PRIMITIVE,
                               ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
 
+            // Which song's full fingering staff (greyed target notes) to show. Vanilla only shows it
+            // while DEMONSTRATING a song (MSGMODE_SONG_PLAYBACK, indexed by the teach/playback action).
+            // Skijer's NEI: MM + custom songs are played via free-play (pause-play), whose success runs
+            // through MSGMODE_DISPLAY_SONG_PLAYED — which otherwise reveals only the one-by-one replay
+            // notes. Draw the target staff there too (keyed by lastPlayedSong) so the song's notes are
+            // clearly visible during the replay and it reads as a real song.
+            g = -1;
             if (msgCtx->msgMode == MSGMODE_SONG_PLAYBACK) {
                 g = msgCtx->ocarinaAction - OCARINA_ACTION_PLAYBACK_MINUET;
+            } else if ((msgCtx->msgMode == MSGMODE_DISPLAY_SONG_PLAYED) &&
+                       (msgCtx->lastPlayedSong >= OCARINA_SONG_MM_FIRST) &&
+                       (msgCtx->lastPlayedSong < OCARINA_SONG_MAX)) {
+                g = msgCtx->lastPlayedSong;
+            }
+            if (g >= 0) {
                 r = gOcarinaSongNotes[g].len;
                 for (notePosX = R_OCARINA_NOTES_XPOS, i = 0; i < r; i++, notePosX += R_OCARINA_NOTES_XPOS_OFFSET) {
                     gDPPipeSync(gfx++);

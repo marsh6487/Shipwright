@@ -28,6 +28,7 @@ extern "C" {
 #include "mods/transformation_masks/transformation_masks.h"
 #include "mods/pak_loader/pak_loader.h"
 #include "mods/voice_pack/voice_pack.h"
+#include "mods/nei_save.h" // Skijer's NEI — ultrashotOwned (Ultrashot toggle)
 void TwilightUpgrade_Grant(void);
 extern unsigned char TwilightUpgrade_HasClawshot(void);
 extern unsigned char TwilightUpgrade_HasBombArrows(void);
@@ -47,6 +48,21 @@ void WeaponUpgrade_SetGilded(unsigned char on);
 void WeaponUpgrade_SetTrueMaster(unsigned char on);
 void WeaponUpgrade_SetGreatFairy(unsigned char on);
 void WeaponUpgrade_GrantAll(void);
+
+// Pictograph Box (mods/items/logic/picto_box.c)
+extern unsigned char Picto_IsOwned(void);
+void Picto_SetOwned(unsigned char on);
+void Picto_TakePhotoNow(void);
+// Power Keg (mods/items/logic/power_keg.c)
+extern unsigned char PowerKeg_IsOwned(void);
+void PowerKeg_SetOwned(unsigned char on);
+unsigned char PowerKeg_GetCount(void);
+void PowerKeg_SetCount(unsigned char n);
+// MM adult trade-quest items (mods/items/logic/trade_items.c)
+int TradeAdult_Count(void);
+unsigned char TradeAdult_IsOwnedIndex(int index);
+void TradeAdult_GiveIndex(int index);
+int TradeAdult_OwnedCount(void);
 void PikachuControls_OpenWindow(void); // pikachu_hud.cpp — Pikachu mode bindings window
 extern PlayState* gPlayState;
 u8 GerudoForm_IsActive(void); // gerudo_form.cpp
@@ -600,6 +616,50 @@ void RegisterNEIMenu() {
     path.column = SECTION_COLUMN_1;
     mSohMenu->AddWidget(path, "Custom Items", WIDGET_SEPARATOR_TEXT);
 
+    // --- MM Quest Page (mirror of the 2ship-side OoT quest page). Skijer's NEI ---
+    mSohMenu->AddWidget(path, "MM Quest Page", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Songs: Pause Play (skip minigame)", WIDGET_CVAR_CHECKBOX)
+        .CVar("gEnhancements.SkijerNEI.PausePlay")
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "On the MM Quest Status page (press L on the quest page to flip), if you hold an "
+            "ocarina, pressing A on a learned song closes the menu and instantly plays it in-world "
+            "(native success flow) INSTEAD of the learn-it minigame. OFF = the minigame."));
+    mSohMenu->AddWidget(path, "Grant MM Songs + Remains", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) {
+            // FC_MMQ_* bits: remains 0-3; songs Sonata 6, GoronLullaby 7, NewWave 8, Elegy 9,
+            // Oath 10, Time-row(Command) 12, Healing 13, Epona-row(Fugue) 14, Soaring 15,
+            // Storms-row(Ballad) 16. (Saria/Sun rows come from OoT's own quest items.)
+            Nei_Save()->mmQuestItems |= 0x0001FFCF;
+        })
+        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
+            "Grants the 4 boss remains + all MM-page songs (the 7 MM songs and the 3 NEI custom "
+            "songs). Saria's/Sun's rows follow your normal OoT songs. Idempotent."));
+
+    // NEI Weapon Upgrade appearance — pick which model/icon the progressive weapons display
+    // for the levels that have two looks (DL + icon load from mm.o2r, with a vanilla fallback).
+    mSohMenu->AddWidget(path, "Weapon Upgrade Appearance", WIDGET_SEPARATOR_TEXT);
+
+    mSohMenu->AddWidget(path, "Gilded Sword: use Gilded look", WIDGET_CVAR_CHECKBOX)
+        .CVar("gEnhancements.SkijerNEI.GildedUsesGildedLook")
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "When the Kokiri Sword is at its top upgrade (Gilded), choose the look:\n"
+            "ON  = Gilded Sword model + icon.\n"
+            "OFF = keep the Razor Sword look.\n"
+            "(Razor level always shows the Razor look. DL/icon load from mm.o2r,\n"
+            "falling back to the vanilla Kokiri Sword if unavailable.)"));
+
+    mSohMenu->AddWidget(path, "Biggoron Upgrade: use Great Fairy's Sword look", WIDGET_CVAR_CHECKBOX)
+        .CVar("gEnhancements.SkijerNEI.BgsUsesGfsLook")
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "When the Biggoron's Sword is upgraded (Great Fairy's Sword), choose the look:\n"
+            "ON  = Great Fairy's Sword model + icon.\n"
+            "OFF = keep the Biggoron's Sword look.\n"
+            "(DL/icon load from mm.o2r, falling back to the vanilla Biggoron Sword.)"));
+
     mSohMenu->AddWidget(path, "Enable Extra Equipment", WIDGET_CVAR_CHECKBOX)
         .CVar("gCheats.ExtEquip.Enabled")
         .RaceDisable(false)
@@ -608,6 +668,9 @@ void RegisterNEIMenu() {
             "Press L on the equipment page to toggle between vanilla and extended equipment.\n"
             "(The 'Add Extended Equipment to Rando' toggle in the Randomizer tab controls\n"
             "whether they are shuffled into the seed.)"));
+
+    // Net Model tuning sliders REMOVED: the in-hand placement is final and baked as constants in
+    // object_net.c (Scale 0.49, Rot -5/-169/64, Offset 3.2/4.3/-1.0; catch radius 30). Skijer's NEI
 
     // Roc's Items MM Animations - requires mm.o2r
     mSohMenu->AddWidget(path, "Roc's Items Use MM Animations", WIDGET_CVAR_CHECKBOX)
@@ -722,6 +785,26 @@ void RegisterNEIMenu() {
             "Sets all three Twilight Upgrade bits at once. Equivalent to\n"
             "checking the three checkboxes above. Idempotent."));
 
+    // Skijer's NEI hookshot overhaul — Ultrashot ownership (its own unlock, persisted in the
+    // "nei" save section, NOT one of the Twilight bits above). Same live-shadow pattern.
+    mSohMenu->AddWidget(path, "Hookshot Overhaul", WIDGET_SEPARATOR_TEXT);
+
+    static bool sUltrashotShadow = false;
+    mSohMenu->AddWidget(path, "Ultrashot", WIDGET_CHECKBOX)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            sUltrashotShadow = Nei_Save()->ultrashotOwned != 0;
+            info.valuePointer = &sUltrashotShadow;
+        })
+        .Callback([](WidgetInfo& info) {
+            Nei_Save()->ultrashotOwned = sUltrashotShadow ? 1 : 0;
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Unlocks the Ultrashot: the LONGSHOT fires 4x the hookshot's\n"
+            "distance at double chain speed (Link's reel-in included).\n"
+            "The item keeps the Longshot icon — a small Light Medallion\n"
+            "corner marker and the 'Ultrashot' name tell it apart."));
+
     // NEI Weapon Upgrades — per-bit save flags (gSaveContext.ship.weaponUpgrades).
     // Each upgrade requires the BASE weapon to be owned. State is read live from the
     // save each frame via PreFunc → the shadow bool, and writes go through
@@ -809,6 +892,77 @@ void RegisterNEIMenu() {
         })
         .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
             "Sets all weapon-upgrade bits at once. Idempotent."));
+
+    // NEI Pictograph Box (MM port). Photographing a mapped OoT actor writes MM's pictoFlags0/1 +
+    // the I5 photo into the NEI save in MM's exact layout, for a 2Ship bridge. No in-OoT reward.
+    mSohMenu->AddWidget(path, "Pictograph Box", WIDGET_SEPARATOR_TEXT);
+
+    static bool sPictoOwnedShadow = false;
+    mSohMenu->AddWidget(path, "Pictobox: Owned", WIDGET_CHECKBOX)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            sPictoOwnedShadow = Picto_IsOwned() != 0;
+            info.valuePointer = &sPictoOwnedShadow;
+        })
+        .Callback([](WidgetInfo& info) {
+            Picto_SetOwned(sPictoOwnedShadow ? 1 : 0);
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Grants the Pictograph Box. Photos are stored in Majora's Mask's\n"
+            "exact save layout (pictoFlags0/1 + pictoPhotoI5) for a 2Ship bridge;\n"
+            "they have no use in OoT itself."));
+
+    mSohMenu->AddWidget(path, "Take Pictograph Now (debug)", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) {
+            Picto_TakePhotoNow();
+        })
+        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
+            "Fires the shutter immediately (no aim/wheel) to test capture + subject\n"
+            "validation: sweeps loaded actors, sets the matching PICTO_VALID_* flags,\n"
+            "and captures the I5 photo of the current frame."));
+
+    mSohMenu->AddWidget(path, "Power Keg", WIDGET_SEPARATOR_TEXT);
+
+    static bool sPowerKegOwnedShadow = false;
+    mSohMenu->AddWidget(path, "Power Keg: Owned", WIDGET_CHECKBOX)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            sPowerKegOwnedShadow = PowerKeg_IsOwned() != 0;
+            info.valuePointer = &sPowerKegOwnedShadow;
+        })
+        .Callback([](WidgetInfo& info) {
+            PowerKeg_SetOwned(sPowerKegOwnedShadow ? 1 : 0);
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Grants the Power Keg (MM Goron's big bomb). Shares the Bomb slot:\n"
+            "press A on Bombs in the kaleido to flip Bomb <-> Power Keg, then equip\n"
+            "to a C-button. Usable only as Fierce Deity / Goron, or Human/Gerudo\n"
+            "with Silver Gauntlets or better. Behavior WIP."));
+
+    mSohMenu->AddWidget(path, "Give 20 Power Kegs", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) {
+            PowerKeg_SetOwned(1);
+            PowerKeg_SetCount(20);
+        })
+        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
+            "Grants the Power Keg + 20 kegs of ammo (its own counter, separate from bombs)."));
+
+    mSohMenu->AddWidget(path, "MM Trade Items", WIDGET_SEPARATOR_TEXT);
+
+    mSohMenu->AddWidget(path, "Grant All Trade Items", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) {
+            int n = TradeAdult_Count();
+            for (int i = 0; i < n; i++) {
+                TradeAdult_GiveIndex(i);
+            }
+        })
+        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
+            "Grants every adult trade-quest item (OoT's plus the 9 Majora's Mask ones)\n"
+            "into the adult-trade slot wheel. The Pendant of Memories also unlocks its\n"
+            "combat moveset (Ext Boots 2) — equip it on the equipment page to a C-button."));
 
     // ===================== Tab: Spells =====================
     path.sidebarName = "Spells";
@@ -1284,6 +1438,7 @@ void RegisterNEIMenu() {
             Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
             // Publish to shared memory so BOTH processes freeze/unfreeze + show/hide in sync.
             FleetShipCombo_SetActiveGame(next);
+            FleetShipCombo_SetUiFocus(next); // front window follows the newly-active game
             SPDLOG_INFO("[FleetShipCombo] isPlayerIn2Ship -> {}", next ? "Majora's Mask (2ship)" : "Ocarina of Time (Ship)");
             Notification::Emit({
                 .message = next ? "Switching to Majora's Mask..." : "Switching to Ocarina of Time...",
@@ -1296,6 +1451,18 @@ void RegisterNEIMenu() {
             "auto-start there next launch.\n\n"
             "NOTE: the runtime hand-off (session pause + cross-process compositing) is still\n"
             "being wired up. For now this just flips and remembers the active game."));
+
+    mSohMenu->AddWidget(path, "Show 2ship UI overlay (trackers)", WIDGET_CVAR_CHECKBOX)
+        .CVar("gFleetCombo.ShowMmUiOverlay")
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "Draws 2ship's floating UI windows (Check Tracker, etc.) on top of the game,\n"
+            "no matter which game is active — so both games' trackers can be open at once.\n\n"
+            "The overlay is view-only (an image): to CLICK 2ship's UI, use the\n"
+            "'2 Ship 2 Harkinian' tab at the top of this menu.\n"
+            "Open/close the windows themselves from 2ship's own menu.\n\n"
+            "2ship-side publishing can be disabled with gFleetShipCombo.UiOverlay = 0\n"
+            "(also restores the full render-skip for the inactive game)."));
 
     // The "View" game switcher (Ship / 2Ship / Shared) moved to the menu's top tab row
     // (DrawFleetShipComboTabs in Menu.cpp) so it's the same in both apps.

@@ -10,6 +10,7 @@
 #include "soh/Enhancements/randomizer/draw.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "mods/items/custom_items.h"
+#include "mods/items/custom_bottles.h" // Net catch-at-blade (Skijer's NEI)
 #include "mods/extended_player.h"
 #include "mods/extended_equipment.h"
 #include "mods/items/logic/item_mitts.h"
@@ -504,62 +505,10 @@ void Player_SetBootData(PlayState* play, Player* this) {
         REG(45) = 500;
     }
 
-    // MM transformation boot data override.
-    // Each MM form has unique boot physics (from 2Ship z_player_lib.c D_801BFE14).
-    // MM boot data mapped to OOT's REG layout (17 entries, same order as sBootData).
-    // Key differences from Human/Hylian (OOT default):
-    //   FD: R_RUN_SPEED_LIMIT=1000 (vs 550), faster accel curve
-    //   Goron: R_RUN_SPEED_LIMIT=600, REG(68)=-140 (heavier gravity)
-    //   Zora/Deku: R_RUN_SPEED_LIMIT=600
+    // MM transformation boot physics (per-form movement REGs). Skijer's NEI
     if (TransformMasks_IsTransformed()) {
-        extern s32 MmForm_GetCurrentForm(void);
-        s32 form = MmForm_GetCurrentForm();
-
-        // OOT sBootData format: REG(19,30,32,34,35,36,37,38), REG(43), REG(45),
-        //                       REG(68,69), IREG(66,67,68,69), MREG(95)
-        static const s16 sMmBootData[][17] = {
-            // FIERCE_DEITY (form 0) — from MM PLAYER_BOOTS_FIERCE_DEITY
-            { 200, 666, 200, 700, 366, 200, 600, 175, 800, 1000, -100, 600, 590, 800, 125, 300, 65 },
-            // GORON (form 1) — from MM PLAYER_BOOTS_GORON
-            { 200, 1000, 300, 700, 550, 270, 700, 200, 800, 600, -140, 600, 590, 750, 125, 200, 130 },
-            // ZORA (form 2) — from MM PLAYER_BOOTS_ZORA_LAND
-            { 200, 1000, 300, 700, 550, 270, 700, 300, 800, 600, -100, 600, 590, 750, 125, 200, 130 },
-            // DEKU (form 3) — from MM PLAYER_BOOTS_DEKU
-            { 200, 1000, 300, 700, 550, 270, 600, 1000, 800, 600, -100, 600, 590, 750, 125, 200, 130 },
-            // HUMAN (form 4) — no override needed, uses OOT defaults
-            { 200, 1000, 300, 700, 550, 270, 600, 350, 800, 600, -100, 600, 590, 750, 125, 200, 130 },
-            // PIKACHU (form 5) — same as FD (fast movement)
-            { 200, 666, 200, 700, 366, 200, 600, 175, 800, 1000, -100, 600, 590, 800, 125, 300, 65 },
-        };
-
-        if (form >= 0 && form <= 5 && form != 4) {
-            const s16* bd = sMmBootData[form];
-            REG(19) = bd[0];
-            REG(30) = bd[1];
-            REG(32) = bd[2];
-            REG(34) = bd[3];
-            REG(35) = bd[4];
-            REG(36) = bd[5];
-            REG(37) = bd[6];
-            REG(38) = bd[7];
-            REG(43) = bd[8];
-            REG(45) = bd[9];
-            REG(68) = bd[10];
-            REG(69) = bd[11];
-            IREG(66) = bd[12];
-            IREG(67) = bd[13];
-            IREG(68) = bd[14];
-            IREG(69) = bd[15];
-            MREG(95) = bd[16];
-        }
-
-        // R_RUN_SPEED_LIMIT: MM stores separately, OOT doesn't have a boot-data entry.
-        // Override it here based on form.
-        if (form == 0 || form == 5) {
-            R_RUN_SPEED_LIMIT = 1000; // FD and Pikachu
-        } else if (form >= 1 && form <= 3) {
-            R_RUN_SPEED_LIMIT = 600; // Goron, Zora, Deku
-        }
+        extern void MmForm_ApplyBootData(void);
+        MmForm_ApplyBootData();
     }
 }
 
@@ -661,6 +610,14 @@ void Player_SetModels(Player* this, s32 modelGroup) {
     // The rod visual is drawn separately in CustomItems_Draw functions
     if (this->heldItemAction == PLAYER_IA_ROD_FIRE || this->heldItemAction == PLAYER_IA_ROD_ICE ||
         this->heldItemAction == PLAYER_IA_ROD_LIGHT) {
+        this->leftHandType = PLAYER_MODELTYPE_LH_CLOSED;
+        this->leftHandDLists = &sPlayerDListGroups[PLAYER_MODELTYPE_LH_CLOSED][gSaveContext.linkAge];
+    }
+
+    // Net (Skijer's NEI): uses the Master Sword IA to swing 1:1, but must NOT show the sword model —
+    // close the fist and let CustomItems_DrawNet draw the net in the hand. Keyed on heldItemId (the IA
+    // is the sword IA, shared with real swords).
+    if (this->heldItemId == ITEM_NET) {
         this->leftHandType = PLAYER_MODELTYPE_LH_CLOSED;
         this->leftHandDLists = &sPlayerDListGroups[PLAYER_MODELTYPE_LH_CLOSED][gSaveContext.linkAge];
     }
@@ -865,36 +822,20 @@ s32 Player_GetStrength(void) {
         return PLAYER_STR_NONE;
     }
 
-    // Transformed forms have an INTRINSIC body strength independent of the player's
-    // upgrade bits. We compute it virtually here instead of mutating
-    // gSaveContext.inventory.upgrades on transform — that prior approach broke
-    // randomizer / pickup scenarios:
-    //   1. As Goron (override=GoldG, save bits=GoldG), the player picks up a
-    //      strength upgrade. Inventory_ChangeUpgrade overwrites the bits with the
-    //      pickup's level (e.g. Bracelet=1), DOWNGRADING Goron's lift power.
-    //   2. On detransform, the prior "restore to savedStrength" path snapped the
-    //      bits back to the pre-transform value, deleting the pickup.
-    // Returning the form's strength virtually lets the save bits track only what
-    // the player actually earned, and the form's body strength is applied per call.
-    // Item equipping is unaffected: those gates live in CHECK_AGE_REQ_* and
-    // inventory ownership checks, not here. Also covers Child Link transforms
-    // (the original Child age cap below doesn't apply when transformed).
+    // MM transformation forms have an intrinsic body strength (independent of save upgrade bits). Skijer's NEI
     if (TransformMasks_IsTransformed()) {
-        extern s32 MmForm_GetCurrentForm(void);
-        switch (MmForm_GetCurrentForm()) {
-            case 0 /* MM_PLAYER_FORM_FIERCE_DEITY */:
-                return PLAYER_STR_GOLD_G;
-            case 1 /* MM_PLAYER_FORM_GORON */:
-                return PLAYER_STR_GOLD_G;
-            case 2 /* MM_PLAYER_FORM_ZORA */:
-                return PLAYER_STR_BRACELET;
-            case 3 /* MM_PLAYER_FORM_DEKU */:
-                return PLAYER_STR_NONE;
-            // Pikachu (5) and anything else falls through to the normal path,
-            // so the player's real upgrade applies (no override).
-            default:
-                break;
+        extern s32 MmForm_GetStrengthOverride(void);
+        s32 formStr = MmForm_GetStrengthOverride();
+        if (formStr >= 0) {
+            return formStr;
         }
+    }
+
+    // Giant's Mask grants max lift strength (Gold Gauntlets) without touching the
+    // save upgrade bits, so randomizer progressive-strength logic stays intact. Skijer's NEI
+    extern s32 MmMaskWear_IsGiantMaskActive(void);
+    if (MmMaskWear_IsGiantMaskActive()) {
+        return PLAYER_STR_GOLD_G;
     }
 
     if (CVarGetInteger(CVAR_CHEAT("TimelessEquipment"), 0) || LINK_IS_ADULT) {
@@ -1000,24 +941,19 @@ s32 Player_GetMeleeWeaponHeld(Player* this) {
     if (TransformMasks_IsFDSkinMode() && Player_ActionToMeleeWeapon(this->heldItemAction) > 0) {
         return Player_ActionToMeleeWeapon(PLAYER_IA_SWORD_BIGGORON); // 3
     }
+    // NEI Razor/Gilded Sword: the upgraded Kokiri Sword wields like the Master Sword
+    // (reach 4000 + Master trail/damage flags). Gilded additionally deals Biggoron damage,
+    // applied in func_80837948 (z_player.c). Only for the real Kokiri sword in human form.
+    if (this->heldItemAction == PLAYER_IA_SWORD_KOKIRI && WeaponUpgrade_KokiriLevel() >= 1) {
+        return Player_ActionToMeleeWeapon(PLAYER_IA_SWORD_MASTER); // 1
+    }
     return Player_ActionToMeleeWeapon(this->heldItemAction);
 }
 
 s32 Player_HoldsTwoHandedWeapon(Player* this) {
-    // FD skin mode: FD's sword is two-handed (like BGS) regardless of actual equipped sword.
-    // This disables shield usage and enables two-handed attack patterns.
-    if (TransformMasks_IsFDSkinMode() && Player_ActionToMeleeWeapon(this->heldItemAction) > 0) {
-        return 1;
-    }
-    if ((this->heldItemAction >= PLAYER_IA_SWORD_BIGGORON) && (this->heldItemAction <= PLAYER_IA_HAMMER)) {
-        return 1;
-    }
-    // Custom rods use two-handed weapon mechanics (BGS-style spin attack)
-    if (this->heldItemAction == PLAYER_IA_ROD_FIRE || this->heldItemAction == PLAYER_IA_ROD_ICE ||
-        this->heldItemAction == PLAYER_IA_ROD_LIGHT) {
-        return 1;
-    }
-    return 0;
+    s32 result = (this->heldItemAction >= PLAYER_IA_SWORD_BIGGORON) && (this->heldItemAction <= PLAYER_IA_HAMMER);
+    // Skijer's NEI: custom items / forms can be two-handed (FD sword, Fire/Ice/Light rods)
+    return GameInteractor_Should(VB_PLAYER_HOLDS_TWO_HANDED_WEAPON, result, this);
 }
 
 s32 Player_HoldsBrokenKnife(Player* this) {
@@ -1180,6 +1116,10 @@ Gfx* sBootDListGroups[][2] = {
     { gLinkAdultLeftHoverBootDL, gLinkAdultRightHoverBootDL }, // PLAYER_BOOTS_HOVER
 };
 
+// Skijer's NEI: the tunic env color the player body draws with (captured each frame in
+// Player_DrawImpl, re-applied by the held-sword compound DL so the GFS's own env doesn't leak).
+static Color_RGB8 sPlayerBodyEnvColor = { 255, 255, 255 };
+
 void Player_DrawImpl(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dListCount, s32 lod, s32 tunic, s32 boots,
                      s32 face, OverrideLimbDrawOpa overrideLimbDraw, PostLimbDrawOpa postLimbDraw, void* data) {
     Color_RGB8* color;
@@ -1240,15 +1180,37 @@ void Player_DrawImpl(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dL
         color = &sTemp;
     }
 
-    // Champion's Tunic (Ext Tunic 3): BotW blue #38b6f1
-    if (ExtEquip_IsEnabled() && ExtEquip_GetCurrent(EQUIP_TYPE_TUNIC) == 3) {
+    // Extended RECOLOR tunics (Skijer 2026-07-16): each ext tunic paints Link's tunic 1:1 like the
+    // vanilla Goron/Zora recolor (ext tunics equip with Kokiri base, so `tunic`==0 and this wins).
+    if (ExtEquip_IsChampionTunic()) {
+        // Champion's Tunic — blue #38b6f1
         sTemp.r = 56;
         sTemp.g = 182;
         sTemp.b = 241;
         color = &sTemp;
+    } else if (ExtEquip_IsSpiritTunic()) {
+        // Spirit Tunic — ORANGE when active (has rupees), BLACK when deactivated (broke).
+        if (ExtEquip_SpiritHasMoney()) {
+            sTemp.r = 235;
+            sTemp.g = 110;
+            sTemp.b = 20;
+        } else {
+            sTemp.r = 20;
+            sTemp.g = 20;
+            sTemp.b = 20;
+        }
+        color = &sTemp;
+    } else if (ExtEquip_IsSnowquillTunic()) {
+        // Snowquill Tunic — white
+        sTemp.r = 235;
+        sTemp.g = 240;
+        sTemp.b = 245;
+        color = &sTemp;
     }
 
-    // Spirit Breastplate (Ext Tunic 2): armor drawn separately in PostLimbDraw, tunic color unchanged
+    // Skijer's NEI: remember the body tunic env so the held-sword compound DL (WeaponUpgrade_
+    // ApplyHeldSwordDL) can re-apply it after a combined MM sword DL that sets its own env color.
+    sPlayerBodyEnvColor = *color;
 
     if (GameInteractor_Should(VB_APPLY_TUNIC_COLOR, true, data, color)) {
         gDPSetEnvColor(POLY_OPA_DISP++, color->r, color->g, color->b, 0);
@@ -1306,11 +1268,27 @@ void Player_DrawImpl(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dL
                                                     : gLinkAdultRightGauntletPlate3DL);
             }
 
-            if (boots != 0) {
-                Gfx** bootDLists = sBootDListGroups[boots - 1];
+            // Skijer 2026-07-15: Pegasus Anklet's model = the vanilla HOVER BOOTS recolored RED (no
+            // custom DL anymore). When Pegasus is the current ext boots and no vanilla boot model is
+            // shown, draw the hover-boot DLs through the grayscale-recolor path (same technique as
+            // the age-restricted icon tint — reliable on any DL regardless of its combiner).
+            {
+                u8 pegasusRed = (boots == 0) && ExtEquip_IsEnabled() && (ExtEquip_GetCurrent(EQUIP_TYPE_BOOTS) == 1);
 
-                gSPDisplayList(POLY_OPA_DISP++, bootDLists[0]);
-                gSPDisplayList(POLY_OPA_DISP++, bootDLists[1]);
+                if ((boots != 0) || pegasusRed) {
+                    Gfx** bootDLists =
+                        pegasusRed ? sBootDListGroups[PLAYER_BOOTS_HOVER - 1] : sBootDListGroups[boots - 1];
+
+                    if (pegasusRed) {
+                        gDPSetGrayscaleColor(POLY_OPA_DISP++, 210, 30, 30, 255);
+                        gSPGrayscale(POLY_OPA_DISP++, true);
+                    }
+                    gSPDisplayList(POLY_OPA_DISP++, bootDLists[0]);
+                    gSPDisplayList(POLY_OPA_DISP++, bootDLists[1]);
+                    if (pegasusRed) {
+                        gSPGrayscale(POLY_OPA_DISP++, false);
+                    }
+                }
             }
         } else {
             // Child Link
@@ -1602,30 +1580,8 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
     Player* this = (Player*)thisx;
 
     if (!Player_OverrideLimbDrawGameplayCommon(play, limbIndex, dList, pos, rot, thisx)) {
-        // Gerudo Form dual-wield: both hands hold a custom scimitar DL from
-        // gerudo.o2r. The shield slot stays empty (R-hand DL = second sword
-        // instead of a shield). Sheath is hidden — there's nothing to sheathe.
-        // Falls through to vanilla if the .o2r doesn't ship the DL (cosmetic
-        // miss, not a crash).
-        u8 gerudoHandled = 0;
-        if (GerudoForm_IsActive()) {
-            if (limbIndex == PLAYER_LIMB_L_HAND) {
-                Gfx* swordL = GerudoForm_GetSwordDL_L();
-                if (swordL != NULL) {
-                    *dList = swordL;
-                    gerudoHandled = 1;
-                }
-            } else if (limbIndex == PLAYER_LIMB_R_HAND) {
-                Gfx* swordR = GerudoForm_GetSwordDL_R();
-                if (swordR != NULL) {
-                    *dList = swordR;
-                    gerudoHandled = 1;
-                }
-            } else if (limbIndex == PLAYER_LIMB_SHEATH) {
-                *dList = NULL; // no sheath in Gerudo Form
-                gerudoHandled = 1;
-            }
-        }
+        // Gerudo Form dual-wield (hand = scimitar DL, sheath hidden). Skijer's NEI
+        u8 gerudoHandled = GerudoForm_ResolveLimbDL(limbIndex, dList);
 
         // PAK Loader: When a custom model or equipment pak is active, try equipment DLs first.
         // If GetEquipDL returns a DL or STUB, use it. If NULL, fall through to vanilla code.
@@ -1731,60 +1687,36 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
             }
         } // close pakHandled block
 
-        // Hide vanilla weapon DL for items that draw their own model on top:
-        // Byrna / IK Axe (via ExtEquip_ShouldHideSwordDL) and the custom rods
-        // (Fire/Ice/Light, which use BGS modelGroup for animations but ship
-        // their own DLs). Runs AFTER pak_loader so the override also catches
-        // o2r equipment mods — otherwise their custom hammer/BGS DL renders
-        // alongside the rod/cane/axe and the user sees two weapons in Link's
-        // hand. The inner ExtEquip check above (~line 1662) only covers the
-        // vanilla fallback path; pak_loader short-circuits it.
+        // Hide Link's held-weapon DL for items that draw their own model (rods/Byrna/IK Axe).
+        // After pak_loader so o2r equipment mods are caught too. Skijer's NEI
         if (!gerudoHandled && limbIndex == PLAYER_LIMB_L_HAND && this->actor.scale.y >= 0.0f) {
-            u8 hideLH = ExtEquip_ShouldHideSwordDL() ||
-                        this->itemAction == PLAYER_IA_ROD_FIRE ||
-                        this->itemAction == PLAYER_IA_ROD_ICE ||
-                        this->itemAction == PLAYER_IA_ROD_LIGHT;
+            u8 hideLH = GameInteractor_Should(VB_PLAYER_SHOULD_HIDE_HELD_WEAPON, false, this);
             if (hideLH && sLeftHandType != PLAYER_MODELTYPE_LH_OPEN &&
                 sLeftHandType != PLAYER_MODELTYPE_LH_CLOSED &&
                 sLeftHandType != PLAYER_MODELTYPE_LH_BOOMERANG) {
                 Gfx** openDLs = &gPlayerLeftHandOpenDLs[gSaveContext.linkAge];
                 *dList = Player_ResolveLimbDLForDummyOrLocal(openDLs[sDListsLodOffset]);
                 sLeftHandType = PLAYER_MODELTYPE_LH_OPEN;
+            } else {
+                // NEI progressive sword upgrades: keep an OOT open hand and draw the MM Razor /
+                // Gilded / Great Fairy's Sword pieces (loaded from o2r) on top — pak_loader-style
+                // (sword then hand), supporting mods. No-op unless the upgraded sword is wielded.
+                Gfx** openDLs = &gPlayerLeftHandOpenDLs[gSaveContext.linkAge];
+                void* ootHand = Player_ResolveLimbDLForDummyOrLocal(openDLs[sDListsLodOffset]);
+                if (WeaponUpgrade_ApplyHeldSwordDL(dList, ootHand, this, sPlayerBodyEnvColor.r, sPlayerBodyEnvColor.g,
+                                                   sPlayerBodyEnvColor.b)) {
+                    sLeftHandType = PLAYER_MODELTYPE_LH_OPEN;
+                }
             }
         }
 
-        // Twilight Upgrade — Clawshot mode: replace the right-hand hookshot
-        // DL with a 2-call compound — OOT's closed-hand DL followed by MM's
-        // hookshot-only body DL. This keeps Link's hand looking like OOT
-        // (the "RightHandHoldingHookshot" MM variant we used before swapped
-        // his hand to MM's style, which the player noticed). Falls through
-        // to vanilla when mm.o2r isn't loaded.
+        // Twilight clawshot mode: R-hand hookshot DL = OOT closed hand + MM hookshot body. Skijer's NEI
         if (!gerudoHandled && limbIndex == PLAYER_LIMB_R_HAND && this->actor.scale.y >= 0.0f &&
             sRightHandType == PLAYER_MODELTYPE_RH_HOOKSHOT) {
-            extern u8 TwilightUpgrade_IsClawshotActive(void);
-            extern void* MmAssets_LoadHookshotBodyDL(void);
-            if (TwilightUpgrade_IsClawshotActive()) {
-                void* mmBody = MmAssets_LoadHookshotBodyDL();
-                if (mmBody != NULL) {
-                    // Static buffer rebuilt only when the resolved OOT hand
-                    // or MM body pointer changes (e.g. on scene swap or LOD
-                    // flip). Holds two SP_DisplayList calls + EndDisplayList.
-                    static Gfx sClawshotHandBodyDL[3];
-                    static void* sLastOotHand = NULL;
-                    static void* sLastMmBody = NULL;
-                    void* ootHand = (sDListsLodOffset == 0) ? gLinkAdultRightHandClosedNearDL
-                                                            : gLinkAdultRightHandClosedFarDL;
-                    if (sLastOotHand != ootHand || sLastMmBody != mmBody) {
-                        Gfx* dl = sClawshotHandBodyDL;
-                        gSPDisplayList(dl++, ootHand);
-                        gSPDisplayList(dl++, mmBody);
-                        gSPEndDisplayList(dl);
-                        sLastOotHand = ootHand;
-                        sLastMmBody = mmBody;
-                    }
-                    *dList = sClawshotHandBodyDL;
-                }
-            }
+            extern void TwilightUpgrade_ApplyClawshotHandDL(Gfx** dList, void* ootHand);
+            void* ootHand = (sDListsLodOffset == 0) ? gLinkAdultRightHandClosedNearDL
+                                                    : gLinkAdultRightHandClosedFarDL;
+            TwilightUpgrade_ApplyClawshotHandDL(dList, ootHand);
         }
     }
 
@@ -1968,6 +1900,106 @@ Vec3f D_801260A4[3] = {
     { 0.0f, -400.0f, 1000.0f },
 };
 
+// ── Net: catch at the blade instead of dealing damage (Skijer's NEI) ─────────
+// The Net uses the Master Sword IA (heldItemId == ITEM_NET), so it swings 1:1 like a sword. But
+// instead of the damage quads, we scan for a catchable actor near the blade (meleeWeaponInfo[0]
+// tip/base) and scoop it into an empty bottle — one catch per swing.
+static u8 Net_ContentForActor(Actor* actor) {
+    switch (actor->id) {
+        case ACTOR_EN_ELF: // only the small catchable healing fairies (FAIRY_HEAL_TIMED=2, FAIRY_HEAL=6)
+            return (actor->params == 2 || actor->params == 6) ? ITEM_FAIRY : ITEM_NONE;
+        case ACTOR_EN_FISH:     return ITEM_FISH;
+        case ACTOR_EN_INSECT:   return ITEM_BUG;
+        case ACTOR_EN_ICE_HONO: return ITEM_BLUE_FIRE;
+        default:                return ITEM_NONE;
+    }
+}
+
+static u8 sNetCaughtThisSwing = 0; // one bottle catch per swing; reset between swings
+
+// Min distance from an actor to the net's catch samples (the whole DL, grip -> hoop; see gNetCatchPts).
+static f32 Net_DistToCatchVolume(Actor* actor) {
+    f32 best = 99999.0f;
+    for (s32 i = 0; i < NET_CATCH_PTS; i++) {
+        f32 dx = actor->world.pos.x - gNetCatchPts[i].x;
+        f32 dy = actor->world.pos.y - gNetCatchPts[i].y;
+        f32 dz = actor->world.pos.z - gNetCatchPts[i].z;
+        f32 d = sqrtf(dx * dx + dy * dy + dz * dz);
+        if (d < best) {
+            best = d;
+        }
+    }
+    return best;
+}
+
+// Butterfly (En_Butte) -> fairy transform forced by the net (see z_en_butte.c). Replaces the vanilla
+// held-deku-stick dance; with fairy shuffle on, VB_SPAWN_BUTTERFLY_FAIRY gives the rando check instead.
+void EnButte_NetForceTransform(Actor* actor);
+
+static void Net_CaptureAtBlade(PlayState* play, Player* this) {
+    if (!gNetCatchPtsValid) {
+        return; // net model/DL not drawn yet — no volume to test
+    }
+    const f32 catchRadius = 30.0f; // fixed (the gNetCatch.Radius dev slider was removed). Skijer's NEI
+
+    Actor* best = NULL;
+    u8 bestContent = ITEM_NONE;
+    f32 bestDist = catchRadius;
+    for (s32 cat = 0; cat < ACTORCAT_MAX; cat++) {
+        Actor* actor = play->actorCtx.actorLists[cat].head;
+        while (actor != NULL) {
+            // Butterflies: crossing the net forces the fairy transform (no deku stick needed) — the
+            // rando fairy-shuffle check or the vanilla fairy comes out of the vanilla transform path.
+            // Independent of the bottle catch (doesn't consume a bottle or the swing).
+            if (actor->id == ACTOR_EN_BUTTE) {
+                if (Net_DistToCatchVolume(actor) < catchRadius) {
+                    EnButte_NetForceTransform(actor);
+                }
+            } else {
+                u8 content = Net_ContentForActor(actor);
+                if (content != ITEM_NONE) {
+                    f32 d = Net_DistToCatchVolume(actor);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        best = actor;
+                        bestContent = content;
+                    }
+                }
+            }
+            actor = actor->next;
+        }
+    }
+
+    if (sNetCaughtThisSwing || best == NULL) {
+        return;
+    }
+
+    u8 placed = Bottle_CatchIntoEmpty(bestContent);
+    if (!placed) {
+        // Fallback: no wheel/bottomless space — fill the first empty VANILLA bottle slot (covers pure
+        // vanilla saves where the bottle system isn't driven by NEI bottleSlots), refreshing any
+        // C-button that shows it.
+        for (s32 bs = SLOT_BOTTLE_1; bs <= SLOT_BOTTLE_4; bs++) {
+            if (gSaveContext.inventory.items[bs] == ITEM_BOTTLE) {
+                gSaveContext.inventory.items[bs] = bestContent;
+                for (s16 j = 1; j < 4; j++) {
+                    if (gSaveContext.equips.cButtonSlots[j - 1] == bs) {
+                        gSaveContext.equips.buttonItems[j] = bestContent;
+                        Interface_LoadItemIcon1(play, j);
+                    }
+                }
+                placed = true;
+                break;
+            }
+        }
+    }
+    if (placed) {
+        Audio_PlayFanfare(NA_BGM_ITEM_GET | 0x900);
+        Actor_Kill(best);
+        sNetCaughtThisSwing = 1;
+    }
+}
+
 void func_800906D4(PlayState* play, Player* this, Vec3f* newTipPos) {
     Vec3f newBasePos[3];
 
@@ -1975,8 +2007,10 @@ void func_800906D4(PlayState* play, Player* this, Vec3f* newTipPos) {
     Matrix_MultVec3f(&D_801260A4[1], &newBasePos[1]);
     Matrix_MultVec3f(&D_801260A4[2], &newBasePos[2]);
 
+    // func_80090480 always runs (it updates meleeWeaponInfo[0].tip used by the Net catch); the sword
+    // trail is skipped for the Net (it's a net, not a glowing blade).
     if (func_80090480(play, NULL, &this->meleeWeaponInfo[0], &newTipPos[0], &newBasePos[0]) &&
-        !(this->stateFlags1 & PLAYER_STATE1_SHIELDING) &&
+        !(this->stateFlags1 & PLAYER_STATE1_SHIELDING) && (this->heldItemId != ITEM_NET) &&
         !CVarGetInteger(CVAR_ENHANCEMENT("DisableLinkSwordTrail"), 0)) {
         EffectBlure_AddVertex(Effect_GetByIndex(this->meleeWeaponEffectIndex), &this->meleeWeaponInfo[0].tip,
                               &this->meleeWeaponInfo[0].base);
@@ -1984,8 +2018,14 @@ void func_800906D4(PlayState* play, Player* this, Vec3f* newTipPos) {
 
     if ((this->meleeWeaponState > 0) &&
         ((this->meleeWeaponAnimation < 0x18) || (this->stateFlags2 & PLAYER_STATE2_SPIN_ATTACKING))) {
-        func_80090480(play, &this->meleeWeaponQuads[0], &this->meleeWeaponInfo[1], &newTipPos[1], &newBasePos[1]);
-        func_80090480(play, &this->meleeWeaponQuads[1], &this->meleeWeaponInfo[2], &newTipPos[2], &newBasePos[2]);
+        if (this->heldItemId == ITEM_NET) {
+            Net_CaptureAtBlade(play, this); // capture at the blade — NO damage colliders
+        } else {
+            func_80090480(play, &this->meleeWeaponQuads[0], &this->meleeWeaponInfo[1], &newTipPos[1], &newBasePos[1]);
+            func_80090480(play, &this->meleeWeaponQuads[1], &this->meleeWeaponInfo[2], &newTipPos[2], &newBasePos[2]);
+        }
+    } else if (this->heldItemId == ITEM_NET) {
+        sNetCaughtThisSwing = 0; // between swings — allow the next swing to catch again
     }
 }
 
@@ -2290,6 +2330,18 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
             Matrix_Pop();
 
             CLOSE_DISPS(play->state.gfxCtx);
+        } else if ((this->heldItemId == ITEM_NET) && (this->actor.scale.y >= 0.0f)) {
+            // Net (Skijer's NEI): wields via the sword IA. Draw the net using THIS limb matrix (the
+            // hand BONE) so it follows the hand's full rotation/roll 1:1 like the sword — a
+            // forearm->hand reconstruction could not roll. Then run the sword weapon update so the
+            // blade-capture works (func_800906D4 catches instead of dealing damage — gated inside).
+            CustomItems_DrawNet(this, play); // uses the current (hand-bone) matrix; Push/Pop internally
+            if (this->meleeWeaponState != 0) {
+                Vec3f spNet[3];
+                D_80126080.x = sMeleeWeaponLengths[Player_GetMeleeWeaponHeld(this)];
+                func_80090A28(this, spNet);
+                func_800906D4(play, this, spNet);
+            }
         } else if ((this->actor.scale.y >= 0.0f) && (this->meleeWeaponState != 0)) {
             Vec3f spE4[3];
 
@@ -2432,11 +2484,20 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
                     heldActor->shape.rot = heldActor->world.rot;
 
                     if (func_8002DD78(this) != 0) {
+                        // Skijer's NEI hookshot overhaul — Ultrashot: the Longshot reaches TWICE as
+                        // far while the unlock is owned, so its reticle raycast must too or it
+                        // vanishes over the far half of the range. No other change: same Longshot
+                        // in-hand DL and reticle, just double distance.
+                        extern u8 Nei_UltrashotOwned(void);
+                        f32 reticleRange = (this->heldItemAction == PLAYER_IA_HOOKSHOT) ? 38600.0f : 77600.0f;
+
+                        if ((this->heldItemAction == PLAYER_IA_LONGSHOT) && Nei_UltrashotOwned()) {
+                            reticleRange *= 2.0f;
+                        }
                         Matrix_Translate(500.0f, 300.0f, 0.0f, MTXMODE_APPLY);
-                        Player_DrawHookshotReticle(
-                            play, this,
-                            ((this->heldItemAction == PLAYER_IA_HOOKSHOT) ? 38600.0f : 77600.0f) *
-                                CVarGetFloat(CVAR_CHEAT("HookshotReachMultiplier"), 1.0f));
+                        Player_DrawHookshotReticle(play, this,
+                                                   reticleRange *
+                                                       CVarGetFloat(CVAR_CHEAT("HookshotReachMultiplier"), 1.0f));
                     }
                 }
             }
@@ -2488,8 +2549,8 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
 
             Actor_SetFeetPos(&this->actor, limbIndex, PLAYER_LIMB_L_FOOT, vec, PLAYER_LIMB_R_FOOT, vec);
 
-            // Draw Pegasus Anklet (golden torus + fairy wings) on each foot
-            ExtEquip_DrawAnklet(play, (limbIndex == PLAYER_LIMB_R_FOOT) ? 1 : 0);
+            // Pegasus Anklet no longer draws a custom per-foot model (torus + wings removed) — its
+            // look is now the RED hover boots drawn with the body in Player_DrawImpl (Skijer 2026-07-15).
         }
     }
 }

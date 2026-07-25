@@ -45,11 +45,21 @@ typedef struct {
     u8 dekuLeafBlowing;
     s16 dekuLeafAnimTimer;
     s16 dekuLeafBlowTimer;
+    ColliderCylinder dekuLeafCollider; // wind AT collider (DMG_DEKU_NUT stun) — Skijer's NEI
 
     // Ball and Chain
     u8 ballAndChainThrown;
     u8 ballAndChainFirstPersonActive;
     ColliderCylinder ballAndChainCollider;
+    // TP ballistic-throw state (arc + floor bounces + wall ricochet + retract) — Skijer's NEI
+    Vec3f ballAndChainVel;      // thrown-ball velocity
+    u8 ballAndChainPhase;       // thrown sub-phase (FLY/REST/RETRACT)
+    u8 ballAndChainBounces;     // floor bounces this throw
+    s16 ballAndChainRestTimer;  // rest beat / retract clink counter
+    // Spin/throw motion trail (EffectBlure) — Skijer's NEI
+    s32 ballAndChainTrailIndex; // EffectBlure effect index (-1 = inactive)
+    u8 ballAndChainTrailActive; // 1 = trail effect allocated
+    u8 ballAndChainTrailTick;   // frame counter — feed a vertex every 2nd tick (sparser than sword)
 
     // Spinner
     u8 spinnerActive;
@@ -316,6 +326,8 @@ typedef struct {
     s16 whipExtendYaw;
     s16 whipExtendPitch;
     u8 whipFirstPersonActive;
+    s16 whipSwingSubCamId; // dedicated swing camera (Wind-Waker-style behind-follow), SUBCAM_FREE = none
+    s16 whipSwingCamYaw;   // camera yaw, smoothly chases whipSwingYaw so it "semi-follows" the swing
 
     // Desire Sensor
     u8 desireSensorActive;
@@ -627,6 +639,8 @@ void CustomItems_DrawBallChain(Player* player, PlayState* play);
 void CustomItems_DrawShovel(Player* player, PlayState* play);
 void CustomItems_DrawDemiseDestruction(Player* player, PlayState* play);
 void CustomItems_DrawBeetle(Player* player, PlayState* play);
+void Beetle_DrawOffer(Player* player, PlayState* play); // sets the offer arrow (targetCtx.arrowPointedActor)
+void Beetle_DrawTargetVfx(Player* player, PlayState* play); // our own billboarded target ring (offer + lock)
 void CustomItems_DrawBombArrowsReticle(Player* player, PlayState* play);
 void CustomItems_DrawFireRod(Player* player, PlayState* play);
 void CustomItems_DrawFireRodReticle(Player* player, PlayState* play);
@@ -639,6 +653,13 @@ void CustomItems_DrawDominionRodReticle(Player* player, PlayState* play);
 void CustomItems_DrawCaneOfSomaria(Player* player, PlayState* play);
 void CustomItems_DrawMogmaMitts(Player* player, PlayState* play);
 void CustomItems_DrawWhip(Player* player, PlayState* play);
+void CustomItems_DrawNet(Player* player, PlayState* play);
+// Net catch volume: world-space samples spanning the whole net DL (grip -> hoop), updated each frame
+// by CustomItems_DrawNet with the same matrix the model draws with (hand bone + gNetModel.* CVars).
+// Used by Net_CaptureAtBlade (z_player_lib.c) so the catch follows the visible net exactly.
+#define NET_CATCH_PTS 5
+extern Vec3f gNetCatchPts[NET_CATCH_PTS];
+extern u8 gNetCatchPtsValid;
 void CustomItems_DrawTimeGate(Player* player, PlayState* play);
 void CustomItems_DrawTimeGatePortal(Player* player, PlayState* play);
 void CustomItems_DrawSwitchHook(Player* player, PlayState* play);

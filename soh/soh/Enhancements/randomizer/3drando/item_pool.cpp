@@ -179,11 +179,19 @@ void GenerateItemPool() {
     // can take their pool slots. Equipment (tunics, boots, shields, swords) and capacity
     // upgrades (bomb bag, magic meter, etc.) are intentionally kept.
     bool removeVanillaMajors = CVarGetInteger(CVAR_RANDOMIZER_SETTING("RemoveVanillaMajors"), 0) != 0;
+    // NEI Weapon Upgrades: the four base weapons become progressive items (level 1 = vanilla
+    // weapon, higher levels = the upgrades). They REPLACE the vanilla weapon at its pool add
+    // site. Kokiri/Master only get their upgrades when their shuffle setting is on (otherwise
+    // the vanilla weapon stays at its fixed chest/pedestal — level 1 only).
+    bool neiWeaponUpgrades = ctx->GetOption(RSK_NEI_WEAPON_UPGRADES).Get() != 0;
 
     // clang-format off
     if (!removeVanillaMajors) AddItemToPool(RG_BOOMERANG, 2, 1, 1, 1);
     if (!removeVanillaMajors) AddItemToPool(RG_LENS_OF_TRUTH, 2, 1, 1, 1);
-    if (!removeVanillaMajors) AddItemToPool(RG_MEGATON_HAMMER, 2, 1, 1, 1);
+    if (!removeVanillaMajors) {
+        if (neiWeaponUpgrades) AddItemToPool(RG_PROGRESSIVE_HAMMER, 3, 2, 2, 2);
+        else                   AddItemToPool(RG_MEGATON_HAMMER, 2, 1, 1, 1);
+    }
     AddItemToPool(RG_IRON_BOOTS, 2, 1, 1, 1);
     AddItemToPool(RG_GORON_TUNIC, 2, 1, 1, 1);
     AddItemToPool(RG_ZORA_TUNIC, 2, 1, 1, 1);
@@ -200,7 +208,8 @@ void GenerateItemPool() {
     if (!removeVanillaMajors) AddItemToPool(RG_PROGRESSIVE_HOOKSHOT, 2, 2, 2, 2);
     AddItemToPool(RG_HYLIAN_SHIELD, 1, 1, 1, 1);
     AddItemToPool(RG_DOUBLE_DEFENSE, 2, 1, 0, 0);
-    AddItemToPool(RG_BIGGORON_SWORD, 2, 1, 1, 0);
+    if (neiWeaponUpgrades) AddItemToPool(RG_PROGRESSIVE_BGS, 3, 2, 2, 2);
+    else                   AddItemToPool(RG_BIGGORON_SWORD, 2, 1, 1, 0);
     bool isScrubs = ctx->GetOption(RSK_SHUFFLE_SCRUBS).Is(RO_SCRUBS_ALL);
     AddFixedItemToPool(RG_DEKU_SHIELD, isScrubs ? 1 : 2);
     AddFixedItemToPool(RG_RECOVERY_HEART, isScrubs ? 6 : 11);
@@ -364,7 +373,9 @@ void GenerateItemPool() {
 
     if (!ctx->GetOption(RSK_STARTING_KOKIRI_SWORD)) {
         if (ctx->GetOption(RSK_SHUFFLE_KOKIRI_SWORD)) {
-            AddItemToPool(RG_KOKIRI_SWORD, 2, 1, 1, 1);
+            // 3 copies (balanced) → Kokiri → Razor → Gilded reachable; 4 in Plentiful.
+            if (neiWeaponUpgrades) AddItemToPool(RG_PROGRESSIVE_KOKIRI_SWORD, 4, 3, 3, 3);
+            else                   AddItemToPool(RG_KOKIRI_SWORD, 2, 1, 1, 1);
         } else {
             ctx->PlaceItemInLocation(RC_KF_KOKIRI_SWORD_CHEST, RG_KOKIRI_SWORD, false, true);
         }
@@ -372,7 +383,8 @@ void GenerateItemPool() {
 
     if (!ctx->GetOption(RSK_STARTING_MASTER_SWORD)) {
         if (ctx->GetOption(RSK_SHUFFLE_MASTER_SWORD)) {
-            AddItemToPool(RG_MASTER_SWORD, 2, 1, 1, 1);
+            if (neiWeaponUpgrades) AddItemToPool(RG_PROGRESSIVE_MASTER_SWORD, 3, 2, 2, 2);
+            else                   AddItemToPool(RG_MASTER_SWORD, 2, 1, 1, 1);
         } else {
             ctx->PlaceItemInLocation(RC_TOT_MASTER_SWORD, RG_MASTER_SWORD, false, true);
         }
@@ -482,67 +494,53 @@ void GenerateItemPool() {
         AddItemToPool(RG_MM_MASK_FIERCE_DEITY, 2, 1, 1, 1);
     }
 
-    // Skijer's Custom Items (Second Inventory Page) - 24 items.
-    // We use AddFixedItemToPool here (instead of AddItemToPool) so each custom item enters the
-    // pool exactly once regardless of "Item Pool" setting. AddItemToPool in Plentiful mode also
-    // pushes a duplicate into plentifulPool, which doubled the custom-item count and caused the
-    // pool to overflow available major-item locations — symptom: most custom items silently
-    // dropped from the placement and never appeared in generated seeds.
+    // Skijer's Custom Items (Second Inventory Page) - 24 items
     if (ctx->GetOption(RSK_SKIJER_CUSTOM_ITEMS)) {
         SPDLOG_INFO("[NEI] SKIJER_CUSTOM_ITEMS block ENTERED — adding 24 custom items, itemPool.size() before = {}", itemPool.size());
-        AddFixedItemToPool(RG_PROGRESSIVE_ROCS, 2); // Progressive: Feather then Cape
-        AddFixedItemToPool(RG_WHIP);
-        AddFixedItemToPool(RG_SPINNER);
-        AddFixedItemToPool(RG_BOMB_ARROWS);
-        AddFixedItemToPool(RG_FIRE_ROD);
-        AddFixedItemToPool(RG_DEMISE_DESTRUCTION);
-        AddFixedItemToPool(RG_DEKU_LEAF);
-        AddFixedItemToPool(RG_TIME_GATE);
-        AddFixedItemToPool(RG_BEETLE);
-        AddFixedItemToPool(RG_SWITCH_HOOK);
-        AddFixedItemToPool(RG_ICE_ROD);
-        AddFixedItemToPool(RG_ZONAI_PERMAFROST);
-        AddFixedItemToPool(RG_MOGMA_MITTS);
-        AddFixedItemToPool(RG_GUST_JAR);
-        AddFixedItemToPool(RG_BALL_AND_CHAIN);
-        AddFixedItemToPool(RG_LIGHT_ROD);
-        AddFixedItemToPool(RG_HYLIAS_GRACE);
-        AddFixedItemToPool(RG_LANTERN);
-        AddFixedItemToPool(RG_PENDING_1); // Minish Cap
-        AddFixedItemToPool(RG_PENDING_3); // Pokeball
-        AddFixedItemToPool(RG_CANE_OF_SOMARIA);
-        AddFixedItemToPool(RG_SHOVEL);
-        AddFixedItemToPool(RG_DOMINION_ROD);
-        AddFixedItemToPool(RG_DESIRE_SENSOR);
+        AddItemToPool(RG_PROGRESSIVE_ROCS, 3, 2, 2, 2);
+        AddItemToPool(RG_WHIP, 2, 1, 1, 1);
+        AddItemToPool(RG_SPINNER, 2, 1, 1, 1);
+        AddItemToPool(RG_BOMB_ARROWS, 2, 1, 1, 1);
+        AddItemToPool(RG_FIRE_ROD, 2, 1, 1, 1);
+        AddItemToPool(RG_DEMISE_DESTRUCTION, 2, 1, 1, 1);
+        AddItemToPool(RG_DEKU_LEAF, 2, 1, 1, 1);
+        AddItemToPool(RG_TIME_GATE, 2, 1, 1, 1);
+        AddItemToPool(RG_BEETLE, 2, 1, 1, 1);
+        AddItemToPool(RG_SWITCH_HOOK, 2, 1, 1, 1);
+        AddItemToPool(RG_ICE_ROD, 2, 1, 1, 1);
+        AddItemToPool(RG_ZONAI_PERMAFROST, 2, 1, 1, 1);
+        AddItemToPool(RG_MOGMA_MITTS, 2, 1, 1, 1);
+        AddItemToPool(RG_GUST_JAR, 2, 1, 1, 1);
+        AddItemToPool(RG_BALL_AND_CHAIN, 2, 1, 1, 1);
+        AddItemToPool(RG_LIGHT_ROD, 2, 1, 1, 1);
+        AddItemToPool(RG_HYLIAS_GRACE, 2, 1, 1, 1);
+        AddItemToPool(RG_LANTERN, 2, 1, 1, 1);
+        AddItemToPool(RG_MINISH_CAP, 2, 1, 1, 1);
+        AddItemToPool(RG_POKEBALL, 2, 1, 1, 1);
+        AddItemToPool(RG_CANE_OF_SOMARIA, 2, 1, 1, 1);
+        AddItemToPool(RG_SHOVEL, 2, 1, 1, 1);
+        AddItemToPool(RG_DOMINION_ROD, 2, 1, 1, 1);
+        AddItemToPool(RG_DESIRE_SENSOR, 2, 1, 1, 1);
     }
 
-    // Extended Equipment (12 items for equipment page 2). Same fixed-pool reasoning as above —
-    // ensure each ext equipment piece is placed exactly once when the cheat is enabled.
+    // Extended Equipment (equipment page 2) - 12 items
     if (ctx->GetOption(RSK_EXT_EQUIPMENT)) {
         SPDLOG_INFO("[NEI] EXT_EQUIPMENT block ENTERED — adding 12 ext equipment items, itemPool.size() before = {}", itemPool.size());
-        AddFixedItemToPool(RG_EXT_CANE_OF_BYRNA);
-        AddFixedItemToPool(RG_EXT_FOUR_SWORD);
-        AddFixedItemToPool(RG_EXT_DIVINE_SHIELD);
-        AddFixedItemToPool(RG_EXT_SHEIKAH_SHIELD);
-        AddFixedItemToPool(RG_EXT_SHIELD_OF_IKANA);
-        AddFixedItemToPool(RG_EXT_MAGIC_CAPE);
-        AddFixedItemToPool(RG_EXT_SPIRIT_BREASTPLATE);
-        AddFixedItemToPool(RG_EXT_CHAMPIONS_TUNIC);
-        AddFixedItemToPool(RG_EXT_PEGASUS_ANKLET);
-        AddFixedItemToPool(RG_EXT_PENDANT_OF_MEMORIES);
-        AddFixedItemToPool(RG_EXT_WATER_DRAGON_SCALE);
+        AddItemToPool(RG_EXT_CANE_OF_BYRNA, 2, 1, 1, 1);
+        AddItemToPool(RG_EXT_FOUR_SWORD, 2, 1, 1, 1);
+        AddItemToPool(RG_EXT_DIVINE_SHIELD, 2, 1, 1, 1);
+        AddItemToPool(RG_EXT_SHEIKAH_SHIELD, 2, 1, 1, 1);
+        AddItemToPool(RG_EXT_SHIELD_OF_IKANA, 2, 1, 1, 1);
+        AddItemToPool(RG_EXT_MAGIC_CAPE, 2, 1, 1, 1);
+        AddItemToPool(RG_EXT_SPIRIT_BREASTPLATE, 2, 1, 1, 1);
+        AddItemToPool(RG_EXT_CHAMPIONS_TUNIC, 2, 1, 1, 1);
+        AddItemToPool(RG_EXT_PEGASUS_ANKLET, 2, 1, 1, 1);
+        AddItemToPool(RG_EXT_PENDANT_OF_MEMORIES, 2, 1, 1, 1);
+        AddItemToPool(RG_EXT_WATER_DRAGON_SCALE, 2, 1, 1, 1);
     }
 
-    // NEI Weapon Upgrades (each requires the base weapon). Fixed-pool for the same
-    // reason as above — placed exactly once when enabled. The Kokiri Sword upgrade is
-    // progressive (Razor → Gilded), so it enters the pool twice.
-    if (ctx->GetOption(RSK_NEI_WEAPON_UPGRADES)) {
-        SPDLOG_INFO("[NEI] WEAPON_UPGRADES block ENTERED — adding weapon upgrades, itemPool.size() before = {}", itemPool.size());
-        AddFixedItemToPool(RG_HAMMER_UPGRADE);
-        AddFixedItemToPool(RG_PROGRESSIVE_KOKIRI_SWORD, 2); // Progressive: Razor then Gilded
-        AddFixedItemToPool(RG_TRUE_MASTER_SWORD);
-        AddFixedItemToPool(RG_GREAT_FAIRY_SWORD);
-    }
+    // NEI Weapon Upgrades are NOT a separate fixed block — the four progressive weapons replace
+    // the vanilla weapons at their own pool add sites above (Hammer / BGS / Kokiri / Master).
 
     // Post-NEI snapshot: count how many of each NEI category survived in itemPool
     {
@@ -556,7 +554,7 @@ void GenerateItemPool() {
                      rg == RG_ICE_ROD || rg == RG_LIGHT_ROD || rg == RG_DEKU_LEAF ||
                      rg == RG_TIME_GATE || rg == RG_DEMISE_DESTRUCTION || rg == RG_ZONAI_PERMAFROST ||
                      rg == RG_HYLIAS_GRACE || rg == RG_DESIRE_SENSOR || rg == RG_PROGRESSIVE_ROCS ||
-                     rg == RG_PENDING_1 || rg == RG_PENDING_3) customCount++;
+                     rg == RG_MINISH_CAP || rg == RG_POKEBALL) customCount++;
             else if (rg >= RG_EXT_CANE_OF_BYRNA && rg <= RG_EXT_WATER_DRAGON_SCALE) extCount++;
         }
         SPDLOG_INFO("[NEI] After NEI blocks: itemPool.size()={} masks={} custom={} ext={}",

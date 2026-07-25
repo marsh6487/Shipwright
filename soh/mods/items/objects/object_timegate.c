@@ -11,7 +11,23 @@
 #include "macros.h"
 #include "functions.h"
 #include "objects/object_warp1/object_warp1.h"
-#include "time_gate_giveDL/header.h"
+
+// Time-gate model now in soh.o2r (object_nei_time_gate). Cached gated load.
+extern u8 ResourceMgr_FileExists(const char* resName);
+extern Gfx* ResourceMgr_LoadGfxByName(const char* path);
+
+static Gfx* TimeGate_GetDL(void) {
+    static Gfx* sDL = NULL;
+    static u8 sTried = 0;
+    if (!sTried) {
+        sTried = 1;
+        const char* otr = "__OTR__objects/object_nei_time_gate/g_timegate_dl";
+        if (ResourceMgr_FileExists(otr)) {
+            sDL = ResourceMgr_LoadGfxByName(otr);
+        }
+    }
+    return sDL;
+}
 
 // Portal animation state (local to avoid cluttering CustomItemState)
 static f32 sPortalScrollOffset = 0.0f;
@@ -21,6 +37,8 @@ static f32 sPortalScrollOffset = 0.0f;
  */
 void CustomItems_DrawTimeGate(Player* player, PlayState* play) {
     if (!tgItemVisible)
+        return;
+    if (TimeGate_GetDL() == NULL)
         return;
 
     OPEN_DISPS(play->state.gfxCtx);
@@ -45,7 +63,7 @@ void CustomItems_DrawTimeGate(Player* player, PlayState* play) {
 
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, g_timegate_dl);
+    gSPDisplayList(POLY_OPA_DISP++, TimeGate_GetDL());
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

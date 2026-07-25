@@ -88,6 +88,33 @@ void* MmAssets_LoadResourceWithSize(const char* path, size_t* outSize);
 u8 MmAssets_ResourceExists(const char* path);
 
 /**
+ * Load an MM skeleton (2Ship OSKL resource) ARCHIVE-SCOPED from mm.o2r.
+ *
+ * 2Ship writes skeletons in the exact same binary format as SoH (fourcc OSKL v0,
+ * identical SkeletonFactory field order), so SoH's stock factory parses them natively.
+ * The load is scoped to the mm.o2r archive (bypassing the global name index) so a
+ * same-named OoT skeleton can never shadow it. NOTE: the factory resolves each limb
+ * by GLOBAL name lookup — only use this for skeletons whose limb paths are MM-unique
+ * (e.g. gStrayFairySkel); for colliding paths (gStalchildSkel etc.) load the OoT
+ * version globally instead.
+ *
+ * Accepts paths with or without the "__OTR__" prefix.
+ *
+ * @param path e.g. "objects/gameplay_keep/gStrayFairySkel"
+ * @return SkeletonHeader* / FlexSkeletonHeader* (per the resource's type), or NULL.
+ */
+void* MmAssets_LoadSkeleton(const char* path);
+
+/**
+ * Load an MM animation (2Ship OANM resource, same format as SoH's) ARCHIVE-SCOPED
+ * from mm.o2r. Accepts paths with or without the "__OTR__" prefix.
+ *
+ * @param path e.g. "objects/gameplay_keep/gStrayFairyFlyingAnim"
+ * @return AnimationHeader pointer (or LinkAnimationHeader / TransformUpdateIndex per type), or NULL.
+ */
+void* MmAssets_LoadAnimation(const char* path);
+
+/**
  * List files matching a pattern from mm.o2r
  * @param searchMask Pattern (e.g., "audio/fonts*")
  * @param resultSize Output: number of matching files

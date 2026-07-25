@@ -1636,7 +1636,15 @@ s32 Actor_ActorAIsFacingAndNearActorB(Actor* actorA, Actor* actorB, f32 range, s
 }
 
 s32 func_8002E234(Actor* actor, f32 arg1, s32 arg2) {
-    if ((actor->bgCheckFlags & 0x1) && (arg1 < -11.0f)) {
+    // bgCheckFlags 0x800 = MM's BGCHECKFLAG_PLAYER_800 (mm z_actor.c:1766). An actor
+    // owning it never hugs small drops: it leaves the ground the instant the floor
+    // falls away, so ledges and ramps LAUNCH it instead of gluing it to the terrain.
+    // MM's Goron roll (Player_Action_96) sets the flag on entry and clears it on exit.
+    // MM puts the exemption in this function's CALLER, because there the <=11-unit hug
+    // is part of the on-ground branch condition; OOT instead splits that hug down here,
+    // so the check belongs here. Nothing in vanilla OOT ever sets 0x800, so this is
+    // inert for every other actor.
+    if ((actor->bgCheckFlags & 0x1) && ((arg1 < -11.0f) || (actor->bgCheckFlags & 0x800))) {
         actor->bgCheckFlags &= ~0x1;
         actor->bgCheckFlags |= 0x4;
 

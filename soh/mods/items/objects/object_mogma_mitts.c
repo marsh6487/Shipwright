@@ -9,10 +9,28 @@
 #include "../custom_items.h"
 #include "macros.h"
 #include "functions.h"
-#include "mogma_mittsDL/header.h"
+
+// Mitts model now in soh.o2r (object_nei_mogma_mitts). Cached gated load.
+extern u8 ResourceMgr_FileExists(const char* resName);
+extern Gfx* ResourceMgr_LoadGfxByName(const char* path);
+
+static Gfx* MogmaMitts_GetDL(void) {
+    static Gfx* sDL = NULL;
+    static u8 sTried = 0;
+    if (!sTried) {
+        sTried = 1;
+        const char* otr = "__OTR__objects/object_nei_mogma_mitts/gMogmaMittsGiveDL";
+        if (ResourceMgr_FileExists(otr)) {
+            sDL = ResourceMgr_LoadGfxByName(otr);
+        }
+    }
+    return sDL;
+}
 
 void CustomItems_DrawMogmaMitts(Player* player, PlayState* play) {
     if (!gCustomItemState.mogmaMittsActive)
+        return;
+    if (MogmaMitts_GetDL() == NULL)
         return;
 
     OPEN_DISPS(play->state.gfxCtx);
@@ -31,7 +49,7 @@ void CustomItems_DrawMogmaMitts(Player* player, PlayState* play) {
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
 
-    gSPDisplayList(POLY_OPA_DISP++, gMogmaMittsGiveDL);
+    gSPDisplayList(POLY_OPA_DISP++, MogmaMitts_GetDL());
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

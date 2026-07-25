@@ -9,9 +9,11 @@
 
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "mods/extended_inventory.h"
+#include "mods/nei_save.h" // Skijer's NEI
 #include "mods/transformation_masks/transformation_masks.h"
 #include "mods/extended_inventory.c"
 #include "mods/items/custom_items.h"
+#include "mods/items/custom_bottles.h" // Skijer's NEI — bottle randomizer wheels (A/B)
 #include "mods/items/logic/item_lantern.h" // LanternFireType enum (Vacía/Regular/Blue/Poe/Green)
 #include "mods/items/logic/twilight_upgrade.h" // Clawshot / Gale Boomerang mode selectors
 #include "expansions/sw97/sw97_config.h"
@@ -25,10 +27,8 @@ static s16 sEquipState = 0;
 static s16 sEquipAnimTimer = 0;
 static s16 sEquipMoveTimer = 10;
 
-static s16 sAmmoVtxOffset[] = {
-    0, 2, 4, 6, 99, 99, 8, 99, 10, 99, 99, 99, 99, 99, 12,
-};
-
+// Ammo-quad vertex offset per slot in the full 24-slot ammo layout (2 per slot). The old compact
+// 8-slot table (sAmmoVtxOffset) is retired — the layout is always the full set now. Skijer's NEI
 static s16 sAllAmmoVtxOffset[] = {
     0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46,
 };
@@ -36,7 +36,12 @@ static s16 sAllAmmoVtxOffset[] = {
 extern const char* _gAmmoDigit0Tex[];
 
 s8 ItemInSlotUsesAmmo(s16 slot) {
-    s16 item = gSaveContext.inventory.items[slot];
+    s16 item = ExtInv_GetSlotItem(slot); // Skijer's NEI
+    // Bottomless Bottle: ALWAYS show a use-counter while owned — the number (0 when empty, else the
+    // remaining uses) is what identifies it as the Bottomless Bottle. Skijer's NEI
+    if (slot == SLOT_BOTTLE_4 && Bottle_BottomlessOwned()) {
+        return 1;
+    }
     return item == ITEM_STICK || item == ITEM_NUT || item == ITEM_BOMB || item == ITEM_BOW || item == ITEM_SLINGSHOT ||
            item == ITEM_BOMBCHU || item == ITEM_BEAN;
 }
@@ -49,9 +54,30 @@ void KaleidoScope_DrawAmmoCount(PauseContext* pauseCtx, GraphicsContext* gfxCtx,
     s16 ammo;
     s16 i;
 
+    // The ammo vertex layout is now ALWAYS the full 24-slot table (see KaleidoScope_InitVertices), so
+    // use the all-slots offsets directly — this also covers the Bottomless Bottle (SLOT_BOTTLE_4)
+    // counter regardless of BetterAmmoRendering. Skijer's NEI
+    s16 ammoVtx = sAllAmmoVtxOffset[slot];
+
     OPEN_DISPS(gfxCtx);
 
     ammo = AMMO(item);
+
+    // Skijer's NEI — shared-slot counters show their OWN count, not the underlying vanilla item's ammo.
+    {
+        extern unsigned char PowerKeg_IsOwned(void);
+        extern unsigned char PowerKeg_IsOnBombActive(void);
+        extern unsigned char PowerKeg_GetCount(void);
+        extern unsigned char Picto_IsOwned(void);
+        extern unsigned char Picto_IsOnLensActive(void);
+        if ((item == ITEM_BOMB) && PowerKeg_IsOwned() && PowerKeg_IsOnBombActive()) {
+            ammo = PowerKeg_GetCount(); // Power Keg (Bomb slot): its own keg count
+        } else if ((item == ITEM_LENS) && Picto_IsOwned() && Picto_IsOnLensActive()) {
+            ammo = Nei_Save()->pictoHasPhoto ? 1 : 0; // Pictograph Box (Lens slot): 1 with a photo, else 0
+        } else if (slot == SLOT_BOTTLE_4 && Bottle_BottomlessOwned()) {
+            ammo = Bottle_BottomlessCount(); // Bottomless Bottle (SLOT_BOTTLE_4): its use counter (0 = empty)
+        }
+    }
 
     gDPPipeSync(POLY_OPA_DISP++);
 
@@ -79,13 +105,7 @@ void KaleidoScope_DrawAmmoCount(PauseContext* pauseCtx, GraphicsContext* gfxCtx,
     gDPPipeSync(POLY_OPA_DISP++);
 
     if (i != 0) {
-        gSPVertex(
-            POLY_OPA_DISP++,
-            &pauseCtx->itemVtx[((CVarGetInteger(CVAR_ENHANCEMENT("BetterAmmoRendering"), 0) ? sAllAmmoVtxOffset[slot]
-                                                                                            : sAmmoVtxOffset[slot]) +
-                                31) *
-                               4],
-            4, 0);
+        gSPVertex(POLY_OPA_DISP++, &pauseCtx->itemVtx[(ammoVtx + 31) * 4], 4, 0);
 
         gDPLoadTextureBlock(POLY_OPA_DISP++, ((u8*)_gAmmoDigit0Tex[i]), G_IM_FMT_IA, G_IM_SIZ_8b, 8, 8, 0,
                             G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD,
@@ -94,12 +114,7 @@ void KaleidoScope_DrawAmmoCount(PauseContext* pauseCtx, GraphicsContext* gfxCtx,
         gSP1Quadrangle(POLY_OPA_DISP++, 0, 2, 3, 1, 0);
     }
 
-    gSPVertex(POLY_OPA_DISP++,
-              &pauseCtx->itemVtx[((CVarGetInteger(CVAR_ENHANCEMENT("BetterAmmoRendering"), 0) ? sAllAmmoVtxOffset[slot]
-                                                                                              : sAmmoVtxOffset[slot]) +
-                                  32) *
-                                 4],
-              4, 0);
+    gSPVertex(POLY_OPA_DISP++, &pauseCtx->itemVtx[(ammoVtx + 32) * 4], 4, 0);
 
     gDPLoadTextureBlock(POLY_OPA_DISP++, ((u8*)_gAmmoDigit0Tex[ammo]), G_IM_FMT_IA, G_IM_SIZ_8b, 8, 8, 0,
                         G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD,
@@ -163,8 +178,23 @@ static Vtx sCycleAButtonVtx[] = {
 // Track animation timers for each inventory slot
 static int sSlotCycleActiveAnimTimer[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-// Renders a left and/or right item for any item slot that can support cycling
-void KaleidoScope_DrawItemCycleExtras(PlayState* play, u8 slot, u8 canCycle, u8 leftItem, u8 rightItem) {
+// Copy the 4 vertices of a slot quad and remap their texture coords to span a
+// sizePx×sizePx texture (tc in s10.5 = sizePx<<5). Returns the temp Vtx (Graph_Alloc'd). Skijer's NEI
+static Vtx* KaleidoScope_AllocRemappedQuad(GraphicsContext* gfxCtx, Vtx* srcQuad, s32 sizePx) {
+    Vtx* v = (Vtx*)Graph_Alloc(gfxCtx, 4 * sizeof(Vtx));
+    for (s32 i = 0; i < 4; i++) { v[i] = srcQuad[i]; }
+    v[0].v.tc[0] = 0;            v[0].v.tc[1] = 0;
+    v[1].v.tc[0] = sizePx << 5;  v[1].v.tc[1] = 0;
+    v[2].v.tc[0] = 0;            v[2].v.tc[1] = sizePx << 5;
+    v[3].v.tc[0] = sizePx << 5;  v[3].v.tc[1] = sizePx << 5;
+    return v;
+}
+
+// Renders a left and/or right item for any item slot that can support cycling. `forceShow` (used by
+// the bottle wheel) shows the previews + A indicator even when prev/next share the slot's value —
+// needed because multiple EMPTY bottles all read as ITEM_BOTTLE but are distinct slots. Skijer's NEI
+static void KaleidoScope_DrawItemCycleExtrasImpl(PlayState* play, u8 slot, u8 canCycle, u8 leftItem, u8 rightItem,
+                                                 u8 forceShow) {
     PauseContext* pauseCtx = &play->pauseCtx;
 
     u8 isCycling = gCurrentItemCyclingSlot == slot;
@@ -182,9 +212,9 @@ void KaleidoScope_DrawItemCycleExtras(PlayState* play, u8 slot, u8 canCycle, u8 
         }
     }
 
-    u8 slotItem = gSaveContext.inventory.items[slot];
-    u8 showLeftItem = leftItem != ITEM_NONE && slotItem != leftItem;
-    u8 showRightItem = rightItem != ITEM_NONE && slotItem != rightItem && leftItem != rightItem;
+    u8 slotItem = ExtInv_GetSlotItem(slot); // Skijer's NEI
+    u8 showLeftItem = leftItem != ITEM_NONE && (forceShow || slotItem != leftItem);
+    u8 showRightItem = rightItem != ITEM_NONE && (forceShow || (slotItem != rightItem && leftItem != rightItem));
 
     // Render the extra cycle items if at least the left or right item are valid
     if (canCycle && slotItem != ITEM_NONE && (showLeftItem || showRightItem)) {
@@ -269,12 +299,17 @@ void KaleidoScope_DrawItemCycleExtras(PlayState* play, u8 slot, u8 canCycle, u8 
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Public entry (value-based show gates) — trade/mask/etc. cyclers use this.
+void KaleidoScope_DrawItemCycleExtras(PlayState* play, u8 slot, u8 canCycle, u8 leftItem, u8 rightItem) {
+    KaleidoScope_DrawItemCycleExtrasImpl(play, slot, canCycle, leftItem, rightItem, false);
+}
+
 void KaleidoScope_HandleItemCycleExtras(PlayState* play, u8 slot, bool canCycle, u8 leftItem, u8 rightItem,
                                         bool replaceCButtons) {
     Input* input = &play->state.input[0];
     PauseContext* pauseCtx = &play->pauseCtx;
     bool dpad = (CVarGetInteger(CVAR_SETTING("DPadOnPause"), 0) && !CHECK_BTN_ALL(input->cur.button, BTN_CUP));
-    u8 slotItem = gSaveContext.inventory.items[slot];
+    u8 slotItem = ExtInv_GetSlotItem(slot); // Skijer's NEI
     u8 hasLeftItem = leftItem != ITEM_NONE && slotItem != leftItem;
     u8 hasRightItem = rightItem != ITEM_NONE && slotItem != rightItem && leftItem != rightItem;
 
@@ -292,7 +327,7 @@ void KaleidoScope_HandleItemCycleExtras(PlayState* play, u8 slot, bool canCycle,
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
             if (replaceCButtons) {
                 for (int i = 1; i < ARRAY_COUNT(gSaveContext.equips.buttonItems); i++) {
-                    if (gSaveContext.equips.buttonItems[i] == gSaveContext.inventory.items[slot]) {
+                    if (gSaveContext.equips.buttonItems[i] == ExtInv_GetSlotItem(slot)) { // Skijer's NEI
                         if (CHECK_AGE_REQ_ITEM(rightItem)) {
                             gSaveContext.equips.buttonItems[i] = rightItem;
                             Interface_LoadItemIcon1(play, i);
@@ -303,14 +338,14 @@ void KaleidoScope_HandleItemCycleExtras(PlayState* play, u8 slot, bool canCycle,
                     }
                 }
             }
-            gSaveContext.inventory.items[slot] = rightItem;
+            ExtInv_SetSlotItem(slot, rightItem); // Skijer's NEI
         } else if ((pauseCtx->stickRelX < -30 || pauseCtx->stickRelY < -30) ||
                    dpad && CHECK_BTN_ANY(input->press.button, BTN_DLEFT | BTN_DDOWN)) {
             Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
             if (replaceCButtons) {
                 for (int i = 1; i < ARRAY_COUNT(gSaveContext.equips.buttonItems); i++) {
-                    if (gSaveContext.equips.buttonItems[i] == gSaveContext.inventory.items[slot]) {
+                    if (gSaveContext.equips.buttonItems[i] == ExtInv_GetSlotItem(slot)) { // Skijer's NEI
                         if (CHECK_AGE_REQ_ITEM(leftItem)) {
                             gSaveContext.equips.buttonItems[i] = leftItem;
                             Interface_LoadItemIcon1(play, i);
@@ -321,7 +356,7 @@ void KaleidoScope_HandleItemCycleExtras(PlayState* play, u8 slot, bool canCycle,
                     }
                 }
             }
-            gSaveContext.inventory.items[slot] = leftItem;
+            ExtInv_SetSlotItem(slot, leftItem); // Skijer's NEI
         }
         gCurrentItemCyclingSlot = pauseCtx->cursorSlot[PAUSE_ITEM] == slot ? slot : -1;
     }
@@ -357,14 +392,11 @@ extern void* ExtInv_GetItemIcon(uint16_t itemId);
 // ── Lantern Kaleido Fire-Type Selector ───────────────────────────────────────
 // Press A on the lantern in kaleido → opens an overlay with all ever-captured
 // fire types (tracked persistently in gSaveContext.ship.lanternCapturedTypes)
-// plus a "Vacía" / extinguish slot. Stick L/R cycles, press A confirms, B
-// cancels. Replaces the old hold-C-to-extinguish shortcut.
+// plus a "Vacía" / extinguish slot. A toggles the wheel; while open, stick L/R
+// cycles. Replaces the old hold-C-to-extinguish shortcut.
 #define LANTERN_SELECTOR_MAX 5
 
 static u8  sLanternSelectorActive = 0;
-static s8  sLanternSelectorCursor = 0;
-static s32 sLanternSelectorStickHeld = 0;
-static s32 sLanternAnimTimer = 0; // 0..5 — matches sSlotCycleActiveAnimTimer easing in DrawItemCycleExtras
 
 // Tint colors per LanternFireType — used by the overlay draw to indicate which
 // fuel is in each slot without needing dedicated icons.
@@ -398,143 +430,83 @@ static u8 Lantern_BuildSelectorEntries(u8 entries[LANTERN_SELECTOR_MAX]) {
     // "Vacía" / extinguish is always selectable
     entries[count++] = LANTERN_FIRE_NONE;
     for (u8 t = LANTERN_FIRE_REGULAR; t <= LANTERN_FIRE_GREEN; t++) {
-        if (gSaveContext.ship.lanternCapturedTypes & (1 << t)) {
+        if (Nei_Save()->lanternCapturedTypes & (1 << t)) { // Skijer's NEI
             entries[count++] = t;
         }
     }
     return count;
 }
 
-static void Lantern_HandleKaleidoSelector(PlayState* play) {
+// ── Reusable press-A "wheel" selector ───────────────────────────────────────
+// Shared input handler for the kaleido cycle-wheels (Lantern, Clawshot, Gale,
+// Gust Jar, Arrow Wheel — and future ones). A toggles the wheel open/closed;
+// while open, stick/D-pad L or R calls onCycle(dir) to apply the change.
+//   onThisItem : cursor is on this wheel's item AND any ownership gate passed.
+//   canToggle  : whether A may open/close (multi-value wheels pass count>1).
+//   active     : the wheel's persistent open/closed flag.
+//   onCycle    : applies the change for dir (+1 next / -1 prev) + plays cursor SFX.
+// Skijer's NEI
+static void KaleidoWheel_Run(PlayState* play, u8 onThisItem, u8 canToggle, u8* active,
+                             void (*onCycle)(PlayState* play, s32 dir)) {
     PauseContext* pauseCtx = &play->pauseCtx;
     Input* input = &play->state.input[0];
 
-    s32 cursorItem = pauseCtx->cursorItem[PAUSE_ITEM];
-    if (cursorItem != ITEM_LANTERN) {
-        if (sLanternSelectorActive) {
-            sLanternSelectorActive = 0;
+    if (!onThisItem) {
+        if (*active) {
+            *active = 0;
             gCurrentItemCyclingSlot = -1;
         }
         return;
     }
 
-    u8 entries[LANTERN_SELECTOR_MAX];
-    u8 count = Lantern_BuildSelectorEntries(entries);
-
-    // Roc's Feather-style cycle: A toggles cycle mode; stick L/R applies the
-    // change immediately and updates the visible prev/next mini icons. Single
-    // press of A confirms exit (no separate confirm cursor).
     bool dpad = (CVarGetInteger(CVAR_SETTING("DPadOnPause"), 0) && !CHECK_BTN_ALL(input->cur.button, BTN_CUP));
 
-    if (CHECK_BTN_ALL(input->press.button, BTN_A) && count > 1) {
-        sLanternSelectorActive = !sLanternSelectorActive;
-        if (sLanternSelectorActive) {
-            gCurrentItemCyclingSlot = pauseCtx->cursorSlot[PAUSE_ITEM];
-        } else {
-            gCurrentItemCyclingSlot = -1;
-        }
+    if (CHECK_BTN_ALL(input->press.button, BTN_A) && canToggle) {
+        *active = !*active;
+        gCurrentItemCyclingSlot = *active ? pauseCtx->cursorSlot[PAUSE_ITEM] : -1;
         Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         return;
     }
 
-    if (sLanternSelectorActive) {
-        pauseCtx->cursorColorSet = 8;
-        if ((pauseCtx->stickRelX > 30 || pauseCtx->stickRelY > 30) ||
-            (dpad && CHECK_BTN_ANY(input->press.button, BTN_DRIGHT | BTN_DUP))) {
-            // Cycle to next captured fire type.
-            for (u8 i = 0; i < count; i++) {
-                if (entries[i] == gCustomItemState.lanternFireType) {
-                    gCustomItemState.lanternFireType = entries[(i + 1) % count];
-                    gSaveContext.ship.lanternFireType = gCustomItemState.lanternFireType;
-                    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-                    break;
-                }
-            }
-        } else if ((pauseCtx->stickRelX < -30 || pauseCtx->stickRelY < -30) ||
-                   (dpad && CHECK_BTN_ANY(input->press.button, BTN_DLEFT | BTN_DDOWN))) {
-            for (u8 i = 0; i < count; i++) {
-                if (entries[i] == gCustomItemState.lanternFireType) {
-                    gCustomItemState.lanternFireType = entries[(i + count - 1) % count];
-                    gSaveContext.ship.lanternFireType = gCustomItemState.lanternFireType;
-                    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-                    break;
-                }
-            }
-        }
-        // Keep cycling slot in sync with cursor position (gets reset to -1 if
-        // user moves cursor off the lantern).
-        gCurrentItemCyclingSlot = pauseCtx->cursorSlot[PAUSE_ITEM];
+    if (!*active) {
+        return;
     }
+    pauseCtx->cursorColorSet = 8;
+    gCurrentItemCyclingSlot = pauseCtx->cursorSlot[PAUSE_ITEM];
 
-    // Legacy path (kept disabled — unreachable, A press above always returns).
-    if (0 && CHECK_BTN_ALL(input->press.button, BTN_A)) {
-        if (!sLanternSelectorActive) {
-            // Open — cursor starts at current fire type if present in the list.
-            sLanternSelectorActive = 1;
-            sLanternSelectorCursor = 0;
-            for (u8 i = 0; i < count; i++) {
-                if (entries[i] == gCustomItemState.lanternFireType) {
-                    sLanternSelectorCursor = i;
-                    break;
-                }
-            }
-            sLanternSelectorStickHeld = 0;
-            // Use the existing kaleido cycling lock so other A handlers don't
-            // also fire (equip-to-button, exit pause, etc.) while the overlay
-            // is open. SLOT_LANTERN is the lantern's inventory slot.
-            gCurrentItemCyclingSlot = SLOT_LANTERN;
-            Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    if ((pauseCtx->stickRelX > 30 || pauseCtx->stickRelY > 30) ||
+        (dpad && CHECK_BTN_ANY(input->press.button, BTN_DRIGHT | BTN_DUP))) {
+        onCycle(play, +1);
+    } else if ((pauseCtx->stickRelX < -30 || pauseCtx->stickRelY < -30) ||
+               (dpad && CHECK_BTN_ANY(input->press.button, BTN_DLEFT | BTN_DDOWN))) {
+        onCycle(play, -1);
+    }
+}
+
+static void Lantern_Cycle(PlayState* play, s32 dir) {
+    u8 entries[LANTERN_SELECTOR_MAX];
+    u8 count = Lantern_BuildSelectorEntries(entries);
+    for (u8 i = 0; i < count; i++) {
+        if (entries[i] == gCustomItemState.lanternFireType) {
+            u8 next = (dir > 0) ? (i + 1) % count : (i + count - 1) % count;
+            gCustomItemState.lanternFireType = entries[next];
+            Nei_Save()->lanternFireType = gCustomItemState.lanternFireType; // Skijer's NEI
+            Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-        } else {
-            // Confirm — apply selection and close.
-            u8 newType = entries[sLanternSelectorCursor];
-            if (newType != gCustomItemState.lanternFireType) {
-                gCustomItemState.lanternFireType = newType;
-                gSaveContext.ship.lanternFireType = newType;
-                Audio_PlaySoundGeneral(newType == LANTERN_FIRE_NONE ? NA_SE_EV_FIRE_PILLAR : NA_SE_EV_FLAME_IGNITION,
-                                       &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                                       &gSfxDefaultReverb);
-            } else {
-                Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                                       &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-            }
-            sLanternSelectorActive = 0;
-            gCurrentItemCyclingSlot = -1;
+            break;
         }
-        return;
     }
+}
 
-    if (!sLanternSelectorActive) {
-        return;
-    }
+static void Lantern_HandleKaleidoSelector(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
 
-    // B cancels without applying.
-    if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
-        sLanternSelectorActive = 0;
-        gCurrentItemCyclingSlot = -1;
-        Audio_PlaySoundGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-        return;
-    }
+    u8 onThisItem = (pauseCtx->cursorItem[PAUSE_ITEM] == ITEM_LANTERN);
+    u8 entries[LANTERN_SELECTOR_MAX];
+    u8 count = Lantern_BuildSelectorEntries(entries);
 
-    // Stick L/R cycles selection (with debounce so a held stick doesn't spam).
-    s32 stickX = input->rel.stick_x;
-    if (stickX > 30 && !sLanternSelectorStickHeld) {
-        sLanternSelectorCursor = (sLanternSelectorCursor + 1) % count;
-        sLanternSelectorStickHeld = 1;
-        Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-    } else if (stickX < -30 && !sLanternSelectorStickHeld) {
-        sLanternSelectorCursor = (sLanternSelectorCursor + count - 1) % count;
-        sLanternSelectorStickHeld = 1;
-        Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-    } else if (stickX > -20 && stickX < 20) {
-        sLanternSelectorStickHeld = 0;
-    }
+    KaleidoWheel_Run(play, onThisItem, count > 1, &sLanternSelectorActive, Lantern_Cycle);
 }
 
 // Draw the selector overlay around the lantern icon — shows each available
@@ -683,6 +655,183 @@ static void KaleidoCycle_DrawRocStyle(PlayState* play, s32 visualSlot, u8 isCycl
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// ── MM trade items in the existing adult-trade wheel (Skijer's NEI) ──────────
+// The adult-trade slot already has the shared linear cycle wheel (KaleidoScope_HandleItemCycleExtras).
+// We just feed it owned-trade-item prev/next so that same wheel cycles the MM items too. Data lives in
+// trade_items.c.
+extern s32 TradeAdult_OwnedCount(void);
+extern s32 TradeAdult_OwnedAt(s32 ordinal);
+extern u8 TradeAdult_ItemId(s32 index);
+extern u8 TradeAdult_PrevItem(u8 cur);
+extern u8 TradeAdult_NextItem(u8 cur);
+extern void TradeAdult_FoldCurrent(u8 item);
+
+#if 0 // Skijer's NEI — old custom 2D-grid handler/draw, replaced by feeding the existing linear wheel.
+static void KaleidoTradeGrid_Handle(PlayState* play) {
+    // Vanilla adult-trade shuffle keeps the linear cycle; the owned-grid is the non-rando path.
+    if (IS_RANDO && Randomizer_GetSettingValue(RSK_SHUFFLE_ADULT_TRADE)) {
+        return;
+    }
+    PauseContext* pauseCtx = &play->pauseCtx;
+    Input* input = &play->state.input[0];
+    s32 owned = TradeAdult_OwnedCount();
+
+    // Make owned trade items visible: fill an empty adult-trade slot with the first owned one (like the
+    // bottle wheel). Granting only sets the tradeAdultOwned bit, so without this the slot stays ITEM_NONE
+    // and nothing shows in the slot or the wheel. Skijer's NEI
+    if (owned > 0 && ExtInv_GetSlotItem(SLOT_TRADE_ADULT) == ITEM_NONE) {
+        s32 first = TradeAdult_OwnedAt(0);
+        if (first >= 0) {
+            ExtInv_SetSlotItem(SLOT_TRADE_ADULT, TradeAdult_ItemId(first));
+        }
+    }
+
+    // Detect "cursor on the adult-trade slot" the way the working press-A selectors (lantern/gust jar)
+    // do: by the item under the cursor — the slot holds a trade item after auto-populate — with the raw
+    // slot index as a fallback. (The old cursorSlot + cursorSpecialPos==0 check never matched, so A did
+    // nothing.) Skijer's NEI
+    u8 curItem = (u8)pauseCtx->cursorItem[PAUSE_ITEM];
+    bool onSlot = (pauseCtx->cursorSlot[PAUSE_ITEM] == SLOT_TRADE_ADULT) || (TradeAdult_IndexOfItem(curItem) >= 0);
+
+    if (!onSlot) {
+        if (sTradeGridActive) {
+            sTradeGridActive = 0;
+            gCurrentItemCyclingSlot = -1;
+        }
+        return;
+    }
+
+    bool dpad = (CVarGetInteger(CVAR_SETTING("DPadOnPause"), 0) && !CHECK_BTN_ALL(input->cur.button, BTN_CUP));
+
+    if (!sTradeGridActive) {
+        if (CHECK_BTN_ALL(input->press.button, BTN_A) && owned > 0) {
+            sTradeGridActive = 1;
+            gCurrentItemCyclingSlot = pauseCtx->cursorSlot[PAUSE_ITEM];
+            s32 ord = TradeAdult_OrdinalOf(ExtInv_GetSlotItem(SLOT_TRADE_ADULT));
+            sTradeGridCursor = (ord >= 0) ? ord : 0;
+            sTradeGridStickReady = 0;
+            Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        }
+        return;
+    }
+
+    // Grid is open.
+    pauseCtx->cursorColorSet = 8;
+    gCurrentItemCyclingSlot = SLOT_TRADE_ADULT;
+
+    if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
+        sTradeGridActive = 0;
+        gCurrentItemCyclingSlot = -1;
+        Audio_PlaySoundGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        return;
+    }
+
+    if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
+        s32 gi = TradeAdult_OwnedAt(sTradeGridCursor);
+        if (gi >= 0) {
+            u8 newItem = TradeAdult_ItemId(gi);
+            u8 oldItem = ExtInv_GetSlotItem(SLOT_TRADE_ADULT);
+            for (int i = 1; i < ARRAY_COUNT(gSaveContext.equips.buttonItems); i++) {
+                if (gSaveContext.equips.buttonItems[i] == oldItem) {
+                    gSaveContext.equips.buttonItems[i] = newItem;
+                    Interface_LoadItemIcon1(play, i);
+                    break;
+                }
+            }
+            ExtInv_SetSlotItem(SLOT_TRADE_ADULT, newItem); // Skijer's NEI
+        }
+        sTradeGridActive = 0;
+        gCurrentItemCyclingSlot = -1;
+        Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        return;
+    }
+
+    // One move per flick: re-arm when the stick returns near neutral.
+    s32 sx = pauseCtx->stickRelX;
+    s32 sy = pauseCtx->stickRelY;
+    if (sx < 15 && sx > -15 && sy < 15 && sy > -15) {
+        sTradeGridStickReady = 1;
+    }
+    if (sTradeGridStickReady) {
+        s32 cur = sTradeGridCursor;
+        if (sx > 30 || (dpad && CHECK_BTN_ALL(input->press.button, BTN_DRIGHT))) {
+            cur += 1;
+        } else if (sx < -30 || (dpad && CHECK_BTN_ALL(input->press.button, BTN_DLEFT))) {
+            cur -= 1;
+        } else if (sy < -30 || (dpad && CHECK_BTN_ALL(input->press.button, BTN_DDOWN))) {
+            cur += TRADE_GRID_COLS; // stick down -> next row
+        } else if (sy > 30 || (dpad && CHECK_BTN_ALL(input->press.button, BTN_DUP))) {
+            cur -= TRADE_GRID_COLS; // stick up -> previous row
+        }
+        if (cur != sTradeGridCursor && cur >= 0 && cur < owned) {
+            sTradeGridCursor = cur;
+            sTradeGridStickReady = 0;
+            Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        }
+    }
+}
+
+static void KaleidoTradeGrid_Draw(PlayState* play) {
+    if (!sTradeGridActive) {
+        return;
+    }
+    PauseContext* pauseCtx = &play->pauseCtx;
+    s32 owned = TradeAdult_OwnedCount();
+    if (owned <= 0) {
+        return;
+    }
+    s32 cols = TRADE_GRID_COLS;
+
+    OPEN_DISPS(play->state.gfxCtx);
+    Matrix_Push();
+
+    Vtx* tl = &pauseCtx->itemVtx[SLOT_TRADE_ADULT * 4];
+    Vtx* br = &tl[3];
+    s16 halfX = (br->v.ob[0] - tl->v.ob[0]) / 2;
+    s16 halfY = (br->v.ob[1] - tl->v.ob[1]) / 2;
+    f32 cx = (f32)(tl->v.ob[0] + halfX);
+    f32 cy = (f32)(tl->v.ob[1] + halfY);
+    f32 cell = 2.4f * (f32)halfX; // halfX > 0; first-pass spacing (tune visually)
+
+    for (s32 ord = 0; ord < owned; ord++) {
+        s32 row = ord / cols;
+        s32 col = ord % cols;
+        f32 dx = ((f32)col - (f32)(cols - 1) * 0.5f) * cell;
+        f32 dy = -(f32)(row + 1) * cell; // grid drops below the slot
+
+        Matrix_Push();
+        Matrix_Translate(cx + dx, cy + dy, 0, MTXMODE_APPLY);
+        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+
+        // Highlight ring behind the selected cell.
+        if (ord == sTradeGridCursor) {
+            gSPVertex(POLY_OPA_DISP++, sCycleCircleVtx, 8, 0);
+            gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 230, 80, pauseCtx->alpha);
+            gDPLoadTextureBlock_4b(POLY_OPA_DISP++, gPausePromptCursorTex, G_IM_FMT_I, 48, 48, 0,
+                                   G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK,
+                                   G_TX_NOLOD, G_TX_NOLOD);
+            gSP1Quadrangle(POLY_OPA_DISP++, 0, 2, 3, 1, 0);
+        }
+
+        s32 gi = TradeAdult_OwnedAt(ord);
+        void* icon = (gi >= 0) ? ExtInv_GetItemIcon(TradeAdult_ItemId(gi)) : NULL;
+        if (icon != NULL) {
+            gSPVertex(POLY_OPA_DISP++, sCycleExtraItemVtx, 8, 0);
+            gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
+            KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, icon, 32, 32, 0);
+        }
+        Matrix_Pop();
+    }
+
+    Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+#endif // Skijer's NEI — end of disabled 2D-grid code
+
 // ── Twilight Upgrade Mode Selectors ─────────────────────────────────────────
 // When the player owns the Twilight Upgrade, pressing A on Hookshot / Longshot
 // (Clawshot toggle) or Boomerang (Gale Boomerang toggle) opens a 2-slot kaleido
@@ -696,13 +845,9 @@ static void KaleidoCycle_DrawRocStyle(PlayState* play, s32 visualSlot, u8 isCycl
 
 // Clawshot selector state
 static u8  sClawshotSelectorActive = 0;
-static s8  sClawshotSelectorCursor = 0;
-static s32 sClawshotSelectorStickHeld = 0;
 static s32 sClawshotAnimTimer = 0;
 // Gale Boomerang selector state
 static u8  sGaleSelectorActive = 0;
-static s8  sGaleSelectorCursor = 0;
-static s32 sGaleSelectorStickHeld = 0;
 static s32 sGaleAnimTimer = 0;
 
 // Helper: returns 1 if the cursor item is a hookshot/longshot.
@@ -720,49 +865,17 @@ static u8 TwilightSel_IsHookshotItem(s32 item) {
 //   - A press again → confirm + exit selector
 // pauseCtx->stickRelX/Y is already debounced by the kaleido (resets when the
 // stick returns to center), so no manual debounce needed.
+// Two-position toggle: stick/D-pad in either direction flips vanilla ↔ clawshot.
+static void Clawshot_Cycle(PlayState* play, s32 dir) {
+    TwilightUpgrade_SetClawshotActive(TwilightUpgrade_IsClawshotActive() ? 0 : 1);
+    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
 static void Clawshot_HandleKaleidoSelector(PlayState* play) {
-    PauseContext* pauseCtx = &play->pauseCtx;
-    Input* input = &play->state.input[0];
-
-    s32 cursorItem = pauseCtx->cursorItem[PAUSE_ITEM];
-    if (!TwilightSel_IsHookshotItem(cursorItem) || !TwilightUpgrade_HasClawshot()) {
-        if (sClawshotSelectorActive) {
-            sClawshotSelectorActive = 0;
-            gCurrentItemCyclingSlot = -1;
-        }
-        return;
-    }
-
-    bool dpad = (CVarGetInteger(CVAR_SETTING("DPadOnPause"), 0) && !CHECK_BTN_ALL(input->cur.button, BTN_CUP));
-
-    if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
-        sClawshotSelectorActive = !sClawshotSelectorActive;
-        gCurrentItemCyclingSlot = sClawshotSelectorActive ? pauseCtx->cursorSlot[PAUSE_ITEM] : -1;
-        Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-        return;
-    }
-
-    if (!sClawshotSelectorActive) return;
-    pauseCtx->cursorColorSet = 8;
-    gCurrentItemCyclingSlot = pauseCtx->cursorSlot[PAUSE_ITEM];
-
-    // Two-position cursor: 0 = vanilla hookshot, 1 = clawshot. Stick/D-pad
-    // flips between them; each flip immediately applies the new mode.
-    s8 newMode = -1;
-    if ((pauseCtx->stickRelX > 30 || pauseCtx->stickRelY > 30) ||
-        (dpad && CHECK_BTN_ANY(input->press.button, BTN_DRIGHT | BTN_DUP))) {
-        newMode = TwilightUpgrade_IsClawshotActive() ? 0 : 1;
-    } else if ((pauseCtx->stickRelX < -30 || pauseCtx->stickRelY < -30) ||
-               (dpad && CHECK_BTN_ANY(input->press.button, BTN_DLEFT | BTN_DDOWN))) {
-        newMode = TwilightUpgrade_IsClawshotActive() ? 0 : 1;
-    }
-
-    if (newMode >= 0) {
-        TwilightUpgrade_SetClawshotActive(newMode);
-        Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-    }
+    s32 cursorItem = play->pauseCtx.cursorItem[PAUSE_ITEM];
+    u8 onThisItem = TwilightSel_IsHookshotItem(cursorItem) && TwilightUpgrade_HasClawshot();
+    KaleidoWheel_Run(play, onThisItem, 1, &sClawshotSelectorActive, Clawshot_Cycle);
 }
 
 // Draws the small left/right flip — vanilla hookshot/longshot vs clawshot —
@@ -802,48 +915,17 @@ static void Clawshot_DrawKaleidoSelector(PlayState* play) {
 }
 
 // ── Gale Boomerang Mode Selector (Boomerang icon) ───────────────────────────
+// Two-position toggle: stick/D-pad in either direction flips vanilla ↔ gale.
+static void Gale_Cycle(PlayState* play, s32 dir) {
+    TwilightUpgrade_SetGaleBoomerangActive(TwilightUpgrade_IsGaleBoomerangActive() ? 0 : 1);
+    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
 static void Gale_HandleKaleidoSelector(PlayState* play) {
-    PauseContext* pauseCtx = &play->pauseCtx;
-    Input* input = &play->state.input[0];
-
-    s32 cursorItem = pauseCtx->cursorItem[PAUSE_ITEM];
-    if (cursorItem != ITEM_BOOMERANG || !TwilightUpgrade_HasGaleBoomerang()) {
-        if (sGaleSelectorActive) {
-            sGaleSelectorActive = 0;
-            gCurrentItemCyclingSlot = -1;
-        }
-        return;
-    }
-
-    // Same canonical ArrowWheel pattern as Clawshot above.
-    bool dpad = (CVarGetInteger(CVAR_SETTING("DPadOnPause"), 0) && !CHECK_BTN_ALL(input->cur.button, BTN_CUP));
-
-    if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
-        sGaleSelectorActive = !sGaleSelectorActive;
-        gCurrentItemCyclingSlot = sGaleSelectorActive ? pauseCtx->cursorSlot[PAUSE_ITEM] : -1;
-        Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-        return;
-    }
-
-    if (!sGaleSelectorActive) return;
-    pauseCtx->cursorColorSet = 8;
-    gCurrentItemCyclingSlot = pauseCtx->cursorSlot[PAUSE_ITEM];
-
-    s8 newMode = -1;
-    if ((pauseCtx->stickRelX > 30 || pauseCtx->stickRelY > 30) ||
-        (dpad && CHECK_BTN_ANY(input->press.button, BTN_DRIGHT | BTN_DUP))) {
-        newMode = TwilightUpgrade_IsGaleBoomerangActive() ? 0 : 1;
-    } else if ((pauseCtx->stickRelX < -30 || pauseCtx->stickRelY < -30) ||
-               (dpad && CHECK_BTN_ANY(input->press.button, BTN_DLEFT | BTN_DDOWN))) {
-        newMode = TwilightUpgrade_IsGaleBoomerangActive() ? 0 : 1;
-    }
-
-    if (newMode >= 0) {
-        TwilightUpgrade_SetGaleBoomerangActive(newMode);
-        Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-    }
+    s32 cursorItem = play->pauseCtx.cursorItem[PAUSE_ITEM];
+    u8 onThisItem = (cursorItem == ITEM_BOOMERANG) && TwilightUpgrade_HasGaleBoomerang();
+    KaleidoWheel_Run(play, onThisItem, 1, &sGaleSelectorActive, Gale_Cycle);
 }
 
 // Same small-flip pattern as Clawshot above — left side shows the vanilla
@@ -869,6 +951,106 @@ static void Gale_DrawKaleidoSelector(PlayState* play) {
                               /*hasLeft=*/1, /*hasRight=*/1,
                               vanillaTex, galeTex,
                               sVanillaTint, sGaleTint,
+                              /*leftSize=*/32, /*rightSize=*/32);
+}
+
+// ── Pictograph Box selector (on the Lens of Truth slot) ─────────────────────
+// A on the Lens of Truth (when the pictobox is owned) flips between the Lens and
+// the Pictograph Box. Selecting the pictobox puts the Lens slot in "pictobox
+// mode": its equipped C-button then enters the photo viewfinder. Skijer's NEI
+extern unsigned char Picto_IsOwned(void);
+extern unsigned char Picto_IsOnLensActive(void);
+extern void Picto_SetOnLensActive(unsigned char on);
+extern void* MmAssets_LoadResource(const char* path);
+
+static u8 sPictoSelectorActive = 0;
+
+// Flip toggled by the wheel cycle: Lens of Truth <-> Pictograph Box on the Lens slot.
+static void Picto_Cycle(PlayState* play, s32 dir) {
+    Picto_SetOnLensActive(Picto_IsOnLensActive() ? 0 : 1);
+    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
+static void Picto_HandleKaleidoSelector(PlayState* play) {
+    s32 cursorItem = play->pauseCtx.cursorItem[PAUSE_ITEM];
+    u8 onThisItem = (cursorItem == ITEM_LENS) && Picto_IsOwned();
+    // The flip only makes sense if you own BOTH the Lens and the pictobox. Without the real Lens the
+    // slot is always the pictobox (Picto_IsOnLensActive forces it), so there's nothing to toggle.
+    u8 haveRealLens = (gSaveContext.inventory.items[SLOT_LENS] == ITEM_LENS);
+    // A on the Lens opens the flip wheel; stick L/R cycles Lens <-> Pictobox — same UX as the
+    // Lantern/Clawshot/Gale selectors. The slot icon swaps via ExtInv_GetItemIcon for clear feedback.
+    KaleidoWheel_Run(play, onThisItem, haveRealLens, &sPictoSelectorActive, Picto_Cycle);
+}
+
+// Hint overlay on the Lens slot: shows the Lens + Pictograph Box flip so the player knows A switches.
+// The slot's main icon already reflects the current mode via ExtInv_GetItemIcon.
+static void Picto_DrawKaleidoSelector(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+    s32 cursorItem = pauseCtx->cursorItem[PAUSE_ITEM];
+    if (cursorItem != ITEM_LENS || !Picto_IsOwned()) {
+        return;
+    }
+    // Only show the Lens<->Pictobox flip when you own both; without the real Lens the slot is just the
+    // pictobox (the ExtInv icon swap already shows it), so there's no alternative to flip to.
+    if (gSaveContext.inventory.items[SLOT_LENS] != ITEM_LENS) {
+        return;
+    }
+
+    extern void* gItemIcons[];
+    void* lensTex = gItemIcons[ITEM_LENS];
+    static const char sPictoIconPath[] = "__OTR__icon_item_static_yar/gItemIconPictographBoxTex";
+    void* pictoTex = (void*)sPictoIconPath;
+    if (lensTex == NULL) {
+        return;
+    }
+
+    static const u8 sTint[3] = { 255, 255, 255 };
+    KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], sPictoSelectorActive,
+                              /*hasLeft=*/1, /*hasRight=*/1, lensTex, pictoTex, sTint, sTint,
+                              /*leftSize=*/32, /*rightSize=*/32);
+}
+
+// ── Power Keg selector (on the Bomb slot) ───────────────────────────────────
+// A on the Bomb slot (when the Power Keg is owned) flips between Bombs and the Power Keg. Selecting
+// the keg puts the Bomb slot in "power keg mode": its equipped C-button then uses the keg in-game,
+// gated by form + strength (FD/Goron, or Human/Gerudo with Silver Gauntlets+). Skijer's NEI
+extern unsigned char PowerKeg_IsOwned(void);
+extern unsigned char PowerKeg_IsOnBombActive(void);
+extern void PowerKeg_SetOnBombActive(unsigned char on);
+
+static u8 sPowerKegSelectorActive = 0;
+
+static void PowerKeg_Cycle(PlayState* play, s32 dir) {
+    PowerKeg_SetOnBombActive(PowerKeg_IsOnBombActive() ? 0 : 1);
+    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
+static void PowerKeg_HandleKaleidoSelector(PlayState* play) {
+    s32 cursorItem = play->pauseCtx.cursorItem[PAUSE_ITEM];
+    u8 onThisItem = (cursorItem == ITEM_BOMB) && PowerKeg_IsOwned();
+    KaleidoWheel_Run(play, onThisItem, 1, &sPowerKegSelectorActive, PowerKeg_Cycle);
+}
+
+static void PowerKeg_DrawKaleidoSelector(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+    s32 cursorItem = pauseCtx->cursorItem[PAUSE_ITEM];
+    if (cursorItem != ITEM_BOMB || !PowerKeg_IsOwned()) {
+        return;
+    }
+
+    extern void* gItemIcons[];
+    void* bombTex = gItemIcons[ITEM_BOMB];
+    static const char sKegIconPath[] = "__OTR__icon_item_static_yar/gItemIconPowderKegTex";
+    void* kegTex = (void*)sKegIconPath;
+    if (bombTex == NULL) {
+        return;
+    }
+
+    static const u8 sTint[3] = { 255, 255, 255 };
+    KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], sPowerKegSelectorActive,
+                              /*hasLeft=*/1, /*hasRight=*/1, bombTex, kegTex, sTint, sTint,
                               /*leftSize=*/32, /*rightSize=*/32);
 }
 
@@ -917,51 +1099,24 @@ static const u16 sGustElemToMedallion[6] = {
     ITEM_MEDALLION_LIGHT,  // LIGHT
 };
 
+static void GustJar_Cycle(PlayState* play, s32 dir) {
+    sGustElemCursor = (dir > 0) ? (sGustElemCursor + 1) % sGustAvailCount
+                                : (sGustElemCursor + sGustAvailCount - 1) % sGustAvailCount;
+    gCustomItemState.gustJarElement = sGustAvailElems[sGustElemCursor];
+    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
 static void GustJar_HandlePressASelector(PlayState* play) {
     PauseContext* pauseCtx = &play->pauseCtx;
-    Input* input = &play->state.input[0];
+    u8 onThisItem = (pauseCtx->cursorItem[PAUSE_ITEM] == ITEM_GUST_JAR);
 
-    s32 cursorItem = pauseCtx->cursorItem[PAUSE_ITEM];
-    if (cursorItem != ITEM_GUST_JAR) {
-        if (sGustPressASelectorActive) {
-            sGustPressASelectorActive = 0;
-            gCurrentItemCyclingSlot = -1;
-        }
-        return;
+    if (onThisItem) {
+        GustJar_BuildKaleidoElements();
     }
-
-    GustJar_BuildKaleidoElements();
-    if (sGustAvailCount <= 1) {
-        return; // nothing to cycle
-    }
-
-    bool dpad = (CVarGetInteger(CVAR_SETTING("DPadOnPause"), 0) && !CHECK_BTN_ALL(input->cur.button, BTN_CUP));
-
-    if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
-        sGustPressASelectorActive = !sGustPressASelectorActive;
-        gCurrentItemCyclingSlot = sGustPressASelectorActive ? pauseCtx->cursorSlot[PAUSE_ITEM] : -1;
-        Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-        return;
-    }
-
-    if (!sGustPressASelectorActive) return;
-    pauseCtx->cursorColorSet = 8;
-    gCurrentItemCyclingSlot = pauseCtx->cursorSlot[PAUSE_ITEM];
-
-    if ((pauseCtx->stickRelX > 30 || pauseCtx->stickRelY > 30) ||
-        (dpad && CHECK_BTN_ANY(input->press.button, BTN_DRIGHT | BTN_DUP))) {
-        sGustElemCursor = (sGustElemCursor + 1) % sGustAvailCount;
-        gCustomItemState.gustJarElement = sGustAvailElems[sGustElemCursor];
-        Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-    } else if ((pauseCtx->stickRelX < -30 || pauseCtx->stickRelY < -30) ||
-               (dpad && CHECK_BTN_ANY(input->press.button, BTN_DLEFT | BTN_DDOWN))) {
-        sGustElemCursor = (sGustElemCursor + sGustAvailCount - 1) % sGustAvailCount;
-        gCustomItemState.gustJarElement = sGustAvailElems[sGustElemCursor];
-        Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-    }
+    // canToggle requires >1 element; when on the item with nothing to cycle,
+    // KaleidoWheel_Run still closes the wheel if it was open (canToggle=0 skips A).
+    KaleidoWheel_Run(play, onThisItem, sGustAvailCount > 1, &sGustPressASelectorActive, GustJar_Cycle);
 }
 
 static void GustJar_DrawPressASelector(PlayState* play) {
@@ -1073,9 +1228,6 @@ static void GustJar_DrawElementCycle(PlayState* play) {
 
     u8 curElem = sGustAvailElems[sGustElemCursor];
 
-    static const u16 elemToMedallion[] = { ITEM_MEDALLION_FOREST, ITEM_MEDALLION_FIRE,   ITEM_MEDALLION_WATER,
-                                           ITEM_MEDALLION_SHADOW, ITEM_MEDALLION_SPIRIT, ITEM_MEDALLION_LIGHT };
-
     // Get cursor slot vertex for positioning
     s32 cursorSlot = pauseCtx->cursorSlot[PAUSE_ITEM];
     s32 vtxIdx = cursorSlot * 4;
@@ -1085,7 +1237,7 @@ static void GustJar_DrawElementCycle(PlayState* play) {
     // Always draw selected medallion at half-alpha behind the Gust Jar icon
     // (same pattern as SW97 elemental arrows in z_kaleido_collect.c:440-465)
     if (curElem != 0) { // Not wind (default)
-        void* medallionTex = ExtInv_GetItemIcon(elemToMedallion[curElem]);
+        void* medallionTex = ExtInv_GetItemIcon(sGustElemToMedallion[curElem]);
         if (medallionTex != NULL) {
             // Medallion at 50% alpha (behind)
             gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha >> 1);
@@ -1096,18 +1248,7 @@ static void GustJar_DrawElementCycle(PlayState* play) {
             void* gustTex = ExtInv_GetItemIcon(ITEM_GUST_JAR);
             if (gustTex != NULL) {
                 // Remap texture coords to 32x32 for item icon overlay (75% scale like SW97)
-                Vtx* overlayVtx = (Vtx*)Graph_Alloc(play->state.gfxCtx, 4 * sizeof(Vtx));
-                for (s32 vi = 0; vi < 4; vi++) {
-                    overlayVtx[vi] = pauseCtx->itemVtx[vtxIdx + vi];
-                }
-                overlayVtx[0].v.tc[0] = 0;
-                overlayVtx[0].v.tc[1] = 0;
-                overlayVtx[1].v.tc[0] = 32 << 5;
-                overlayVtx[1].v.tc[1] = 0;
-                overlayVtx[2].v.tc[0] = 0;
-                overlayVtx[2].v.tc[1] = 32 << 5;
-                overlayVtx[3].v.tc[0] = 32 << 5;
-                overlayVtx[3].v.tc[1] = 32 << 5;
+                Vtx* overlayVtx = KaleidoScope_AllocRemappedQuad(play->state.gfxCtx, &pauseCtx->itemVtx[vtxIdx], 32);
 
                 gDPPipeSync(POLY_OPA_DISP++);
                 gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
@@ -1124,7 +1265,7 @@ static void GustJar_DrawElementCycle(PlayState* play) {
 
         for (u8 i = 0; i < sGustAvailCount; i++) {
             u8 elem = sGustAvailElems[i];
-            void* tex = ExtInv_GetItemIcon(elemToMedallion[elem]);
+            void* tex = ExtInv_GetItemIcon(sGustElemToMedallion[elem]);
             if (tex == NULL)
                 continue;
 
@@ -1243,13 +1384,27 @@ static void* ArrowWheel_GetEntryIcon(u8 entry) {
     return NULL;
 }
 
+// Per-call context for ArrowWheel_Cycle, stashed by the handler after its
+// inline gates pass (the wheel callback can't take extra args).
+static s8  sArrowWheelCycleCurIdx = 0;
+static s32 sArrowWheelCycleCBtn = -1;
+
+static void ArrowWheel_Cycle(PlayState* play, s32 dir) {
+    s8 newIdx = (dir > 0) ? (sArrowWheelCycleCurIdx + 1) % sArrowWheelAvailCount
+                          : (sArrowWheelCycleCurIdx + sArrowWheelAvailCount - 1) % sArrowWheelAvailCount;
+    ArrowWheel_ApplyEntry(play, newIdx, sArrowWheelCycleCBtn);
+    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
 static void ArrowWheel_HandlePressA(PlayState* play) {
+    // Hard disable: SW97 medallions off → never cycle (kept inline; doesn't
+    // fit the wheel's onThisItem close path).
     if (!SW97_MEDALLIONS_ENABLED()) {
         sArrowWheelPressAActive = 0;
         return;
     }
     PauseContext* pauseCtx = &play->pauseCtx;
-    Input* input = &play->state.input[0];
 
     s32 cursorItem = pauseCtx->cursorItem[PAUSE_ITEM];
     if (cursorItem != ITEM_BOW && cursorItem != ITEM_SLINGSHOT) {
@@ -1263,39 +1418,22 @@ static void ArrowWheel_HandlePressA(PlayState* play) {
     ArrowWheel_Build();
     if (sArrowWheelAvailCount <= 1) return;
 
+    // Resolve which C-button holds the bow/slingshot and the current entry.
+    // If NO C-button has bow/slingshot/SW97-arrow/bomb-arrows, fall back to
+    // C-Left (button index 0) as the target — cycling still updates a
+    // C-button so the change is visible, and the auto-equip lets the user
+    // just open the pause and cycle without having to manually drop the bow
+    // onto a C-button first. Skijer's NEI (Sw97).
     s32 cBtn = -1;
     s8 curIdx = ArrowWheel_GetCurrentEntry(&cBtn);
-    if (cBtn < 0) return; // bow/slingshot not on any C-button — nothing to cycle
+    if (cBtn < 0) {
+        cBtn = 0; // C-Left as default target
+    }
     if (curIdx < 0) curIdx = 0;
+    sArrowWheelCycleCurIdx = curIdx;
+    sArrowWheelCycleCBtn = cBtn;
 
-    bool dpad = (CVarGetInteger(CVAR_SETTING("DPadOnPause"), 0) && !CHECK_BTN_ALL(input->cur.button, BTN_CUP));
-
-    if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
-        sArrowWheelPressAActive = !sArrowWheelPressAActive;
-        gCurrentItemCyclingSlot = sArrowWheelPressAActive ? pauseCtx->cursorSlot[PAUSE_ITEM] : -1;
-        Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-        return;
-    }
-
-    if (!sArrowWheelPressAActive) return;
-    pauseCtx->cursorColorSet = 8;
-    gCurrentItemCyclingSlot = pauseCtx->cursorSlot[PAUSE_ITEM];
-
-    s8 newIdx = -1;
-    if ((pauseCtx->stickRelX > 30 || pauseCtx->stickRelY > 30) ||
-        (dpad && CHECK_BTN_ANY(input->press.button, BTN_DRIGHT | BTN_DUP))) {
-        newIdx = (curIdx + 1) % sArrowWheelAvailCount;
-    } else if ((pauseCtx->stickRelX < -30 || pauseCtx->stickRelY < -30) ||
-               (dpad && CHECK_BTN_ANY(input->press.button, BTN_DLEFT | BTN_DDOWN))) {
-        newIdx = (curIdx + sArrowWheelAvailCount - 1) % sArrowWheelAvailCount;
-    }
-
-    if (newIdx >= 0) {
-        ArrowWheel_ApplyEntry(play, newIdx, cBtn);
-        Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-    }
+    KaleidoWheel_Run(play, 1, 1, &sArrowWheelPressAActive, ArrowWheel_Cycle);
 }
 
 static void ArrowWheel_DrawPressA(PlayState* play) {
@@ -1344,7 +1482,7 @@ static void ArrowWheel_Build(void) {
     // ITEM_BOMB_ARROWS is a NEI custom item (0xAE); INV_CONTENT()/SLOT() would index
     // gItemSlots[56] out of bounds. Resolve the real extended-inventory slot instead.
     u8 baSlot = ExtInv_GetItemSlot(ITEM_BOMB_ARROWS);
-    if (baSlot != 0xFF && gSaveContext.inventory.items[baSlot] != ITEM_NONE) {
+    if (baSlot != 0xFF && ExtInv_GetSlotItem(baSlot) != ITEM_NONE) { // Skijer's NEI
         sArrowWheelEntries[sArrowWheelAvailCount++] = ARROW_WHEEL_ENTRY_BOMB;
     }
     if (sArrowWheelCursor >= sArrowWheelAvailCount) {
@@ -1460,33 +1598,89 @@ static void ArrowWheel_Draw(PlayState* play) {
         u8 alpha = (i == sArrowWheelCursor) ? pauseCtx->alpha : (pauseCtx->alpha >> 1);
         gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, alpha);
 
-        Vtx* elemVtx = (Vtx*)Graph_Alloc(play->state.gfxCtx, 4 * sizeof(Vtx));
+        Vtx* elemVtx;
+        if (is32px) {
+            // 32x32 icons (bomb arrows / bombchu) — remap UVs to fit the slot quad.
+            elemVtx = KaleidoScope_AllocRemappedQuad(play->state.gfxCtx, &pauseCtx->itemVtx[vtxIdx], 32);
+        } else {
+            elemVtx = (Vtx*)Graph_Alloc(play->state.gfxCtx, 4 * sizeof(Vtx));
+            for (s32 vi = 0; vi < 4; vi++) {
+                elemVtx[vi] = pauseCtx->itemVtx[vtxIdx + vi];
+            }
+        }
         for (s32 vi = 0; vi < 4; vi++) {
-            elemVtx[vi] = pauseCtx->itemVtx[vtxIdx + vi];
             elemVtx[vi].v.ob[0] += sArrowWheelOffX[i];
             elemVtx[vi].v.ob[1] += sArrowWheelOffY[i];
         }
 
-        if (is32px) {
-            // 32x32 icons (bomb arrows / bombchu) — remap UVs to fit the slot quad.
-            elemVtx[0].v.tc[0] = 0;        elemVtx[0].v.tc[1] = 0;
-            elemVtx[1].v.tc[0] = 32 << 5;  elemVtx[1].v.tc[1] = 0;
-            elemVtx[2].v.tc[0] = 0;        elemVtx[2].v.tc[1] = 32 << 5;
-            elemVtx[3].v.tc[0] = 32 << 5;  elemVtx[3].v.tc[1] = 32 << 5;
-            gSPVertex(POLY_OPA_DISP++, elemVtx, 4, 0);
-            KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, tex, 32, 32, 0);
-        } else {
-            gSPVertex(POLY_OPA_DISP++, elemVtx, 4, 0);
-            KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, tex, 24, 24, 0);
-        }
+        gSPVertex(POLY_OPA_DISP++, elemVtx, 4, 0);
+        KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, tex, is32px ? 32 : 24, is32px ? 32 : 24, 0);
     }
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Bottle wheel selector — INDEX-based (Skijer's NEI). Unlike KaleidoScope_HandleItemCycleExtras (which
+// swaps by VALUE and so can't move between two identical empty bottles), this steps the ACTIVE SLOT so
+// every physical bottle — empty ones included — is reachable, and the wheel stays cyclable even when
+// every bottle is empty. A opens/closes the selector; stick L/R steps the slot and updates the visible
+// slot + any C-button showing it.
+static void Bottle_WheelHandle(PlayState* play, u8 wheel, u8 kaleidoSlot) {
+    Input* input = &play->state.input[0];
+    PauseContext* pauseCtx = &play->pauseCtx;
+    bool dpad = (CVarGetInteger(CVAR_SETTING("DPadOnPause"), 0) && !CHECK_BTN_ALL(input->cur.button, BTN_CUP));
+
+    // Keep the visible slot showing a bottle the wheel actually owns (covers give/drink/catch that
+    // changed it out of kaleido, and the initial projection).
+    u16 first = Bottle_WheelFirstItem(wheel);
+    if (first != ITEM_NONE && !Bottle_WheelContains(wheel, ExtInv_GetSlotItem(kaleidoSlot))) {
+        ExtInv_SetSlotItem(kaleidoSlot, (u8)first);
+    }
+
+    if (Bottle_WheelBottleCount(wheel) < 2) {
+        return; // 0 or 1 bottle: nothing to cycle
+    }
+
+    if (pauseCtx->cursorSlot[PAUSE_ITEM] == kaleidoSlot && CHECK_BTN_ALL(input->press.button, BTN_A)) {
+        Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        gCurrentItemCyclingSlot = gCurrentItemCyclingSlot == kaleidoSlot ? -1 : kaleidoSlot;
+    }
+    if (gCurrentItemCyclingSlot == kaleidoSlot) {
+        pauseCtx->cursorColorSet = 8;
+        s8 dir = 0;
+        if ((pauseCtx->stickRelX > 30 || pauseCtx->stickRelY > 30) ||
+            (dpad && CHECK_BTN_ANY(input->press.button, BTN_DRIGHT | BTN_DUP))) {
+            dir = 1;
+        } else if ((pauseCtx->stickRelX < -30 || pauseCtx->stickRelY < -30) ||
+                   (dpad && CHECK_BTN_ANY(input->press.button, BTN_DLEFT | BTN_DDOWN))) {
+            dir = -1;
+        }
+        if (dir != 0) {
+            Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            u8 oldItem = ExtInv_GetSlotItem(kaleidoSlot);
+            u8 newItem = (u8)Bottle_WheelStep(wheel, dir);
+            // Update the C-button equipped to THIS slot (if any) to the new bottle.
+            for (int i = 1; i < ARRAY_COUNT(gSaveContext.equips.buttonItems); i++) {
+                if (gSaveContext.equips.cButtonSlots[i - 1] == kaleidoSlot &&
+                    gSaveContext.equips.buttonItems[i] == oldItem) {
+                    gSaveContext.equips.buttonItems[i] = newItem;
+                    Interface_LoadItemIcon1(play, i);
+                    break;
+                }
+            }
+            ExtInv_SetSlotItem(kaleidoSlot, newItem);
+        }
+        gCurrentItemCyclingSlot = pauseCtx->cursorSlot[PAUSE_ITEM] == kaleidoSlot ? kaleidoSlot : -1;
+    }
+}
+
 void KaleidoScope_HandleItemCycles(PlayState* play) {
-    // handle the mask select
-    KaleidoScope_HandleItemCycleExtras(
+    // handle the mask select — only on the vanilla item page (0); on pages 1/2 the cell is a custom
+    // item / MM mask, so the wheel must not respond there (same as the bottle wheels). Skijer's NEI
+    if (ExtInv_GetCurrentPage() == 0)
+        KaleidoScope_HandleItemCycleExtras(
         play, SLOT_TRADE_CHILD, CanMaskSelect(),
         IS_RANDO ? Randomizer_GetPrevChildTradeItem()
                  : (INV_CONTENT(ITEM_TRADE_CHILD) <= ITEM_MASK_KEATON || INV_CONTENT(ITEM_TRADE_CHILD) > ITEM_MASK_TRUTH
@@ -1516,9 +1710,32 @@ void KaleidoScope_HandleItemCycles(PlayState* play) {
     }
 
     // handle the adult trade select
-    KaleidoScope_HandleItemCycleExtras(play, SLOT_TRADE_ADULT,
-                                       IS_RANDO && Randomizer_GetSettingValue(RSK_SHUFFLE_ADULT_TRADE),
-                                       Randomizer_GetPrevAdultTradeItem(), Randomizer_GetNextAdultTradeItem(), true);
+    // Adult-trade wheel: the shared linear cycle wheel, fed with EVERY owned trade item — a held
+    // vanilla/rando item folded in, plus the granted MM ones — so the one wheel cycles them all (A opens,
+    // stick L/R cycles). Only on the vanilla item page (0) — on pages 1/2 the cell is a custom item /
+    // MM mask, so the wheel must not respond there (same as the bottle wheels). Skijer's NEI
+    if (ExtInv_GetCurrentPage() == 0) {
+        u8 tradeCur = ExtInv_GetSlotItem(SLOT_TRADE_ADULT);
+        TradeAdult_FoldCurrent(tradeCur);
+        if (tradeCur == ITEM_NONE && TradeAdult_OwnedCount() > 0) {
+            tradeCur = TradeAdult_ItemId(TradeAdult_OwnedAt(0)); // show the first owned item in an empty slot
+            ExtInv_SetSlotItem(SLOT_TRADE_ADULT, tradeCur);
+        }
+        KaleidoScope_HandleItemCycleExtras(play, SLOT_TRADE_ADULT, TradeAdult_OwnedCount() > 1,
+                                           TradeAdult_PrevItem(tradeCur), TradeAdult_NextItem(tradeCur), true);
+    }
+
+    // Bottle Randomizer wheels A/B (Skijer's NEI). Wheel A holds bottleSlots[0..3], Wheel B holds
+    // bottleSlots[4..7] (the bottle inventory edited in the save editor). Show a real bottle from
+    // that wheel in the visible slot, then reuse the trade-slot cycler to swap among them. Only
+    // syncs when the wheel actually has bottles, so vanilla bottles are untouched when the rando
+    // isn't active. ONLY on page 1 — on pages 2/3 the visual bottle cells are different items
+    // (custom items / MM masks), so the wheel must not run there.
+    if (ExtInv_GetCurrentPage() == 0) {
+        // Index-based selectors so every bottle (empty ones included) is reachable, always cyclable.
+        Bottle_WheelHandle(play, BOTTLE_WHEEL_A, SLOT_BOTTLE_1);
+        Bottle_WheelHandle(play, BOTTLE_WHEEL_B, SLOT_BOTTLE_2);
+    }
 
     // Handle Nayru's Love/Roc's Feather
     KaleidoScope_HandleItemCycleExtras(play, SLOT_NAYRUS_LOVE, Randomizer_GetSettingValue(RSK_ROCS_FEATHER),
@@ -1541,6 +1758,12 @@ void KaleidoScope_HandleItemCycles(PlayState* play) {
     Clawshot_HandleKaleidoSelector(play);
     Gale_HandleKaleidoSelector(play);
 
+    // Pictograph Box flip on the Lens of Truth slot (A → Lens ↔ Pictobox). Skijer's NEI
+    Picto_HandleKaleidoSelector(play);
+
+    // Power Keg flip on the Bomb slot (A → Bomb ↔ Power Keg). Skijer's NEI
+    PowerKeg_HandleKaleidoSelector(play);
+
     // Gust Jar press-A element selector (Roc's Feather style — coexists with
     // the hold-C wheel below).
     GustJar_HandlePressASelector(play);
@@ -1552,7 +1775,9 @@ void KaleidoScope_HandleItemCycles(PlayState* play) {
 
 void KaleidoScope_DrawItemCycles(PlayState* play) {
     // draw the mask select
-    KaleidoScope_DrawItemCycleExtras(
+    // mask-select overlay only on the vanilla item page (0) — pages 1/2 show custom items / masks. Skijer's NEI
+    if (ExtInv_GetCurrentPage() == 0)
+        KaleidoScope_DrawItemCycleExtras(
         play, SLOT_TRADE_CHILD, CanMaskSelect(),
         IS_RANDO ? Randomizer_GetPrevChildTradeItem()
                  : (INV_CONTENT(ITEM_TRADE_CHILD) <= ITEM_MASK_KEATON || INV_CONTENT(ITEM_TRADE_CHILD) > ITEM_MASK_TRUTH
@@ -1563,10 +1788,24 @@ void KaleidoScope_DrawItemCycles(PlayState* play) {
                         ? ITEM_MASK_KEATON
                         : INV_CONTENT(ITEM_TRADE_CHILD) + 1));
 
-    // draw the adult trade select
-    KaleidoScope_DrawItemCycleExtras(play, SLOT_TRADE_ADULT,
-                                     IS_RANDO && Randomizer_GetSettingValue(RSK_SHUFFLE_ADULT_TRADE),
-                                     Randomizer_GetPrevAdultTradeItem(), Randomizer_GetNextAdultTradeItem());
+    // draw the adult trade select — only on the vanilla item page (0), like the mask select above. Skijer's NEI
+    if (ExtInv_GetCurrentPage() == 0) {
+        u8 tradeCur = ExtInv_GetSlotItem(SLOT_TRADE_ADULT);
+        KaleidoScope_DrawItemCycleExtras(play, SLOT_TRADE_ADULT, TradeAdult_OwnedCount() > 1,
+                                         TradeAdult_PrevItem(tradeCur), TradeAdult_NextItem(tradeCur));
+    }
+
+    // Bottle Randomizer wheels A/B draw (Skijer's NEI) — page 1 only (see HandleItemCycles). Previews
+    // are the prev/next SLOT (index-based) with forceShow, so the mini-icons + A indicator appear even
+    // between identical EMPTY bottles.
+    if (ExtInv_GetCurrentPage() == 0) {
+        KaleidoScope_DrawItemCycleExtrasImpl(play, SLOT_BOTTLE_1, Bottle_WheelBottleCount(BOTTLE_WHEEL_A) > 1,
+                                             Bottle_WheelPeek(BOTTLE_WHEEL_A, -1), Bottle_WheelPeek(BOTTLE_WHEEL_A, 1),
+                                             true);
+        KaleidoScope_DrawItemCycleExtrasImpl(play, SLOT_BOTTLE_2, Bottle_WheelBottleCount(BOTTLE_WHEEL_B) > 1,
+                                             Bottle_WheelPeek(BOTTLE_WHEEL_B, -1), Bottle_WheelPeek(BOTTLE_WHEEL_B, 1),
+                                             true);
+    }
 
     // Draw Nayru's Love/Roc's Feather
     KaleidoScope_DrawItemCycleExtras(play, SLOT_NAYRUS_LOVE, Randomizer_GetSettingValue(RSK_ROCS_FEATHER),
@@ -1584,6 +1823,12 @@ void KaleidoScope_DrawItemCycles(PlayState* play) {
     // Draw Twilight Upgrade mode toggles (Clawshot + Gale Boomerang)
     Clawshot_DrawKaleidoSelector(play);
     Gale_DrawKaleidoSelector(play);
+
+    // Pictograph Box flip overlay on the Lens of Truth slot. Skijer's NEI
+    Picto_DrawKaleidoSelector(play);
+
+    // Power Keg flip overlay on the Bomb slot. Skijer's NEI
+    PowerKeg_DrawKaleidoSelector(play);
 
     // Draw Gust Jar press-A selector (Roc's Feather visual)
     GustJar_DrawPressASelector(play);
@@ -1703,15 +1948,15 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
 
                 // Seem necessary to match
                 if (pauseCtx->cursorX[PAUSE_ITEM]) {}
-                if (gSaveContext.inventory.items[pauseCtx->cursorPoint[PAUSE_ITEM]]) {}
+                if (ExtInv_GetSlotItem(pauseCtx->cursorPoint[PAUSE_ITEM])) {} // Skijer's NEI
 
                 while (moveCursorResult == 0) {
                     if ((pauseCtx->stickRelX < -30) || (dpad && CHECK_BTN_ALL(input->press.button, BTN_DLEFT))) {
                         if (pauseCtx->cursorX[PAUSE_ITEM] != 0) {
                             pauseCtx->cursorX[PAUSE_ITEM] -= 1;
                             pauseCtx->cursorPoint[PAUSE_ITEM] -= 1;
-                            if ((gSaveContext.inventory.items[ExtInv_GetInventorySlot(
-                                     pauseCtx->cursorPoint[PAUSE_ITEM])] != ITEM_NONE) ||
+                            if ((ExtInv_GetSlotItem(ExtInv_GetInventorySlot(
+                                     pauseCtx->cursorPoint[PAUSE_ITEM])) != ITEM_NONE) || // Skijer's NEI
                                 pauseAnyCursor) {
                                 moveCursorResult = 1;
                             }
@@ -1743,8 +1988,8 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
                         if (pauseCtx->cursorX[PAUSE_ITEM] < 5) {
                             pauseCtx->cursorX[PAUSE_ITEM] += 1;
                             pauseCtx->cursorPoint[PAUSE_ITEM] += 1;
-                            if ((gSaveContext.inventory.items[ExtInv_GetInventorySlot(
-                                     pauseCtx->cursorPoint[PAUSE_ITEM])] != ITEM_NONE) ||
+                            if ((ExtInv_GetSlotItem(ExtInv_GetInventorySlot(
+                                     pauseCtx->cursorPoint[PAUSE_ITEM])) != ITEM_NONE) || // Skijer's NEI
                                 pauseAnyCursor) {
                                 moveCursorResult = 1;
                             }
@@ -1777,7 +2022,7 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
 
                 if (moveCursorResult == 1) {
                     cursorItem =
-                        gSaveContext.inventory.items[ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])];
+                        ExtInv_GetSlotItem(ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])); // Skijer's NEI
                 }
 
                 osSyncPrintf("【Ｘ cursor=%d(%) (cur_xpt=%d)(ok_fg=%d)(ccc=%d)(key_angle=%d)】  ",
@@ -1794,7 +2039,7 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
 
                 cursorPoint = cursorX = cursorY = 0;
                 while (true) {
-                    if (gSaveContext.inventory.items[ExtInv_GetInventorySlot(cursorPoint)] != ITEM_NONE) {
+                    if (ExtInv_GetSlotItem(ExtInv_GetInventorySlot(cursorPoint)) != ITEM_NONE) { // Skijer's NEI
                         pauseCtx->cursorPoint[PAUSE_ITEM] = cursorPoint;
                         pauseCtx->cursorX[PAUSE_ITEM] = cursorX;
                         pauseCtx->cursorY[PAUSE_ITEM] = cursorY;
@@ -1830,7 +2075,7 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
                 cursorPoint = cursorX = 5;
                 cursorY = 0;
                 while (true) {
-                    if (gSaveContext.inventory.items[ExtInv_GetInventorySlot(cursorPoint)] != ITEM_NONE) {
+                    if (ExtInv_GetSlotItem(ExtInv_GetInventorySlot(cursorPoint)) != ITEM_NONE) { // Skijer's NEI
                         pauseCtx->cursorPoint[PAUSE_ITEM] = cursorPoint;
                         pauseCtx->cursorX[PAUSE_ITEM] = cursorX;
                         pauseCtx->cursorY[PAUSE_ITEM] = cursorY;
@@ -1870,8 +2115,8 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
                             if (pauseCtx->cursorY[PAUSE_ITEM] != 0) {
                                 pauseCtx->cursorY[PAUSE_ITEM] -= 1;
                                 pauseCtx->cursorPoint[PAUSE_ITEM] -= 6;
-                                if ((gSaveContext.inventory.items[ExtInv_GetInventorySlot(
-                                         pauseCtx->cursorPoint[PAUSE_ITEM])] != ITEM_NONE) ||
+                                if ((ExtInv_GetSlotItem(ExtInv_GetInventorySlot(
+                                         pauseCtx->cursorPoint[PAUSE_ITEM])) != ITEM_NONE) || // Skijer's NEI
                                     pauseAnyCursor) {
                                     moveCursorResult = 1;
                                 }
@@ -1886,8 +2131,8 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
                             if (pauseCtx->cursorY[PAUSE_ITEM] < 3) {
                                 pauseCtx->cursorY[PAUSE_ITEM] += 1;
                                 pauseCtx->cursorPoint[PAUSE_ITEM] += 6;
-                                if ((gSaveContext.inventory.items[ExtInv_GetInventorySlot(
-                                         pauseCtx->cursorPoint[PAUSE_ITEM])] != ITEM_NONE) ||
+                                if ((ExtInv_GetSlotItem(ExtInv_GetInventorySlot(
+                                         pauseCtx->cursorPoint[PAUSE_ITEM])) != ITEM_NONE) || // Skijer's NEI
                                     pauseAnyCursor) {
                                     moveCursorResult = 1;
                                 }
@@ -1915,9 +2160,9 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
             int inventorySlot = ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM]);
 
             if (moveCursorResult == 1) {
-                cursorItem = gSaveContext.inventory.items[inventorySlot];
+                cursorItem = ExtInv_GetSlotItem(inventorySlot); // Skijer's NEI
             } else if (moveCursorResult != 2) {
-                cursorItem = gSaveContext.inventory.items[inventorySlot];
+                cursorItem = ExtInv_GetSlotItem(inventorySlot); // Skijer's NEI
             }
 
             pauseCtx->cursorItem[PAUSE_ITEM] = cursorItem;
@@ -1999,7 +2244,7 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
         gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
 
         int drawSlot = ExtInv_GetInventorySlot(i);
-        if (gSaveContext.inventory.items[drawSlot] != ITEM_NONE) {
+        if (ExtInv_GetSlotItem(drawSlot) != ITEM_NONE) { // Skijer's NEI
             if ((pauseCtx->unk_1E4 == 0) && (pauseCtx->pageIndex == PAUSE_ITEM) && (pauseCtx->cursorSpecialPos == 0)) {
                 if (CHECK_AGE_REQ_SLOT(drawSlot)) {
                     if ((sEquipState == 2) && (i == 3)) {
@@ -2035,7 +2280,7 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
             }
 
             gSPVertex(POLY_OPA_DISP++, &pauseCtx->itemVtx[j + 0], 4, 0);
-            int itemId = gSaveContext.inventory.items[drawSlot];
+            int itemId = ExtInv_GetSlotItem(drawSlot); // Skijer's NEI
             bool not_acquired = !CHECK_AGE_REQ_SLOT(drawSlot);
             if (not_acquired) {
                 gDPSetGrayscaleColor(POLY_OPA_DISP++, 109, 109, 109, 255);
@@ -2047,6 +2292,35 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
             //  selector in Clawshot_/Gale_DrawKaleidoSelector now
             //  serves as the visual mode-toggle hint. The L hint stays
             //  on the C-button HUD for in-gameplay binding feedback.)
+
+            // Skijer's NEI — Ultrashot: while owned, the hookshot cell keeps the Longshot ICON; a
+            // small Light medallion on the cell's TOP-RIGHT corner (+ the "Ultrashot" name tex) is
+            // what tells it apart. Suppressed while the Twilight clawshot MODE is on (claw icon).
+            if ((drawSlot == SLOT_HOOKSHOT) && (itemId == ITEM_LONGSHOT) && Nei_Save()->ultrashotOwned &&
+                !TwilightUpgrade_IsClawshotActive()) {
+                Vtx* cellVtx = &pauseCtx->itemVtx[j + 0];
+                Vtx* mv = (Vtx*)Graph_Alloc(play->state.gfxCtx, 4 * sizeof(Vtx));
+                s16 cx = (cellVtx[0].v.ob[0] + cellVtx[3].v.ob[0]) / 2;
+                s16 cy = (cellVtx[0].v.ob[1] + cellVtx[3].v.ob[1]) / 2;
+                s16 mSize = 14;
+                s16 mx0 = cx + 18 - mSize; // marker's right edge 2px past the 32px cell's right edge
+                s16 myTop = cy + 18;       // marker's top edge 2px past the cell's top edge
+                s32 mvi;
+
+                for (mvi = 0; mvi < 4; mvi++) {
+                    mv[mvi] = cellVtx[0];
+                }
+                mv[0].v.ob[0] = mx0;         mv[0].v.ob[1] = myTop;         mv[0].v.tc[0] = 0;       mv[0].v.tc[1] = 0;
+                mv[1].v.ob[0] = mx0 + mSize; mv[1].v.ob[1] = myTop;         mv[1].v.tc[0] = 24 << 5; mv[1].v.tc[1] = 0;
+                mv[2].v.ob[0] = mx0;         mv[2].v.ob[1] = myTop - mSize; mv[2].v.tc[0] = 0;       mv[2].v.tc[1] = 24 << 5;
+                mv[3].v.ob[0] = mx0 + mSize; mv[3].v.ob[1] = myTop - mSize; mv[3].v.tc[0] = 24 << 5; mv[3].v.tc[1] = 24 << 5;
+
+                gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
+                gSPVertex(POLY_OPA_DISP++, mv, 4, 0);
+                KaleidoScope_DrawQuadTextureRGBA32(
+                    play->state.gfxCtx, (u8*)"__OTR__textures/icon_item_24_static/gQuestIconMedallionLightTex", 24,
+                    24, 0);
+            }
         }
     }
 
@@ -2062,10 +2336,21 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
 
     if (ExtInv_GetCurrentPage() == 0) {
         for (i = 0; i < (gBetterAmmoRendering ? 24 : 15); i++) {
-            if ((gBetterAmmoRendering ? ItemInSlotUsesAmmo(i) : gAmmoItems[i] != ITEM_NONE) &&
-                (gSaveContext.inventory.items[i] != ITEM_NONE)) {
-                KaleidoScope_DrawAmmoCount(pauseCtx, play->state.gfxCtx, gSaveContext.inventory.items[i], i);
+            // Skijer's NEI: the Pictograph Box on the Lens slot shows a 0/1 photo counter even though the
+            // Lens isn't a vanilla ammo item. Force ITEM_LENS so DrawAmmoCount's override picks it up.
+            u8 pictoOnLens = (i == SLOT_LENS) && Picto_IsOwned() && Picto_IsOnLensActive();
+            s16 dispItem = pictoOnLens ? ITEM_LENS : gSaveContext.inventory.items[i];
+            if (((gBetterAmmoRendering ? ItemInSlotUsesAmmo(i) : gAmmoItems[i] != ITEM_NONE) || pictoOnLens) &&
+                (dispItem != ITEM_NONE)) {
+                KaleidoScope_DrawAmmoCount(pauseCtx, play->state.gfxCtx, dispItem, i);
             }
+        }
+        // Bottomless Bottle counter: SLOT_BOTTLE_4 (slot 21) is past the default 15-slot loop above, so
+        // draw its use-counter here too — the counter is what identifies a multi-use content. Skijer's NEI
+        if (!gBetterAmmoRendering && ItemInSlotUsesAmmo(SLOT_BOTTLE_4) &&
+            gSaveContext.inventory.items[SLOT_BOTTLE_4] != ITEM_NONE) {
+            KaleidoScope_DrawAmmoCount(pauseCtx, play->state.gfxCtx, gSaveContext.inventory.items[SLOT_BOTTLE_4],
+                                       SLOT_BOTTLE_4);
         }
     }
 

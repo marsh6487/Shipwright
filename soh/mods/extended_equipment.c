@@ -10,6 +10,7 @@
  */
 
 #include "extended_equipment.h"
+#include "nei_save.h" // Skijer's NEI
 #include "transformation_masks/transformation_masks.h"
 #include "transformation_masks/assets/mm_asset_loader.h"
 #include "pak_loader/pak_loader.h"
@@ -25,6 +26,7 @@ extern MmPlayerTransformation MmForm_GetCurrentForm(void);
 
 extern SaveContext gSaveContext;
 extern s32 CVarGetInteger(const char* name, s32 defaultValue);
+extern f32 CVarGetFloat(const char* name, f32 defaultValue);
 
 // Cane of Byrna 3D model: blue-tinted variant of the Somaria cane, loaded from
 // soh.o2r (objects/object_somaria/g_byrna_cane_dl — shares the Somaria tri
@@ -74,7 +76,7 @@ static Gfx* Byrna_GetCaneDL(void) {
 static const u8 sExtEquipAgeReqs[4][3] = {
     { AGE_REQ_NONE,  AGE_REQ_CHILD, AGE_REQ_ADULT },
     { AGE_REQ_NONE,  AGE_REQ_NONE,  AGE_REQ_CHILD },
-    { AGE_REQ_NONE,  AGE_REQ_ADULT, AGE_REQ_ADULT },
+    { AGE_REQ_NONE,  AGE_REQ_NONE,  AGE_REQ_NONE }, // recolor tunics: any age (Champion/Spirit/Snowquill)
     { AGE_REQ_NONE,  AGE_REQ_NONE,  AGE_REQ_ADULT },
 };
 
@@ -112,14 +114,35 @@ void ExtEquip_Init(void) {
     memset(&gExtEquipState, 0, sizeof(gExtEquipState));
     memset(&gExtEquipBehavior, 0, sizeof(gExtEquipBehavior));
 
-    // Clear reserved bits 28-31 (may contain garbage from old saves where equipment was u16 + padding)
-    gSaveContext.inventory.equipment &= 0x0FFFFFFF;
+    // Load equipped state from save data (per-file, persisted only on game save) // Skijer's NEI
+    gExtEquipState.currentExtSword = Nei_Save()->extEquipSword;
+    gExtEquipState.currentExtShield = Nei_Save()->extEquipShield;
+    gExtEquipState.currentExtTunic = Nei_Save()->extEquipTunic;
+    gExtEquipState.currentExtBoots = Nei_Save()->extEquipBoots;
 
-    // Load equipped state from save data (per-file, persisted only on game save)
-    gExtEquipState.currentExtSword = gSaveContext.ship.extEquipSword;
-    gExtEquipState.currentExtShield = gSaveContext.ship.extEquipShield;
-    gExtEquipState.currentExtTunic = gSaveContext.ship.extEquipTunic;
-    gExtEquipState.currentExtBoots = gSaveContext.ship.extEquipBoots;
+    // Old saves may still have the retired slots EQUIPPED (Cape as tunic 1, Pendant as boots 2,
+    // Dragon Scale as boots 3). Migrate: equipped implies OWNED, so set the ownership bit (the
+    // moved-out passives read ownership now) BEFORE clearing the equipped field. Dragon Scale (boots
+    // 3) is gone entirely, so just clear it.
+    // Magic Cape ownership migration (Skijer 2026-07-16): the Cape used to own the ext TUNIC-1 bit,
+    // which is now the Champion's Tunic slot. Move any old cape ownership (bit set, or the cape was
+    // equipped in slot 1 pre-rework) to the dedicated capeOwned flag, then CLEAR the TUNIC-1 bit so
+    // it no longer reads as "owns Champion".
+    if (ExtEquip_HasItem(EQUIP_TYPE_TUNIC, 1) || gExtEquipState.currentExtTunic == 1) {
+        Nei_Save()->capeOwned = 1;
+        ExtEquip_RemoveItem(EQUIP_TYPE_TUNIC, 1);
+        if (gExtEquipState.currentExtTunic == 1) {
+            gExtEquipState.currentExtTunic = 0;
+            Nei_Save()->extEquipTunic = 0;
+        }
+    }
+    if (ExtEquip_SlotRetired(EQUIP_TYPE_BOOTS, gExtEquipState.currentExtBoots)) {
+        if (gExtEquipState.currentExtBoots == 2) {
+            ExtEquip_GiveItem(EQUIP_TYPE_BOOTS, 2); // keep the Pendant of Memories owned
+        }
+        gExtEquipState.currentExtBoots = 0;
+        Nei_Save()->extEquipBoots = 0;
+    }
 
     // Clamp to valid range
     if (gExtEquipState.currentExtSword > 3)
@@ -184,19 +207,19 @@ static void ExtEquip_SetCurrentByType(s16 equipType, u8 index) {
     switch (equipType) {
         case EQUIP_TYPE_SWORD:
             gExtEquipState.currentExtSword = index;
-            gSaveContext.ship.extEquipSword = index;
+            Nei_Save()->extEquipSword = index; // Skijer's NEI
             break;
         case EQUIP_TYPE_SHIELD:
             gExtEquipState.currentExtShield = index;
-            gSaveContext.ship.extEquipShield = index;
+            Nei_Save()->extEquipShield = index; // Skijer's NEI
             break;
         case EQUIP_TYPE_TUNIC:
             gExtEquipState.currentExtTunic = index;
-            gSaveContext.ship.extEquipTunic = index;
+            Nei_Save()->extEquipTunic = index; // Skijer's NEI
             break;
         case EQUIP_TYPE_BOOTS:
             gExtEquipState.currentExtBoots = index;
-            gSaveContext.ship.extEquipBoots = index;
+            Nei_Save()->extEquipBoots = index; // Skijer's NEI
             break;
     }
 }
@@ -212,13 +235,13 @@ static u32 ExtEquip_GetBit(s16 equipType, u8 index) {
 u8 ExtEquip_HasItem(s16 equipType, u8 index) {
     if (index == 0 || index > 3 || equipType < 0 || equipType > 3)
         return 0;
-    return (gSaveContext.inventory.equipment & ExtEquip_GetBit(equipType, index)) != 0;
+    return (Nei_Save()->extEquipOwnedBits & ExtEquip_GetBit(equipType, index)) != 0; // Skijer's NEI
 }
 
 void ExtEquip_GiveItem(s16 equipType, u8 index) {
     if (index == 0 || index > 3 || equipType < 0 || equipType > 3)
         return;
-    gSaveContext.inventory.equipment |= ExtEquip_GetBit(equipType, index);
+    Nei_Save()->extEquipOwnedBits |= ExtEquip_GetBit(equipType, index); // Skijer's NEI
 }
 
 // Clear vanilla equipment base that was set for ext equipment.
@@ -241,7 +264,7 @@ static void ExtEquip_ClearVanillaEquip(s16 equipType) {
 void ExtEquip_RemoveItem(s16 equipType, u8 index) {
     if (index == 0 || index > 3 || equipType < 0 || equipType > 3)
         return;
-    gSaveContext.inventory.equipment &= ~ExtEquip_GetBit(equipType, index);
+    Nei_Save()->extEquipOwnedBits &= ~ExtEquip_GetBit(equipType, index); // Skijer's NEI
     // If currently equipped, unequip and clear vanilla base
     if (ExtEquip_GetCurrent(equipType) == index) {
         ExtEquip_Unequip(equipType);
@@ -249,8 +272,91 @@ void ExtEquip_RemoveItem(s16 equipType, u8 index) {
     }
 }
 
+// Retired slots (2026-07-15 rework): pieces that no longer live in the ext-equipment grid.
+//   TUNIC 1 (Magic Cape)          -> moved to the equipment page's upgrade column (passive effect).
+//   BOOTS 2 (Pendant of Memories) -> moved to the upgrade column (effect toggle there).
+//   BOOTS 3 (Water Dragon Scale)  -> deleted; Zora swim is the Zora Tunic's permanent effect.
+// Their OWNERSHIP bits remain meaningful (the new systems read them) — only the slot is dead.
+u8 ExtEquip_SlotRetired(s16 equipType, u8 index) {
+    // TUNIC 1 is LIVE again (Champion's Tunic recolor) — only the BOOTS slots stay retired (Pendant
+    // moved to the upgrade column on BOOTS 2, Water Dragon Scale deleted on BOOTS 3).
+    return (equipType == EQUIP_TYPE_BOOTS && (index == 2 || index == 3));
+}
+
+// ---------------------------------------------------------------------------
+// Upgrade-column passives: Magic Cape + Pendant of Memories (Skijer 2026-07-15).
+// They live on the equipment page's upgrade column now (replacing the bomb-bag and quiver/bullet
+// capacity icons). Ownership = the SAME extEquipOwnedBits they always had (TUNIC 1 / BOOTS 2).
+//   Cape:    magic refund is ALWAYS active once owned; the A-toggle only hides the cloth on Link.
+//   Pendant: the A-toggle enables/disables its whole moveset.
+// ---------------------------------------------------------------------------
+u8 ExtEquip_CapeOwned(void) {
+    // Own bit now (Skijer 2026-07-16): the ext TUNIC-1 slot is a real recolor tunic (Champion's), so
+    // the Cape has its own ownership flag, migrated off the old TUNIC-1 bit in ExtEquip_Init.
+    return Nei_Save()->capeOwned;
+}
+
+void ExtEquip_GiveCape(void) {
+    Nei_Save()->capeOwned = 1;
+}
+
+u8 ExtEquip_CapeVisible(void) {
+    return ExtEquip_CapeOwned() && !Nei_Save()->capeHidden;
+}
+
+void ExtEquip_ToggleCapeVisibility(void) {
+    Nei_Save()->capeHidden = !Nei_Save()->capeHidden;
+}
+
+u8 ExtEquip_PendantOwned(void) {
+    return ExtEquip_HasItem(EQUIP_TYPE_BOOTS, 2);
+}
+
+u8 ExtEquip_PendantActive(void) {
+    return ExtEquip_PendantOwned() && !Nei_Save()->pendantEffectOff;
+}
+
+void ExtEquip_TogglePendantEffect(void) {
+    Nei_Save()->pendantEffectOff = !Nei_Save()->pendantEffectOff;
+}
+
+// ---------------------------------------------------------------------------
+// Extended RECOLOR tunics (Skijer 2026-07-16): the 3 ext tunic slots are now real recolor tunics
+// (like vanilla Goron/Zora). They equip with Kokiri as the vanilla base and repaint Link's tunic env
+// color in Player_DrawImpl. Predicates = "this ext tunic is currently equipped".
+//   Slot 1 = Champion's Tunic (blue) — flurry rush + bullet time
+//   Slot 2 = Spirit Tunic (orange w/ rupees, black without) — rupee-immunity + fire/water timer skip
+//   Slot 3 = Snowquill Tunic (white) — total ice / freeze immunity
+// ---------------------------------------------------------------------------
+// Dedicated upgrade-column icons — the Cape/Pendant no longer live in the ext grid (the TUNIC-1 grid
+// slot is Champion now), so their kaleido icons come from here, NOT ExtEquip_GetIcon(grid).
+void* ExtEquip_GetCapeIcon(void) {
+    return (void*)dgItemIconMagicCapeTex;
+}
+void* ExtEquip_GetPendantIcon(void) {
+    return (void*)"__OTR__icon_item_static_yar/gItemIconPendantOfMemoriesTex";
+}
+
+u8 ExtEquip_IsChampionTunic(void) {
+    return ExtEquip_IsEnabled() && ExtEquip_GetCurrent(EQUIP_TYPE_TUNIC) == 1;
+}
+u8 ExtEquip_IsSpiritTunic(void) {
+    return ExtEquip_IsEnabled() && ExtEquip_GetCurrent(EQUIP_TYPE_TUNIC) == 2;
+}
+u8 ExtEquip_IsSnowquillTunic(void) {
+    return ExtEquip_IsEnabled() && ExtEquip_GetCurrent(EQUIP_TYPE_TUNIC) == 3;
+}
+// Spirit Tunic "has money" gate — its damage-immunity + fire/water-timer-skip only work with rupees.
+u8 ExtEquip_SpiritHasMoney(void) {
+    return ExtEquip_IsSpiritTunic() && (gSaveContext.rupees > 0);
+}
+
 void ExtEquip_Equip(s16 equipType, u8 index) {
     if (index == 0 || index > 3)
+        return;
+
+    // Freed/retired slots can never be equipped (reserved for the new boots)
+    if (ExtEquip_SlotRetired(equipType, index))
         return;
 
     // Pikachu cannot use extended equipment
@@ -422,12 +528,13 @@ static const char* sExtEquipIconPaths[4][3] = {
     // Shields
     { dgItemIconDivineShieldTex, dgItemIconGerudoScimitarTex,
       "__OTR__icon_item_static_yar/gItemIconMirrorShieldTex" }, // Shield of Ikana (MM mirror shield)
-    // Tunics
-    { dgItemIconMagicCapeTex, dgItemIconPending4Tex, dgItemIconChampionsTunicTex },
-    // Boots
-    { dgItemIconPegasusAnkletTex,
-      "__OTR__icon_item_static_yar/gItemIconPendantOfMemoriesTex", // mm.o2r
-      dgItemIconWaterDragonScaleTex },
+    // Tunics — recolor tunics (Skijer 2026-07-16): 1=Champion (blue), 2=Spirit (orange), 3=Snowquill
+    // (white). Icons = the vanilla OoT tunic icon recolored (assets/custom/textures/icon_item_custom).
+    { dgItemIconChampionsTunicTex, dgItemIconSpiritTunicTex, dgItemIconSnowquillTunicTex },
+    // Boots — slot 2 RETIRED (Pendant on the upgrade column; icon still served for that cell) and
+    // slot 3 FREED for good (Water Dragon Scale deleted; Zora swim = Zora Tunic effect). Slots 2-3
+    // of the grid are reserved for new boots (Gravity Boots + TBD).
+    { dgItemIconPegasusAnkletTex, "__OTR__icon_item_static_yar/gItemIconPendantOfMemoriesTex", NULL },
 };
 
 void* ExtEquip_GetIcon(s16 equipType, u8 index) {
@@ -464,14 +571,17 @@ void ExtEquip_UpdateBehavior(void* playerVoid, void* playVoid) {
     Player* player = (Player*)playerVoid;
     PlayState* play = (PlayState*)playVoid;
 
-    // Hammer upgrade (Iron Knuckle's Axe) is a weapon upgrade, NOT extended equipment —
-    // it runs whenever the upgrade is owned, regardless of the ext-equipment cheat. Gate
-    // on the local player (reads global save state + local input for the throw).
+    // NEI weapon upgrades are NOT extended equipment — they run whenever the upgrade is owned,
+    // regardless of the ext-equipment cheat. Gate on the local player (read global save state +
+    // local input for the throw).
     if (gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
         if (WeaponUpgrade_HasHammerAxe()) {
             IKAxe_Behavior(player, play);
         } else {
             IKAxe_Cleanup();
+        }
+        if (WeaponUpgrade_HasGreatFairy()) {
+            GreatFairySword_Behavior(player, play);
         }
     }
 
@@ -482,11 +592,16 @@ void ExtEquip_UpdateBehavior(void* playerVoid, void* playVoid) {
 }
 
 void ExtEquip_OnMeleeHit(void* playerVoid, void* playVoid) {
-    if (!ExtEquip_IsEnabled())
-        return;
-
     Player* player = (Player*)playerVoid;
     PlayState* play = (PlayState*)playVoid;
+
+    // Great Fairy's Sword recovers HP+MP on hit, independent of the ext-equipment cheat.
+    if (WeaponUpgrade_HasGreatFairy() && player->heldItemAction == PLAYER_IA_SWORD_BIGGORON) {
+        GreatFairySword_OnMeleeHit(player, play);
+    }
+
+    if (!ExtEquip_IsEnabled())
+        return;
 
     ExtEquip_OnMeleeHitDispatch(player, play);
 }
@@ -564,8 +679,8 @@ const char* ExtEquip_GetShieldDLOverride(void) {
     if (!ExtEquip_IsEnabled())
         return NULL;
 
-    // Shield of Ikana (slot 3): hide OOT mirror shield, draw custom in PostLimbDraw
-    if (gExtEquipState.currentExtShield == 3)
+    // Divine (1), Kite (2), Shield of Ikana (3): hide OOT shield, draw custom in PostLimbDraw
+    if (gExtEquipState.currentExtShield >= 1 && gExtEquipState.currentExtShield <= 3)
         return "HIDE";
 
     return NULL;
@@ -603,27 +718,98 @@ static void DrawCachedShieldDL(void* playVoid, Gfx* dl) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-void ExtEquip_DrawShieldDL(void* playVoid) {
-    if (!ExtEquip_IsEnabled() || gExtEquipState.currentExtShield != 3)
-        return;
-
-    ExtEquip_LoadMmShieldDLs();
-    if (sCachedMmShieldHandDL == NULL)
-        return;
-
-    DrawCachedShieldDL(playVoid, sCachedMmShieldHandDL);
+// Custom soh.o2r shield models (brought in from kite_shield.blend via the
+// blend_to_nei -> c2obj_nei pipeline). Cached gated loads.
+//   slot 1 = Divine Shield (object_nei_divine_shield)
+//   slot 2 = Kite Shield    (object_nei_kite_shield)
+static Gfx* ExtEquip_GetCachedDL(const char* otr, Gfx** cache, u8* tried) {
+    if (!*tried) {
+        *tried = 1;
+        if (ResourceMgr_FileExists(otr)) {
+            *cache = ResourceMgr_LoadGfxByName(otr);
+        }
+    }
+    return *cache;
 }
 
-// Draw MM Mirror Shield on Link's back (sheath position)
+static Gfx* ExtEquip_GetKiteShieldDL(void) {
+    static Gfx* sCached = NULL;
+    static u8 sTried = 0;
+    return ExtEquip_GetCachedDL("__OTR__objects/object_nei_kite_shield/g_kite_shield_dl", &sCached, &sTried);
+}
+
+static Gfx* ExtEquip_GetDivineShieldDL(void) {
+    static Gfx* sCached = NULL;
+    static u8 sTried = 0;
+    return ExtEquip_GetCachedDL("__OTR__objects/object_nei_divine_shield/g_divine_shield_dl", &sCached, &sTried);
+}
+
+// Shared transform that seats a custom shield model in Link's shield-limb space.
+// The model is drawn relative to the sheath/hand limb matrix, whose LOCAL space is
+// huge (~6000 N64 units across — the Hylian shield collider quad size in z_player_lib.c).
+// Divine + Kite share this placement (both modeled in the same space).
+// Final, visually-tuned values (degrees for rotation, N64 units for offset).
+#define CUSTOM_SHIELD_SCALE  44.2f
+#define CUSTOM_SHIELD_ROT_X  (-95.0f * (M_PI / 180.0f))
+#define CUSTOM_SHIELD_ROT_Y  (-27.0f * (M_PI / 180.0f))
+#define CUSTOM_SHIELD_ROT_Z  (-99.0f * (M_PI / 180.0f))
+#define CUSTOM_SHIELD_OFF_X  (-508.0f)
+#define CUSTOM_SHIELD_OFF_Y  (-372.0f)
+#define CUSTOM_SHIELD_OFF_Z  (-5.0f)
+
+static void DrawCustomShieldDL(void* playVoid, Gfx* dl) {
+    if (dl == NULL)
+        return;
+
+    PlayState* play = (PlayState*)playVoid;
+    OPEN_DISPS(play->state.gfxCtx);
+
+    // Drawn on XLU (like the MM Ikana shield): a custom DL leaves its combiner/texture
+    // state on the pipe; on OPA that bleeds onto the limbs drawn after it (black tunic).
+    // The XLU pass runs after all OPA limbs, so the body stays clean.
+    Matrix_Push();
+    Matrix_Translate(CUSTOM_SHIELD_OFF_X, CUSTOM_SHIELD_OFF_Y, CUSTOM_SHIELD_OFF_Z, MTXMODE_APPLY);
+    Matrix_RotateX(CUSTOM_SHIELD_ROT_X, MTXMODE_APPLY);
+    Matrix_RotateY(CUSTOM_SHIELD_ROT_Y, MTXMODE_APPLY);
+    Matrix_RotateZ(CUSTOM_SHIELD_ROT_Z, MTXMODE_APPLY);
+    Matrix_Scale(CUSTOM_SHIELD_SCALE, CUSTOM_SHIELD_SCALE, CUSTOM_SHIELD_SCALE, MTXMODE_APPLY);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_XLU_DISP++, dl);
+    Matrix_Pop();
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// Hand + back draws share the per-slot model dispatch (onBack picks hand vs sheath
+// DL for the MM Mirror Shield; the custom models use one DL for both).
+static void ExtEquip_DrawShieldCommon(void* playVoid, u8 onBack) {
+    if (!ExtEquip_IsEnabled())
+        return;
+
+    switch (gExtEquipState.currentExtShield) {
+        case 1: // Divine Shield: custom soh.o2r model
+            DrawCustomShieldDL(playVoid, ExtEquip_GetDivineShieldDL());
+            break;
+        case 2: // Kite Shield: custom soh.o2r model
+            DrawCustomShieldDL(playVoid, ExtEquip_GetKiteShieldDL());
+            break;
+        case 3: { // Shield of Ikana: MM Mirror Shield from mm.o2r
+            ExtEquip_LoadMmShieldDLs();
+            Gfx* mmDL = onBack ? sCachedMmShieldBackDL : sCachedMmShieldHandDL;
+            if (mmDL != NULL)
+                DrawCachedShieldDL(playVoid, mmDL);
+            break;
+        }
+    }
+}
+
+void ExtEquip_DrawShieldDL(void* playVoid) {
+    ExtEquip_DrawShieldCommon(playVoid, 0);
+}
+
+// Draw the ext shield on Link's back (sheath position)
 void ExtEquip_DrawShieldBackDL(void* playVoid) {
-    if (!ExtEquip_IsEnabled() || gExtEquipState.currentExtShield != 3)
-        return;
-
-    ExtEquip_LoadMmShieldDLs();
-    if (sCachedMmShieldBackDL == NULL)
-        return;
-
-    DrawCachedShieldDL(playVoid, sCachedMmShieldBackDL);
+    ExtEquip_DrawShieldCommon(playVoid, 1);
 }
 
 // Common prologue for the per-piece dispatch wrappers below: bail out unless
@@ -633,38 +819,24 @@ void ExtEquip_DrawShieldBackDL(void* playVoid) {
     if (!ExtEquip_IsEnabled() || ExtEquip_GetCurrent(type) != (index))      \
     return
 
-void ExtEquip_DrawWaistScale(void* playVoid) {
-    EXT_EQUIP_REQUIRE(EQUIP_TYPE_BOOTS, 3);
+// ExtEquip_DrawWaistScale removed — the Water Dragon Scale item (and its waist pendant model) no
+// longer exists; Zora swim is the Zora Tunic's permanent effect (equip_dragonscale.c driver).
 
-    PlayState* play = (PlayState*)playVoid;
-    DScale_DrawWaistScale(play);
-}
-
-void ExtEquip_DrawAnklet(void* playVoid, s32 isRightFoot) {
-    EXT_EQUIP_REQUIRE(EQUIP_TYPE_BOOTS, 1);
-
-    PlayState* play = (PlayState*)playVoid;
-    Pegasus_DrawAnklet(play, isRightFoot);
-}
-
-void ExtEquip_UpdateAnkletPhysics(void* playerVoid) {
-    EXT_EQUIP_REQUIRE(EQUIP_TYPE_BOOTS, 1);
-
-    Player* player = (Player*)playerVoid;
-    Pegasus_UpdateWingPhysics(player);
-}
+// ExtEquip_DrawAnklet / ExtEquip_UpdateAnkletPhysics removed (Skijer 2026-07-15): the Pegasus
+// Anklet's model is now the RED-recolored vanilla hover boots drawn in Player_DrawImpl.
 
 void ExtEquip_CaptureCapeShoulderPos(s32 limbIndex) {
-    EXT_EQUIP_REQUIRE(EQUIP_TYPE_TUNIC, 1);
+    // Cape decoupled from the ext-tunic slot (Skijer 2026-07-15): capture whenever the cloth draws.
+    if (!ExtEquip_CapeVisible())
+        return;
 
     MagicCape_CaptureShoulderPos(limbIndex);
 }
 
+// ExtEquip_DrawBreastplate removed (Skijer 2026-07-16): Spirit Tunic is a recolor tunic now, no armor
+// overlay. Kept as an empty stub so the PostLimbDraw call site needs no edit.
 void ExtEquip_DrawBreastplate(void* playVoid) {
-    EXT_EQUIP_REQUIRE(EQUIP_TYPE_TUNIC, 2);
-
-    PlayState* play = (PlayState*)playVoid;
-    Breastplate_Draw(play);
+    (void)playVoid;
 }
 
 u8 ExtEquip_IkanaDeathSave(void* playVoid) {

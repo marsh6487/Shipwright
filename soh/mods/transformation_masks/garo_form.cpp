@@ -63,6 +63,25 @@
 extern "C" void FrameInterpolation_RecordOpenChild(const void* a, int b);
 extern "C" void FrameInterpolation_RecordCloseChild(void);
 
+// Set by the play loop; used by GaroForm_ResetToIdle to tear down the
+// first-person rod-aim camera on any reset path (gPlayState == the active
+// play during GaroForm_Update). Same C-linkage global transformation_masks.c
+// externs.
+extern "C" PlayState* gPlayState;
+
+// v10.11: rod aim REUSES the OOT slingshot aim pipeline (the exact mechanism
+// the Deku bubble uses — Player_StartDekuBubble un-pauses the action func and
+// starts the real first-person/Z-target slingshot aim, so the camera engages
+// properly; a paused-form manual approach could never replicate it). On the
+// slingshot fire, z_player.c calls MmForm_FireDekuBubble, which we intercept
+// to spawn Garo's elemental orb. These are defined in z_player.c.
+extern "C" void Player_StartDekuBubble(Player* this_, PlayState* play);
+extern "C" void Player_DekuBubbleCleanup(Player* this_);
+
+// Magic consumed per rod orb fired (own magic, per the design — independent
+// of the Deku bubble's MP). Tuned modest so charged combat stays sustainable.
+#define GARO_ROD_MAGIC_COST 4
+
 // ============================================================================
 // Attack tuning
 // ============================================================================
@@ -199,6 +218,10 @@ extern "C" void FrameInterpolation_RecordCloseChild(void);
 // re-fires SWING_1 the very next frame, looking like a rapid-fire bug).
 // 10 frames is enough that an organic re-press feels intentional.
 #define GARO_ROD_RELEASE_CD     10
+// v10.8 tap-vs-hold: B released before this many frames from an idle press =
+// slash combo; held at/after it = enter the rod charge ball. ~9 frames is a
+// crisp tap window that doesn't add noticeable slash latency.
+#define GARO_B_HOLD_THRESHOLD   9
 // Post-kill laugh chance — 20% means most kills are silent, a few trigger
 // the taunt (mirrors Garo Master MM behavior).
 #define GARO_LAUGH_CHANCE       0.20f
@@ -215,6 +238,8 @@ enum GaroAttackState {
     GARO_SWING_2,    // last_hit_motion1 [26,43] @ 2x (B re-pressed during SWING_1)
     GARO_SWING_3,    // last_hit_motion1 [44,81] @ 2x (B re-pressed during SWING_2)
     GARO_RECOVER,    // garo_slashStart ping-pong @ 0.7x (Garo signature finisher)
+    GARO_B_HOLD_DETECT, // v10.8: brief window after B-press — tap→spin, hold→rod
+    GARO_SPIN,       // v11: B-tap → Deku-style dual-sword spin (replaces 3-slash combo)
     GARO_ROD_AIM,    // v9: tremble loop, charge ramp 0..120, L/R cycle element
                      // (renamed from GARO_CHARGING; old "spin attack" path
                      // is dead and removed)
@@ -263,6 +288,7 @@ typedef struct {
     // ── ROD_ORB-only fields (ignored for KNIFE / PARALYZE) ──────────────
     u8  rodElement; // 0=normal, 1=fire, 2=ice, 3=light (visual tint + cycle)
     u8  rodDamage;  // 1..4, charge-tier resolved at fire time
+    s16 rodPitch;   // v10.6 aim pitch (focus.rot.x) — drives 3D travel
     u32 rodDmgFlag; // DMG_ARROW_NORMAL/FIRE/ICE/LIGHT (combined with
                     // DMG_SLASH_MASTER at AC time so restrictive enemies
                     // still take the hit).
@@ -276,6 +302,9 @@ static struct {
                          // tier picks at release (1/30/60/90 thresholds).
     u8  rodElement;      // 0=normal, 1=fire, 2=ice, 3=light. Cycled via L/R.
     u8  rodSfxPlayed;    // "fully charged" SFX latch — fires once per aim.
+    u8  rodAimActive;    // v10.11 1 while the slingshot-borrowed rod aim is owned.
+    s16 bHoldDetectTimer; // v10.8 frames B held since IDLE press (tap→slash
+                          // vs hold→charge-ball discriminator).
     s16 rodReleaseCD;    // frames after release where B-press cannot re-fire
                          // a slash (prevents rapid alternate-press spam loop).
     u8  laughPending;    // set when an enemy dies; next IDLE frame rolls 20%.
@@ -935,16 +964,53 @@ static void GaroAttack_SpawnSwordParalyze(Player* player) {
 #define GARO_ROD_ORB_SPEED      12.0f
 #define GARO_ROD_ORB_LIFETIME   60
 
-static void GaroAttack_SpawnRodOrb(Player* player, u8 element, u8 damage, u32 dmgFlag) {
+static void GaroAttack_SpawnRodOrb(Player* player, u8 element, u8 damage, u32 dmgFlag,
+                                   s16 yaw, s16 pitch) {
     GaroSword tmp = {};
     tmp.pos = GaroAttack_HandOrigin(player);
-    tmp.yaw = player->actor.shape.rot.y;
+    tmp.yaw = yaw;       // v10.6 first-person aim yaw (focus.rot.y)
+    tmp.rodPitch = pitch; // v10.6 first-person aim pitch (focus.rot.x)
     tmp.kind = GARO_PROJ_ROD_ORB;
     tmp.rodElement = element;
     tmp.rodDamage = damage;
     tmp.rodDmgFlag = dmgFlag;
     tmp.timer = GARO_ROD_ORB_LIFETIME;  // overrides SpawnOne's default 45-frame fallback
     GaroAttack_SpawnOne(tmp, player);
+}
+
+// v10.11: true while the rod charge-aim owns the borrowed slingshot pipeline.
+// mm_player_form.cpp reads this to skip nulling heldItemAction (which would
+// break the aim, since the aim sets heldItemAction = SLINGSHOT).
+extern "C" u8 GaroForm_IsRodAiming(void) {
+    return (sGaroAttack.state == GARO_ROD_AIM) ? 1 : 0;
+}
+
+// v10.11: fire one rod orb. Called from MmForm_FireDekuBubble on the slingshot
+// release (the EXACT Deku-bubble fire path), so the aim direction is already
+// in focus.rot. Damage tier + ball scale come from rodChargeTimer (our own
+// charge); element from rodElement (L/R cycle). Consumes our own magic. Charge
+// resets after so the player can hold-charge-release again (rapid-fire), like
+// the Deku bubble.
+extern "C" void GaroForm_FireRodOrb(Player* player, PlayState* play) {
+    u8  element = sGaroAttack.rodElement;
+    u8  dmg     = GaroAttack_GetRodDamage(sGaroAttack.rodChargeTimer);
+    u32 dmgFlag = GaroAttack_GetRodDmgFlag(element);
+
+    // Own magic: full cost → full charge damage; no magic → weak (1 dmg) orb.
+    if (gSaveContext.magic >= GARO_ROD_MAGIC_COST) {
+        gSaveContext.magic -= GARO_ROD_MAGIC_COST;
+    } else {
+        dmg = 1;
+    }
+
+    s16 aimYaw   = player->actor.focus.rot.y; // set by the slingshot aim
+    s16 aimPitch = player->actor.focus.rot.x;
+    GaroAttack_SpawnRodOrb(player, element, dmg, dmgFlag, aimYaw, aimPitch);
+    Audio_PlayActorSound2(&player->actor, NA_SE_IT_SWORD_SWING_HARD);
+
+    // Reset charge for the next shot (stay in aim, rapid-fire like Deku).
+    sGaroAttack.rodChargeTimer = 0;
+    sGaroAttack.rodSfxPlayed = 0;
 }
 
 // ── v9 rod orb AC quad pool ─────────────────────────────────────────────
@@ -1029,16 +1095,20 @@ static void GaroAttack_UpdateSwords(PlayState* play) {
         GaroSword* sw = &sGaroAttack.swords[i];
         if (!sw->active) continue;
 
-        // Travel speed depends on the projectile kind. Knives keep the legacy
-        // 18.0f speed; rod orbs glide slower at 12.0f (longer lifetime, more
-        // tracking time for the player to aim with).
-        f32 speed = (sw->kind == GARO_PROJ_ROD_ORB) ? GARO_ROD_ORB_SPEED : GARO_SWORD_SPEED;
-
-        // Advance forward along yaw.
-        f32 sinYaw = Math_SinS(sw->yaw);
-        f32 cosYaw = Math_CosS(sw->yaw);
-        sw->pos.x += sinYaw * speed;
-        sw->pos.z += cosYaw * speed;
+        // Advance. Rod orbs travel in 3D along the first-person aim
+        // (yaw + pitch), mirroring Actor_SetProjectileSpeed:
+        //   speedXZ      = speed * cos(pitch)
+        //   velocity.y   = speed * -sin(pitch)
+        // Knives keep the legacy flat 18.0f XZ travel.
+        if (sw->kind == GARO_PROJ_ROD_ORB) {
+            f32 cosP = Math_CosS(sw->rodPitch);
+            sw->pos.x += Math_SinS(sw->yaw) * cosP * GARO_ROD_ORB_SPEED;
+            sw->pos.z += Math_CosS(sw->yaw) * cosP * GARO_ROD_ORB_SPEED;
+            sw->pos.y += -Math_SinS(sw->rodPitch) * GARO_ROD_ORB_SPEED;
+        } else {
+            sw->pos.x += Math_SinS(sw->yaw) * GARO_SWORD_SPEED;
+            sw->pos.z += Math_CosS(sw->yaw) * GARO_SWORD_SPEED;
+        }
 
         sw->timer--;
         if (sw->timer <= 0) {
@@ -1051,6 +1121,8 @@ static void GaroAttack_UpdateSwords(PlayState* play) {
         // for rod orbs since those carry their own XLU tinted draw + element
         // semantics; mixing in dust would muddy the visual.
         if (sw->kind != GARO_PROJ_ROD_ORB) {
+            f32 sinYaw = Math_SinS(sw->yaw);
+            f32 cosYaw = Math_CosS(sw->yaw);
             Vec3f trailPos = {
                 sw->pos.x - sinYaw * 8.0f,  // 8 units behind the tip
                 sw->pos.y,
@@ -1153,17 +1225,31 @@ extern "C" void GaroForm_DrawProjectiles(PlayState* play) {
     if (!GaroForm_IsActive()) return;
     Player* player = GET_PLAYER(play);
 
-    // ── v10.5 charge ball — grows in Garo's hand while charging (ROD_AIM) ──
-    // Scale ramps 1.5 (no charge) → 4.5 (full); model quad ~14u → ~21..63u.
-    // A gentle sine pulse makes it "breathe." Tinted by the selected element.
-    // Each orb draw is self-contained (own OPEN_DISPS) so we call them
-    // OUTSIDE the knife OPEN_DISPS block below — no nesting.
+    // ── v10.10 charge ball — grows IN FRONT OF GARO'S FACE while charging ──
+    // Drawn ~55u ahead of the head along the aim direction (focus.rot), like
+    // the Deku bubble forming at the mouth — so it's visible whether the
+    // camera is first-person or 3rd-person Z-target (the hand position was
+    // off-screen in first-person). Scale ramps 1.5→4.5 with charge + a gentle
+    // pulse. Self-contained OPEN_DISPS (called outside the knife block below).
     if (sGaroAttack.state == GARO_ROD_AIM) {
-        Vec3f hand = GaroAttack_HandOrigin(player);
+        Vec3f head = player->actor.focus.pos;   // head/eye point (PostLimbDraw HEAD)
+        if (head.y == 0.0f) {                   // fallback before PostLimb populates it
+            head = player->actor.world.pos;
+            head.y += 60.0f;
+        }
+        s16 ay = player->actor.focus.rot.y;
+        s16 ax = player->actor.focus.rot.x;
+        f32 cosP = Math_CosS(ax);
+        f32 fwd = 55.0f;
+        Vec3f ballPos = {
+            head.x + Math_SinS(ay) * cosP * fwd,
+            head.y + (-Math_SinS(ax)) * fwd,
+            head.z + Math_CosS(ay) * cosP * fwd,
+        };
         f32 t = (f32)sGaroAttack.rodChargeTimer / (f32)GARO_ROD_CHARGE_MAX;
         if (t > 1.0f) t = 1.0f;
         f32 scale = (1.5f + t * 3.0f) * (1.0f + 0.08f * Math_SinS(play->gameplayFrames * 0x1000));
-        GaroForm_DrawOneOrb(play, hand, scale, sGaroAttack.rodElement);
+        GaroForm_DrawOneOrb(play, ballPos, scale, sGaroAttack.rodElement);
     }
 
     // Fired rod orbs: billboarded light orb, element-tinted, size by charge
@@ -1259,6 +1345,26 @@ static void GaroForm_ResetToIdle(Player* player) {
     sGaroAttack.landStrikeFired = 0;
     sGaroAttack.landStrikeTailFrames = 0;
     sGaroAttack.hopAirTimer = 0;
+    // v10.9: tear down the rod aim camera if it was active (covers the normal
+    // release path AND any interrupt that resets to idle — damage, hard-block,
+    // scene change). Clear FIRST_PERSON + unk_6AD so Player_UpdateCamAndSeqModes
+    // resumes normal camera control, restore the camera to NORMAL, and zero the
+    // upper-body tilt. Guarded so we don't reset a player who wasn't aiming.
+    // gPlayState == play during GaroForm_Update.
+    if (sGaroAttack.rodAimActive) {
+        // Tear down the borrowed slingshot aim. Force heldItemAction off
+        // SLINGSHOT so Player_DekuBubbleCleanup's guard passes, then run it
+        // to clear sDekuBubbleActive + the aim flags and restore the camera —
+        // exactly the Deku bubble's cleanup path.
+        player->heldItemAction = PLAYER_IA_NONE;
+        player->itemAction = PLAYER_IA_NONE;
+        Player_DekuBubbleCleanup(player);
+        player->upperLimbRot.x = 0;
+        player->upperLimbRot.y = 0;
+        player->headLimbRot.x = 0;
+        player->headLimbRot.y = 0;
+        sGaroAttack.rodAimActive = 0;
+    }
     // v10.1: sidehop / backflip temporarily rotates world.rot.y to drive
     // the engine's lateral / backward motion via linearVelocity. We MUST
     // restore world.rot.y to match shape.rot.y so the next "forward
@@ -1340,10 +1446,25 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
     const u32 hardBlockMask = PLAYER_STATE1_LOADING | PLAYER_STATE1_TALKING |
                               PLAYER_STATE1_DEAD | PLAYER_STATE1_GETTING_ITEM |
                               PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_CLIMBING_LEDGE |
-                              PLAYER_STATE1_HANGING_OFF_LEDGE | PLAYER_STATE1_FIRST_PERSON |
+                              PLAYER_STATE1_HANGING_OFF_LEDGE |
                               PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_IN_ITEM_CS |
                               PLAYER_STATE1_IN_CUTSCENE;
     if (player->stateFlags1 & hardBlockMask) {
+        if (sGaroAttack.state != GARO_IDLE) {
+            GaroAttack_KillTrail(play);
+            GaroForm_ResetToIdle(player);
+        }
+        return;
+    }
+    // v10.9 FIRST_PERSON is a "soft" block: it bails to idle for every state
+    // EXCEPT GARO_ROD_AIM, which legitimately SETS FIRST_PERSON itself for the
+    // aim camera. (FIRST_PERSON was in hardBlockMask — so the moment ROD_AIM
+    // raised the flag, the next frame's guard reset to idle → "enter aim then
+    // exit instantly". This is exactly what the Deku bubble avoids by not
+    // running under such a guard.) For other states the flag still means
+    // "Link entered C-up look / bow aim" → yield.
+    if ((player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) &&
+        sGaroAttack.state != GARO_ROD_AIM) {
         if (sGaroAttack.state != GARO_IDLE) {
             GaroAttack_KillTrail(play);
             GaroForm_ResetToIdle(player);
@@ -1677,13 +1798,15 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
                 sGaroAttack.stateTimer = 0;
                 break;
             }
-            // B-press on ground → instant SWING_A. Air-B is captured by
-            // the v10 AIR_SLASH dispatcher above; this only runs when the
-            // player is grounded. Gated on rodReleaseCD so a rod release →
-            // instant B re-press doesn't loop into the slash combo.
+            // B-press on ground → tap-vs-hold detect window. A quick tap
+            // (released within GARO_B_HOLD_THRESHOLD frames) fires the slash
+            // combo; holding past the threshold enters the rod charge ball
+            // directly (no slash plays first). Air-B is captured by the v10
+            // AIR_SLASH dispatcher above; this only runs grounded. Gated on
+            // rodReleaseCD so a rod release → instant B re-press doesn't loop.
             if (bPress && onGround && sGaroAttack.rodReleaseCD == 0) {
-                GaroForm_StartSwing(play, player, GARO_SWING_1);
-                sGaroAttack.bReleasedDuringSwing = 0;
+                sGaroAttack.state = GARO_B_HOLD_DETECT;
+                sGaroAttack.bHoldDetectTimer = 0;
                 break;
             }
 
@@ -1712,8 +1835,53 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
         }
 
         // ────────────────────────────────────────────────────────────────────
+        // v10.8 B HOLD DETECT: brief window after an idle B-press. Released
+        // early → spin attack; held past the threshold → rod charge ball.
+        // PAUSE so Link doesn't roll/jump during the window.
+        // ────────────────────────────────────────────────────────────────────
+        case GARO_B_HOLD_DETECT: {
+            player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
+            player->actor.velocity.x = 0;
+            player->actor.velocity.z = 0;
+            player->linearVelocity = 0;
+            sGaroAttack.bHoldDetectTimer++;
+
+            if (!bHold) {
+                // v11: Tap → Deku-style dual-sword spin attack (replaces the
+                // old 3-slash combo). Plays garo_spinAttack; the radial spin
+                // quad sweeps at sword height for the anim duration.
+                LinkAnimationHeader* spin = GaroForm_LoadAnim(GARO_SPINATTACK_PATH);
+                if (spin != NULL) {
+                    GaroAttack_StartFormAnim(play, spin, 0.0f, -1.0f, 1.0f);
+                }
+                sGaroAttack.state = GARO_SPIN;
+                sGaroAttack.stateTimer = 0;
+                if (!sGaroAttack.trailActive) GaroAttack_SpawnTrail(play);
+                Audio_PlayActorSound2(&player->actor, NA_SE_IT_SWORD_SWING_HARD);
+                break;
+            }
+            if (sGaroAttack.bHoldDetectTimer >= GARO_B_HOLD_THRESHOLD) {
+                // Hold → rod charge ball directly. The ROD_AIM handler drives
+                // the aim camera: first-person (stick) when not Z-targeting,
+                // or aim-at-target when Z-locked. Hold the takeOutBomb pose.
+                GaroForm_LeaveRodState();
+                LinkAnimationHeader* aim = GaroForm_LoadAnim(GARO_TAKEOUTBOMB_PATH);
+                if (aim != NULL) {
+                    GaroAttack_StartFormAnim(play, aim, 0.0f, -1.0f, 1.0f);
+                }
+                // Enter the EXACT Deku-bubble aim: the OOT slingshot pipeline.
+                // It un-pauses the action func and runs the real first-person
+                // / Z-target aim (camera engages, focus.rot tracks the stick).
+                Player_StartDekuBubble(player, play);
+                sGaroAttack.rodAimActive = 1;
+                sGaroAttack.state = GARO_ROD_AIM;
+                sGaroAttack.stateTimer = 0;
+            }
+            break;
+        }
+
+        // ────────────────────────────────────────────────────────────────────
         // SWING chain: A → B (B-repress) → C (B-repress) → IDLE.
-        // Hold B continuously through SWING_A without re-pressing → ROD_AIM.
         // ────────────────────────────────────────────────────────────────────
         case GARO_SWING_1:
         case GARO_SWING_2:
@@ -1777,17 +1945,10 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             if (sGaroAttack.state == GARO_SWING_1) {
                 if (sGaroAttack.comboBPressed) {
                     GaroForm_StartSwing(play, player, GARO_SWING_2);
-                } else if (!sGaroAttack.bReleasedDuringSwing && bHold) {
-                    // Held B continuously → rod mode aim. Reset charge state
-                    // so this aim starts from 0 (rodElement persists for UI
-                    // continuity across aims).
-                    GaroForm_LeaveRodState();
-                    LinkAnimationHeader* tremble = GaroForm_LoadAnim(GARO_TREMBLE_PATH);
-                    if (tremble != NULL) {
-                        GaroAttack_StartFormAnim(play, tremble, 0.0f, -1.0f, 1.0f);
-                    }
-                    sGaroAttack.state = GARO_ROD_AIM;
                 } else {
+                    // v10.8: rod entry moved to GARO_B_HOLD_DETECT (tap-vs-hold
+                    // off the idle press). A slash that reaches its end without
+                    // a chain just returns to idle.
                     GaroForm_ResetToIdle(player);
                 }
             } else if (sGaroAttack.state == GARO_SWING_2) {
@@ -1804,39 +1965,83 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
         }
 
         // ────────────────────────────────────────────────────────────────────
-        // GARO_ROD_AIM: charge a magic orb. Held tremble anim drives the
-        // visual; rodChargeTimer ramps 0..120 to pick a damage tier on
-        // release. L cycles element backward, R forward (normal → fire →
-        // ice → light → wrap). B release plays garo_takeOutBomb for a
-        // beat and spawns the rod orb projectile via GaroAttack_SpawnRodOrb.
+        // v11 GARO_SPIN — B-tap Deku-style dual-sword spin. The radial spin
+        // quad (EnableSpinQuad, DMG_FIXED_DAMAGE) sweeps around Garo at sword
+        // height for the whole garo_spinAttack anim, then returns to idle.
+        // Replaces the old 3-slash combo on B-tap.
         // ────────────────────────────────────────────────────────────────────
-        case GARO_ROD_AIM: {
+        case GARO_SPIN: {
             player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
             player->actor.velocity.x = 0;
             player->actor.velocity.z = 0;
             player->linearVelocity = 0;
+
+            // Radial sword sweep active the whole spin. Fixed damage via the
+            // DMG_FIXED_DAMAGE flag baked into EnableSpinQuad (GARO_SPIN_DAMAGE).
+            GaroAttack_EnableSpinQuad(player, play);
+
+            s32 done = GaroAttack_AdvanceFormAnim(play, player);
+            sGaroAttack.stateTimer++;
+            if (done) {
+                player->meleeWeaponQuads[0].base.atFlags &= ~AT_ON;
+                GaroForm_ResetToIdle(player);
+            }
+            break;
+        }
+
+        // ────────────────────────────────────────────────────────────────────
+        // v10.11 GARO_ROD_AIM — borrows the OOT slingshot aim (entered via
+        // Player_StartDekuBubble, the EXACT Deku-bubble mechanism). That runs
+        // UN-paused and owns the camera + focus.rot (real first-person aim, or
+        // Z-target aim when locked-on). We do NOT pause, do NOT touch the
+        // camera, do NOT drive focus.rot — that's the whole point (the manual
+        // shortcuts never worked). We only: track charge, cycle element, hold
+        // the pose. The FIRE happens on the slingshot release via
+        // MmForm_FireDekuBubble → GaroForm_FireRodOrb (charge resets there).
+        // ────────────────────────────────────────────────────────────────────
+        case GARO_ROD_AIM: {
+            // Exit the aim on A-press (matches the Deku bubble, where A cancels
+            // aim). FilterB strips A from the slingshot's input, so OOT won't
+            // self-exit on A — we drive the exit here (GaroForm_Update reads
+            // raw input). ResetToIdle tears down the borrowed slingshot aim.
+            if (aPress) {
+                GaroForm_ResetToIdle(player);
+                sGaroAttack.rodReleaseCD = GARO_ROD_RELEASE_CD;
+                break;
+            }
+            // Also exit if the slingshot aim ended on its own (held item
+            // restored away from SLINGSHOT by some other path / cleanup).
+            if (player->heldItemAction != PLAYER_IA_SLINGSHOT) {
+                GaroForm_ResetToIdle(player);
+                break;
+            }
+
+            // B RELEASED → fire here directly (Garo reads raw input, so this is
+            // reliable). We entered ROD_AIM only after holding B ≥9 frames, so
+            // on entry B is held; the first !bHold is the deliberate release.
+            // Firing here (not via the slingshot's fire path, which needs the
+            // bow-draw counter to progress and didn't fire for Garo) guarantees
+            // the orb launches. ResetToIdle tears down the borrowed aim.
+            if (!bHold) {
+                GaroForm_FireRodOrb(player, play);
+                sGaroAttack.rodReleaseCD = GARO_ROD_RELEASE_CD;
+                GaroForm_ResetToIdle(player);
+                break;
+            }
 
             sGaroAttack.stateTimer++;
             if (sGaroAttack.rodChargeTimer < GARO_ROD_CHARGE_MAX) {
                 sGaroAttack.rodChargeTimer++;
             }
 
-            // Latched "fully charged" SFX so the player gets audio feedback
-            // when the max tier unlocks. Plays exactly once per aim.
+            // Fully-charged SFX latch (one shot when max tier unlocks).
             if (!sGaroAttack.rodSfxPlayed &&
                 sGaroAttack.rodChargeTimer >= GARO_ROD_CHARGE_TIER4) {
                 Audio_PlayActorSound2(&player->actor, NA_SE_IT_MAGIC_ARROW_SHOT);
                 sGaroAttack.rodSfxPlayed = 1;
             }
 
-            // Element cycling — BTN_L (prev) / BTN_R (next). Pattern
-            // mirrored from ArrowCycle.cpp:RegisterArrowCycle. BTN_L/BTN_R
-            // are NOT stripped by TransformMasks_FilterB (that filter only
-            // strips B for Garo), so we read them from the raw
-            // play->state.input[0] copy. This is safe because the cycle
-            // only triggers in GARO_ROD_AIM state, which only exists when
-            // Garo is the active form and B is being held — vanilla
-            // bow-aim L/R cycling can't be live at the same time.
+            // Element cycling — BTN_L (prev) / BTN_R (next).
             if (CHECK_BTN_ALL(input->press.button, BTN_L)) {
                 sGaroAttack.rodElement =
                     (sGaroAttack.rodElement + GARO_ROD_ELEMENT_COUNT - 1) % GARO_ROD_ELEMENT_COUNT;
@@ -1848,29 +2053,9 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
                 Audio_PlayActorSound2(&player->actor, NA_SE_SY_DECIDE);
             }
 
-            // B released → fire the orb.
-            if (!bHold) {
-                u8  dmg     = GaroAttack_GetRodDamage(sGaroAttack.rodChargeTimer);
-                u32 dmgFlag = GaroAttack_GetRodDmgFlag(sGaroAttack.rodElement);
-
-                // Play the "take out bomb" anim as a brief release pose so
-                // the orb-spawn moment reads visually instead of snapping
-                // back to idle. The anim runs once; we transition to IDLE
-                // after spawning so subsequent input flows normally.
-                LinkAnimationHeader* release = GaroForm_LoadAnim(GARO_TAKEOUTBOMB_PATH);
-                if (release != NULL) {
-                    GaroAttack_StartFormAnim(play, release, 0.0f, -1.0f, 1.5f);
-                }
-
-                GaroAttack_SpawnRodOrb(player, sGaroAttack.rodElement, dmg, dmgFlag);
-                Audio_PlayActorSound2(&player->actor, NA_SE_IT_SWORD_SWING_HARD);
-
-                GaroForm_LeaveRodState();
-                // Block IDLE's B-press → SWING_1 re-entry for a few frames so
-                // a release → rapid re-press doesn't loop into the slash combo.
-                sGaroAttack.rodReleaseCD = GARO_ROD_RELEASE_CD;
-                GaroForm_ResetToIdle(player);
-            }
+            // Hold the takeOutBomb pose (body). The slingshot aim owns the
+            // camera; the form skel anime drives Garo's visible body pose.
+            (void)GaroAttack_AdvanceFormAnim(play, player);
             break;
         }
 

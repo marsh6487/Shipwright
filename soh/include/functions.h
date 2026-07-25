@@ -2051,7 +2051,7 @@ void AudioSeq_SkipForwardSequence(SequencePlayer* seqPlayer);
 void AudioSeq_ResetSequencePlayer(SequencePlayer* seqPlayer);
 void AudioSeq_InitSequencePlayerChannels(s32 playerIdx);
 void AudioSeq_InitSequencePlayers(void);
-void func_800ECC04(u16);
+void func_800ECC04(u32); // Skijer's NEI: widened (MM/custom song bits 16-25)
 void Audio_OcaSetInstrument(u8);
 void Audio_OcaSetSongPlayback(s8 songIdxPlusOne, s8 playbackState);
 void Audio_OcaSetRecordingState(u8);

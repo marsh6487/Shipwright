@@ -399,6 +399,9 @@ void RegisterChateauRomaniMessage() {
     COND_ID_HOOK(OnOpenText, 0x9214, true, BuildChateauRomaniMessage);
 }
 
+// (Fleet Ship Combo: the old Happy Mask Shop "Travel to Termina?" prompt (0x9215) was removed —
+// the blue warp is now a Door_Ana hole; falling in IS the confirmation.)
+
 static RegisterShipInitFunc initFunc(RegisterItemMessages, { "IS_RANDO" });
 static RegisterShipInitFunc initTimeGate(RegisterTimeGateMessage);
 static RegisterShipInitFunc initChateau(RegisterChateauRomaniMessage);

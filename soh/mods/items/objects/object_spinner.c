@@ -9,7 +9,10 @@
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
-#include "spinner_giveDL/header.h"
+
+// Spinner 3D model lives in soh.o2r (object_nei_spinner). No inline C model.
+extern u8 ResourceMgr_FileExists(const char* resName);
+extern Gfx* ResourceMgr_LoadGfxByName(const char* path);
 
 // ============================================================================
 // DRAW FUNCTION CALLER
@@ -17,6 +20,18 @@
 
 void CustomItems_DrawSpinner(Player* this, PlayState* play) {
     if (gCustomItemState.spinnerActive) {
+        static Gfx* sDL = NULL;
+        static u8 sTried = 0;
+        if (!sTried) {
+            sTried = 1;
+            const char* otr = "__OTR__objects/object_nei_spinner/n0b0_opaque_dl";
+            if (ResourceMgr_FileExists(otr)) {
+                sDL = ResourceMgr_LoadGfxByName(otr);
+            }
+        }
+        if (sDL == NULL)
+            return;
+
         OPEN_DISPS(play->state.gfxCtx);
 
         // Position the spinner at the player's location
@@ -36,7 +51,7 @@ void CustomItems_DrawSpinner(Player* this, PlayState* play) {
         // Apply the generated matrix to the display list
         gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
                   G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-        gSPDisplayList(POLY_OPA_DISP++, g_spinner_dl);
+        gSPDisplayList(POLY_OPA_DISP++, sDL);
 
         CLOSE_DISPS(play->state.gfxCtx);
     }

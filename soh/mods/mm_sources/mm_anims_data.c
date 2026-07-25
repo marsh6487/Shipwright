@@ -718,6 +718,11 @@ const MmAnimDef gMmAnims[MM_ANIM_MAX] = {
     // default idle anim while wearing the mask. ~80 frames per MM analysis.
     [MM_ANIM_CL_MSBOWAIT] = LINK_ANIM("gPlayerAnim_cl_msbowait", 80),
 
+    // Giant's Mask: child Link mask-on cutscene (hands to face). FrameCounts from
+    // MM decomp link_animetion.xml (cl_setmask=66, cl_setmaskend=3).
+    [MM_ANIM_CL_SETMASK]    = LINK_ANIM("gPlayerAnim_cl_setmask", 66),
+    [MM_ANIM_CL_SETMASKEND] = LINK_ANIM("gPlayerAnim_cl_setmaskend", 3),
+
     // Remaining animations use placeholder definitions
     // Each entry that isn't explicitly defined will have NULL path and 0 frames
 };

@@ -9,6 +9,7 @@
 #include "mods/transformation_masks/assets/mm_asset_loader.h"
 #include "mods/transformation_masks/gerudo_form.h"
 #include "mods/transformation_masks/boss_super_damage.h"
+#include "mods/items/logic/weapon_upgrades.h" // NEI Real Master Sword super-damage
 #include "mods/o2r_loader/o2r_loader.h"
 #include "overlays/effects/ovl_Effect_Ss_Fhg_Flash/z_eff_ss_fhg_flash.h"
 #include "functions.h"
@@ -525,11 +526,33 @@ extern u8 Sm64Mario_IsSuperAttacking(void);
 extern u8 Sm64Mario_FireballActive(void);
 extern u8 Sm64Mario_FireballNear(Vec3f* pos, f32 range);
 
+// NEI Real Master Sword: at FULL health the Master Sword fires the FD thunder beam, so it counts
+// as a super attack just like Fierce Deity — the reworked bosses take super damage from the beam
+// (and from a full-health Master Sword hit). Persistent while the conditions hold; the bosses AND
+// this with an actual AC_HIT / reach test, so merely standing near a boss never triggers it.
+static u8 BsdRealMasterSwordActive(PlayState* play) {
+    Player* player = (play != NULL) ? GET_PLAYER(play) : NULL;
+    if (player == NULL) {
+        return 0;
+    }
+    return WeaponUpgrade_HasTrueMaster() && (player->heldItemAction == PLAYER_IA_SWORD_MASTER) &&
+                   (gSaveContext.health >= gSaveContext.healthCapacity)
+               ? 1
+               : 0;
+}
+
 u8 BossSuperDamage_IsActive(PlayState* play) {
     // SM64 Mario: the spin counts as a super attack (only bosses query this, so
     // it's implicitly boss-room-gated).
     if (Sm64Mario_IsSuperAttacking()) {
         return 1;
+    }
+    // NEI Real Master Sword: super attack while swinging at full health (the beam frame).
+    if (BsdRealMasterSwordActive(play)) {
+        Player* msPlayer = GET_PLAYER(play);
+        if (msPlayer != NULL && msPlayer->meleeWeaponState != 0) {
+            return 1;
+        }
     }
     // Fire Flower: a fireball in flight counts as a super attack so the fire can
     // break/kill bosses (gated naturally — fireballs only exist while throwing fire).
@@ -556,7 +579,10 @@ u8 BossSuperDamage_IsFormActive(PlayState* play) {
     // Persistent: true the whole time the player is in FD form or Pika Gigantamax
     // mode, regardless of whether a swing is active this exact frame. For
     // contact/AT-based boss triggers where the hit is read one frame late.
-    (void)play;
+    // NEI Real Master Sword counts the whole time the full-health beam can be in flight.
+    if (BsdRealMasterSwordActive(play)) {
+        return 1;
+    }
     // gPikaGigantamaxMode is ANDed with the authoritative form-state check: it's
     // only a mirror of sPika.gigantamax refreshed while PikachuForm_Update runs, so
     // it can stay latched at 1 after leaving Pika form (e.g. if Cleanup didn't run).
@@ -613,9 +639,10 @@ u8 BossSuperDamage_FormAttackReaches(PlayState* play, Vec3f* targetPos, f32 rang
         return 1;
     }
 
-    // Must be in a super form (FD or Pika Gigantamax) for ANY of this to fire, so
-    // normal play / the boomerang regression path is never affected.
-    if (!(MmForm_IsPikachuActive() && gPikaGigantamaxMode) && !MmForm_IsFDSkinMode()) {
+    // Must be in a super form (FD or Pika Gigantamax) — or wielding the full-health Real Master
+    // Sword — for ANY of this to fire, so normal play / the boomerang regression is never affected.
+    if (!(MmForm_IsPikachuActive() && gPikaGigantamaxMode) && !MmForm_IsFDSkinMode() &&
+        !BsdRealMasterSwordActive(play)) {
         return 0;
     }
 
@@ -670,6 +697,11 @@ f32 BossSuperDamage_FormAttackRange(PlayState* play) {
         u8 fullHealth = (gSaveContext.health >= gSaveContext.healthCapacity);
         return fullHealth ? BSD_REACH_RANGED : BSD_REACH_MELEE;
     }
+
+    // NEI Real Master Sword: the full-health beam is a ranged super attack.
+    if (BsdRealMasterSwordActive(play)) {
+        return BSD_REACH_RANGED;
+    }
     return 0.0f;
 }
 
@@ -685,6 +717,10 @@ u8 BossSuperDamage_FormDamage(PlayState* play) {
     }
     if (MmForm_IsPikachuActive() && gPikaGigantamaxMode) {
         return 8;
+    }
+    // NEI Real Master Sword: same per-hit super damage as Fierce Deity.
+    if (BsdRealMasterSwordActive(play)) {
+        return 4;
     }
     return 4;
 }

@@ -21,7 +21,9 @@
 
 #define FS_CHARGE_HOLD 15 // frames R+B held to arm charge
 #define FS_CLONE_MAX 3
-#define FS_CLONE_MP_COST 12       // MP per clone (36 total)
+// MP per clone (36 total; HALVED by the Magic Cape passive via MAGIC_REQ -> 18 total,
+// matching commit 10a66533's "Spawns 3 clones (18 MP)")
+#define FS_CLONE_MP_COST MAGIC_REQ(12)
 #define FS_FORMATION_RADIUS 80.0f // equilateral triangle radius (units)
 
 #define FS_AC_RADIUS 18

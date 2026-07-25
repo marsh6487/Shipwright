@@ -1027,6 +1027,76 @@ OcarinaNote sOcarinaSongs[OCARINA_SONG_MAX][20] = {
         { 2, 0, 3, 0, 0, 0, 0 },
         { 0xFF, 0, 0, 0, 0, 0, 0 },
     },
+
+    // Skijer's NEI: MM-unique songs brought to OoT's quest page (real MM note data, pitch table shared:
+    // 2=D4,5=F4,9=A4,11=B4,14=D5). Format = OoT { pitch, unk, length, volume, vibrato, bend, bFlat }.
+    // OCARINA_SONG_MM_SONATA
+    {
+        { 14, 0, 19, 92, 0, 0, 0 }, { 11, 0, 19, 90, 0, 0, 0 }, { 14, 0, 19, 90, 0, 0, 0 },
+        { 11, 0, 38, 90, 0, 0, 0 }, { 2, 0, 39, 92, 0, 0, 0 },  { 9, 0, 76, 89, 0, 0, 0 },
+        { 2, 0, 77, 82, 0, 0, 0 },  { 0xFF, 0, 0, 86, 0, 0, 0 },
+    },
+    // OCARINA_SONG_MM_GORON_LULLABY
+    {
+        { 2, 0, 41, 80, 0, 0, 0 },  { 9, 0, 40, 72, 0, 0, 0 },  { 11, 0, 39, 84, 0, 0, 0 },
+        { 2, 0, 42, 76, 0, 0, 0 },  { 9, 0, 40, 84, 0, 0, 0 },  { 11, 0, 39, 76, 0, 0, 0 },
+        { 9, 0, 41, 84, 0, 0, 0 },  { 2, 0, 80, 76, 0, 0, 0 },  { 0xFF, 0, 40, 76, 0, 0, 0 },
+        { 0xFF, 0, 0, 66, 0, 0, 0 },
+    },
+    // OCARINA_SONG_MM_NEW_WAVE
+    {
+        { 11, 0, 64, 74, 0, 0, 0 }, { 14, 0, 13, 88, 0, 0, 0 }, { 11, 0, 12, 90, 0, 0, 0 },
+        { 9, 0, 78, 88, 0, 0, 0 },  { 5, 0, 12, 76, 0, 0, 0 },  { 11, 0, 13, 76, 0, 0, 0 },
+        { 9, 0, 114, 76, 6, 0, 0 }, { 0xFF, 0, 0, 90, 0, 0, 0 },
+    },
+    // OCARINA_SONG_MM_ELEGY
+    {
+        { 9, 0, 85, 93, 0, 0, 0 },  { 11, 0, 43, 91, 0, 0, 0 }, { 9, 0, 43, 93, 0, 0, 0 },
+        { 5, 0, 21, 88, 0, 0, 0 },  { 9, 0, 21, 88, 0, 0, 0 },  { 14, 0, 43, 101, 0, 0, 0 },
+        { 11, 0, 85, 95, 0, 0, 0 }, { 0xFF, 0, 0, 94, 0, 0, 0 },
+    },
+    // OCARINA_SONG_MM_OATH
+    {
+        { 9, 0, 97, 104, 0, 0, 0 }, { 5, 0, 48, 88, 0, 0, 0 },  { 2, 0, 49, 78, 0, 0, 0 },
+        { 5, 0, 49, 78, 0, 0, 0 },  { 9, 0, 48, 94, 0, 0, 0 },  { 14, 0, 97, 100, 0, 0, 0 },
+        { 0xFF, 0, 0, 96, 0, 0, 0 },
+    },
+    // OCARINA_SONG_MM_SOARING
+    {
+        { 5, 0, 18, 84, 0, 0, 0 },  { 11, 0, 18, 80, 0, 0, 0 }, { 14, 0, 36, 94, 0, 0, 0 },
+        { 5, 0, 18, 73, 0, 0, 0 },  { 11, 0, 18, 76, 0, 0, 0 }, { 14, 0, 108, 96, 2, 0, 0 },
+        { 0xFF, 0, 0, 90, 0, 0, 0 },
+    },
+    // OCARINA_SONG_MM_HEALING
+    {
+        { 11, 0, 32, 88, 0, 0, 0 }, { 9, 0, 33, 88, 0, 0, 0 },  { 5, 0, 33, 69, 0, 0, 0 },
+        { 11, 0, 32, 94, 0, 0, 0 }, { 9, 0, 33, 88, 0, 0, 0 },  { 5, 0, 121, 86, 2, 0, 0 },
+        { 0xFF, 0, 10, 84, 0, 0, 0 }, { 0xFF, 0, 0, 90, 0, 0, 0 },
+    },
+
+    // Skijer's NEI custom songs (mirror of the 2ship side; fingering = the base notes, playback may add
+    // ornament/cycle notes). OCARINA_SONG_NEI_FUGUE_OF_HOME — 6-note base played 3 rising cycles.
+    {
+        { 2, 0, 10, 86, 0, 0, 0 },  { 5, 0, 10, 86, 0, 0, 0 },  { 9, 0, 10, 88, 0, 0, 0 },
+        { 14, 0, 10, 88, 0, 0, 0 }, { 9, 0, 10, 88, 0, 0, 0 },  { 11, 0, 10, 90, 0, 0, 0 },
+        { 4, 0, 10, 86, 0, 0, 0 },  { 7, 0, 10, 86, 0, 0, 0 },  { 11, 0, 10, 88, 0, 0, 0 },
+        { 16, 0, 10, 88, 0, 0, 0 }, { 11, 0, 10, 88, 0, 0, 0 }, { 13, 0, 10, 90, 0, 0, 0 },
+        { 6, 0, 10, 88, 0, 0, 0 },  { 9, 0, 10, 88, 0, 0, 0 },  { 13, 0, 10, 90, 0, 0, 0 },
+        { 18, 0, 10, 90, 0, 0, 0 }, { 13, 0, 10, 90, 0, 0, 0 }, { 15, 0, 40, 92, 0, 0, 0 },
+        { 0xFF, 0, 0, 90, 0, 0, 0 },
+    },
+    // OCARINA_SONG_NEI_COMMAND_MELODY
+    {
+        { 2, 0, 40, 86, 0, 0, 0 },  { 11, 0, 40, 86, 0, 0, 0 }, { 2, 0, 40, 86, 0, 0, 0 },
+        { 9, 0, 80, 90, 0, 0, 0 },  { 2, 0, 40, 86, 0, 0, 0 },  { 11, 0, 40, 86, 0, 0, 0 },
+        { 2, 0, 40, 86, 0, 0, 0 },  { 9, 0, 80, 90, 0, 0, 0 },  { 0xFF, 0, 0, 90, 0, 0, 0 },
+    },
+    // OCARINA_SONG_NEI_BALLAD_OF_HERO (185 BPM, ornament eighth on note 4)
+    {
+        { 2, 0, 19, 86, 0, 0, 0 },  { 5, 0, 19, 86, 0, 0, 0 },  { 14, 0, 58, 90, 0, 0, 0 },
+        { 12, 0, 10, 88, 0, 0, 0 }, { 11, 0, 10, 88, 0, 0, 0 }, { 9, 0, 39, 90, 0, 0, 0 },
+        { 11, 0, 19, 88, 0, 0, 0 }, { 9, 0, 58, 92, 0, 0, 0 },  { 0xFF, 0, 0, 90, 0, 0, 0 },
+    },
 };
 
 OcarinaNote* sPlaybackSong = sOcarinaSongs[0];
@@ -1185,6 +1255,39 @@ OcarinaSongInfo gOcarinaSongNotes[OCARINA_SONG_MAX] = {
     { 8, { 0, 0, 0, 0, 0, 0, 0, 0 } },
     // Lost Woods Memory Game
     { 0, { 0, 0, 0, 0, 0, 0, 0, 0 } },
+
+    // Skijer's NEI: MM-unique + custom song RECOGNITION note sequences (the fingering; playback in
+    // sOcarinaSongs may add ornament/cycle notes but the player plays only these).
+    // MM Sonata
+    { 7, { OCARINA_NOTE_D5, OCARINA_NOTE_B4, OCARINA_NOTE_D5, OCARINA_NOTE_B4, OCARINA_NOTE_D4,
+           OCARINA_NOTE_A4, OCARINA_NOTE_D4 } },
+    // MM Goron Lullaby
+    { 8, { OCARINA_NOTE_D4, OCARINA_NOTE_A4, OCARINA_NOTE_B4, OCARINA_NOTE_D4, OCARINA_NOTE_A4,
+           OCARINA_NOTE_B4, OCARINA_NOTE_A4, OCARINA_NOTE_D4 } },
+    // MM New Wave Bossa Nova
+    { 7, { OCARINA_NOTE_B4, OCARINA_NOTE_D5, OCARINA_NOTE_B4, OCARINA_NOTE_A4, OCARINA_NOTE_F4,
+           OCARINA_NOTE_B4, OCARINA_NOTE_A4 } },
+    // MM Elegy of Emptiness
+    { 7, { OCARINA_NOTE_A4, OCARINA_NOTE_B4, OCARINA_NOTE_A4, OCARINA_NOTE_F4, OCARINA_NOTE_A4,
+           OCARINA_NOTE_D5, OCARINA_NOTE_B4 } },
+    // MM Oath to Order
+    { 6, { OCARINA_NOTE_A4, OCARINA_NOTE_F4, OCARINA_NOTE_D4, OCARINA_NOTE_F4, OCARINA_NOTE_A4,
+           OCARINA_NOTE_D5 } },
+    // MM Song of Soaring
+    { 6, { OCARINA_NOTE_F4, OCARINA_NOTE_B4, OCARINA_NOTE_D5, OCARINA_NOTE_F4, OCARINA_NOTE_B4,
+           OCARINA_NOTE_D5 } },
+    // MM Song of Healing
+    { 6, { OCARINA_NOTE_B4, OCARINA_NOTE_A4, OCARINA_NOTE_F4, OCARINA_NOTE_B4, OCARINA_NOTE_A4,
+           OCARINA_NOTE_F4 } },
+    // NEI Fugue of Home (6-note base)
+    { 6, { OCARINA_NOTE_D4, OCARINA_NOTE_F4, OCARINA_NOTE_A4, OCARINA_NOTE_D5, OCARINA_NOTE_A4,
+           OCARINA_NOTE_B4 } },
+    // NEI Command Melody
+    { 8, { OCARINA_NOTE_D4, OCARINA_NOTE_B4, OCARINA_NOTE_D4, OCARINA_NOTE_A4, OCARINA_NOTE_D4,
+           OCARINA_NOTE_B4, OCARINA_NOTE_D4, OCARINA_NOTE_A4 } },
+    // NEI Ballad of Hero (7-note fingering; ornament is playback-only)
+    { 7, { OCARINA_NOTE_D4, OCARINA_NOTE_F4, OCARINA_NOTE_D5, OCARINA_NOTE_B4, OCARINA_NOTE_A4,
+           OCARINA_NOTE_B4, OCARINA_NOTE_A4 } },
 };
 // clang-format on
 
@@ -1241,12 +1344,12 @@ u8 sOcarinaSongAppendPos;
 u8 sOcarinaHasStartedSong;
 u8 sOcarinaSongNoteStartIdx;
 u8 sOcarinaSongCnt;
-u16 sOcarinaAvailSongs;
+u32 sOcarinaAvailSongs; // Skijer's NEI: was u16 — MM/custom songs live at bits 14-23
 u8 sStaffPlayingPos;
-u16 sLearnSongPos[0x10];
-u16 D_8016BA50[0x10];
-u16 D_8016BA70[0x10];
-u8 sLearnSongExpectedNote[0x10];
+u16 sLearnSongPos[OCARINA_SONG_MAX];      // Skijer's NEI: were [0x10] — slots 16-23 would OOB
+u16 D_8016BA50[OCARINA_SONG_MAX];
+u16 D_8016BA70[OCARINA_SONG_MAX];
+u8 sLearnSongExpectedNote[OCARINA_SONG_MAX];
 OcarinaNote D_8016BAA0;
 u8 sAudioHasMalonBgm;
 f32 sAudioMalonBgmDist;
@@ -1387,19 +1490,22 @@ void func_800ECB7C(u8 songIdx) {
 }
 
 // start ocarina.
-void func_800ECC04(u16 flg) {
+// Skijer's NEI: widened to u32. OoT's original flag word was 16-bit: song bits 0-13, mode flags
+// 0x4000/0x8000, sentinel 0xFFFF. The MM/custom songs (slots 14-23) are encoded in PARAMETER bits
+// 16-25 (skipping the mode bits) and remapped to internal availability bits 14-23 below.
+void func_800ECC04(u32 flg) {
     u8 i;
 
     if ((sOcarinaSongs[OCARINA_SONG_SCARECROW][1].volume != 0xFF) && ((flg & 0xFFF) == 0xFFF)) {
         flg |= 0x1000;
     }
 
-    if ((flg == 0xCFFF) && (sOcarinaSongs[OCARINA_SONG_SCARECROW][1].volume != 0xFF)) {
-        flg = 0xDFFF;
+    if (((flg & 0xFFFF) == 0xCFFF) && (sOcarinaSongs[OCARINA_SONG_SCARECROW][1].volume != 0xFF)) {
+        flg = (flg & ~0xFFFFu) | 0xDFFF;
     }
 
-    if ((flg == 0xFFF) && (sOcarinaSongs[OCARINA_SONG_SCARECROW][1].volume != 0xFF)) {
-        flg = 0x1FFF;
+    if (((flg & 0xFFFF) == 0xFFF) && (sOcarinaSongs[OCARINA_SONG_SCARECROW][1].volume != 0xFF)) {
+        flg = (flg & ~0xFFFFu) | 0x1FFF;
     }
 
     if (flg != 0xFFFF) {
@@ -1409,7 +1515,11 @@ void func_800ECC04(u16 flg) {
         if (flg != 0xA000) {
             sOcarinaSongCnt--;
         }
-        sOcarinaAvailSongs = flg & 0x3FFF;
+        // Param bits 16-25 (MM/custom songs) → internal availability bits 14-23; scan up to them.
+        sOcarinaAvailSongs = (flg & 0x3FFF) | ((flg >> 2) & 0x00FFC000);
+        if (flg & 0x03FF0000) {
+            sOcarinaSongCnt = OCARINA_SONG_MAX;
+        }
         D_8013187C = 8;
         sOcarinaHasStartedSong = 0;
         D_80131878 = 0;
@@ -1417,7 +1527,7 @@ void func_800ECC04(u16 flg) {
         sPlayingStaff.state = Audio_OcaGetPlayingState();
         sOcarinaInpEnabled = 1;
         D_80130F4C = 0;
-        for (i = 0; i < 0xE; i++) {
+        for (i = 0; i < OCARINA_SONG_MAX; i++) {
             sLearnSongPos[i] = 0;
             D_8016BA50[i] = 0;
             D_8016BA70[i] = 0;
@@ -1449,7 +1559,7 @@ void func_800ECDBC(void) {
 }
 
 void func_800ECDF8(void) {
-    u16 sh;
+    u32 sh; // Skijer's NEI: was u16 — MM/custom song bits reach 23
     u16 pad;
     u8 inputChanged = 0;
     u16 pad2;
@@ -1471,7 +1581,7 @@ void func_800ECDF8(void) {
         // clang-format on
 
         for (i = sOcarinaSongNoteStartIdx; i < sOcarinaSongCnt; i++) {
-            sh = 1 << i;
+            sh = 1u << i;
             if (sOcarinaAvailSongs & sh) {
                 D_8016BA50[i] = D_8016BA70[i] + 0x12;
                 if (inputChanged) {
@@ -1578,7 +1688,7 @@ void func_800ED200(void) {
             }
 
             for (i = sOcarinaSongNoteStartIdx; i < sOcarinaSongCnt; i++) {
-                if (sOcarinaAvailSongs & (u16)(1 << i)) {
+                if (sOcarinaAvailSongs & (1u << i)) {
                     for (j = 0, k = 0;
                          j < gOcarinaSongNotes[i].len && k == 0 && sOcarinaSongAppendPos >= gOcarinaSongNotes[i].len;) {
                         temp_v0 = sCurOcarinaSong[(sOcarinaSongAppendPos - gOcarinaSongNotes[i].len) + j];
@@ -1736,7 +1846,11 @@ void Audio_OcaSetSongPlayback(s8 songIdxPlusOne, s8 playbackState) {
         return;
     }
 
-    if (songIdxPlusOne < 0xF) {
+    // Skijer's NEI: was `< 0xF` (15) — that treated every song index >= 14 as the scarecrow's long
+    // song (sPierresSong), so the new MM/custom songs (slots 14-23, songIdxPlusOne 15-24) played the
+    // WRONG data (short/silent) instead of their melody. Only the actual scarecrow-long sentinel
+    // (OCARINA_SONG_SCARECROW_LONG + 1 = MAX + 1) uses Pierre's song now.
+    if (songIdxPlusOne <= OCARINA_SONG_MAX) {
         sPlaybackSong = sOcarinaSongs[songIdxPlusOne - 1];
     } else {
         sPlaybackSong = sPierresSong;
@@ -1998,7 +2112,22 @@ void Audio_OcaUpdateDisplayedStaff(void) {
 
     sDisplayedStaff.state = sPlaybackState;
 
-    if (sPlaybackSong != sPierresSong) {
+    // Skijer's NEI: custom songs may PLAY more notes than their fingering (Fugue's 18-note rising
+    // cycles, Ballad's ornament eighths) — the UI must only ever show the song's OWN fingering notes.
+    // Clamp the staff pos at the fingering length and drive the shown note from the fingering, not
+    // the sounding pitch (mirror of the 2ship-side fix; also keeps the message note buffer in bounds).
+    if ((sPlaybackSong == sOcarinaSongs[OCARINA_SONG_NEI_FUGUE_OF_HOME]) ||
+        (sPlaybackSong == sOcarinaSongs[OCARINA_SONG_NEI_BALLAD_OF_HERO])) {
+        u8 neiSongIdx = (sPlaybackSong == sOcarinaSongs[OCARINA_SONG_NEI_FUGUE_OF_HOME])
+                            ? OCARINA_SONG_NEI_FUGUE_OF_HOME
+                            : OCARINA_SONG_NEI_BALLAD_OF_HERO;
+        u8 neiLen = gOcarinaSongNotes[neiSongIdx].len;
+
+        sDisplayedStaff.pos = (sStaffPlaybackPos < neiLen) ? sStaffPlaybackPos : neiLen;
+        if (sDisplayedStaff.pos >= 1) {
+            sDisplayedStaff.noteIdx = gOcarinaSongNotes[neiSongIdx].notesIdx[sDisplayedStaff.pos - 1];
+        }
+    } else if (sPlaybackSong != sPierresSong) {
         sDisplayedStaff.pos = sStaffPlaybackPos;
     } else if (sStaffPlaybackPos == 0) {
         sDisplayedStaff.pos = 0;

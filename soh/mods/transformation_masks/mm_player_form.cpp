@@ -96,6 +96,17 @@ extern "C" void FB_WriteFramebufferSliceToCPU(Gfx** gfxp, void* buffer, u8 byteS
 // bgCheckFlags bit 0 = on ground (OOT has no named macro for this)
 #define MMFORM_ON_GROUND(player) ((player)->actor.bgCheckFlags & 1)
 
+// Gerudo "Monster Hunter Rise / Dual Blades" combat controller. Implementation
+// lives in gerudo_mhr_combat.inc.c (text-included at the END of this file, inside
+// the same extern "C" block so the static linkage matches these forward decls).
+// MmForm_GerudoMhrUpdate runs at the top of the action dispatch and returns 1
+// when it is driving a combat move this frame (skip the goron dispatch).
+// MmForm_GerudoMhrReset clears its state on detransform.
+extern "C" {
+static u8 MmForm_GerudoMhrUpdate(Player* player, PlayState* play);
+static void MmForm_GerudoMhrReset(void);
+}
+
 // Jump parameters (from OOT REG(19)/100 = 500/100 = 5.0)
 #define MMFORM_JUMP_VELOCITY 5.0f
 
@@ -1146,6 +1157,8 @@ static MmPlayerTransformation sPendingReactivateForm = MM_PLAYER_FORM_HUMAN;
 static u8 sPendingReactivate = 0;
 static u8 sForceInstantTransform = 0; // Set to 1 for scene-transition reactivation
 static u8 sPendingSoftReload = 0;     // Set to 1 for seamless scene-transition reload (no flash)
+static s8 sFleetPendingForm = -1;     // Fleet Ship Combo: form to force after a cross-game arrival
+                                      // (-1 none; 0..4 MM playerForm). Consumed in MmForm_Update.
 
 // Saved equips for pre-transform state (like vanilla child/adult equip swap)
 static ItemEquips sPreTransformEquips;
@@ -1309,7 +1322,7 @@ static void MmForm_RestoreEquips(PlayState* play) {
         u8 slot = gSaveContext.equips.cButtonSlots[i - 1];
         if (slot < 72 && slot != SLOT_NONE) {
             if ((item >= ITEM_BOTTLE && item <= ITEM_POE) || (item >= ITEM_WEIRD_EGG && item <= ITEM_CLAIM_CHECK)) {
-                gSaveContext.equips.buttonItems[i] = gSaveContext.inventory.items[slot];
+                gSaveContext.equips.buttonItems[i] = ExtInv_GetSlotItem(slot); // Skijer's NEI
             }
         }
 
@@ -2139,6 +2152,7 @@ extern "C" void GaroForm_DrawNullBody(PlayState* play, Player* player, s32 lod);
 extern "C" LinkAnimationHeader* GaroForm_LoadAnimPublic(const char* path);
 extern "C" u8   GaroForm_GetPrevJumping(void);
 extern "C" void GaroForm_SetPrevJumping(u8 v);
+extern "C" u8   GaroForm_IsRodAiming(void);
 // Garo's draw path runs through z_player.c's O2rLoader hook
 // (GaroForm_TryDrawSmoothSkin), NOT through the MM form system — the
 // Garo Mask activates via ITEM_MM_MASK_GARO → O2rLoader_ForceModel("garo")
@@ -2977,7 +2991,17 @@ static void MmForm_ApplyFormProperties(Player* player, MmPlayerTransformation fo
 // Forward decl — definition is further down with the other SFX helpers.
 static void MmForm_StopGoronRollSfx(void);
 
+// True while the Goron ball owns PLAYER_STATE3_PAUSE_ACTION_FUNC. Ownership tracking
+// (the sGohtNoSnapOwned pattern from boss_remains.cpp) so the safety net only ever
+// clears the PAUSE *we* set — shield/swim/jump-kick set it for their own reasons and
+// must never be stomped, and a stray clear-vs-leak here is a freeze either way.
+// Declared here, above MmForm_RestoreOotState, because that is the first user.
+static u8 sRollOwnsPause = 0;
+
 static void MmForm_RestoreOotState(Player* player) {
+    // Clear Gerudo MHR combat state (wirebugs / demon / homing) on every full
+    // form-exit so re-equipping the mask starts clean.
+    MmForm_GerudoMhrReset();
     // Stop any form-specific looping SFX that the seq engine would auto-mute
     // in MM but our MmDirectAudio path leaves running. Called on every full
     // form-exit (detransform cutscene, death, mask-clear) so the loops never
@@ -3044,6 +3068,12 @@ static void MmForm_RestoreOotState(Player* player) {
     player->stateFlags2 &=
         ~(PLAYER_STATE2_DISABLE_ROTATION_Z_TARGET | PLAYER_STATE2_DISABLE_ROTATION_ALWAYS | PLAYER_STATE2_DISABLE_DRAW);
     player->actor.bgCheckFlags &= ~0x800;
+    // Release the ball's actionFunc pause if the form is torn down mid-roll — leaking
+    // it here would leave OOT's actionFunc permanently blocked (a hard freeze).
+    if (sRollOwnsPause) {
+        player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
+        sRollOwnsPause = 0;
+    }
     // Restore OOT input (may have been blocked during roll) and camera state
     player->stateFlags1 &= ~(PLAYER_STATE1_INPUT_DISABLED | PLAYER_STATE1_JUMPING);
     // Reset shape rotation (may be left over from ball rolling)
@@ -4237,11 +4267,14 @@ static const u8 sGerudoStationaryFrames[][2] = {
 // Damage values (from 2Ship D_8085D09C collider setup)
 // Goron: { DMG_GORON_PUNCH, 2, 2, 0, 0 } → transformed damage = 0, but vanilla uses 2
 // Zora: { DMG_ZORA_PUNCH, 1, 2, 0, 0 } → normal=1, strong=2
-// Gerudo: Master Sword tier per the spec. Hits 1+2 = 2 hearts, finisher = 4 (AOE x2).
+// Gerudo: Kokiri Sword tier per the spec. The DMG_SLASH_KOKIRI flag (set on the
+// sword quads) makes each enemy's damage table apply its Kokiri-sword row, so the
+// damage matches a vanilla Kokiri slash exactly. These numeric values are only the
+// fallback for actors WITHOUT a damage table (Kokiri = half the old Master values).
 #define GORON_PUNCH_DAMAGE 2
 #define ZORA_PUNCH_DAMAGE 1
-#define GERUDO_SLASH_DAMAGE 4
-#define GERUDO_FINISHER_DAMAGE 8
+#define GERUDO_SLASH_DAMAGE 2
+#define GERUDO_FINISHER_DAMAGE 4
 
 // Get attack animation for combo step
 static LinkAnimationHeader* MmForm_GetPunchAttackAnim(u8 step) {
@@ -4462,8 +4495,8 @@ static void MmForm_Action_Punch(Player* player, PlayState* play) {
     // Per-form damage tier:
     //   Goron  → GORON_PUNCH_DAMAGE  = 2 (hammer-tier blunt)
     //   Zora   → ZORA_PUNCH_DAMAGE   = 1 (light slash, knockback-only)
-    //   Gerudo → GERUDO_SLASH_DAMAGE = 4 (2 hearts, Master Sword)
-    //            GERUDO_FINISHER     = 8 (4 hearts, AOE x2 on the spin)
+    //   Gerudo → GERUDO_SLASH_DAMAGE = 2 (Kokiri Sword tier)
+    //            GERUDO_FINISHER     = 4 (AOE x2 on the spin)
     u8 damage;
     if (isGerudo) {
         damage = (step == 2) ? GERUDO_FINISHER_DAMAGE : GERUDO_SLASH_DAMAGE;
@@ -4473,9 +4506,9 @@ static void MmForm_Action_Punch(Player* player, PlayState* play) {
     // MM's D_8085D09C: Goron punches use DMG_GORON_PUNCH (mapped to DMG_HAMMER_SWING in OOT
     // — same heavy blunt impact as the Megaton Hammer). Zora punches use DMG_ZORA_PUNCH;
     // the closest OOT analog for the combo swing is DMG_SLASH_MASTER (sword slash damage).
-    // Gerudo always uses DMG_SLASH_MASTER (Master-Sword-equivalent sword damage).
+    // Gerudo uses DMG_SLASH_KOKIRI (Kokiri-Sword-equivalent sword damage).
     // Jump kick keeps DMG_JUMP_MASTER via EnableJumpKickQuad.
-    u32 dmgFlags = isGoron ? DMG_HAMMER_SWING : DMG_SLASH_MASTER;
+    u32 dmgFlags = isGoron ? DMG_HAMMER_SWING : (isGerudo ? DMG_SLASH_KOKIRI : DMG_SLASH_MASTER);
 
     // MM-style wall recoil check (replica of func_808401F4, z_player.c:10513).
     // Runs every frame of the active swing; if the punch ray hits a wall:
@@ -5838,7 +5871,7 @@ static void MmForm_GerudoActionPunch(Player* player, PlayState* play) {
         gFormState.shieldCollider.base.colType = COLTYPE_METAL;
         gFormState.shieldCollider.base.atFlags = AT_ON | AT_TYPE_PLAYER;
         gFormState.shieldCollider.base.acFlags = AC_NONE;
-        gFormState.shieldCollider.info.toucher.dmgFlags = DMG_SLASH_MASTER;
+        gFormState.shieldCollider.info.toucher.dmgFlags = DMG_SLASH_KOKIRI;
         gFormState.shieldCollider.info.toucher.damage = GERUDO_FINISHER_DAMAGE;
         gFormState.shieldCollider.info.toucherFlags = TOUCH_ON | TOUCH_NEAREST;
         gFormState.shieldCollider.dim.radius = 60;   // wide spin AoE
@@ -6840,6 +6873,55 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
     Input* input = &play->state.input[0];
     u8 onGround = MMFORM_ON_GROUND(player);
 
+    // === SLOPE EXEMPTION (from 2Ship Player_HandleSlopes, z_player.c:9986) ===
+    // MM explicitly excludes the Goron roll from slope handling:
+    //   `(Player_Action_96 != this->actionFunc)` — a rolling Goron NEVER slope-slides.
+    // OOT's Player_HandleSlopes has no such exemption, so on SurfaceType_GetSlope==1
+    // floors it (a) hijacks actionFunc with Player_Action_SlideOnSlope when moving
+    // downhill, and (b) applies a downhill pushedSpeed shove when moving uphill.
+    // Both fight the ball's own slope model (speed/velocity.y from floorPitch) —
+    // reported as "roll doesn't ignore slopes / max charge doesn't ignore slopes".
+    // Undo both every roll frame; the ball's MM physics below are the only slope
+    // response the roll should have.
+    if (player->actionFunc == Player_Action_SlideOnSlope) {
+        Player_SetupAction(play, player, Player_Action_Idle, 1);
+    }
+    if (player->actor.floorPoly != NULL &&
+        SurfaceType_GetSlope(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) == 1) {
+        player->pushedSpeed = 0.0f;
+    }
+
+    // === LEDGE EXEMPTION (bgCheckFlags 0x800 = MM's BGCHECKFLAG_PLAYER_800) ===
+    // Re-assert EVERY frame, not just at curl entry (the pattern boss_remains.cpp
+    // uses for the Goht bull charge). With it set, z_actor.c's func_8002E234 stops
+    // hugging drops of <=11 units, so the ball leaves the ground the instant the
+    // floor falls away and sails off ledges carrying its banked velocity.y instead
+    // of being glued to the terrain. MmForm_UpdateActive clears it whenever we are
+    // not curled, so it can never leak into normal movement.
+    player->actor.bgCheckFlags |= 0x800;
+
+    // === OOT ACTION LOCKOUT (MM's sActionHandlerList12, z_player.c:20742) ===
+    // In MM the roll runs under a heavily restricted handler list, so OOT logic simply
+    // cannot touch a rolling Goron. Our port only set PLAYER_STATE1_INPUT_DISABLED,
+    // which zeroes OOT's input copy and therefore blocks BUTTON-driven handlers only.
+    // The two things that kept breaking the roll are both button-INDEPENDENT and sailed
+    // straight through that:
+    //   z_player.c:5739  small-ledge auto-hop — fires on `ledgeClimbDelayTimer >= 3`
+    //                    alone, which is Link's autojump happening mid-roll.
+    //   z_player.c:10853 landing → Player_SetupRoll — gated on
+    //                    `controlStickDirections == 0`, and with the input zeroed that
+    //                    is ALWAYS true, so every touchdown re-curled the ball at
+    //                    linearVelocity = 0 (killing momentum) or let OOT's air/landing
+    //                    actions decay linearVelocity until rollBallSpeed fell under
+    //                    12.0f — which is exactly the "max charge drops the moment I
+    //                    leave the ground" cancel condition.
+    // Pausing actionFunc is the real equivalent of MM's restricted list and closes the
+    // whole class of leaks at once. The ledge-grab bypass that runs BEFORE this pause
+    // (z_player.c:13342) still calls Player_ActionHandler_12 every frame, but both of
+    // its branches are already blocked for a curled Goron, so it returns 0 harmlessly.
+    player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
+    sRollOwnsPause = 1;
+
     // =====================================================================
     // EXIT CHECK: func_80857950 (2Ship line 19829-19841)
     // Called FIRST, before any physics. A-release → uncurl.
@@ -6879,9 +6961,7 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
         }
     }
 
-    // Tick bounce/wall timers
-    if (gFormState.rollWallBounceTimer > 0)
-        gFormState.rollWallBounceTimer--;
+    // Tick no-input timer (unk_B8E)
     if (gFormState.rollNoInputTimer > 0)
         gFormState.rollNoInputTimer--;
 
@@ -6891,6 +6971,11 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
     // =====================================================================
     f32 speedTarget = 0.0f;
     s16 yawTarget = player->yaw;
+
+    // MM spin-target carriers (2Ship spDC bookkeeping): set by the grounded core
+    // physics, consumed by the common spin-target step after the ground/air split.
+    s32 spinTargetMin = 0;    // var_a0: spin floor from trajectory speed (spBC * 500)
+    u8 spinReverseBrake = 0;  // reversal at av1==4 → spin target forced to -0xFA0
 
     if (gFormState.rollNoInputTimer == 0) {
         f32 stickMag = MmForm_GetStickMagnitude(play);
@@ -6904,6 +6989,15 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
             // Speed = stick magnitude normalized to max 8.0, then * 2.6
             speedTarget = (stickMag / 60.0f) * 8.0f * 2.6f;
         }
+    }
+
+    // Wall-bounce steering lock (from 2Ship 20795-20798: unk_B8C): for a few
+    // frames after a wall bounce, steering is ignored (yawTarget forced to the
+    // reflected yaw) so the bounce direction can't be instantly counter-steered.
+    // The timer was previously decremented but its effect never applied.
+    if (gFormState.rollWallBounceTimer > 0) {
+        gFormState.rollWallBounceTimer--;
+        yawTarget = player->yaw;
     }
 
     // =====================================================================
@@ -7101,15 +7195,12 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
         if (gFormState.rollChargeLevel == 4 && gFormState.rollBallSpeed < 12.0f)
             deactivateSpike = 1;
 
-        // Steep slope check: spike disabled on slopes > 0x3A98
-        // From 2Ship line 20180: ABS(sp8E) + ABS(floorPitch) > 0x3A98
-        // Only check while on ground — airborne floorPitch is stale and would
-        // falsely deactivate spikes when rolling off a ledge.
-        if (onGround) {
-            s16 yawDiff = player->yaw - gFormState.rollHomeYaw;
-            if ((ABS(yawDiff) + ABS(player->floorPitch)) > 0x3A98)
-                deactivateSpike = 1;
-        }
+        // NOTE: MM's deactivation conditions are ONLY the three above (2Ship
+        // z_player.c:20804-20807: !A held, no magic, or av1==4 && speed<12).
+        // The steep-slope cancel exists exactly once in MM, inside the grounded
+        // physics (line 20972-20980, ported below) — max charge otherwise
+        // IGNORES slopes. A duplicate slope check here (yawDiff+floorPitch) was
+        // invented and made spikes drop on ordinary slopes; removed.
 
         if (deactivateSpike) {
             if (Math_StepToS(&gFormState.rollSpikeActive, 0, 1)) {
@@ -7233,16 +7324,18 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
                     gFormState.rollSpikeActive = 0;
                     gFormState.rollChargeLevel = 4;
                     gFormState.rollSpinRate = 0;
+                    // MM also locks stick input for 20 frames (unk_B8E = 0x14,
+                    // 2Ship line 20976) so the ball tumbles freely after the cancel.
+                    gFormState.rollNoInputTimer = 0x14;
                     Magic_Reset(play);
                 }
             }
         }
 
-        // Steering lean contribution (from 2Ship z_player.c:19632-19633)
-        // sp7C = lateral lean proportional to steering difference
-        s16 sp7C = (s16)((s16)(yawTarget - player->yaw) * -0.5f);
-        // Squared steering adds to bounce energy (from 2Ship line 19633)
-        gFormState.rollBounce += (f32)(SQ(sp7C)) * 8e-9f;
+        // Steering lean (sp7C) — computed inside the core block below, in the
+        // non-reversal branch only (matches 2Ship 20948-20949). Declared here
+        // because the tilt height-probe after the block reads it.
+        s16 sp7C = 0;
 
         // --- Core rolling physics (from 2Ship line 20093-20165) ---
         {
@@ -7259,6 +7352,18 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
             // Decay bounce
             Math_StepToF(&gFormState.rollBounce, 0.0f, fabsf(sp88) * 20.0f);
 
+            // Spin floor from trajectory speed (from 2Ship 20880-20886):
+            //   var_a0 = spBC * 500 (min 0) — the spin target may never drop below
+            //   this, so a ball carried by momentum (e.g. free-rolling downhill with
+            //   no stick input) keeps spinning, which keeps accel nonzero. This is
+            //   the piece that makes slopes feel like MM: without it, releasing the
+            //   stick on a slope zeroed the spin → zero accel → ball stalls.
+            //   spC0 = speedTarget*400 - var_a0 (min 0) gates the slippery-accel path.
+            spinTargetMin = (s32)(spBC * 500.0f);
+            spinTargetMin = CLAMP_MIN(spinTargetMin, 0);
+            s32 spC0 = (s32)(speedTarget * 400.0f) - spinTargetMin;
+            spC0 = CLAMP_MIN(spC0, 0);
+
             // Decompose into XZ components
             f32 spAC = spBC * Math_SinS(gFormState.rollHomeYaw);
             f32 spA8 = spBC * Math_CosS(gFormState.rollHomeYaw);
@@ -7273,10 +7378,17 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
             player->yaw = gFormState.rollHomeYaw;
             player->actor.world.rot.y = player->yaw;
 
-            // Apply slope gravity
-            // From 2Ship: Actor_GetSlopeDirection gives downward slope normal
-            f32 slopeGravX = Math_SinS(player->floorPitch) * Math_SinS(player->actor.shape.rot.y);
-            f32 slopeGravZ = Math_SinS(player->floorPitch) * Math_CosS(player->actor.shape.rot.y);
+            // Apply slope gravity (from 2Ship 20969/20982-20983: Actor_GetSlopeDirection)
+            // MM uses the floor poly normal's XZ — the true downhill direction with
+            // magnitude sin(slopeAngle) — NOT the facing direction. The old
+            // sin(floorPitch)*facing version pushed along wherever the ball FACED,
+            // so diagonal slopes never produced correct sideways drift/momentum.
+            f32 slopeGravX = 0.0f;
+            f32 slopeGravZ = 0.0f;
+            if (player->actor.floorPoly != NULL) {
+                slopeGravX = COLPOLY_GET_NORMAL(player->actor.floorPoly->normal.x);
+                slopeGravZ = COLPOLY_GET_NORMAL(player->actor.floorPoly->normal.z);
+            }
 
             if (gFormState.rollSpikeActive == 0) {
                 f32 temp_ft4 = (0.6f * slopeGravX) + spA4;
@@ -7301,41 +7413,75 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
                 spA0 *= scale;
             }
 
-            // Apply friction/acceleration toward target speed
-            // From 2Ship line 20056-20089:
-            //   accel = av2.actionVar2 * 0.0003f (normal surface)
-            //   accel = 0.08f (snow/ice/sand AND turnRate >= 0x7D0)
-            //   decel = (Math_SinS(floorPitch) * 8.0f) + 0.6f
-            f32 accel;
-            s16 absSpinRate = (gFormState.rollSpinRate >= 0) ? gFormState.rollSpinRate : -gFormState.rollSpinRate;
-            // From 2Ship: slippery surfaces (ice/sand/snow/FLOOR_TYPE_5) with high spin → 0.08 accel
-            // OOT has NA_SE_PL_WALK_ICE, NA_SE_PL_WALK_SAND, NA_SE_PL_WALK_DIRT
-            // MM also includes FLOOR_TYPE_5 (snow) and FLOOR_TYPE_4 (dirt) in this check
-            if (absSpinRate >= 0x7D0 && (player->floorSfxOffset == (NA_SE_PL_WALK_ICE - SFX_FLAG) ||
-                                         player->floorSfxOffset == (NA_SE_PL_WALK_SAND - SFX_FLAG) ||
-                                         player->floorSfxOffset == (NA_SE_PL_WALK_DIRT - SFX_FLAG))) {
-                accel = 0.08f; // Slippery surfaces: higher accel
-            } else {
-                accel = 0.0003f * absSpinRate;
+            // === Anti-reversal + accel/turn (from 2Ship 20897-20964) ===
+            // MM runs func_8083A4A4 first: pulling the stick >135° against current
+            // motion brakes the ball to a stop (and reverses the spin at av1==4)
+            // instead of yanking the yaw around — the missing "1:1 feel" on turns.
+            f32 spCC = speedTarget;
+            s16 spCA = yawTarget;
+            u8 reversing = 0;
+            {
+                // Port of func_8083A4A4 (2Ship 8964): decel rate is 0 while
+                // charging spikes (av1 >= 5), 1.0 otherwise.
+                s16 revDiff = player->yaw - spCA;
+                if (ABS(revDiff) > 0x6000) {
+                    if (Math_StepToF(&player->linearVelocity, 0.0f,
+                                     (gFormState.rollChargeLevel >= 5) ? 0.0f : 1.0f)) {
+                        spCC = 0.0f;
+                        spCA = player->yaw;
+                    } else {
+                        reversing = 1;
+                    }
+                }
             }
-            // NO minimum accel guard - MM does NOT have one (was invented).
-            // Low spin rate = low accel = ball must build speed gradually.
-            accel = CLAMP_MIN(accel, 0.0f);
-            f32 decel = (Math_SinS(player->floorPitch) * 8.0f) + 0.6f;
-            if (decel < 0.0f)
-                decel = 0.0f;
-            Math_AsymStepToF(&player->linearVelocity, speedTarget, accel, decel);
 
-            // Turn rate (from 2Ship line 20146)
-            // Dampen at low speeds to avoid rapid yaw oscillation ("freaking out on turns").
-            // MM's formula works at higher speeds but OOT's lower friction causes low-speed creeping.
-            s16 turnRate;
-            if (fabsf(player->linearVelocity) < 2.0f) {
-                turnRate = (s16)(fabsf(player->linearVelocity) * 50.0f) + 50;
+            if (reversing) {
+                // 2Ship 20900-20907: while braking out of a reversal, drop the
+                // charge (unless spikes are out) and spin the ball backwards.
+                if (gFormState.rollSpikeActive == 0) {
+                    gFormState.rollChargeLevel = 4;
+                }
+                if (gFormState.rollChargeLevel == 4) {
+                    spinReverseBrake = 1; // spin target forced to -0xFA0 below
+                }
             } else {
-                turnRate = (s16)(fabsf(player->linearVelocity) * 20.0f) + 300;
+                // Accel selection (2Ship 20911-20917): slippery surfaces need
+                // spC0 >= 0x7D0 (stick demand beyond current spin), else spin*0.0003.
+                f32 accel;
+                s16 absSpinRate =
+                    (gFormState.rollSpinRate >= 0) ? gFormState.rollSpinRate : -gFormState.rollSpinRate;
+                if ((player->floorSfxOffset == (NA_SE_PL_WALK_ICE - SFX_FLAG) ||
+                     player->floorSfxOffset == (NA_SE_PL_WALK_SAND - SFX_FLAG) ||
+                     player->floorSfxOffset == (NA_SE_PL_WALK_DIRT - SFX_FLAG)) &&
+                    (spC0 >= 0x7D0)) {
+                    accel = 0.08f; // Slippery surfaces: higher accel
+                } else {
+                    accel = 0.0003f * absSpinRate;
+                }
+                accel = CLAMP_MIN(accel, 0.0f);
+                f32 decel = (Math_SinS(player->floorPitch) * 8.0f) + 0.6f;
+                if (decel < 0.0f)
+                    decel = 0.0f;
+
+                // Reversal just completed (func_8083A4A4 zeroed the target):
+                // snap yaw straight to the new stick direction (2Ship 20937-20939).
+                if (speedTarget != spCC) {
+                    player->yaw = yawTarget;
+                }
+
+                Math_AsymStepToF(&player->linearVelocity, speedTarget, accel, decel);
+
+                // Turn rate (2Ship 20945-20946): |speed| * 20 + 300, min 100.
+                s16 turnRate = (s16)(fabsf(player->linearVelocity) * 20.0f) + 300;
+                if (turnRate < 100)
+                    turnRate = 100;
+
+                // Steering lean + bounce energy (2Ship 20948-20949)
+                sp7C = (s16)((s16)(yawTarget - player->yaw) * -0.5f);
+                gFormState.rollBounce += (f32)(SQ(sp7C)) * 8e-9f;
+
+                Math_ScaledStepToS(&player->yaw, yawTarget, turnRate);
             }
-            Math_ScaledStepToS(&player->yaw, yawTarget, turnRate);
 
             // Recompose speed from components
             spBC = player->linearVelocity;
@@ -7534,11 +7680,15 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
     // --- Visual rotation (from 2Ship line 20231-20237) ---
     Math_ScaledStepToS(&player->actor.shape.rot.y, gFormState.rollHomeYaw, 0x7D0);
 
-    // Ball spin (from 2Ship line 20239-20240: av2.actionVar2 steps toward spDC)
-    // At low speeds, reduce spin multiplier so ball doesn't twirl like a football.
-    // MM: spinTarget = speedTarget * 900. OOT's lower friction allows low-speed creeping
-    // where 900x produces disproportionately fast spin.
-    s32 spinTarget = (fabsf(speedTarget) < 2.0f) ? (s32)(speedTarget * 300.0f) : (s32)(speedTarget * 900.0f);
+    // Ball spin (from 2Ship 20823 + 20886 + 21088: av2.actionVar2 steps toward spDC)
+    // MM: spDC = speedTarget * 900, clamped to at least var_a0 (spin floor from the
+    // ball's actual trajectory speed) — momentum keeps the ball spinning even with
+    // no stick input. A reversal brake at av1==4 overrides it with -0xFA0.
+    s32 spinTarget = (s32)(speedTarget * 900.0f);
+    spinTarget = CLAMP_MIN(spinTarget, spinTargetMin);
+    if (spinReverseBrake) {
+        spinTarget = -0xFA0;
+    }
     // Asymmetric step (inline, since OOT doesn't have Math_AsymStepToS)
     {
         s16 diff = (s16)(spinTarget - gFormState.rollSpinRate);
@@ -10033,7 +10183,10 @@ static void MmForm_Action_SwimIdle(Player* player, PlayState* play) {
     if (onOceanFloor && MMFORM_IS_ZORA_SWIM()) {
         // === OCEAN FLOOR (Zora only) ===
         // Only intercept B when standing still. Moving = OOT handles everything (roll, sidehop, backflip, hookshot).
-        if (fabsf(player->linearVelocity) < 1.0f) {
+        // Skijer 2026-07-15: the punch/boomerang B-moves are FULL-ZORA-FORM only. The Zora-Tunic swim
+        // (zoraSwimEnabled, formerly Water Dragon Scale) is swim+barrier ONLY — without this gate the
+        // tunic swim leaked the Zora punch (B) and boomerang (B hold) when standing on the ocean floor.
+        if ((fabsf(player->linearVelocity) < 1.0f) && !gFormState.zoraSwimEnabled) {
             // B press (standing still) = Zora punch combo
             if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
                 MmForm_StartPunch(player, play);
@@ -11018,9 +11171,15 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
         // heldItemAction). User spec: "ignorar la sword y todo el
         // equipment" — form damage values are constant, not modulated
         // by Link's equipped class.
-        player->heldItemAction = PLAYER_IA_NONE;
-        player->itemAction     = PLAYER_IA_NONE;
-        player->currentShield  = PLAYER_SHIELD_NONE;
+        // v10.11 EXCEPTION: rod aim borrows the OOT slingshot pipeline
+        // (Player_StartDekuBubble) for the EXACT Deku-bubble first-person
+        // aim, which sets heldItemAction = SLINGSHOT. Nulling it here would
+        // break the aim, so skip the null while GaroForm_IsRodAiming().
+        if (!GaroForm_IsRodAiming()) {
+            player->heldItemAction = PLAYER_IA_NONE;
+            player->itemAction     = PLAYER_IA_NONE;
+            player->currentShield  = PLAYER_SHIELD_NONE;
+        }
         GaroForm_Update(play, player);
 
         // v9 design call: Garo keeps vanilla movement (run 1.0x, jump 1.0x).
@@ -11190,6 +11349,36 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
         player->actor.shape.shadowDraw = ActorShadow_DrawCircle;
     } else {
         player->actor.shape.shadowDraw = ActorShadow_DrawFeet;
+    }
+
+    // Ledge/slope no-snap flag safety net (bgCheckFlags 0x800). The roll sets it so
+    // ledges launch the ball instead of gluing it down (see z_actor.c func_8002E234).
+    // It is now a REAL flag in soh, so a single missed exit path would leave Link
+    // floating over every ledge for the rest of the session — exactly the hazard
+    // boss_remains.cpp guards with sGohtNoSnapOwned. The roll is the only thing here
+    // that ever sets it, so clear it whenever we are not in a ball state, no matter
+    // how the roll ended (damage, form change, void out, cutscene hijack, ...).
+    //
+    // Deliberately the THREE ball states, not the five MmForm_IsGoronRolling() covers:
+    // that predicate answers "is the body curled?" (used by the OOT ledge-hop / edge-slip
+    // guards, where curling-in counts), while this one answers "should the ball skip
+    // ground snapping?" — which only applies once it is actually a rolling ball. The
+    // uncurl transition clears the flag explicitly on its way out.
+    {
+        u8 inBallState = (gFormState.currentForm == MM_PLAYER_FORM_GORON &&
+                          (gFormState.goronAction == GORON_ACT_GORON_ROLL ||
+                           gFormState.goronAction == GORON_ACT_GORON_ROLL_JUMP ||
+                           gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND));
+        if (!inBallState) {
+            player->actor.bgCheckFlags &= ~0x800;
+            // Hand OOT's actionFunc back. Ownership-tracked so we only release the
+            // pause the ball itself took — shield/swim/jump-kick set the same flag and
+            // re-assert it during the dispatch below, which runs after this point.
+            if (sRollOwnsPause) {
+                player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
+                sRollOwnsPause = 0;
+            }
+        }
     }
 
     // Freeze form during ANY textbox (NPC talk, signs, narration, item pickup text).
@@ -12090,8 +12279,19 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // Player_ActionHandler_12. So Goron medium ledges (type 2) are unhandled by OOT.
     // Here we give Goron a ground-based jump for medium ledges, matching the small jump formula.
     // From 2Ship: Goron treats medium as small (no separate climb animation).
-    if (gFormState.currentForm == MM_PLAYER_FORM_GORON && onGround && player->ledgeClimbType == 2 &&
-        player->ledgeClimbDelayTimer >= 3) {
+    //
+    // NEVER while curled. In MM the roll runs under sActionHandlerList12, which does NOT
+    // include the ledge handler — a rolling Goron ignores ledges entirely and sails off
+    // them (2Ship Player_Action_96:20742). Without this gate the ball hit a ledge, got
+    // yanked into MMFORM_ACT_JUMP with the jump SFX + attack voice, and the roll ended —
+    // the "sigue saltando normal, no ignora el ledge" report.
+    u8 rollingNow = (gFormState.goronAction == GORON_ACT_ROLL_INIT ||
+                     gFormState.goronAction == GORON_ACT_GORON_ROLL ||
+                     gFormState.goronAction == GORON_ACT_GORON_ROLL_JUMP ||
+                     gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND ||
+                     gFormState.goronAction == GORON_ACT_ROLL_UNCURL);
+    if (gFormState.currentForm == MM_PLAYER_FORM_GORON && !rollingNow && onGround &&
+        player->ledgeClimbType == 2 && player->ledgeClimbDelayTimer >= 3) {
         f32 jumpVel = (player->yDistToLedge * 0.08f) + 5.5f;
         player->actor.velocity.y = jumpVel;
         player->linearVelocity = 2.5f;
@@ -12223,6 +12423,18 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
         if (inAim || inThrowAnim || inCatchAnim) {
             // Tick the form animation so the cutter anim progresses each frame.
             LinkAnimation_Update(play, &gFormState.formSkelAnime);
+            return;
+        }
+    }
+
+    // =========================================================================
+    // Gerudo MHR Dual Blades combat controller — owns all Gerudo combat (combo,
+    // charge, wirebug, air, demon). Returns 1 when driving a move this frame →
+    // skip the goron action dispatch (locomotion still flows through it when the
+    // controller is idle and returns 0). Mirrors the Zora boomerang guard above.
+    // =========================================================================
+    if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
+        if (MmForm_GerudoMhrUpdate(player, play)) {
             return;
         }
     }
@@ -12404,19 +12616,16 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
             player->stateFlags1 |= PLAYER_STATE1_SHIELDING;
 
             if (gFormState.currentForm == MM_PLAYER_FORM_GORON) {
-                // === GORON MASSIVE SHIELD (curled spike armor, effectively immune) ===
-                // Per design: Goron's curled-up form is a 360° spike-armor that
-                // makes him practically invulnerable while shielding — not a flat
-                // front-facing quad. Three layers of defense:
-                //   (1) Huge omnidirectional shield cylinder (covers all sides +
-                //       above his head — anything coming in from any angle hits it)
+                // === GORON SHIELD (curled guard, MM 1:1) ===
+                // Goron's curled-up form blocks from EVERY direction, exactly like
+                // MM (2Ship z_player.c:13514-13537 + 6512) — not a flat frontal quad:
+                //   (1) Omnidirectional AC_HARD shield cylinder (MM dims r30/h35):
+                //       any enemy attack touching it bounces regardless of angle.
                 //   (2) Frontal shieldQuad still stamped so OOT's vanilla block
                 //       animation/SFX/projectile-reflect path fires; we also OR
                 //       AC_BOUNCED into shieldQuad whenever the omnidirectional
                 //       cylinder is hit (back/side hits trigger block visuals).
-                //   (3) invincibilityTimer re-stamped each frame as a final safety
-                //       net for attacks the colliders can miss — radial AoE that
-                //       skips player collision, scripted damage, lava floors, etc.
+                // No invincibility layer — see note below (it tinted Goron red).
 
                 // Lock body yaw every frame (ball-and-chain pattern)
                 player->actor.shape.rot.y = sShieldLockedYaw;
@@ -12434,25 +12643,28 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
                 // Enable directional control (mirror shield light aiming) right away.
                 gFormState.shieldAv2 = 1;
 
-                // Register MASSIVE omnidirectional shield cylinder. We override
-                // the init dimensions (radius=30, height=35) with much larger
-                // values so the cylinder fully wraps Goron's curled body from
-                // every angle and extends well above his head.
+                // Register the omnidirectional shield cylinder, 1:1 with MM
+                // (2Ship z_player.c:13514-13537): AC_ON | AC_HARD | AC_TYPE_ENEMY,
+                // radius 30, height 35, yShift 0, always COL_MATERIAL_METAL (Goron's
+                // hide is the shield — the equipped OOT shield is irrelevant here).
+                // AC_HARD is what blocks from EVERY direction: any enemy attack that
+                // touches the cylinder gets AT_BOUNCED and our AC gets AC_BOUNCED,
+                // which MmForm_CheckDamage treats as a block with no angle test —
+                // exactly MM's mechanism (2Ship 6512).
                 if (gFormState.shieldColliderInitDone) {
-                    static const u8 sShieldColTypes[] = {
-                        COLTYPE_METAL, // PLAYER_SHIELD_NONE
-                        COLTYPE_WOOD,  // PLAYER_SHIELD_DEKU
-                        COLTYPE_METAL, // PLAYER_SHIELD_HYLIAN
-                        COLTYPE_METAL, // PLAYER_SHIELD_MIRROR
-                    };
-                    gFormState.shieldCollider.base.colType = sShieldColTypes[player->currentShield];
-                    gFormState.shieldCollider.dim.radius = 55;  // wide enough for all sides
-                    gFormState.shieldCollider.dim.height = 90;  // taller than any enemy attack
-                    gFormState.shieldCollider.dim.yShift = -10; // slightly below feet
+                    gFormState.shieldCollider.base.colType = COLTYPE_METAL;
+                    gFormState.shieldCollider.dim.radius = 30;
+                    gFormState.shieldCollider.dim.height = 35;
+                    gFormState.shieldCollider.dim.yShift = 0;
                     Collider_UpdateCylinder(&player->actor, &gFormState.shieldCollider);
                     CollisionCheck_SetAC(play, &play->colChkCtx, &gFormState.shieldCollider.base);
+                    // MM shrinks the body cylinder to the curled silhouette so
+                    // nothing pokes out past the shield cylinder (2Ship 13536-13537).
                     player->cylinder.dim.yShift = 0;
                     player->cylinder.dim.height = gFormState.shieldCollider.dim.height;
+                    if (player->cylinder.dim.radius > gFormState.shieldCollider.dim.radius) {
+                        player->cylinder.dim.radius = gFormState.shieldCollider.dim.radius;
+                    }
 
                     // Propagate omnidirectional cylinder hit/bounce to the frontal
                     // shieldQuad so OOT's vanilla damage handler (z_player.c:5233)
@@ -12466,13 +12678,13 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
                 // + shieldMf so frontal-cone projectile rebound math still works.
                 MmForm_ActivateFormShieldQuad(player, play);
 
-                // Final-safety i-frames: re-stamp invincibilityTimer every frame so
-                // Goron takes zero damage from anything the colliders missed (radial
-                // AoE, unblockable scripted hits, hazard floors). When R is released
-                // this stops getting refreshed and decays naturally over ~30 frames.
-                if (player->invincibilityTimer < 30) {
-                    player->invincibilityTimer = 30;
-                }
+                // NO invincibilityTimer stamp. OOT tints the whole player model red
+                // whenever invincibilityTimer > 0 (soh z_player.c:14056-14059 red fog
+                // flash) — the old per-frame `invincibilityTimer = 30` re-stamp here
+                // was exactly why Goron glowed red the entire time he shielded.
+                // Protection now comes from the MM-accurate AC_HARD cylinder above,
+                // like in MM, where curled Goron is NOT invincible — colliders block,
+                // hazards (floors, scripted damage) still hurt.
             } else if (gFormState.currentForm == MM_PLAYER_FORM_ZORA) {
                 // === ZORA SHIELD (static defense pose) ===
                 // Promote static → Z-target shield-walk if the player Z-targets
@@ -13870,7 +14082,7 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
                 // L hitbox quad — only ON during the actual hit-frame window.
                 if (gFormState.gerudoQuadsActive) {
                     player->meleeWeaponQuads[0].base.atFlags = AT_ON | AT_TYPE_PLAYER;
-                    player->meleeWeaponQuads[0].info.toucher.dmgFlags = DMG_SLASH_MASTER;
+                    player->meleeWeaponQuads[0].info.toucher.dmgFlags = DMG_SLASH_KOKIRI;
                     player->meleeWeaponQuads[0].info.toucher.damage = gFormState.gerudoQuadDamage;
                     player->meleeWeaponQuads[0].info.toucherFlags = TOUCH_ON | TOUCH_NEAREST;
                     func_80090480(play, &player->meleeWeaponQuads[0], &sGerudoQuadInfoL,
@@ -13890,7 +14102,7 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
                 // R hitbox quad — only ON during the hit-frame window.
                 if (gFormState.gerudoQuadsActive) {
                     player->meleeWeaponQuads[1].base.atFlags = AT_ON | AT_TYPE_PLAYER;
-                    player->meleeWeaponQuads[1].info.toucher.dmgFlags = DMG_SLASH_MASTER;
+                    player->meleeWeaponQuads[1].info.toucher.dmgFlags = DMG_SLASH_KOKIRI;
                     player->meleeWeaponQuads[1].info.toucher.damage = gFormState.gerudoQuadDamage;
                     player->meleeWeaponQuads[1].info.toucherFlags = TOUCH_ON | TOUCH_NEAREST;
                     func_80090480(play, &player->meleeWeaponQuads[1], &sGerudoQuadInfoR,
@@ -14520,6 +14732,74 @@ MmPlayerTransformation MmForm_GetCurrentForm(void) {
     return (MmPlayerTransformation)gFormState.currentForm;
 }
 
+// Fleet Ship Combo — force the form to match MM's save.playerForm after a cross-game arrival.
+// Queued here and consumed at the top of MmForm_Update (after MmForm_Init ran for the destination
+// scene), where it steers the existing seamless soft-reload path: no transformation cutscene.
+extern "C" void MmForm_FleetApplyForm(int mmForm) {
+    if (mmForm < 0 || mmForm > (int)MM_PLAYER_FORM_HUMAN) {
+        mmForm = (int)MM_PLAYER_FORM_HUMAN;
+    }
+    sFleetPendingForm = (s8)mmForm;
+}
+
+// MM transformation boot physics — per-form movement REGs (from 2Ship D_801BFE14), mapped to OOT's
+// REG layout. Called from z_player.c Player_SetBootData (guarded by TransformMasks_IsTransformed) after
+// vanilla applied OOT defaults. Form 4 (Human) keeps OOT defaults. Skijer's NEI
+extern "C" void MmForm_ApplyBootData(void) {
+    s32 form = (s32)MmForm_GetCurrentForm();
+    // REG(19,30,32,34,35,36,37,38), REG(43), REG(45), REG(68,69), IREG(66,67,68,69), MREG(95)
+    static const s16 sMmBootData[][17] = {
+        { 200, 666, 200, 700, 366, 200, 600, 175, 800, 1000, -100, 600, 590, 800, 125, 300, 65 },   // FIERCE_DEITY (0)
+        { 200, 1000, 300, 700, 550, 270, 700, 200, 800, 600, -140, 600, 590, 750, 125, 200, 130 },  // GORON (1)
+        { 200, 1000, 300, 700, 550, 270, 700, 300, 800, 600, -100, 600, 590, 750, 125, 200, 130 },  // ZORA (2)
+        { 200, 1000, 300, 700, 550, 270, 600, 1000, 800, 600, -100, 600, 590, 750, 125, 200, 130 }, // DEKU (3)
+        { 200, 1000, 300, 700, 550, 270, 600, 350, 800, 600, -100, 600, 590, 750, 125, 200, 130 },  // HUMAN (4)
+        { 200, 666, 200, 700, 366, 200, 600, 175, 800, 1000, -100, 600, 590, 800, 125, 300, 65 },   // PIKACHU (5)
+    };
+    if (form >= 0 && form <= 5 && form != 4) {
+        const s16* bd = sMmBootData[form];
+        REG(19) = bd[0];
+        REG(30) = bd[1];
+        REG(32) = bd[2];
+        REG(34) = bd[3];
+        REG(35) = bd[4];
+        REG(36) = bd[5];
+        REG(37) = bd[6];
+        REG(38) = bd[7];
+        REG(43) = bd[8];
+        REG(45) = bd[9];
+        REG(68) = bd[10];
+        REG(69) = bd[11];
+        IREG(66) = bd[12];
+        IREG(67) = bd[13];
+        IREG(68) = bd[14];
+        IREG(69) = bd[15];
+        MREG(95) = bd[16];
+    }
+    if (form == 0 || form == 5) {
+        R_RUN_SPEED_LIMIT = 1000; // FD and Pikachu
+    } else if (form >= 1 && form <= 3) {
+        R_RUN_SPEED_LIMIT = 600; // Goron, Zora, Deku
+    }
+}
+
+// Strength (lift power) override for the active MM form, or -1 to use the player's real upgrade.
+// Forms have an intrinsic body strength independent of the save's upgrade bits; computing it virtually
+// here (vs mutating inventory.upgrades on transform) avoids clobbering randomizer pickups. Skijer's NEI
+extern "C" s32 MmForm_GetStrengthOverride(void) {
+    switch (gFormState.currentForm) {
+        case MM_PLAYER_FORM_FIERCE_DEITY:
+        case MM_PLAYER_FORM_GORON:
+            return PLAYER_STR_GOLD_G;
+        case MM_PLAYER_FORM_ZORA:
+            return PLAYER_STR_BRACELET;
+        case MM_PLAYER_FORM_DEKU:
+            return PLAYER_STR_NONE;
+        default:
+            return -1; // Pikachu / Human / etc. → use the player's real upgrade
+    }
+}
+
 // Incoming-damage multiplier hook. Called from z_player.c func_80837B18_modified
 // at the single chokepoint that routes every damage-receive path into
 // Health_ChangeBy. Returns 1.5f for Garo (glass cannon) and 1.0f otherwise. The
@@ -14532,6 +14812,13 @@ extern "C" f32 MmForm_GetIncomingDamageMult(void) {
         default:
             return 1.0f;
     }
+}
+
+// Movement/jump speed multiplier: 1.5x for the fast forms (Fierce Deity, Pikachu), else 1.0x.
+// Callers guard with TransformMasks_IsTransformedAny() before applying. Skijer's NEI
+extern "C" f32 MmForm_GetSpeedMultiplier(void) {
+    s32 form = (s32)MmForm_GetCurrentForm();
+    return (form == MM_PLAYER_FORM_FIERCE_DEITY || form == MM_PLAYER_FORM_PIKACHU) ? 1.5f : 1.0f;
 }
 
 // Called from z_player.c func_80837948: override jump slash animations for transforms.
@@ -14615,6 +14902,14 @@ s32 MmForm_LaunchJumpKick(Player* player, PlayState* play) {
 
 // Called from z_player.c func_808351D4: fire bubble on B release in slingshot pipeline.
 void MmForm_FireDekuBubble(Player* player, PlayState* play) {
+    // v10.12: Garo borrows the slingshot AIM (camera) but fires its rod orb
+    // itself, on the B-release detected in GaroForm_Update's GARO_ROD_AIM
+    // state (the slingshot fire path's bow-draw gate didn't progress for
+    // Garo, so this path never reliably fired). No-op here so the slingshot
+    // "fire" neither spawns a Deku bubble nor double-fires the orb.
+    if (gFormState.currentForm == MM_PLAYER_FORM_GARO) {
+        return;
+    }
     // MmForm_FireBubble already stops BREATH at its start; the redundant Stop here
     // was harmless but pointed at a mis-modeled control flow. Single stop is enough.
     MmForm_FireBubble(player, play);
@@ -14656,19 +14951,46 @@ LinkAnimationHeader* MmForm_GetZoraBoomerangAnim(s32 phase) {
     }
 }
 
+// Defined just below; needed here for the already-curled guard in the curl entry point.
+u8 MmForm_IsGoronRolling(void);
+
 // Called from z_player.c Player_SetupRoll when Goron tries to roll → redirect to curl.
 void MmForm_StartGoronCurlFromOot(Player* player, PlayState* play) {
     if (gFormState.state != MMFORM_STATE_ACTIVE || gFormState.maruChange == NULL)
         return;
+    // NEVER restart the curl while already curled. OOT's landing action reaches
+    // Player_SetupRoll on its own (z_player.c:10853-10856: fallDistance < 800, stick
+    // centered), so every time the ball touched down after sailing off a ledge this
+    // fired and reset it to ROLL_INIT with linearVelocity = 0 — wiping exactly the
+    // momentum the launch was supposed to carry, and re-opening the curl-in window
+    // where the ledge hop is unguarded. A curled Goron is already rolling; there is
+    // nothing to start.
+    if (MmForm_IsGoronRolling()) {
+        return;
+    }
     player->linearVelocity = 0.0f;
     MmForm_SetAction(GORON_ACT_ROLL_INIT, play, gFormState.maruChange, 0.67f, ANIMMODE_ONCE);
     MmForm_PlaySfx(player, MM_NA_SE_PL_GORON_TO_BALL, NA_SE_PL_BODY_HIT);
 }
 
+// "Is the Goron curled?" — true for the whole curl→roll→uncurl lifetime, NOT just the
+// three ball states. Consumers are the OOT-side guards that must treat a curled Goron as
+// unable to interact with terrain features:
+//   z_player.c:5744  Player_ActionHandler_12 small-ledge hop (button-INDEPENDENT: it fires
+//                    on proximity alone, so nothing else stops it)
+//   z_player.c:6449  func_8083A6AC edge slip / ledge hang
+//   transformation_masks.c:252  footstep SFX suppression (the ball has its own rolling SFX)
+//
+// ROLL_INIT and ROLL_UNCURL were missing here, and that was the bug: the curl-in animation
+// runs ~10 frames while the Goron is ALREADY MOVING, so hitting a ledge during it left the
+// hop unguarded and the player jumped instead of rolling off. Every state in which the body
+// is curled or curling must be covered.
 u8 MmForm_IsGoronRolling(void) {
     return (gFormState.state == MMFORM_STATE_ACTIVE && gFormState.currentForm == MM_PLAYER_FORM_GORON &&
-            (gFormState.goronAction == GORON_ACT_GORON_ROLL || gFormState.goronAction == GORON_ACT_GORON_ROLL_JUMP ||
-             gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND));
+            (gFormState.goronAction == GORON_ACT_ROLL_INIT || gFormState.goronAction == GORON_ACT_GORON_ROLL ||
+             gFormState.goronAction == GORON_ACT_GORON_ROLL_JUMP ||
+             gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND ||
+             gFormState.goronAction == GORON_ACT_ROLL_UNCURL));
 }
 
 void MmForm_YieldToOot(void) {
@@ -14738,11 +15060,27 @@ u8 MmForm_IsItemAllowed(s32 item) {
 // Per-Form C-Button Item Use Interception (called from z_player.c)
 // =============================================================================
 
+// Power Keg (power_keg.c, C linkage). The keg shares the Bomb slot; it must fire its C-button in the
+// transformed forms it is gated to (Fierce Deity / Goron), which otherwise block bomb use. Skijer's NEI
+extern "C" {
+unsigned char PowerKeg_IsOwned(void);
+unsigned char PowerKeg_IsOnBombActive(void);
+unsigned char PowerKeg_TryPull(PlayState* play, Player* player);
+}
+
 extern "C" u8 TransformMasks_HandleFormItemUse(PlayState* play, Player* player, s32 item) {
     // Only intercept when actively transformed (MM forms) or Pikachu form is loaded
     if (gFormState.state != MMFORM_STATE_ACTIVE &&
         !(gFormState.currentForm == MM_PLAYER_FORM_PIKACHU && gFormState.skeletonLoaded))
         return 0; // Not transformed → normal Player_UseItem
+
+    // Power Keg (shared Bomb slot, keg mode): handle BEFORE the per-form table, since the transformed
+    // forms block normal bomb use and would otherwise swallow the press. PowerKeg_TryPull pulls + holds
+    // the keg like a bomb (carry state); the form/strength gate lives inside it. Skijer's NEI
+    if (item == ITEM_BOMB && PowerKeg_IsOwned() && PowerKeg_IsOnBombActive()) {
+        PowerKeg_TryPull(play, player);
+        return 1; // consumed by the keg — don't fall through to vanilla bomb use / the form table
+    }
 
     s32 form = gFormState.currentForm;
     if (form < 0 || form >= MM_PLAYER_FORM_MAX)
@@ -15175,6 +15513,21 @@ extern "C" int MmSfx_IsGamePaused(void) {
 void MmForm_Update(PlayState* play, Player* player) {
     if (!gFormState.initialized)
         return;
+
+    // === Fleet Ship Combo: forced form after a cross-game arrival ===
+    // Steers the soft-reload pending vars (right below) so the requested form applies through the
+    // same seamless path a scene transition uses. Human cancels any pending re-transform.
+    if (sFleetPendingForm >= 0 && MmForm_IsEnabled()) {
+        MmPlayerTransformation want = (MmPlayerTransformation)sFleetPendingForm;
+        sFleetPendingForm = -1;
+        if (want == MM_PLAYER_FORM_HUMAN) {
+            sPendingSoftReload = 0;
+            sPendingReactivateForm = MM_PLAYER_FORM_HUMAN;
+        } else if (want != (MmPlayerTransformation)gFormState.currentForm) {
+            sPendingSoftReload = 1;
+            sPendingReactivateForm = want;
+        }
+    }
 
     // === Seamless form reload after scene transition ===
     // sPendingSoftReload is set by MmForm_Init when the player was transformed in the old scene.
@@ -16269,5 +16622,10 @@ u8 GerudoForm_GetCurrentDamage(void) {
 // while SHIELDING so the equipped shield draws on R_HAND (path-swapped to the
 // gerudo-skinned DL by GerudoForm_OverrideLimbDraw). No MM-side pose override
 // is needed.
+
+// Gerudo MHR Dual Blades combat controller — text-included here (end of the
+// extern "C" body) so it can call every MmForm_* helper defined above and its
+// static entry points match the forward decls near the top of this file.
+#include "mods/transformation_masks/gerudo_mhr_combat.inc.c"
 
 } // extern "C"

@@ -162,7 +162,18 @@ struct FscShared {
     uint32_t texFormat;     // DXGI_FORMAT value
     uint32_t texFrameIndex; // bumped each publish (lets the consumer detect new frames)
     int32_t uiFocus;        // which window is front for CONFIG: 0 = Ship, 1 = 2ship
-    int32_t reservedI[3];
+    // Cross-game loading-zone WARP request. The trigger side writes the target (in the TARGET
+    // game's id/space), bumps warpSeq, and flips activeGame; whichever game BECOMES active applies
+    // it once per new seq (load scene + override Link pos/rot). MUST stay byte-identical to 2ship.
+    int32_t warpSeq;        // bumped per request (0 = none yet)
+    int32_t warpScene;      // target scene id in the target game's space
+    float warpX;            // land position override (target game world coords)
+    float warpY;
+    float warpZ;
+    int32_t warpRotY;        // land Y rotation (s16 binary angle stored in int32)
+    int32_t warpSaveFileNum; // save SLOT the warp came from; the target game loads its own same slot (-1 = unset)
+    int32_t sendFadeAlpha;   // 0..255 sending-fade overlay, written by the ACTIVE (sending) game, drawn by the host consumer
+    int32_t doorDLIndex;     // DEV: which Lost Woods room-DL the MM door tunnel tool is showing (for the on-screen readout)
     uint64_t reservedU[12];
 };
 
@@ -204,9 +215,13 @@ void InitFreshRegion() {
     sShared->texFormat = 0;
     sShared->texFrameIndex = 0;
     sShared->uiFocus = 0;
-    for (int i = 0; i < 3; ++i) {
-        sShared->reservedI[i] = 0;
-    }
+    sShared->warpSeq = 0;
+    sShared->warpScene = 0;
+    sShared->warpX = sShared->warpY = sShared->warpZ = 0.0f;
+    sShared->warpRotY = 0;
+    sShared->warpSaveFileNum = -1;
+    sShared->sendFadeAlpha = 0;
+    sShared->doorDLIndex = 0;
     for (int i = 0; i < 12; ++i) {
         sShared->reservedU[i] = 0;
     }
@@ -266,7 +281,38 @@ FscShared* LazyOpen() {
     return MapShared(false);
 }
 
+// Copy an .o2r from whichever combo dir has it into the one that doesn't (best-effort, never throws).
+void MirrorO2r(const std::filesystem::path& dirA, const std::filesystem::path& dirB, const char* name) {
+    std::error_code ec;
+    std::filesystem::path a = dirA / name;
+    std::filesystem::path b = dirB / name;
+    bool ae = std::filesystem::exists(a, ec);
+    bool be = std::filesystem::exists(b, ec);
+    if (ae && !be) {
+        std::filesystem::copy_file(a, b, std::filesystem::copy_options::overwrite_existing, ec);
+    } else if (be && !ae) {
+        std::filesystem::copy_file(b, a, std::filesystem::copy_options::overwrite_existing, ec);
+    }
+}
+
 } // namespace
+
+void FleetShipCombo_ProvisionO2rBothDirs(void) {
+    // Combo layout: <root>/soh.exe + <root>/2ship/2ship.exe. Both mm.o2r and oot.o2r should sit next to
+    // BOTH exes, so mirror whichever exists into the dir missing it — an extraction done by EITHER game
+    // (soh -> oot.o2r, 2ship -> mm.o2r) then provisions both. No-op when there's no sibling (standalone).
+    std::filesystem::path selfDir = SelfExeDir();
+    std::filesystem::path guestExe = Locate2ShipExe();
+    if (selfDir.empty() || guestExe.empty()) {
+        return;
+    }
+    std::filesystem::path guestDir = guestExe.parent_path();
+    if (guestDir.empty() || guestDir == selfDir) {
+        return;
+    }
+    MirrorO2r(selfDir, guestDir, "mm.o2r");
+    MirrorO2r(selfDir, guestDir, "oot.o2r");
+}
 
 void FleetShipCombo_HostBootstrap(int argc, char** argv) {
     // For picture-in-picture BOTH games run whenever the combo is enabled; isPlayerIn2Ship
@@ -286,8 +332,21 @@ void FleetShipCombo_HostBootstrap(int argc, char** argv) {
         return;
     }
 
-    // Active game = the one the player was last in (MM if handed off via --boot=mm).
-    int active = (bootMm || CVarGetInteger("isPlayerIn2Ship", 0)) ? 1 : 0;
+    // Active game at boot = where the player LAST SAVED (updated only on save; survives window
+    // switches). The last-saved record OVERRIDES the --boot=mm handoff, so launching via 2ship.exe after
+    // saving in OoT still resumes OoT. (bootMm is ALWAYS set by the 2ship->Ship bounce, so keying the
+    // active game off it made the combo always start in MM — the "autostart into MM" bug.) Only with NO
+    // last-saved record yet (first run) do we honor the "opened via 2ship" handoff / legacy
+    // isPlayerIn2Ship, defaulting to OoT otherwise.
+    int lastSaved = CVarGetInteger("gFleetCombo.LastSavedGame", -1);
+    int active;
+    if (lastSaved >= 0) {
+        active = lastSaved;
+    } else if (bootMm || CVarGetInteger("isPlayerIn2Ship", 0)) {
+        active = 1;
+    } else {
+        active = 0;
+    }
 
     SPDLOG_INFO("[FleetShipCombo] Host bringing up 2ship child at '{}' (--fleet-child). active={}.",
                 twoShipExe.string(), active);
@@ -303,6 +362,7 @@ void FleetShipCombo_HostBootstrap(int argc, char** argv) {
 #endif
     FleetShipCombo_SharedInit(selfPid);
     FleetShipCombo_SetActiveGame(active);
+    FleetShipCombo_SetUiFocus(active); // front window follows the boot active game (0=OoT, 1=MM)
 
     if (Launch2ShipChild(twoShipExe)) {
         CVarSetInteger("isPlayerIn2Ship", active);
@@ -325,6 +385,103 @@ void FleetShipCombo_SetActiveGame(int game) {
     if (s) {
         s->activeGame = game;
     }
+}
+
+// Per-process seq of the last warp we issued/consumed, so the REQUESTER never re-consumes its own.
+static int sLastWarpSeq = 0;
+
+void FleetShipCombo_RequestWarp(int targetGame, int scene, float x, float y, float z, int rotY, int saveFile) {
+    FscShared* s = LazyOpen();
+    if (!s) {
+        return;
+    }
+    s->warpScene = scene;
+    s->warpX = x;
+    s->warpY = y;
+    s->warpZ = z;
+    s->warpRotY = rotY;
+    s->warpSaveFileNum = saveFile; // tell the target game which save slot to be in (set before the seq bump)
+    s->warpSeq += 1;            // mark a new request
+    sLastWarpSeq = s->warpSeq;  // we issued it; don't let THIS process consume its own warp
+    s->activeGame = targetGame; // flip: the target game becomes active (unfrozen) and applies it
+    s->uiFocus = targetGame;    // front window follows the active game (0=OoT, 1=MM); a peek tab may
+                                // override it afterwards without touching activeGame
+}
+
+int FleetShipCombo_ConsumePendingWarp(int* scene, float* x, float* y, float* z, int* rotY) {
+    FscShared* s = LazyOpen();
+    if (!s) {
+        return 0;
+    }
+    if (s->warpSeq == sLastWarpSeq) {
+        return 0; // nothing new
+    }
+    if (s->activeGame != kThisGame) {
+        return 0; // not addressed to this game yet
+    }
+    sLastWarpSeq = s->warpSeq;
+    if (scene) {
+        *scene = s->warpScene;
+    }
+    if (x) {
+        *x = s->warpX;
+    }
+    if (y) {
+        *y = s->warpY;
+    }
+    if (z) {
+        *z = s->warpZ;
+    }
+    if (rotY) {
+        *rotY = s->warpRotY;
+    }
+    return 1;
+}
+
+int FleetShipCombo_GetWarpSaveFile(void) {
+    FscShared* s = LazyOpen();
+    return s ? s->warpSaveFileNum : -1;
+}
+
+// Cross-game arrival blackout: while > 0, THIS game's render path paints the screen BLACK (empty DL)
+// so the stale frame of the OTHER game and the warp scene-load are never shown during a flip. Set on
+// warp arrival; the render path calls ...Active() exactly once per frame (it decrements).
+static int sArrivalBlackout = 0;
+void FleetShipCombo_BeginArrivalBlackout(int frames) {
+    sArrivalBlackout = frames;
+}
+int FleetShipCombo_ArrivalBlackoutActive(void) {
+    if (sArrivalBlackout > 0) {
+        sArrivalBlackout--;
+        return 1;
+    }
+    return 0;
+}
+
+// Sending-side fade overlay (0..255). The active game's warp logic ramps this up while Link keeps
+// walking into the door (no scene transition -> no reload, not frozen); the host PiP consumer draws a
+// black overlay at this alpha over the scene, giving a real fade-out, then we flip at full black.
+void FleetShipCombo_SetSendFadeAlpha(int alpha) {
+    FscShared* s = LazyOpen();
+    if (!s) {
+        return;
+    }
+    s->sendFadeAlpha = alpha < 0 ? 0 : (alpha > 255 ? 255 : alpha);
+}
+int FleetShipCombo_GetSendFadeAlpha(void) {
+    FscShared* s = LazyOpen();
+    return s ? s->sendFadeAlpha : 0;
+}
+
+void FleetShipCombo_SetDoorDLIndex(int index) {
+    FscShared* s = LazyOpen();
+    if (s) {
+        s->doorDLIndex = index;
+    }
+}
+int FleetShipCombo_GetDoorDLIndex(void) {
+    FscShared* s = LazyOpen();
+    return s ? s->doorDLIndex : 0;
 }
 
 bool FleetShipCombo_IsThisGameActive(void) {
@@ -379,4 +536,172 @@ void FleetShipCombo_SetUiFocus(int focus) {
         AllowSetForegroundWindow(ASFW_ANY);
     }
 #endif
+}
+
+// ---- FleetSync save-sync handshake over reservedU (layout unchanged — MUST match 2ship) ----
+// reservedU[0] is reserved (legacy bottles-sync plan). [1] = syncSaveSeq (bumped by the game that
+// just SAVED), [2] = syncSaveAck (set by the OTHER game once it applied the shared overlay and
+// wrote its own file), [3] = syncSaveSlot.
+void FleetShipCombo_SignalSyncSave(int slot) {
+    FscShared* s = LazyOpen();
+    if (!s) {
+        return;
+    }
+    s->reservedU[3] = (uint64_t)(uint32_t)slot;
+    s->reservedU[1] = s->reservedU[1] + 1;
+}
+
+unsigned long long FleetShipCombo_GetSyncSaveSeq(void) {
+    FscShared* s = LazyOpen();
+    return s ? s->reservedU[1] : 0;
+}
+
+int FleetShipCombo_GetSyncSaveSlot(void) {
+    FscShared* s = LazyOpen();
+    return s ? (int)(uint32_t)s->reservedU[3] : -1;
+}
+
+void FleetShipCombo_AckSyncSave(unsigned long long seq) {
+    FscShared* s = LazyOpen();
+    if (s) {
+        s->reservedU[2] = seq;
+    }
+}
+
+unsigned long long FleetShipCombo_GetSyncSaveAck(void) {
+    FscShared* s = LazyOpen();
+    return s ? s->reservedU[2] : 0;
+}
+
+// ---- Fleet Oracle (combo randomizer) handshake over reservedU[4..5] (layout unchanged — MUST match 2ship) ----
+// [4] = oracleReqSeq (bumped by the HOST after writing fleet_oracle_req.json), [5] = oracleRespAck
+// (set by the MM oracle to the req seq it answered, after writing fleet_oracle_resp.json).
+void FleetShipCombo_SignalOracleRequest(void) {
+    FscShared* s = LazyOpen();
+    if (s) {
+        s->reservedU[4] = s->reservedU[4] + 1;
+    }
+}
+
+unsigned long long FleetShipCombo_GetOracleRequestSeq(void) {
+    FscShared* s = LazyOpen();
+    return s ? s->reservedU[4] : 0;
+}
+
+void FleetShipCombo_AckOracleResponse(unsigned long long seq) {
+    FscShared* s = LazyOpen();
+    if (s) {
+        s->reservedU[5] = seq;
+    }
+}
+
+unsigned long long FleetShipCombo_GetOracleResponseAck(void) {
+    FscShared* s = LazyOpen();
+    return s ? s->reservedU[5] : 0;
+}
+
+// ---- Shared-window open request over reservedU[6] (layout unchanged — MUST match 2ship) ----
+// 2ship's "Shared" tab bumps this counter; our client pump (FleetOracleClient) opens the
+// Fleet Shared window when it sees the change.
+void FleetShipCombo_RequestSharedWindowOpen(void) {
+    FscShared* s = LazyOpen();
+    if (s) {
+        s->reservedU[6] = s->reservedU[6] + 1;
+    }
+}
+
+unsigned long long FleetShipCombo_GetSharedWindowOpenSeq(void) {
+    FscShared* s = LazyOpen();
+    return s ? s->reservedU[6] : 0;
+}
+
+// ---- Cross-game RESTART over reservedU[10] (layout unchanged — MUST match the other repo) ----
+// A reset in one game bumps reservedU[10]; the other game's per-frame pump sees the new value and
+// resets itself too. sRestartSelfSeq marks the value we ourselves bumped/observed so we never respond
+// to our own reset (which would ping-pong forever).
+static unsigned long long sRestartSelfSeq = 0;
+static bool sRestartSeqInit = false;
+
+void FleetShipCombo_SignalRestart(void) {
+    FscShared* s = LazyOpen();
+    if (s) {
+        s->reservedU[10] = s->reservedU[10] + 1;
+        sRestartSelfSeq = s->reservedU[10]; // our own bump; our pump must not respond to it
+        sRestartSeqInit = true;
+    }
+}
+
+int FleetShipCombo_ConsumeRestartRequest(void) {
+    FscShared* s = LazyOpen();
+    if (!s) {
+        return 0;
+    }
+    if (!sRestartSeqInit) {
+        sRestartSeqInit = true;
+        sRestartSelfSeq = s->reservedU[10]; // don't fire on any pre-existing value at attach
+        return 0;
+    }
+    if (s->reservedU[10] == sRestartSelfSeq) {
+        return 0; // nothing new, or our own reset
+    }
+    sRestartSelfSeq = s->reservedU[10];
+    return 1;
+}
+
+// ---- UI-overlay texture over reservedU[7..9] (layout unchanged — MUST match 2ship) ----
+// A SECOND shared texture with ONLY 2ship's ImGui windows (trackers etc.) over a transparent
+// background, so we can draw MM's UI on top of whichever game is active (both trackers at once).
+// [7] = D3D11 shared handle (0 = none), [8] = (width<<32)|height, [9] = (dxgiFormat<<32)|frameIndex.
+void FleetShipCombo_PublishUiTexture(unsigned long long handle, unsigned int width, unsigned int height,
+                                     unsigned int dxgiFormat, unsigned int frameIndex) {
+    FscShared* s = LazyOpen();
+    if (!s) {
+        return;
+    }
+    s->reservedU[8] = ((unsigned long long)width << 32) | height;
+    s->reservedU[9] = ((unsigned long long)dxgiFormat << 32) | frameIndex;
+    s->reservedU[7] = handle; // handle last: the consumer keys re-opens off it
+}
+
+int FleetShipCombo_GetUiTexture(unsigned long long* handle, unsigned int* width, unsigned int* height,
+                                unsigned int* dxgiFormat, unsigned int* frameIndex) {
+    FscShared* s = LazyOpen();
+    if (!s) {
+        return 0;
+    }
+    if (handle) {
+        *handle = s->reservedU[7];
+    }
+    if (width) {
+        *width = (unsigned int)(s->reservedU[8] >> 32);
+    }
+    if (height) {
+        *height = (unsigned int)(s->reservedU[8] & 0xFFFFFFFFu);
+    }
+    if (dxgiFormat) {
+        *dxgiFormat = (unsigned int)(s->reservedU[9] >> 32);
+    }
+    if (frameIndex) {
+        *frameIndex = (unsigned int)(s->reservedU[9] & 0xFFFFFFFFu);
+    }
+    return s->reservedU[7] != 0 ? 1 : 0;
+}
+
+// ---- Combo active SLOT over reservedU[11] (layout unchanged — MUST match the other repo) ----
+// OoT publishes which save slot the current combo file is (0..2 stored as 1..3; 0 = unset) when a
+// combo file is created/loaded, so MM auto-loads the SAME slot when it becomes active (its own
+// per-process gFleetCombo.LastSlot may not match on a fresh combo).
+void FleetShipCombo_SetComboSlot(int slot) {
+    FscShared* s = LazyOpen();
+    if (s && slot >= 0 && slot <= 2) {
+        s->reservedU[11] = (uint64_t)(slot + 1);
+    }
+}
+
+int FleetShipCombo_GetComboSlot(void) {
+    FscShared* s = LazyOpen();
+    if (!s || s->reservedU[11] == 0) {
+        return -1;
+    }
+    return (int)s->reservedU[11] - 1;
 }

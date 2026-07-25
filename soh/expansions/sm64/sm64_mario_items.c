@@ -754,9 +754,19 @@ static Vec3f sFireGracePos = { 0.0f, 0.0f, 0.0f };
 //     damage the boss" inconsistency. DMG_SWORD is accepted by every boss's AC
 //     bumper (you can always sword them), so the fireball now lands on all of
 //     them. Radius bumped 13→22 so a thrown ball reliably overlaps a big boss.
+// Sunlight-arrow flags on the toucher (Skijer's NEI):
+//   - DMG_ARROW_LIGHT (1<<0xD): light-arrow damage — undead (ReDead/Gibdo) are weak
+//     to it, and it activates the SunlightArrows-mode sun switch collider (0x00202000).
+//   - DMG_MIR_RAY (1<<0x15): the mirror-ray flag the VANILLA Obj_Lightswitch bumper
+//     accepts (0x00200000). Adding it lets the fireball toggle sun switches even WITHOUT
+//     the SunlightArrows enhancement (both bumper variants include DMG_MIR_RAY). Normal
+//     enemies ignore DMG_MIR_RAY (their DMG_DEFAULT bumpers exclude it), so no side effect
+//     beyond the sun switches.
 static ColliderCylinderInit sMarioFireballColInit = {
     { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
-    { ELEMTYPE_UNK2, { DMG_FIRE | DMG_SWORD, 0x01, 8 }, { 0, 0, 0 }, TOUCH_ON | TOUCH_SFX_NORMAL, BUMP_NONE, OCELEM_NONE },
+    { ELEMTYPE_UNK2,
+      { DMG_FIRE | DMG_SWORD | DMG_ARROW_LIGHT | DMG_MIR_RAY, 0x01, 8 },
+      { 0, 0, 0 }, TOUCH_ON | TOUCH_SFX_NORMAL, BUMP_NONE, OCELEM_NONE },
     { 22, 30, -6, { 0, 0, 0 } }
 };
 
@@ -883,6 +893,50 @@ void Sm64Mario_FireballOnBPress(PlayState* play, Player* player) {
     Sfx_PlaySfxCentered(NA_SE_PL_MAGIC_FIRE);
 }
 
+// Sunlight-arrow effect applied to whatever a fireball hits (in addition to the
+// fire + DMG_SWORD super-boss damage). Mirrors item_rod_light.c: undead (ReDeads,
+// Gibdos, Poes, Stalchildren, hands…) are weak to sunlight and get the white "Sun's
+// Song" paralysis; every other enemy gets a plain stun. SunlightArrows.cpp handles
+// the OTHER half — the fireball is an AT_TYPE_PLAYER attack, so with that enhancement
+// on it already activates Obj_Lightswitch sun switches (its AC is AC_TYPE_PLAYER).
+#define MARIO_FB_SUNLIGHT_STUN 80
+
+static u8 Sm64Fireball_IsUndead(Actor* actor) {
+    switch (actor->id) {
+        case ACTOR_EN_RD:         // ReDead / Gibdo
+        case ACTOR_EN_POH:        // Poe
+        case ACTOR_EN_PO_SISTERS: // Poe Sisters
+        case ACTOR_EN_PO_RELAY:   // Dampe's Ghost
+        case ACTOR_EN_PO_FIELD:   // Field Poe
+        case ACTOR_EN_PO_DESERT:  // Desert Poe
+        case ACTOR_EN_SKB:        // Stalchild
+        case ACTOR_EN_WALLMAS:    // Wallmaster
+        case ACTOR_EN_FLOORMAS:   // Floormaster
+        case ACTOR_EN_DH:         // Dead Hand
+        case ACTOR_EN_DHA:        // Dead Hand arms
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+static void Sm64Fireball_ApplySunlight(PlayState* play, Actor* hitActor) {
+    if (hitActor == NULL || hitActor->update == NULL) {
+        return;
+    }
+    if (hitActor->category != ACTORCAT_ENEMY && hitActor->category != ACTORCAT_BOSS) {
+        return;
+    }
+    if (Sm64Fireball_IsUndead(hitActor)) {
+        // White color filter (-0x8000 flag) = the Sun's Song / Gibdo sunlight paralysis.
+        Actor_SetColorFilter(hitActor, -0x8000, 0xC8, 0, MARIO_FB_SUNLIGHT_STUN);
+    } else {
+        Actor_SetColorFilter(hitActor, 0, 0xFF, 0, MARIO_FB_SUNLIGHT_STUN);
+    }
+    hitActor->freezeTimer = MARIO_FB_SUNLIGHT_STUN;
+    Audio_PlayActorSound2(hitActor, NA_SE_EN_LIGHT_ARROW_HIT);
+}
+
 // Advance every in-flight fireball one frame: gravity, integrate, floor bounce,
 // fire collider, life/hit despawn. Called unconditionally each normal frame from
 // Sm64Mario_Update so balls finish even after the Fire cap ends. The flame VFX is
@@ -922,6 +976,7 @@ void Sm64Mario_UpdateFireballs(PlayState* play) {
         if (fb->colInited && (fb->col.base.atFlags & AT_HIT)) {
             Vec3f zero = { 0.0f, 0.0f, 0.0f };
             fb->col.base.atFlags &= ~AT_HIT;
+            Sm64Fireball_ApplySunlight(play, fb->col.base.at); // sunlight-arrow paralysis/stun on the hit actor
             EffectSsBomb2_SpawnLayered(play, &fb->pos, &zero, &zero, 10, 5);
             // Open the boss super-damage grace at the impact point so a boss that
             // reads its BUMP_HIT one frame later (after this ball is gone) still

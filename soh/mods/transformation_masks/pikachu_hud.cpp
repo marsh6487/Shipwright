@@ -433,3 +433,117 @@ extern "C" void PikachuHud_DrawImGui(void) {
     sHudWindow = std::make_shared<PikachuHudWindow>("gPikachuHudWindow", "Pikachu HUD");
     gui->AddGuiWindow(sHudWindow);
 }
+
+// ===========================================================================
+// Gerudo MHR Dual Blades HUD — wirebug pips + demon gauge.
+//
+// Lives here (not its own gerudo_hud.cpp) because this TU is already in the VS
+// solution with the exact ImGui/Ship includes — avoids a new-file build step.
+// Texture-free (ImDrawList primitives). Reads state via the extern "C" getters
+// defined in gerudo_mhr_combat.inc.c. Skijer's NEI.
+// ===========================================================================
+extern "C" {
+u8  GerudoMhr_IsActive(void);
+u8  GerudoMhr_GetWirebugs(void);
+f32 GerudoMhr_GetWirebugFill(void);
+u8  GerudoMhr_IsDemonActive(void);
+f32 GerudoMhr_GetDemonMeter01(void);
+}
+
+#define CVAR_GERUDO_TRANSFORM "gMods.GerudoMaskTransform"
+#define GMHR_WIREBUG_MAX 3
+
+namespace {
+
+class GerudoHudWindow final : public Ship::GuiWindow {
+  public:
+    using GuiWindow::GuiWindow;
+    void InitElement() override {}
+    void DrawElement() override {}
+    void UpdateElement() override {}
+    void Draw() override;
+};
+
+void GerudoHudWindow::Draw() {
+    if (!CVarGetInteger(CVAR_GERUDO_TRANSFORM, 0) || !GerudoMhr_IsActive()) {
+        return;
+    }
+    if (gPlayState == nullptr || gPlayState->pauseCtx.state != 0) {
+        return;
+    }
+    auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
+    if (gui->GetMenuOrMenubarVisible()) {
+        return;
+    }
+
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImDrawList* dl = ImGui::GetForegroundDrawList(vp);
+    ImVec2 disp = vp->Size;
+    float s = disp.y / 600.0f;
+    if (s < 0.6f) {
+        s = 0.6f;
+    }
+
+    // Wirebug pips (top-left, under the magic bar)
+    u8 count = GerudoMhr_GetWirebugs();
+    f32 fill = GerudoMhr_GetWirebugFill();
+    float r = 9.0f * s;
+    float gap = 8.0f * s;
+    float ox = 28.0f * s;
+    float oy = 70.0f * s;
+    for (int i = 0; i < GMHR_WIREBUG_MAX; i++) {
+        ImVec2 c(ox + (r * 2.0f + gap) * i + r, oy + r);
+        if (i < count) {
+            dl->AddCircleFilled(c, r, IM_COL32(120, 230, 180, 235), 20);
+            dl->AddCircle(c, r, IM_COL32(20, 60, 40, 255), 20, 2.0f * s);
+        } else if (i == count) {
+            dl->AddCircleFilled(c, r, IM_COL32(40, 50, 50, 160), 20);
+            if (fill > 0.0f) {
+                const float kPi = 3.14159265f;
+                dl->PathLineTo(c);
+                dl->PathArcTo(c, r, -kPi * 0.5f, -kPi * 0.5f + 2.0f * kPi * fill, 18);
+                dl->PathFillConvex(IM_COL32(90, 170, 140, 200));
+            }
+            dl->AddCircle(c, r, IM_COL32(20, 60, 40, 200), 20, 2.0f * s);
+        } else {
+            dl->AddCircle(c, r, IM_COL32(60, 70, 70, 150), 20, 1.5f * s);
+        }
+    }
+
+    // Demon gauge (bar below the pips)
+    f32 meter = GerudoMhr_GetDemonMeter01();
+    bool on = GerudoMhr_IsDemonActive() != 0;
+    ImVec2 bmin(ox, oy + r * 2.0f + 8.0f * s);
+    ImVec2 bmax(ox + (r * 2.0f + gap) * GMHR_WIREBUG_MAX - gap, bmin.y + 9.0f * s);
+    dl->AddRectFilled(bmin, bmax, IM_COL32(25, 15, 15, 180), 2.0f * s);
+    ImVec2 fmax(bmin.x + (bmax.x - bmin.x) * meter, bmax.y);
+    ImU32 fillCol = on ? IM_COL32(255, 70, 60, 240) : IM_COL32(180, 60, 70, 200);
+    dl->AddRectFilled(bmin, fmax, fillCol, 2.0f * s);
+    dl->AddRect(bmin, bmax, IM_COL32(255, 120, 110, on ? 255 : 160), 2.0f * s, 0, 1.5f * s);
+}
+
+std::shared_ptr<GerudoHudWindow> sGerudoHudWindow = nullptr;
+
+} // namespace
+
+// Called every frame from Interface_Draw (z_parameter.c). Self-registers on
+// first use; cheap no-op after. Same pattern as PikachuHud_DrawImGui.
+extern "C" void GerudoHud_DrawImGui(void) {
+    if (sGerudoHudWindow != nullptr) {
+        return;
+    }
+    auto ctx = Ship::Context::GetRawInstance();
+    if (ctx == nullptr) {
+        return;
+    }
+    auto window = ctx->GetWindow();
+    if (window == nullptr) {
+        return;
+    }
+    auto gui = window->GetGui();
+    if (gui == nullptr) {
+        return;
+    }
+    sGerudoHudWindow = std::make_shared<GerudoHudWindow>("gGerudoHudWindow", "Gerudo HUD");
+    gui->AddGuiWindow(sGerudoHudWindow);
+}

@@ -36,6 +36,10 @@ void* BrokenItems_FormIconTex(s32 i);     // grid icon texture for form i
 u16 BrokenItems_FormItem(s32 i);          // OOT item whose NAME texture labels form i
 s32 BrokenItems_CurrentForm(void);        // currently-equipped form index
 void BrokenItems_EquipForm(PlayState* play, s32 i); // equip form i (sets the CVars)
+// 0 if form i is not yet earned on this save (Mario needs the Mario Mask). The
+// equip path already refuses locked forms; the kaleido page can use this to grey
+// the icon out. Skijer's NEI
+s32 BrokenItems_FormUnlocked(s32 i);
 
 #ifdef __cplusplus
 }

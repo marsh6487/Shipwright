@@ -94,12 +94,6 @@ static u16 sCapeVerticesMap[CAPE_NUM_STRANDS * CAPE_NUM_JOINTS] = {
 };
 
 // ---------------------------------------------------------------------------
-// Magic recovery: recover half of magic spent each frame (rounded up)
-// ---------------------------------------------------------------------------
-static s8 sCapePrevMagic = 0;
-static u8 sCapeMagicTracking = 0;
-
-// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 static void MagicCape_Init(void) {
@@ -135,7 +129,6 @@ static void MagicCape_Reset(void) {
     // registration is established once in Init and persists for the rest of the session.
     // The mask buffer is static so its lifetime is forever; the GPU can keep referencing it
     // safely across re-inits without races.
-    sCapeMagicTracking = 0;
     sCapeInitialized = 0;
     sCapeShouldersCaptured = 0;
     sCapeNeedsRootSnap = 1;
@@ -434,13 +427,22 @@ static void MagicCape_Draw(Player* player, PlayState* play) {
 // Handles resetting cape when tunic changes away.
 // ---------------------------------------------------------------------------
 static void MagicCape_Cleanup(void) {
-    if (gExtEquipState.currentExtTunic != 1 && sCapeInitialized) {
+    // Skijer 2026-07-15: the cape is no longer an ext-equipment slot — the cloth shows whenever the
+    // cape is OWNED and not hidden via its kaleido upgrade-cell toggle.
+    if (!ExtEquip_CapeVisible() && sCapeInitialized) {
         MagicCape_Reset();
     }
 }
 
 // ---------------------------------------------------------------------------
-// Main behavior entry (called per frame from dispatch)
+// PASSIVE effect (Skijer 2026-07-15): the cape HALVES all magic COSTS (commit 10a66533's MAGIC_REQ),
+// so spells are castable with half the base magic. Implemented at the cost sites, not here:
+// Magic_RequestChange (z_parameter.c, vanilla spells + API), ItemMagic_Consume/HasEnough
+// (equip_helper.c, all custom magic items), FS_CLONE_MP_COST (Four Sword). The old refund tracker
+// (recover half of spent magic) was REMOVED — it required the FULL cost upfront to cast and would
+// have double-dipped with the real half cost.
+// ---------------------------------------------------------------------------
+// Main behavior entry (cloth physics only — called per frame when the cape is VISIBLE)
 // ---------------------------------------------------------------------------
 static void MagicCape_Behavior(Player* player, PlayState* play) {
     // Skip while riding Epona — pairs with the same guard in MagicCape_Draw.
@@ -461,23 +463,6 @@ static void MagicCape_Behavior(Player* player, PlayState* play) {
     // Initialize if needed
     if (!sCapeInitialized) {
         MagicCape_Init();
-    }
-
-    // Magic recovery: if magic decreased this frame, recover half (rounded up)
-    if (!sCapeMagicTracking) {
-        sCapePrevMagic = gSaveContext.magic;
-        sCapeMagicTracking = 1;
-    } else {
-        s8 spent = sCapePrevMagic - gSaveContext.magic;
-        if (spent > 0) {
-            // Recover ceil(spent / 2)
-            s8 recover = (spent + 1) / 2;
-            gSaveContext.magic += recover;
-            if (gSaveContext.magic > gSaveContext.magicCapacity) {
-                gSaveContext.magic = gSaveContext.magicCapacity;
-            }
-        }
-        sCapePrevMagic = gSaveContext.magic;
     }
 
     sCapeFrameTimer++;

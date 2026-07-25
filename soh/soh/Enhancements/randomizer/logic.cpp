@@ -22,7 +22,6 @@ extern "C" {
 #include "mods/items/custom_items.h"
 #include "mods/extended_inventory.h"
 #include "mods/extended_equipment.h"
-#include "mods/items/logic/weapon_upgrades.h"
 }
 namespace Rando {
 
@@ -413,19 +412,18 @@ bool Logic::HasItem(RandomizerGet itemName) {
             return ctx->GetOption(RSK_EXT_EQUIPMENT) && ExtEquip_HasItem(EQUIP_TYPE_SWORD, EXT_EQUIP_1);
         case RG_EXT_FOUR_SWORD:
             return ctx->GetOption(RSK_EXT_EQUIPMENT) && ExtEquip_HasItem(EQUIP_TYPE_SWORD, EXT_EQUIP_2);
-        // ───── NEI Weapon Upgrades (RSK_NEI_WEAPON_UPGRADES) — require the base weapon ─────
-        case RG_HAMMER_UPGRADE:
-            return ctx->GetOption(RSK_NEI_WEAPON_UPGRADES) && WeaponUpgrade_HasHammerAxe() &&
-                   CanUse(RG_MEGATON_HAMMER);
+        // ───── NEI Weapon Upgrades (progressive) ─────
+        // These REPLACE the vanilla weapon in the pool; level 1 = the vanilla weapon (set by
+        // ApplyItemEffect). For logic they are exactly their base weapon — the combat upgrade
+        // levels (Razor/Gilded/Real MS/Axe/GFS) have no reachability effect.
+        case RG_PROGRESSIVE_HAMMER:
+            return CanUse(RG_MEGATON_HAMMER);
         case RG_PROGRESSIVE_KOKIRI_SWORD:
-            return ctx->GetOption(RSK_NEI_WEAPON_UPGRADES) && WeaponUpgrade_HasRazor() &&
-                   CanUse(RG_KOKIRI_SWORD);
-        case RG_TRUE_MASTER_SWORD:
-            return ctx->GetOption(RSK_NEI_WEAPON_UPGRADES) && WeaponUpgrade_HasTrueMaster() &&
-                   CanUse(RG_MASTER_SWORD);
-        case RG_GREAT_FAIRY_SWORD:
-            return ctx->GetOption(RSK_NEI_WEAPON_UPGRADES) && WeaponUpgrade_HasGreatFairy() &&
-                   CanUse(RG_BIGGORON_SWORD);
+            return CanUse(RG_KOKIRI_SWORD);
+        case RG_PROGRESSIVE_MASTER_SWORD:
+            return CanUse(RG_MASTER_SWORD);
+        case RG_PROGRESSIVE_BGS:
+            return CanUse(RG_BIGGORON_SWORD);
         case RG_EXT_DIVINE_SHIELD:
             return ctx->GetOption(RSK_EXT_EQUIPMENT) && ExtEquip_HasItem(EQUIP_TYPE_SHIELD, EXT_EQUIP_1);
         case RG_EXT_SHEIKAH_SHIELD:
@@ -1632,7 +1630,7 @@ bool Logic::CanJumpslashExceptHammer() {
 
 bool Logic::CanJumpslash() {
     return CanJumpslashExceptHammer() || CanUse(RG_MEGATON_HAMMER) ||
-           CanUse(RG_BALL_AND_CHAIN) || CanUse(RG_HAMMER_UPGRADE) ||
+           CanUse(RG_BALL_AND_CHAIN) ||
            CanUse(RG_FIRE_ROD) || CanUse(RG_ICE_ROD) || CanUse(RG_LIGHT_ROD);
 }
 
@@ -1798,7 +1796,7 @@ bool Logic::HasExplosives() {
 
 bool Logic::BlastOrSmash() {
     return HasExplosives() || CanUse(RG_MEGATON_HAMMER) ||
-           CanUse(RG_BALL_AND_CHAIN) || CanUse(RG_HAMMER_UPGRADE) ||
+           CanUse(RG_BALL_AND_CHAIN) ||
            CanUse(RG_MM_MASK_GORON);
 }
 
@@ -1829,7 +1827,7 @@ bool Logic::CanCutShrubs() {
            HasItem(RG_GORONS_BRACELET) ||
            CanUse(RG_DEMISE_DESTRUCTION) || CanUse(RG_MM_MASK_FIERCE_DEITY) ||
            CanUse(RG_EXT_FOUR_SWORD) || CanUse(RG_EXT_CANE_OF_BYRNA) ||
-           CanUse(RG_BALL_AND_CHAIN) || CanUse(RG_HAMMER_UPGRADE) || CanUse(RG_MM_MASK_GORON);
+           CanUse(RG_BALL_AND_CHAIN) || CanUse(RG_MM_MASK_GORON);
 }
 
 bool Logic::CanStunDeku() {
@@ -2491,6 +2489,36 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
                     }
                     SetInventory(ITEM_ROCS_FEATHER_SKIJER, RocsLookup[i]);
                 } break;
+                // NEI progressive weapons (replace the vanilla weapon in the pool). Only level 1
+                // — the vanilla weapon — matters for logic; the combat upgrades (Razor/Gilded/
+                // Real MS/Axe/GFS) have no reachability effect. Multi-copy removal is conservative,
+                // matching the vanilla multi-copy Hammer/BGS behavior above.
+                case RG_PROGRESSIVE_KOKIRI_SWORD:
+                    if (!state) {
+                        mSaveContext->inventory.equipment &= ~EQUIP_FLAG_SWORD_KOKIRI;
+                    } else {
+                        mSaveContext->inventory.equipment |= EQUIP_FLAG_SWORD_KOKIRI;
+                    }
+                    break;
+                case RG_PROGRESSIVE_MASTER_SWORD:
+                    if (!state) {
+                        mSaveContext->inventory.equipment &= ~EQUIP_FLAG_SWORD_MASTER;
+                    } else {
+                        mSaveContext->inventory.equipment |= EQUIP_FLAG_SWORD_MASTER;
+                    }
+                    break;
+                case RG_PROGRESSIVE_HAMMER:
+                    SetInventory(ITEM_HAMMER, (!state ? ITEM_NONE : ITEM_HAMMER));
+                    break;
+                case RG_PROGRESSIVE_BGS:
+                    if (!state) {
+                        mSaveContext->inventory.equipment &= ~EQUIP_FLAG_SWORD_BGS;
+                        mSaveContext->bgsFlag = false;
+                    } else {
+                        mSaveContext->inventory.equipment |= EQUIP_FLAG_SWORD_BGS;
+                        mSaveContext->bgsFlag = true;
+                    }
+                    break;
                 case RG_HEART_CONTAINER:
                     mSaveContext->healthCapacity += (!state ? -16 : 16);
                     break;
@@ -2962,7 +2990,8 @@ uint32_t Logic::CurrentUpgrade(uint32_t upgrade) {
 }
 
 uint32_t Logic::CurrentInventory(uint32_t item) {
-    return mSaveContext->inventory.items[InventorySlot(item)];
+    uint8_t slot = InventorySlot(item); // Skijer's NEI: custom slots (>=24) live in gNeiSave
+    return (slot < 24) ? mSaveContext->inventory.items[slot] : Nei_GetOwnedItem(slot);
 }
 
 void Logic::SetUpgrade(uint32_t upgrade, uint8_t level) {
@@ -2971,12 +3000,15 @@ void Logic::SetUpgrade(uint32_t upgrade, uint8_t level) {
 }
 
 bool Logic::CheckInventory(uint32_t item, bool exact) {
-    auto current = mSaveContext->inventory.items[InventorySlot(item)];
+    uint8_t slot = InventorySlot(item); // Skijer's NEI
+    auto current = (slot < 24) ? mSaveContext->inventory.items[slot] : Nei_GetOwnedItem(slot);
     return exact ? (current == item) : (current != ITEM_NONE);
 }
 
 void Logic::SetInventory(uint32_t itemSlot, uint32_t item) {
-    mSaveContext->inventory.items[InventorySlot(itemSlot)] = item;
+    uint8_t slot = InventorySlot(itemSlot); // Skijer's NEI
+    if (slot < 24) mSaveContext->inventory.items[slot] = item;
+    else           Nei_SetOwnedItem(slot, (uint8_t)item);
 }
 
 bool Logic::CheckEquipment(uint32_t equipFlag) {

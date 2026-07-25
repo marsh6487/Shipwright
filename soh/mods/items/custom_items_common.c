@@ -18,9 +18,13 @@
 #include "logic/item_postman_hat.h"
 #include "../extended_inventory.h" // ExtInv_GetItemSlot — custom items must NOT use vanilla SLOT()/INV_CONTENT()
 #include "overlays/actors/ovl_En_Boom/z_en_boom.h" // EnBoom struct for Gale Boomerang multi-target override
+#include "soh/FleetShipCombo/FleetShipCombo.h"      // cross-game world-connector (loading zone)
+#include "soh/FleetShipCombo/FleetSync.h"           // cross-game save cache + fleet-hole registry
+
+extern PlayState* gPlayState;
 
 // Forward declarations for items included after this file in unity build
-extern void Handle_Pending3(Player* p, PlayState* play);
+extern void Handle_Pokeball(Player* p, PlayState* play);
 
 // Global custom items state
 CustomItemState gCustomItemState = { .timer1 = 0,
@@ -273,7 +277,130 @@ static void CustomItems_CleanupUnequipped(Player* p, PlayState* play) {
         Handle_SwitchHook(p, play);
 }
 
+// ============================================================================
+// Fleet Ship Combo — cross-game WORLD CONNECTOR (loading zone), OoT side.
+// Door: OoT Lost Woods (0x5B) near (772,0,322)  <->  MM Lost Woods Intro (0x65) near (-1092,0,487).
+// Runs every frame from CustomItems_Update. Two jobs:
+//  (1) ACTIVATION: when OoT just became the active game with a warp addressed to it, drop Link at
+//      the target spot (seamless teleport-in-place: keep facing/motion, no fade).
+//  (2) TRIGGER: near our door, CANCEL the vanilla Lost Woods exit (its collision-poly trigger is
+//      baked in the binary scene and can't be edited/out-sized) and FLIP to MM instead.
+// ============================================================================
+static u8 sFleetWarpArmed = 0;
+static u8 sTotHoleArmed = 0; // Temple of Time fleet-hole proximity arm (re-arms when Link steps off)
+static u8 sFlipPending = 0; // OoT->MM: a manual fade-out overlay is ramping; flip to MM at full black
+static s16 sSendAlpha = 0;  // 0..255 ramp for the sending fade overlay (drawn by the PiP consumer)
+static s16 sWarpCooldown = 0; // suppress the trigger right after any warp (bridges the scene reload)
+// Destination of the sending fade (set by whichever trigger started it; consumed at full black).
+static int sSendScene = 0x65;
+static float sSendX = 0.0f, sSendY = 0.0f, sSendZ = 0.0f;
+static int sSendRotY = 0;
+
+// Called by the unified arrival pipeline (FleetWarpBoot.cpp) right before it boots the destination
+// Play_Init: we just arrived -> don't let the Lost Woods trigger instantly ping-pong back.
+void FleetWarp_NotifyArrived(void) {
+    sFleetWarpArmed = 1; // Lost Woods door
+    sTotHoleArmed = 1;   // ToT hole: Link pops OUT on the spot -> suppress until he steps off
+    sWarpCooldown = 40;
+}
+
+// ARRIVALS are owned entirely by FleetWarpBoot.cpp (unified pipeline: force-open slot + FleetSync
+// overlays + explicit destination overrides + fresh Play_Init). This tick owns only the SENDING
+// side: Lost Woods door trigger, fleet-hole fall, and the manual fade-out ramp.
+static void FleetWarp_Tick(Player* p, PlayState* play) {
+    if (FleetShipCombo_GetActiveGame() < 0) {
+        return; // combo not running -> no-op (standalone OoT unaffected)
+    }
+    if (sWarpCooldown > 0) {
+        sWarpCooldown--;
+    }
+
+    // (0) FROZEN GUARD — while we are the INACTIVE game, squash any freshly-set transition trigger
+    // (e.g. the hole-fall completion landing AFTER the flip): a frozen game must never start scene
+    // transitions on its own. Only the trigger — never a live transition mode.
+    if (!FleetShipCombo_IsThisGameActive() && play->transitionTrigger != TRANS_TRIGGER_OFF &&
+        play->transitionMode == TRANS_MODE_OFF) {
+        play->transitionTrigger = TRANS_TRIGGER_OFF;
+    }
+
+    // (1) FLEET-HOLE FALL (Temple of Time Door_Ana): falling INTO the hole (z_door_ana.c disabled
+    // Link's floor and called FleetSync_OnHoleFall) starts the sending fade. Gated on a real loaded
+    // file + normal mode so the title demo can't ghost-flip.
+    if (FleetSync_HoleFallPending() && (gSaveContext.fileNum > 2 || gSaveContext.gameMode != GAMEMODE_NORMAL)) {
+        FleetSync_ClearHoleFall();
+    }
+    if (FleetSync_HoleFallPending() && !sFlipPending && sWarpCooldown == 0) {
+        FleetSync_ClearHoleFall();
+        sFlipPending = 1;
+        sSendAlpha = 0;
+        sSendScene = 0x6F; // MM South Clock Town, popping OUT of MM's paired hole
+        sSendX = -527.0f;
+        sSendY = 100.0f;
+        sSendZ = -1173.719f;
+        sSendRotY = -16384;
+    }
+
+    // (2) SENDING FADE in progress (OoT->MM): no scene transition (that would reload/exit OoT).
+    // Each frame: squash a freshly-set exit trigger (mode still OFF -> safe), ramp the black
+    // overlay drawn by the host PiP consumer, and FLIP at full black.
+    if (sFlipPending) {
+        if (play->transitionMode == TRANS_MODE_OFF) {
+            play->transitionTrigger = TRANS_TRIGGER_OFF; // squash before the FSM picks it up
+        }
+        sSendAlpha += 9; // ~1.5s ramp at the ~20 Hz game-update rate (tune)
+        if (sSendAlpha >= 255) {
+            sSendAlpha = 255;
+            sFlipPending = 0;
+            FleetSync_WriteDeparture(gSaveContext.fileNum); // anchor + shared BEFORE the flip
+            FleetShipCombo_SetSendFadeAlpha(0); // MM (now active) owns the black from here
+            FleetShipCombo_RequestWarp(1 /*MM*/, sSendScene, sSendX, sSendY, sSendZ, sSendRotY,
+                                       gSaveContext.fileNum);
+        } else {
+            FleetShipCombo_SetSendFadeAlpha((int)sSendAlpha);
+        }
+        return;
+    }
+
+    // (3) LOST WOODS DOOR TRIGGER — when Link reaches the door, start the manual sending fade.
+    // Squash the vanilla loading-zone trigger near the door (only while no transition mode runs).
+    if (!FleetShipCombo_IsThisGameActive() || play->sceneNum != SCENE_LOST_WOODS) {
+        return; // DON'T reset armed here -> survives the scene-reload transition (no re-trigger loop)
+    }
+    if (gSaveContext.fileNum > 2 || gSaveContext.gameMode != GAMEMODE_NORMAL) {
+        return; // no REAL file loaded / title demo -> a ghost flip would stomp the shared state
+    }
+    Vec3f door = { 772.033f, 0.0f, 322.431f };
+    f32 dist = Math_Vec3f_DistXZ(&p->actor.world.pos, &door);
+    if (dist < 90.0f) {
+        if (play->transitionMode == TRANS_MODE_OFF) {
+            play->transitionTrigger = TRANS_TRIGGER_OFF; // squash the vanilla exit -> no reload
+        }
+        if (!sFleetWarpArmed && sWarpCooldown == 0) {
+            sFleetWarpArmed = 1;
+            sFlipPending = 1;
+            sSendAlpha = 0;
+            sSendScene = 0x65; // MM Lost Woods, landing at the door spot walking out
+            sSendX = -1092.578f;
+            sSendY = 0.0f;
+            sSendZ = 487.082f;
+            sSendRotY = 24585;
+        }
+    } else if (play->transitionTrigger == TRANS_TRIGGER_OFF && play->transitionMode == TRANS_MODE_OFF) {
+        // Walking around outside the door (stable gameplay) -> re-arm.
+        sFleetWarpArmed = 0;
+    }
+}
+
 void CustomItems_Update(Player* p, PlayState* play) {
+    FleetWarp_Tick(p, play); // cross-game loading zone (intercept vanilla exit + flip)
+
+    // Switch Hook charge regen (Epona-carrot style) runs ALWAYS — even with the hook not in hand
+    // or the player blocked — so the 20s/2min timers keep counting. Skijer's NEI
+    {
+        extern void SwitchHook_ChargeTick(void);
+        SwitchHook_ChargeTick();
+    }
+
     // Minish tiny-mode upkeep runs ALWAYS (scene-load auto-reset, per-frame scale
     // guard, shrink/grow animation) — even while blocked or with the cap unequipped
     {
@@ -304,8 +431,8 @@ void CustomItems_Update(Player* p, PlayState* play) {
         // Resolve the real extended-inventory slot (returns SLOT_BOMB_ARROWS == 27).
         u8 baSlot = ExtInv_GetItemSlot(ITEM_BOMB_ARROWS);
         if ((autoGrant || twilightGrant) && CUR_UPG_VALUE(UPG_BOMB_BAG) > 0 && baSlot != 0xFF &&
-            gSaveContext.inventory.items[baSlot] == ITEM_NONE) {
-            gSaveContext.inventory.items[baSlot] = ITEM_BOMB_ARROWS;
+            ExtInv_GetSlotItem(baSlot) == ITEM_NONE) { // Skijer's NEI
+            ExtInv_SetSlotItem(baSlot, ITEM_BOMB_ARROWS); // Skijer's NEI
         }
     }
 
@@ -661,7 +788,7 @@ void CustomItems_Update(Player* p, PlayState* play) {
                 Handle_Lantern(p, play);
                 break;
             case ITEM_POKEBALL:
-                Handle_Pending3(p, play);
+                Handle_Pokeball(p, play);
                 break;
             default:
                 break;
@@ -670,11 +797,17 @@ void CustomItems_Update(Player* p, PlayState* play) {
 }
 
 s32 CustomItems_OverrideDraw(Player* p, PlayState* play) {
+    // Point the game's NATIVE offer arrow at the beetle's candidate (screen-space, correctly sized —
+    // like MM's arrowHoverActor). The lock reticle is driven separately by player->focusActor, set
+    // inline in Beetle_StateFlying. No custom world-space DL. Skijer's NEI
+    Beetle_DrawOffer(p, play);
     CustomItems_DrawDekuLeaf(p, play);
     CustomItems_DrawSpinner(p, play);
     CustomItems_DrawFireRod(p, play);  // Call unconditionally like spinner
     CustomItems_DrawIceRod(p, play);   // Ice Rod draw
     CustomItems_DrawLightRod(p, play); // Light Rod draw
+    // Net: drawn in Player_PostLimbDrawGameplay at PLAYER_LIMB_L_HAND (using the hand-bone matrix so it
+    // rolls 1:1 with the sword), NOT here — a post-draw reconstructed matrix could not follow the roll.
 
     if (gCustomItemState.gustJarMode > 0 || p->heldItemAction == ITEM_GUST_JAR) {
         CustomItems_DrawGustJar(p, play);

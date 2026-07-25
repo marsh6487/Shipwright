@@ -15,6 +15,7 @@
 #include "assets/soh_assets.h"
 #include "transformation_masks/transformation_masks.h"
 #include "transformation_masks/assets/mm_asset_loader.h"
+#include "items/logic/weapon_upgrades.h" // NEI weapon-upgrade icon overrides
 extern void* gItemIcons[];
 extern uint8_t gItemSlots[];
 static ExtendedInventoryState sExtInvState = { .currentPage = 0, .pageSwitchTimer = 0 };
@@ -197,6 +198,16 @@ uint8_t ExtInv_GetSlotAgeReq(uint8_t slot) {
         return 9; // Allowed by form → bypass vanilla age check
     }
 
+    // NEI: the Twilight clawshot upgrade makes the hookshot/longshot usable by child AND adult
+    // (the clawshot is a child-friendly grapple). Owned-gated so child can still select it in the
+    // kaleido to toggle clawshot mode.
+    if (slot == SLOT_HOOKSHOT) {
+        extern unsigned char TwilightUpgrade_HasClawshot(void);
+        if (TwilightUpgrade_HasClawshot()) {
+            return 9; // AGE_REQ_NONE
+        }
+    }
+
     // Vanilla slots (0-23) use the original array
     if (slot < 24) {
         return gSlotAgeReqs[slot];
@@ -230,6 +241,12 @@ uint8_t ExtInv_GetEquipAgeReq(uint8_t row, uint8_t col) {
     if (TransformMasks_IsEnabled() && TransformMasks_IsTransformedAny()) {
         extern SaveContext gSaveContext;
         return 1 - gSaveContext.linkAge;
+    }
+
+    // NEI: the Great Fairy's Sword upgrade makes the Biggoron Sword (row 0 = swords, col 3 = BGS)
+    // usable by BOTH child and adult (normally adult-only).
+    if (row == 0 && col == 3 && WeaponUpgrade_HasGreatFairy()) {
+        return 9; // AGE_REQ_NONE
     }
 
     return gEquipAgeReqs[row][col];
@@ -280,6 +297,13 @@ static const CustomItemAsset sCustomItemAssets[] = {
     // fire type -> icon left NULL so the icon getter handles it below.
     { ITEM_LANTERN,             NULL,                                 (void*)gLanternNameTex },           // 0xB4
     { ITEM_POKEBALL,            (void*)gItemIconPokeballTex,          (void*)gPokeballNameTex },
+    // Mario Mask: slotless (page 2 is full) — ownership lives in
+    // RAND_INF_OBTAINED_MARIO_MASK and unlocks MARIO MODE in the Broken Items
+    // form selector, which is also what reads this name texture. Skijer's NEI
+    { ITEM_MARIO_MASK,          (void*)gItemIconMarioMaskTex,         (void*)gMarioMaskNameTex },         // 0xD6
+    // Bottle Randomizer extra items (Skijer's NEI). Net + Bottomless Bottle; SLOT_BOTTLE_3/4.
+    { ITEM_NET,                 (void*)gItemIconNetTex,               (void*)gNetNameTex },               // 0xF4
+    { ITEM_BOTTOMLESS_BOTTLE,   (void*)gItemIconBottomlessBottleTex,  (void*)gBottomlessBottleNameTex },  // 0xF5
 };
 
 static const CustomItemAsset* ExtInv_FindCustomItemAsset(uint16_t itemId) {
@@ -305,6 +329,29 @@ void* ExtInv_GetCustomItemNameTex(uint16_t itemId, uint8_t language) {
         if (MmAssets_GetChateauIconPath()) // checks availability
             return (void*)"__OTR__item_name_static/gItemNameChateauRomaniENGTex";
         return NULL;
+    }
+    // MM bottle-content custom items: name textures from mm.o2r (item_name_static), like Chateau.
+    // Hylian Loach + Obaba's Drink only exist as JPN textures in MM. Skijer's NEI
+    switch (itemId) {
+        case ITEM_GOLD_DUST:        return (void*)"__OTR__item_name_static/gItemNameGoldDustENGTex";
+        case ITEM_HOT_SPRING_WATER: return (void*)"__OTR__item_name_static/gItemNameHotSpringWaterENGTex";
+        case ITEM_DEKU_PRINCESS:    return (void*)"__OTR__item_name_static/gItemNameDekuPrincessENGTex";
+        case ITEM_SEAHORSE:         return (void*)"__OTR__item_name_static/gItemNameSeaHorseENGTex";
+        case ITEM_SPRING_WATER:     return (void*)"__OTR__item_name_static/gItemNameSpringWaterENGTex";
+        case ITEM_ZORA_EGG:         return (void*)"__OTR__item_name_static/gItemNameZoraEggENGTex";
+        case ITEM_HYLIAN_LOACH:     return (void*)"__OTR__item_name_static/gItemNameHylianLoachJPNTex";
+        case ITEM_OBABA_DRINK:      return (void*)"__OTR__item_name_static/gItemNameObabasDrinkJPNTex";
+        case ITEM_MAGIC_MUSHROOM:   return (void*)"__OTR__item_name_static/gItemNameMagicalMushroomENGTex";
+        // MM adult trade-quest items (Skijer's NEI) — names from mm.o2r item_name_static.
+        case ITEM_MM_MOONS_TEAR:       return (void*)"__OTR__item_name_static/gItemNameMoonsTearENGTex";
+        case ITEM_MM_DEED_LAND:        return (void*)"__OTR__item_name_static/gItemNameLandTitleDeedENGTex";
+        case ITEM_MM_DEED_SWAMP:       return (void*)"__OTR__item_name_static/gItemNameSwampTitleDeedENGTex";
+        case ITEM_MM_DEED_MOUNTAIN:    return (void*)"__OTR__item_name_static/gItemNameMountainTitleDeedENGTex";
+        case ITEM_MM_DEED_OCEAN:       return (void*)"__OTR__item_name_static/gItemNameOceanTitleDeedENGTex";
+        case ITEM_MM_ROOM_KEY:         return (void*)"__OTR__item_name_static/gItemNameRoomKeyENGTex";
+        case ITEM_MM_LETTER_KAFEI:     return (void*)"__OTR__item_name_static/gItemNameLetterToKafeiENGTex";
+        case ITEM_MM_SPECIAL_DELIVERY: return (void*)"__OTR__item_name_static/gItemNameSpecialDeliveryToMamaENGTex";
+        default:                    break;
     }
     // All page-2 custom item name textures live in the shared asset table.
     const CustomItemAsset* asset = ExtInv_FindCustomItemAsset(itemId);
@@ -349,9 +396,31 @@ void* ExtInv_GetItemIcon(uint16_t itemId) {
     // FD skin mode: show FD sword icon for any equipped sword
     if (TransformMasks_IsFDSkinMode() && (itemId == ITEM_SWORD_KOKIRI || itemId == ITEM_SWORD_MASTER ||
                                           itemId == ITEM_SWORD_BGS || itemId == ITEM_SWORD_KNIFE)) {
-        void* fdIcon = MmAssets_LoadFDSwordIcon();
-        if (fdIcon)
-            return fdIcon;
+        // Return the OTR PATH (HD-mod-aware); the loader call is just the mm.o2r existence probe.
+        if (MmAssets_LoadFDSwordIcon())
+            return (void*)"__OTR__icon_item_static_yar/gItemIconFierceDeitySwordTex";
+    }
+
+    // NEI weapon upgrades — show the MM upgrade icon when the upgrade is owned and the matching
+    // base weapon is equipped. The Kokiri top level (Gilded) and the BGS upgrade (GFS) each have
+    // a display toggle in the Custom Items menu. Falls through to the vanilla icon (gItemIcons)
+    // if mm.o2r lacks the asset. Real Master Sword keeps the vanilla Master icon (a glow is
+    // applied at render time, not here).
+    if (itemId == ITEM_SWORD_KOKIRI && WeaponUpgrade_KokiriLevel() >= 1) {
+        u8 showGilded = WeaponUpgrade_HasGilded() && CVarGetInteger("gEnhancements.SkijerNEI.GildedUsesGildedLook", 1);
+        const char* p = showGilded ? "__OTR__icon_item_static_yar/gItemIconGildedSwordTex"
+                                   : "__OTR__icon_item_static_yar/gItemIconRazorSwordTex";
+        if (MmAssets_LoadResource(p)) // probe; return the PATH so the HD pack applies
+            return (void*)p;
+    }
+    if (itemId == ITEM_SWORD_BGS && WeaponUpgrade_HasGreatFairy() &&
+        CVarGetInteger("gEnhancements.SkijerNEI.BgsUsesGfsLook", 1)) {
+        if (MmAssets_LoadResource("__OTR__icon_item_static_yar/gItemIconGreatFairysSwordTex"))
+            return (void*)"__OTR__icon_item_static_yar/gItemIconGreatFairysSwordTex";
+    }
+    // Hammer → Iron Knuckle's Axe: show the axe icon while the upgrade is owned.
+    if (itemId == ITEM_HAMMER && WeaponUpgrade_HasHammerAxe()) {
+        return (void*)gItemIconDrillshaftTex;
     }
 
     // SM64 caps are NO LONGER tied to the OOT spells — they're custom behavior
@@ -380,14 +449,76 @@ void* ExtInv_GetItemIcon(uint16_t itemId) {
         extern unsigned char TwilightUpgrade_IsClawshotActive(void);
         extern unsigned char TwilightUpgrade_IsGaleBoomerangActive(void);
         if ((itemId == ITEM_HOOKSHOT || itemId == ITEM_LONGSHOT) && TwilightUpgrade_IsClawshotActive()) {
-            void* mmIcon = MmAssets_LoadHookshotIcon();
-            if (mmIcon)
-                return mmIcon;
+            if (MmAssets_LoadHookshotIcon())
+                return (void*)"__OTR__icon_item_static_yar/gItemIconHookshotTex";
             return (void*)gItemIconClawshotTex;
         }
         if (itemId == ITEM_BOOMERANG && TwilightUpgrade_IsGaleBoomerangActive()) {
             return (void*)gItemIconGaleBoomerangTex;
         }
+    }
+
+    // Pictograph Box shares the Lens of Truth slot. When the slot's pictobox mode is selected (kaleido
+    // A-toggle), show the pictobox icon in the slot instead of the Lens — clear feedback for the swap,
+    // mirroring the Clawshot/Gale overrides above. Skijer's NEI
+    {
+        extern unsigned char Picto_IsOwned(void);
+        extern unsigned char Picto_IsOnLensActive(void);
+        if (itemId == ITEM_LENS && Picto_IsOwned() && Picto_IsOnLensActive()) {
+            // Return the OTR PATH (not the resolved MmAssets_LoadResource pointer) so gDPLoadTextureBlock
+            // gets the name and Fast3D can substitute an MM HD texture pack (MM_Reloaded etc.) — a
+            // resolved pointer draws base data at the wrong size and went blank under an HD pack. The
+            // MmAssets_LoadResource call stays as the mm.o2r existence probe (falls through if absent).
+            if (MmAssets_LoadResource("__OTR__icon_item_static_yar/gItemIconPictographBoxTex")) {
+                return (void*)"__OTR__icon_item_static_yar/gItemIconPictographBoxTex";
+            }
+        }
+    }
+
+    // Power Keg shares the Bomb slot. When power-keg mode is selected (kaleido A-toggle), show the
+    // Power Keg icon in the slot instead of the Bomb. Skijer's NEI
+    {
+        extern unsigned char PowerKeg_IsOwned(void);
+        extern unsigned char PowerKeg_IsOnBombActive(void);
+        if (itemId == ITEM_BOMB && PowerKeg_IsOwned() && PowerKeg_IsOnBombActive()) {
+            // Return the OTR PATH (see the pictobox note above) so the MM HD texture pack applies.
+            if (MmAssets_LoadResource("__OTR__icon_item_static_yar/gItemIconPowderKegTex")) {
+                return (void*)"__OTR__icon_item_static_yar/gItemIconPowderKegTex";
+            }
+        }
+    }
+
+    // MM bottle-content custom items (Bottle Randomizer) — load the content icon from mm.o2r.
+    // Placeholder texture names for now (TODO: swap to the exact mm.o2r names on test). Falls
+    // through to the registry/fallback if mm.o2r isn't loaded. (Chateau Romani 0xB6 keeps its own
+    // gItemIconChateauRomaniTex; Magic Mushroom 0xDD keeps its own.) Skijer's NEI
+    {
+        const char* p = NULL;
+        if (itemId == ITEM_GOLD_DUST)             p = "__OTR__icon_item_static_yar/gItemIconBottledGoldDustTex";
+        else if (itemId == ITEM_HOT_SPRING_WATER) p = "__OTR__icon_item_static_yar/gItemIconHotSpringWaterTex";
+        else if (itemId == ITEM_DEKU_PRINCESS)    p = "__OTR__icon_item_static_yar/gItemIconBottledDekuPrincessTex";
+        else if (itemId == ITEM_SEAHORSE)         p = "__OTR__icon_item_static_yar/gItemIconBottledSeahorseTex";
+        else if (itemId == ITEM_SPRING_WATER)     p = "__OTR__icon_item_static_yar/gItemIconSpringWaterTex";
+        else if (itemId == ITEM_ZORA_EGG)         p = "__OTR__icon_item_static_yar/gItemIconBottledZoraEggTex";
+        else if (itemId == ITEM_HYLIAN_LOACH)     p = "__OTR__icon_item_static_yar/gItemIconBottledHylianLoachTex";
+        else if (itemId == ITEM_OBABA_DRINK)      p = "__OTR__icon_item_static_yar/gItemIconEmptyBottle2Tex";
+        if (p && MmAssets_LoadResource(p)) return (void*)p; // PATH -> HD-pack aware
+    }
+
+    // MM adult trade-quest items (Skijer's NEI) — shown in the SLOT_TRADE_ADULT 2D-grid wheel. Icons
+    // from mm.o2r. The Pendant of Memories (ITEM_EXT_BOOTS_2) is the combat item, so it gets its icon
+    // from the ext-equipment block below. Special Delivery to Mama reuses MM's "Letter to Mama" icon.
+    {
+        const char* p = NULL;
+        if (itemId == ITEM_MM_MOONS_TEAR)            p = "__OTR__icon_item_static_yar/gItemIconMoonsTearTex";
+        else if (itemId == ITEM_MM_DEED_LAND)        p = "__OTR__icon_item_static_yar/gItemIconLandDeedTex";
+        else if (itemId == ITEM_MM_DEED_SWAMP)       p = "__OTR__icon_item_static_yar/gItemIconSwampDeedTex";
+        else if (itemId == ITEM_MM_DEED_MOUNTAIN)    p = "__OTR__icon_item_static_yar/gItemIconMountainDeedTex";
+        else if (itemId == ITEM_MM_DEED_OCEAN)       p = "__OTR__icon_item_static_yar/gItemIconOceanDeedTex";
+        else if (itemId == ITEM_MM_ROOM_KEY)         p = "__OTR__icon_item_static_yar/gItemIconRoomKeyTex";
+        else if (itemId == ITEM_MM_LETTER_KAFEI)     p = "__OTR__icon_item_static_yar/gItemIconLetterToKafeiTex";
+        else if (itemId == ITEM_MM_SPECIAL_DELIVERY) p = "__OTR__icon_item_static_yar/gItemIconLetterToMamaTex";
+        if (p && MmAssets_LoadResource(p)) return (void*)p; // PATH -> HD-pack aware
     }
 
     if (itemId < 156) {
@@ -500,8 +631,7 @@ int32_t ExtInv_HasMmMask(uint16_t itemId) {
     }
     for (int i = 0; i < 24; i++) {
         if (gPage3MaskItems[i] == itemId) {
-            extern SaveContext gSaveContext;
-            return gSaveContext.inventory.items[48 + i] == itemId;
+            return Nei_GetOwnedItem((uint8_t)(48 + i)) == itemId; // Skijer's NEI
         }
     }
     return 0;

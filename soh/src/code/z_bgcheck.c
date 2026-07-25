@@ -12,6 +12,10 @@
 // expansions/sm64/sm64_mario.c and mods/items/logic/item_hylias_grace.c.
 extern u8 Sm64Mario_IsVanishActive(void);
 extern s32 HGrace_WantsNoClip(void);
+// Skijer's NEI switchhook: during the position swap (+ a few settle frames) the player gets the
+// SAME full collision bypass as the NoClip cheat (z_arms_hook.c SwitchHook_PlayerNoClip), so the
+// swap can materialize Link behind walls / below floors.
+extern s32 SwitchHook_PlayerNoClip(void);
 
 #define SS_NULL 0xFFFF
 
@@ -1910,7 +1914,8 @@ s32 BgCheck_CheckWallImpl(CollisionContext* colCtx, u16 xpFlags, Vec3f* posResul
     s32 bgId2;
     f32 nx, ny, nz; // unit normal of polygon
 
-    if ((CVarGetInteger(CVAR_CHEAT("NoClip"), 0) || Sm64Mario_IsVanishActive() || HGrace_WantsNoClip()) &&
+    if ((CVarGetInteger(CVAR_CHEAT("NoClip"), 0) || Sm64Mario_IsVanishActive() || HGrace_WantsNoClip() ||
+         SwitchHook_PlayerNoClip()) && // Skijer's NEI switchhook: post-swap noclip window
         actor != NULL && actor->id == ACTOR_PLAYER) {
         return false;
     }

@@ -31,7 +31,13 @@ extern PlayState* gPlayState;
 #include "textures/icon_item_24_static/icon_item_24_static.h"
 #include "textures/parameter_static/parameter_static.h"
 #include "mods/extended_inventory.h"
+#include "mods/nei_save.h"             // Skijer's NEI — bottle flags (Nei_Save)
+#include "mods/items/custom_bottles.h" // Skijer's NEI — BottleContent + Bottle_ContentItemId
 #include "mods/extended_equipment.h"
+#include "mods/items/logic/weapon_upgrades.h"
+// Skijer's NEI — mods/items/logic/trade_items.c (no header)
+unsigned char TradeAdult_IsOwnedIndex(int index);
+void TradeAdult_SetOwnedIndex(int index, unsigned char on);
 }
 
 #include "message_data_static.h"
@@ -532,6 +538,235 @@ void DrawBGSItemFlag(uint8_t itemID) {
                  ImVec2(32.0f, 32.0f), ImVec2(0, 0), ImVec2(1, 1));
 }
 
+// Skijer's NEI — Bottle Randomizer dev editor (drawn to the right of the page-1 inventory grid as a
+// 4x2 grid: Bottle A = slots 0-3, Bottle B = slots 4-7). Each cell edits NeiSaveData.bottleSlots[i]
+// via a content picker (Empty / Empty Bottle / any content). The kaleido Wheel A/B cycle their half.
+static const char* sBottleContentNames[BOTTLE_C_COUNT] = {
+    "Ruto's Letter", "Big Poe", "Blue Fire", "Blue Potion", "Red Potion", "Green Potion",
+    "Fairy", "Fish", "Bug", "Poe", "Milk",
+    "Gold Dust", "Hot Spring Water", "Deku Princess", "Seahorse", "Spring Water",
+    "Zora Egg", "Hylian Loach", "Obaba's Drink", "Chateau Romani", "Magic Mushroom",
+};
+
+// Resolve an item's registered ImGui texture name (vanilla itemMapping or customItemMapping). Empty
+// string if none — the caller then draws a plain button. Skijer's NEI
+static std::string BottleEditor_ItemTexName(uint8_t item) {
+    if (item == ITEM_NONE) return "";
+    auto it = itemMapping.find(item);
+    if (it != itemMapping.end()) return it->second.name;
+    auto cit = customItemMapping.find(item);
+    if (cit != customItemMapping.end()) return cit->second.name;
+    return "";
+}
+
+void DrawBottleRandoEditor() {
+    ImGui::BeginGroup();
+    ImGui::Text("Bottles");
+    ImGui::Separator();
+
+    static int sBottlePickSlot = -1;
+    static bool sOpenBottlePicker = false;
+    static const char* kBottlePicker = "bottleContentPicker";
+    static bool sOpenBottomlessPicker = false;
+    static const char* kBottomlessPicker = "bottomlessContentPicker";
+    auto gui = [] {
+        return std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
+    };
+
+    // Lazily (re)register the MM bottle-content icons. At startup RegisterImGuiItemIcons skips any
+    // customItemMapping texture whose resource isn't found yet, and mm.o2r is usually mounted AFTER
+    // that runs — so the MM icons come up blank. By the time this dev editor is shown, mm.o2r is
+    // loaded, so re-load them here once. Skijer's NEI
+    static bool sBottleIconsRegistered = false;
+    if (!sBottleIconsRegistered) {
+        sBottleIconsRegistered = true;
+        for (int c = 0; c < BOTTLE_C_COUNT; c++) {
+            auto cit = customItemMapping.find((uint8_t)Bottle_ContentItemId((BottleContent)c));
+            if (cit != customItemMapping.end()) {
+                // Pre-check the resource exists (mirrors RegisterImGuiItemIcons): LoadGuiTexture on a
+                // missing path can crash, so only load when the resource is present.
+                auto res =
+                    Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(cit->second.texturePath, true);
+                if (res) {
+                    gui()->LoadGuiTexture(cit->second.name, cit->second.texturePath, ImVec4(1, 1, 1, 1));
+                }
+            }
+        }
+    }
+
+    // Column headers: Bottle A (slots 0-3) | Bottle B (slots 4-7).
+    ImGui::Text("Bottle A");
+    ImGui::SameLine(0.0f, 26.0f);
+    ImGui::Text("Bottle B");
+
+    // 4 rows x 2 columns; slotIndex = col*4 + row (col 0 = Bottle A, col 1 = Bottle B). Each cell is
+    // an image button showing the bottle's content (mm.o2r icon for MM); click -> content picker.
+    for (int row = 0; row < 4; row++) {
+        for (int col = 0; col < 2; col++) {
+            int slotIndex = col * 4 + row;
+            if (col != 0) {
+                ImGui::SameLine();
+            }
+            ImGui::PushID(4000 + slotIndex);
+            uint8_t item = Bottle_GetSlot((uint8_t)slotIndex);
+            std::string tex = (item == BOTTLE_SLOT_EMPTY) ? "" : BottleEditor_ItemTexName(item);
+            bool clicked;
+            PushStyleButton(Colors::DarkGray);
+            // Only draw the image when the texture is actually cached — GetTextureByName crashes on
+            // an uncached name (e.g. an MM icon whose mm.o2r resource didn't load). Skijer's NEI
+            if (!tex.empty() && gui()->HasTextureByName(tex)) {
+                clicked = ImGui::ImageButton(tex.c_str(), gui()->GetTextureByName(tex), ImVec2(40.0f, 40.0f),
+                                             ImVec2(0, 0), ImVec2(1, 1));
+            } else {
+                clicked = ImGui::Button("##emptyBottleSlot", ImVec2(48.0f, 48.0f));
+            }
+            PopStyleButton();
+            if (clicked) {
+                sBottlePickSlot = slotIndex;
+                sOpenBottlePicker = true;
+            }
+            ImGui::PopID();
+        }
+    }
+
+    // OpenPopup must be at the SAME ImGui ID-stack level as BeginPopup. The per-slot PushID above
+    // would scope the popup id to one slot, so BeginPopup (outside it) would never match — defer the
+    // open to here via the flag.
+    if (sOpenBottlePicker) {
+        ImGui::OpenPopup(kBottlePicker);
+        sOpenBottlePicker = false;
+    }
+
+    // Picker: Empty (no bottle) / Empty Bottle / every content (with icon).
+    if (ImGui::BeginPopup(kBottlePicker)) {
+        if (ImGui::Button("Empty (no bottle)")) {
+            Bottle_SetSlot((uint8_t)sBottlePickSlot, BOTTLE_SLOT_EMPTY);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Empty Bottle")) {
+            Bottle_SetSlot((uint8_t)sBottlePickSlot, ITEM_BOTTLE);
+            ImGui::CloseCurrentPopup();
+        }
+        for (int c = 0; c < BOTTLE_C_COUNT; c++) {
+            uint8_t cItem = (uint8_t)Bottle_ContentItemId((BottleContent)c);
+            std::string tex = BottleEditor_ItemTexName(cItem);
+            if ((c % 6) != 0) {
+                ImGui::SameLine();
+            }
+            ImGui::PushID(5000 + c);
+            bool pick;
+            PushStyleButton(Colors::DarkGray);
+            // Image only when cached (else a labeled button) — avoids GetTextureByName on an
+            // uncached name. Skijer's NEI
+            if (!tex.empty() && gui()->HasTextureByName(tex)) {
+                pick = ImGui::ImageButton(tex.c_str(), gui()->GetTextureByName(tex), ImVec2(IMAGE_SIZE, IMAGE_SIZE),
+                                          ImVec2(0, 0), ImVec2(1, 1));
+            } else {
+                pick = ImGui::Button(sBottleContentNames[c], ImVec2(IMAGE_SIZE, IMAGE_SIZE));
+            }
+            PopStyleButton();
+            UIWidgets::Tooltip(sBottleContentNames[c]);
+            if (pick) {
+                Bottle_SetSlot((uint8_t)sBottlePickSlot, cItem);
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndPopup();
+    }
+
+    // ── Net (SLOT_BOTTLE_3) + Bottomless Bottle (SLOT_BOTTLE_4) ────────────────
+    ImGui::Separator();
+    bool netOwned = Bottle_NetOwned() != 0;
+    if (ImGui::Checkbox("Net (owned)", &netOwned)) {
+        Bottle_SetNetOwned(netOwned ? 1 : 0);
+    }
+    bool bbOwned = Bottle_BottomlessOwned() != 0;
+    if (ImGui::Checkbox("Bottomless Bottle (owned)", &bbOwned)) {
+        Bottle_SetBottomlessOwned(bbOwned ? 1 : 0);
+        if (!bbOwned) {
+            // Clear the slot too, or the leftover content is seen as a residue vanilla bottle next
+            // frame -> migrated to a wheel ("free bottle") + Bottomless re-granted. Skijer's NEI
+            gSaveContext.inventory.items[SLOT_BOTTLE_4] = ITEM_NONE;
+        }
+    }
+    if (bbOwned) {
+        uint8_t bbItem = Bottle_BottomlessContent();
+        bool bbEmpty = Bottle_BottomlessIsEmpty() != 0;
+        ImGui::Text("Content:");
+        ImGui::SameLine();
+        std::string bbtex = bbEmpty ? "" : BottleEditor_ItemTexName(bbItem);
+        ImGui::PushID(4100);
+        PushStyleButton(Colors::DarkGray);
+        bool bbClick;
+        if (!bbtex.empty() && gui()->HasTextureByName(bbtex)) {
+            bbClick = ImGui::ImageButton(bbtex.c_str(), gui()->GetTextureByName(bbtex), ImVec2(40.0f, 40.0f),
+                                         ImVec2(0, 0), ImVec2(1, 1));
+        } else {
+            bbClick = ImGui::Button(bbEmpty ? "Empty##bbpick" : "##bbpick", ImVec2(48.0f, 48.0f));
+        }
+        PopStyleButton();
+        if (bbClick) {
+            sOpenBottomlessPicker = true;
+        }
+        ImGui::PopID();
+
+        int cnt = Bottle_BottomlessCount();
+        ImGui::SetNextItemWidth(140.0f);
+        if (ImGui::SliderInt("Uses left", &cnt, 0, 20)) {
+            Bottle_BottomlessSetCount((uint8_t)cnt);
+        }
+        if (!bbEmpty) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(max %d)", Bottle_ContentMaxUses(bbItem));
+        }
+    }
+
+    if (sOpenBottomlessPicker) {
+        ImGui::OpenPopup(kBottomlessPicker);
+        sOpenBottomlessPicker = false;
+    }
+    if (ImGui::BeginPopup(kBottomlessPicker)) {
+        if (ImGui::Button("Empty##bb")) {
+            Bottle_BottomlessEmpty();
+            // Sync the slot immediately (see below) — empty = a plain empty bottle.
+            gSaveContext.inventory.items[SLOT_BOTTLE_4] = ITEM_BOTTLE;
+            ImGui::CloseCurrentPopup();
+        }
+        for (int c = 0; c < BOTTLE_C_COUNT; c++) {
+            uint8_t cItem = (uint8_t)Bottle_ContentItemId((BottleContent)c);
+            std::string tex = BottleEditor_ItemTexName(cItem);
+            if ((c % 6) != 0) {
+                ImGui::SameLine();
+            }
+            ImGui::PushID(5100 + c);
+            PushStyleButton(Colors::DarkGray);
+            bool pick;
+            if (!tex.empty() && gui()->HasTextureByName(tex)) {
+                pick = ImGui::ImageButton(tex.c_str(), gui()->GetTextureByName(tex), ImVec2(IMAGE_SIZE, IMAGE_SIZE),
+                                          ImVec2(0, 0), ImVec2(1, 1));
+            } else {
+                pick = ImGui::Button(sBottleContentNames[c], ImVec2(IMAGE_SIZE, IMAGE_SIZE));
+            }
+            PopStyleButton();
+            UIWidgets::Tooltip(sBottleContentNames[c]);
+            if (pick) {
+                Bottle_BottomlessFill(cItem); // sets content + resets counter to its max
+                // Also write the slot NOW, or the enforcer's "adopt external fill" logic sees the OLD
+                // slot content differ from the new bottomlessContent and reverts it — so you couldn't
+                // change the content until you emptied it. Matching them skips the adopt. Skijer's NEI
+                gSaveContext.inventory.items[SLOT_BOTTLE_4] = cItem;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::EndGroup();
+}
+
 void DrawInventoryTab() {
     static bool restrictToValid = true;
 
@@ -545,6 +780,7 @@ void DrawInventoryTab() {
     ImGui::Text("Vanilla Inventory (Page 1)");
     ImGui::Separator();
 
+    ImGui::BeginGroup(); // Skijer's NEI — group the grid so the bottle editor sits to its right
     for (int32_t y = 0; y < 4; y++) {
         for (int32_t x = 0; x < 6; x++) {
             int32_t index = x + y * 6;
@@ -555,6 +791,48 @@ void DrawInventoryTab() {
 
             if (x != 0) {
                 ImGui::SameLine();
+            }
+
+            // Net / Bottomless Bottle cells (Skijer's NEI): SLOT_BOTTLE_3/4 have a FIXED identity now —
+            // no vanilla bottles can be assigned here. The cell shows the item's own icon (faded when
+            // not owned) and clicking toggles ownership; the runtime enforcer projects it in-game.
+            if (index == SLOT_BOTTLE_3 || index == SLOT_BOTTLE_4) {
+                bool nbOwned = (index == SLOT_BOTTLE_3) ? (Bottle_NetOwned() != 0) : (Bottle_BottomlessOwned() != 0);
+                uint32_t fixedItem = (index == SLOT_BOTTLE_3) ? (uint32_t)ITEM_NET : (uint32_t)ITEM_BOTTOMLESS_BOTTLE;
+                auto nbGui =
+                    std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
+                auto nbIt = customItemMapping.find(fixedItem);
+                bool nbClicked = false;
+                PushStyleButton(Colors::DarkGray);
+                if (nbIt != customItemMapping.end() && nbGui->HasTextureByName(nbIt->second.name)) {
+                    ImVec4 nbTint = nbOwned ? ImVec4(1, 1, 1, 1) : ImVec4(0.3f, 0.3f, 0.3f, 1.0f);
+                    nbClicked = ImGui::ImageButton(nbIt->second.name.c_str(), nbGui->GetTextureByName(nbIt->second.name),
+                                                   ImVec2(48.0f, 48.0f), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0),
+                                                   nbTint);
+                } else {
+                    nbClicked = ImGui::Button((index == SLOT_BOTTLE_3) ? "Net" : "B.less",
+                                              ImVec2(IMAGE_SIZE, IMAGE_SIZE) + ImGui::GetStyle().FramePadding * 2);
+                }
+                PopStyleButton();
+                if (nbClicked) {
+                    if (index == SLOT_BOTTLE_3) {
+                        Bottle_SetNetOwned(nbOwned ? 0 : 1);
+                        if (nbOwned) {
+                            gSaveContext.inventory.items[index] = ITEM_NONE;
+                        }
+                    } else {
+                        Bottle_SetBottomlessOwned(nbOwned ? 0 : 1);
+                        if (nbOwned) {
+                            gSaveContext.inventory.items[index] = ITEM_NONE;
+                        }
+                    }
+                }
+                UIWidgets::Tooltip((index == SLOT_BOTTLE_3)
+                                       ? (nbOwned ? "Net (owned) — click to remove" : "Net — click to own")
+                                       : (nbOwned ? "Bottomless Bottle (owned) — click to remove"
+                                                  : "Bottomless Bottle — click to own"));
+                ImGui::PopID();
+                continue;
             }
 
             uint8_t item = gSaveContext.inventory.items[index];
@@ -604,10 +882,10 @@ void DrawInventoryTab() {
 
                 std::vector<ItemMapEntry> possibleItems;
                 if (restrictToValid) {
-                    // Scan gItemSlots to find legal items for this slot. Bottles are a special case
+                    // Scan gItemSlots to find legal items for this slot. Wheel bottles are a special
+                    // case; SLOT_BOTTLE_3/4 never reach here (Net/Bottomless cells above).
                     for (int slotIndex = 0; slotIndex < 56; slotIndex++) {
-                        int testIndex = (selectedIndex == SLOT_BOTTLE_1 || selectedIndex == SLOT_BOTTLE_2 ||
-                                         selectedIndex == SLOT_BOTTLE_3 || selectedIndex == SLOT_BOTTLE_4)
+                        int testIndex = (selectedIndex == SLOT_BOTTLE_1 || selectedIndex == SLOT_BOTTLE_2)
                                             ? SLOT_BOTTLE_1
                                             : selectedIndex;
                         if (gItemSlots[slotIndex] == testIndex) {
@@ -646,6 +924,11 @@ void DrawInventoryTab() {
             ImGui::PopID();
         }
     }
+    ImGui::EndGroup();
+
+    // Skijer's NEI — Bottle Randomizer dev editor on the right of the page-1 grid.
+    ImGui::SameLine();
+    DrawBottleRandoEditor();
 
     ImGui::Spacing();
     ImGui::Spacing();
@@ -705,16 +988,16 @@ void DrawInventoryTab() {
                 // Give max upgrade for progressive items
                 if (i == 0) {
                     // Slot 24: Give Roc's Cape (max upgrade) instead of Roc's Feather
-                    gSaveContext.inventory.items[24 + i] = ITEM_ROCS_CAPE;
+                    Nei_SetOwnedItem((uint8_t)(24 + i), ITEM_ROCS_CAPE); // Skijer's NEI
                 } else {
-                    gSaveContext.inventory.items[24 + i] = gPage2Items[i];
+                    Nei_SetOwnedItem((uint8_t)(24 + i), gPage2Items[i]); // Skijer's NEI
                 }
             }
         }
         ImGui::SameLine();
         if (ImGui::Button("Clear All Custom Items")) {
             for (int i = 24; i < 48; i++) {
-                gSaveContext.inventory.items[i] = ITEM_NONE;
+                Nei_SetOwnedItem((uint8_t)i, ITEM_NONE); // Skijer's NEI
             }
         }
 
@@ -734,7 +1017,7 @@ void DrawInventoryTab() {
                     ImGui::SameLine();
                 }
 
-                uint8_t item = gSaveContext.inventory.items[slotIndex];
+                uint8_t item = ExtInv_GetSlotItem(slotIndex); // Skijer's NEI
 
                 bool clicked = false;
                 if (item != ITEM_NONE) {
@@ -788,7 +1071,7 @@ void DrawInventoryTab() {
                     PushStyleButton(Colors::DarkGray);
                     if (ImGui::Button("##customItemNonePicker",
                                       ImVec2(IMAGE_SIZE, IMAGE_SIZE) + ImGui::GetStyle().FramePadding * 2)) {
-                        gSaveContext.inventory.items[selectedCustomIndex] = ITEM_NONE;
+                        ExtInv_SetSlotItem(selectedCustomIndex, ITEM_NONE); // Skijer's NEI
                         ImGui::CloseCurrentPopup();
                     }
                     PopStyleButton();
@@ -827,7 +1110,7 @@ void DrawInventoryTab() {
                         }
 
                         if (ret) {
-                            gSaveContext.inventory.items[selectedCustomIndex] = customItemId;
+                            ExtInv_SetSlotItem(selectedCustomIndex, customItemId); // Skijer's NEI
                             ImGui::CloseCurrentPopup();
                         }
                     }
@@ -860,7 +1143,7 @@ void DrawInventoryTab() {
                         }
 
                         if (ret) {
-                            gSaveContext.inventory.items[selectedCustomIndex] = ITEM_ROCS_CAPE;
+                            ExtInv_SetSlotItem(selectedCustomIndex, ITEM_ROCS_CAPE); // Skijer's NEI
                             ImGui::CloseCurrentPopup();
                         }
                         UIWidgets::Tooltip("Roc's Cape (upgrade)\nShares slot 24 with Roc's Feather");
@@ -929,13 +1212,13 @@ void DrawInventoryTab() {
 
         if (ImGui::Button("Give All MM Masks")) {
             for (int i = 0; i < 24; i++) {
-                gSaveContext.inventory.items[48 + i] = gPage3MaskItems[i];
+                Nei_SetOwnedItem((uint8_t)(48 + i), gPage3MaskItems[i]); // Skijer's NEI
             }
         }
         ImGui::SameLine();
         if (ImGui::Button("Clear All MM Masks")) {
             for (int i = 48; i < 72; i++) {
-                gSaveContext.inventory.items[i] = ITEM_NONE;
+                Nei_SetOwnedItem((uint8_t)i, ITEM_NONE); // Skijer's NEI
             }
         }
         ImGui::SameLine();
@@ -943,13 +1226,13 @@ void DrawInventoryTab() {
             // Find an empty slot and give a random mask
             std::vector<int> emptySlots;
             for (int i = 0; i < 24; i++) {
-                if (gSaveContext.inventory.items[48 + i] == ITEM_NONE) {
+                if (Nei_GetOwnedItem((uint8_t)(48 + i)) == ITEM_NONE) { // Skijer's NEI
                     emptySlots.push_back(i);
                 }
             }
             if (!emptySlots.empty()) {
                 int r = emptySlots[rand() % emptySlots.size()];
-                gSaveContext.inventory.items[48 + r] = gPage3MaskItems[r];
+                Nei_SetOwnedItem((uint8_t)(48 + r), gPage3MaskItems[r]); // Skijer's NEI
             }
         }
 
@@ -967,7 +1250,7 @@ void DrawInventoryTab() {
                     ImGui::SameLine();
                 }
 
-                uint8_t item = gSaveContext.inventory.items[slotIndex];
+                uint8_t item = ExtInv_GetSlotItem(slotIndex); // Skijer's NEI
                 const char* maskName = sMmMaskNames[visualIndex];
                 bool hasItem = (item != ITEM_NONE);
 
@@ -991,9 +1274,9 @@ void DrawInventoryTab() {
 
                     if (clicked) {
                         if (hasItem) {
-                            gSaveContext.inventory.items[slotIndex] = ITEM_NONE;
+                            ExtInv_SetSlotItem(slotIndex, ITEM_NONE); // Skijer's NEI
                         } else {
-                            gSaveContext.inventory.items[slotIndex] = gPage3MaskItems[visualIndex];
+                            ExtInv_SetSlotItem(slotIndex, gPage3MaskItems[visualIndex]); // Skijer's NEI
                         }
                     }
                 } else {
@@ -1010,9 +1293,9 @@ void DrawInventoryTab() {
                     if (ImGui::Button(buttonLabel,
                                       ImVec2(IMAGE_SIZE + 20, IMAGE_SIZE) + ImGui::GetStyle().FramePadding * 2)) {
                         if (hasItem) {
-                            gSaveContext.inventory.items[slotIndex] = ITEM_NONE;
+                            ExtInv_SetSlotItem(slotIndex, ITEM_NONE); // Skijer's NEI
                         } else {
-                            gSaveContext.inventory.items[slotIndex] = gPage3MaskItems[visualIndex];
+                            ExtInv_SetSlotItem(slotIndex, gPage3MaskItems[visualIndex]); // Skijer's NEI
                         }
                     }
                     PopStyleButton();
@@ -1481,6 +1764,29 @@ void DrawFlagsTab() {
         },
         "Gold Skulltulas");
 
+    // Skijer's NEI — MM adult trade-quest items "obtained" flags: a labeled checkbox per item, like the
+    // other Inf-flag editors. Toggling sets tradeAdultOwned (shown in the SLOT_TRADE_ADULT 2D-grid wheel
+    // + synced to MM for the Anju exchange). The Pendant of Memories also (un)locks its Ext Boots 2 moveset.
+    if (ImGui::TreeNode("MM Trade Items")) {
+        static const char* mmTradeNames[] = {
+            "Moon's Tear",        "Land Title Deed", "Swamp Title Deed",         "Mountain Title Deed",
+            "Ocean Title Deed",   "Room Key",        "Letter to Kafei",          "Special Delivery to Mama",
+            "Pendant of Memories",
+        };
+        static const int mmTradeIndices[] = { 11, 12, 13, 14, 15, 16, 17, 18, 19 };
+        for (int i = 0; i < (int)(sizeof(mmTradeNames) / sizeof(mmTradeNames[0])); i++) {
+            bool obtained = TradeAdult_IsOwnedIndex(mmTradeIndices[i]) != 0;
+            ImGui::PushID(i);
+            PushStyleCheckbox(THEME_COLOR);
+            if (ImGui::Checkbox(mmTradeNames[i], &obtained)) {
+                TradeAdult_SetOwnedIndex(mmTradeIndices[i], obtained ? 1 : 0);
+            }
+            PopStyleCheckbox();
+            ImGui::PopID();
+        }
+        ImGui::TreePop();
+    }
+
     for (size_t i = 0; i < flagTables.size(); i++) {
         const FlagTable& flagTable = flagTables[i];
         if (flagTable.flagTableType == RANDOMIZER_INF && !IS_RANDO && !IS_BOSS_RUSH) {
@@ -1771,20 +2077,56 @@ void DrawEquipmentTab() {
     // ============================================================================
     // EXTENDED EQUIPMENT (Page 2)
     // ============================================================================
+    if (ImGui::CollapsingHeader("NEI Weapon Upgrades")) {
+        // Progressive weapon upgrade bits (Nei_Save()->weaponUpgrades). These only do something
+        // in-game while you also own + wield the matching base weapon. Gilded implies Razor.
+        ImGui::TextWrapped("Each upgrade needs the matching base weapon owned/equipped to take effect.");
+        bool wuHammer = WeaponUpgrade_HasHammerAxe() != 0;
+        if (ImGui::Checkbox("Hammer  ->  Iron Knuckle's Axe", &wuHammer)) {
+            WeaponUpgrade_SetHammerAxe(wuHammer ? 1 : 0);
+        }
+        bool wuRazor = WeaponUpgrade_HasRazor() != 0;
+        if (ImGui::Checkbox("Kokiri  ->  Razor Sword (L1)", &wuRazor)) {
+            WeaponUpgrade_SetRazor(wuRazor ? 1 : 0);
+        }
+        bool wuGilded = WeaponUpgrade_HasGilded() != 0;
+        if (ImGui::Checkbox("Kokiri  ->  Gilded Sword (L2)", &wuGilded)) {
+            WeaponUpgrade_SetGilded(wuGilded ? 1 : 0);
+        }
+        bool wuMaster = WeaponUpgrade_HasTrueMaster() != 0;
+        if (ImGui::Checkbox("Master  ->  Real Master Sword", &wuMaster)) {
+            WeaponUpgrade_SetTrueMaster(wuMaster ? 1 : 0);
+        }
+        bool wuGfs = WeaponUpgrade_HasGreatFairy() != 0;
+        if (ImGui::Checkbox("Biggoron  ->  Great Fairy's Sword", &wuGfs)) {
+            WeaponUpgrade_SetGreatFairy(wuGfs ? 1 : 0);
+        }
+        if (ImGui::Button("Grant All Weapon Upgrades")) {
+            WeaponUpgrade_GrantAll();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear All Weapon Upgrades")) {
+            WeaponUpgrade_SetHammerAxe(0);
+            WeaponUpgrade_SetRazor(0);
+            WeaponUpgrade_SetGilded(0);
+            WeaponUpgrade_SetTrueMaster(0);
+            WeaponUpgrade_SetGreatFairy(0);
+        }
+    }
+
     if (ImGui::CollapsingHeader("Extended Equipment (Page 2)")) {
+        // Skijer 2026-07-15: Cape/Pendant stay here for OWNERSHIP (their bits feed the new
+        // upgrade-column passives); "Free Slot" cells are the retired grid slots (Gravity Boots TBD;
+        // Water Dragon Scale deleted — Zora swim is the Zora Tunic's permanent effect now).
         static const char* extEquipNames[4][3] = {
             { "Cane of Byrna", "Four Sword", "Drillshaft" },
             { "Divine Shield", "Gerudo Scimitar", "Shield of Ikana" },
-            { "Magic Cape", "Pending 4", "Champion's Tunic" },
-            { "Pegasus Anklet", "Pendant of Memories", "Water Dragon Scale" },
+            { "Champion's Tunic", "Spirit Tunic", "Snowquill Tunic" }, // recolor tunics (2026-07-16)
+            { "Pegasus Anklet", "Pendant of Memories", "Free Slot (was Dragon Scale)" },
         };
-        // OTR icon paths for each ext equipment piece (same order as item IDs)
-        static const char* extEquipIconPaths[4][3] = {
-            { dgItemIconCaneOfByrnaTex, dgItemIconFourSwordTex, dgItemIconDrillshaftTex },
-            { dgItemIconDivineShieldTex, dgItemIconGerudoScimitarTex, NULL }, // Shield of Ikana: no icon yet
-            { dgItemIconMagicCapeTex, dgItemIconPending4Tex, dgItemIconChampionsTunicTex },
-            { dgItemIconPegasusAnkletTex, NULL, dgItemIconWaterDragonScaleTex }, // Pendant: no icon yet
-        };
+        // Icons come from the CANONICAL table (ExtEquip_GetIcon, extended_equipment.c) — the same one
+        // the game uses — so Shield of Ikana (MM mirror shield) and Pendant of Memories (mm.o2r) show
+        // their real art here too instead of NULL placeholders.
 
         // Enable/disable cheat toggle
         bool extEnabled = CVarGetInteger(CVAR_EXT_EQUIP_ENABLED, 0) != 0;
@@ -1827,6 +2169,10 @@ void DrawEquipmentTab() {
 
                     ImGui::PushID(2000 + row * 3 + col);
 
+                    // Boots slot 3 is gone for good (Water Dragon Scale deleted) — dead cell.
+                    bool deadCell = (row == EQUIP_TYPE_BOOTS && col + 1 == 3);
+                    ImGui::BeginDisabled(deadCell);
+
                     bool owned = ExtEquip_HasItem(row, col + 1) != 0;
                     u8 currentEquipped = ExtEquip_GetCurrent(row);
                     bool isEquipped = (currentEquipped == (col + 1));
@@ -1840,18 +2186,28 @@ void DrawEquipmentTab() {
                     }
 
                     bool clicked = false;
-                    const char* iconPath = extEquipIconPaths[row][col];
+                    const char* iconPath = (const char*)ExtEquip_GetIcon(row, col + 1);
+                    bool texReady = false;
                     if (iconPath != NULL) {
-                        auto tex = gui->GetTextureByName(iconPath);
-                        if (tex) {
-                            // Faded if not owned
-                            ImVec4 tint = owned ? ImVec4(1, 1, 1, 1) : ImVec4(0.3f, 0.3f, 0.3f, 1.0f);
-                            clicked = ImGui::ImageButton(extEquipNames[row][col], tex, ImVec2(IMAGE_SIZE, IMAGE_SIZE),
-                                                         ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), tint);
+                        if (gui->HasTextureByName(iconPath)) {
+                            texReady = true;
                         } else {
-                            clicked = ImGui::Button(extEquipNames[row][col], ImVec2(IMAGE_SIZE, IMAGE_SIZE) +
-                                                                                 ImGui::GetStyle().FramePadding * 2);
+                            // Lazy ImGui registration (mm.o2r icons mount after startup registration).
+                            // LoadResource pre-check: LoadGuiTexture on a missing path can crash.
+                            auto res = Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(iconPath,
+                                                                                                           true);
+                            if (res) {
+                                gui->LoadGuiTexture(iconPath, iconPath, ImVec4(1, 1, 1, 1));
+                                texReady = gui->HasTextureByName(iconPath);
+                            }
                         }
+                    }
+                    if (texReady) {
+                        // Faded if not owned
+                        ImVec4 tint = owned ? ImVec4(1, 1, 1, 1) : ImVec4(0.3f, 0.3f, 0.3f, 1.0f);
+                        clicked = ImGui::ImageButton(extEquipNames[row][col], gui->GetTextureByName(iconPath),
+                                                     ImVec2(IMAGE_SIZE, IMAGE_SIZE), ImVec2(0, 0), ImVec2(1, 1),
+                                                     ImVec4(0, 0, 0, 0), tint);
                     } else {
                         // No icon available, use text button
                         clicked = ImGui::Button(extEquipNames[row][col],
@@ -1884,9 +2240,38 @@ void DrawEquipmentTab() {
                         ImGui::EndTooltip();
                     }
 
+                    ImGui::EndDisabled(); // deadCell
                     ImGui::PopID();
                 }
             }
+
+            // Skijer 2026-07-15: the upgrade-column passive toggles (same state the kaleido A-press
+            // flips; persisted per-save in the nei section as capeHidden / pendantEffectOff).
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Text("Upgrade-column passives (equipment page, left column)");
+
+            // Magic Cape ownership moved off the ext-grid TUNIC-1 bit (that slot is Champion's Tunic
+            // now) to Nei_Save()->capeOwned — grant it here (2026-07-16).
+            bool capeOwned = Nei_Save()->capeOwned != 0;
+            if (ImGui::Checkbox("Magic Cape owned", &capeOwned)) {
+                Nei_Save()->capeOwned = capeOwned ? 1 : 0;
+            }
+
+            ImGui::BeginDisabled(!ExtEquip_CapeOwned());
+            bool capeVisible = Nei_Save()->capeHidden == 0;
+            if (ImGui::Checkbox("Magic Cape visible on Link (refund is always active when owned)",
+                                &capeVisible)) {
+                Nei_Save()->capeHidden = capeVisible ? 0 : 1;
+            }
+            ImGui::EndDisabled();
+
+            ImGui::BeginDisabled(!ExtEquip_PendantOwned());
+            bool pendantOn = Nei_Save()->pendantEffectOff == 0;
+            if (ImGui::Checkbox("Pendant of Memories moveset enabled", &pendantOn)) {
+                Nei_Save()->pendantEffectOff = pendantOn ? 0 : 1;
+            }
+            ImGui::EndDisabled();
         }
     }
 

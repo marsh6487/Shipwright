@@ -192,7 +192,7 @@ typedef enum PlayerItemAction {
     /* 0x59 */ PLAYER_IA_MINISH_CAP,
     /* 0x5A */ PLAYER_IA_LANTERN,
     /* 0x5B */ PLAYER_IA_UNUSED_5B,
-    /* 0x5C */ PLAYER_IA_PENDING_3,
+    /* 0x5C */ PLAYER_IA_POKEBALL,
     // PLAYER_IA values 0x5D-0x74 are #defined in mods/extended_player.h (MM_MASK_*) above PLAYER_IA_MAX; Skijer's NEI
     /* 0x5D */ PLAYER_IA_MAX
 } PlayerItemAction;

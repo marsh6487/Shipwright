@@ -14,10 +14,10 @@
 
 extern void TransformMasks_HandleMaskUse(PlayState* play, Player* player, s32 maskType);
 
-void Player_InitPending3IA(PlayState* play, Player* this) {
+void Player_InitPokeballIA(PlayState* play, Player* this) {
 }
 
-void Handle_Pending3(Player* this, PlayState* play) {
+void Handle_Pokeball(Player* this, PlayState* play) {
     ItemInputState input;
     ItemInput_Update(&input, ITEM_POKEBALL, this, play);
     if (!input.wasEquipped)
@@ -30,6 +30,6 @@ void Handle_Pending3(Player* this, PlayState* play) {
     }
 }
 
-s32 Player_UpperAction_Pending3(Player* this, PlayState* play) {
+s32 Player_UpperAction_Pokeball(Player* this, PlayState* play) {
     return 0;
 }

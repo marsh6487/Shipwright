@@ -1,22 +1,19 @@
 /**
- * weapon_upgrades.h - NEI Weapon Upgrades (per-weapon "upgrade" items)
+ * weapon_upgrades.h - NEI Weapon Upgrades (progressive weapon levels)
  *
- * Each upgrade requires the BASE weapon to be owned (a true upgrade), and once
- * obtained replaces the base weapon with a stronger variant:
+ * The four base weapons become progressive randomizer items. Level 1 is the
+ * vanilla weapon (tracked by normal equipment/inventory state); the levels above
+ * are these upgrade bits:
  *
- *   Hammer  → Iron Knuckle's Axe   (double damage/reach + tomahawk throw)
- *   Kokiri  → Razor Sword          (progressive level 1)
- *   Kokiri  → Gilded Sword         (progressive level 2)
- *   Master  → True Master Sword
- *   Biggoron→ Great Fairy's Sword
+ *   progressiveKokiriSword:  L1 Kokiri  → L2 Razor   → L3 Gilded
+ *   progressiveMasterSword:  L1 Master  → L2 Real Master Sword
+ *   progressiveHammer:       L1 Hammer  → L2 Iron Knuckle's Axe
+ *   progressiveBGS:          L1 BGS     → L2 Great Fairy's Sword
  *
- * Persistence: gSaveContext.ship.weaponUpgrades is a u8 bitfield where each bit
- * is one upgrade. The Kokiri chain uses two bits (Razor then Gilded) so the
- * progressive item can be shuffled / granted step by step.
- *
- * Only the Hammer upgrade has gameplay behavior for now (lives in
- * mods/equipment/behaviors/equip_ikaxe.c, driven by WeaponUpgrade_HasHammerAxe).
- * The sword upgrades are reachable plumbing (give/logic/menu) with behavior TBD.
+ * Persistence: Nei_Save()->weaponUpgrades is a u8 bitfield (one bit per upgrade),
+ * serialized by the "nei" SaveManager section in mods/nei_save.cpp. The Kokiri
+ * chain uses two bits (Razor then Gilded). The level-1 vanilla weapons persist via
+ * the normal SaveContext (sword equip flags / ITEM_HAMMER inventory slot).
  */
 #ifndef WEAPON_UPGRADES_H
 #define WEAPON_UPGRADES_H
@@ -58,6 +55,22 @@ void WeaponUpgrade_GiveProgressiveKokiri(void);
 
 // Grant the full set at once (debug convenience). Idempotent.
 void WeaponUpgrade_GrantAll(void);
+
+// Iron Knuckle's Axe prop-smash. A prop actor calls this from its Update; it detects an axe
+// strike (player owns the Axe upgrade, is mid-hammer-swing, facing within reach) and tracks a
+// per-actor hit counter in an internal side table (keyed by Actor*, no actor-struct changes).
+// Returns 1 on the strike that reaches `hitsNeeded` (the caller then breaks + rewards + kills
+// the actor). `range` is the max actor-to-player distance that still counts as a hit.
+u8 WeaponUpgrade_IKAxeStrike(struct Actor* actor, struct PlayState* play, u8 hitsNeeded, f32 range);
+
+// In-hand held-sword model swap. Builds a compound DL [OOT hand] + [MM sword pieces from o2r] and
+// writes it to *dList when the matching upgrade is owned and that sword is wielded. Returns 1 if it
+// set *dList, 0 to keep the vanilla DL. `ootHand` is the resolved OOT hand DL for this limb/LOD.
+// Called from the L_HAND limb draw in z_player_lib.c. `bodyEnvR/G/B` is the tunic env color the
+// player body expects (set once before the skeleton draw); the compound re-applies it after the MM
+// sword DL so a combined DL that sets its own env color (the GFS) doesn't blacken the torso.
+u8 WeaponUpgrade_ApplyHeldSwordDL(Gfx** dList, void* ootHand, struct Player* player, u8 bodyEnvR, u8 bodyEnvG,
+                                  u8 bodyEnvB);
 
 #ifdef __cplusplus
 }

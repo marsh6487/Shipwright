@@ -29,7 +29,7 @@ extern s32 TransformMasks_WearGetCurrent(void);
 
 // True when the player owns the Postman's Hat (MM mask slot in extended inv).
 static s32 PostmanHat_PlayerOwnsHat(void) {
-    return gSaveContext.inventory.items[SLOT_MM_MASK_POSTMAN] == ITEM_MM_MASK_POSTMAN;
+    return Nei_GetOwnedItem(SLOT_MM_MASK_POSTMAN) == ITEM_MM_MASK_POSTMAN; // Skijer's NEI
 }
 
 // True when the player is currently wearing the Postman's Hat on their head.

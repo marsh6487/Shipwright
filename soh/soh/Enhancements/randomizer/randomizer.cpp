@@ -37,8 +37,27 @@ extern "C" {
 #include "mods/items/logic/weapon_upgrades.h"
 #include "mods/items/custom_items.h"
 #include "src/overlays/actors/ovl_Obj_Bean/z_obj_bean.h"
+#include "mods/nei_save.h"                          // Nei_Save() + FC_COMBO_OBTAINED_FC_SIZE (fcId store)
+#include "soh/FleetShipCombo/FleetComboItemsGlue.h" // FcCombo_ItemForNative (native RG -> FcComboItemId)
+#include "soh/FleetShipCombo/FleetComboItems.h"     // FCI_NO_ITEM sentinel
+#include "soh/FleetShipCombo/FleetComboIds.h"       // FC_MM_SKULLS_* registry counters (MM GS tokens)
 
 extern void func_80B8FE00(ObjBean*); // trigger planting
+// MM trade/quest grant APIs (Skijer's NEI) — same calls the debug/give-all menu uses (SohMenuNEI.cpp):
+// trade_items.c (adult-trade wheel bitmask), picto_box.c (pictoboxOwned), power_keg.c (kegOwned+count).
+extern void TradeAdult_GiveItem(unsigned char item);         // sets Nei_Save()->tradeAdultOwned bit
+extern void Picto_SetOwned(unsigned char on);                // sets Nei_Save()->pictoboxOwned
+extern void PowerKeg_SetOwned(unsigned char on);             // sets Nei_Save()->powerKegOwned
+extern unsigned char PowerKeg_GetCount(void);                // Nei_Save()->powerKegCount
+extern void PowerKeg_SetCount(unsigned char n);              // clamps to PowerKeg_MaxCount()
+// Bottle Randomizer ownership (custom_bottles.cpp): once set, mm_bottle_items.cpp projects the
+// item into SLOT_BOTTLE_3/4 (+ any C-button) every frame — the give only needs the flag.
+extern void Bottle_SetNetOwned(unsigned char owned);         // Nei_Save()->netEquipped
+extern void Bottle_SetBottomlessOwned(unsigned char owned);  // Nei_Save()->bottomlessBottleMode
+// FleetSync: while ApplyFcRegistryToNatives() is granting the FC deficit it calls Randomizer_Item_Give,
+// which would re-enter the record hook below and double-count. This flag lets the hook skip recording
+// during that apply pass (see FleetSync.cpp ApplyFcRegistryToNatives).
+int FleetSync_IsApplyingFc(void);
 }
 
 static ObjectExtension::Register<CheckIdentity> RegisterIdentity;
@@ -108,8 +127,8 @@ static const CustomItemMessageEntry customItemMessages[] = {
       "Du hast das %gVier-Schwert%w!&Eine Klinge die ihren Träger&in vier Helden teilt.^Rüste es am %ySchwert-Platz%w aus.^Halte %y\xA3%w + %y\xA0%w 15 Frames ->&%g3 farbige Klone%w (Rot/Blau/Violett)&erscheinen im Dreieck.^Jeder Klon kostet %g12 Magie%w.&Klone %gspiegeln deine Schwerthiebe%w und&kopieren %gPfeile%w, %gBomben%w und %gBumerang%w.^Feindtreffer töten sie.",
       "Vous obtenez l'%gÉpée de Quatre%w!&Une lame qui divise son porteur&en quatre héros.^Équipez-la dans l'%yemplacement épée%w.^Maintenez %y\xA3%w + %y\xA0%w 15 frames ->&%g3 clones colorés%w (Rouge/Bleu/Violet)&apparaissent en triangle.^Chaque clone coûte %g12 Magie%w.&Les clones %gimitent vos coups%w et copient&%gflèches%w, %gbombes%w et %gboomerang%w.^Les ennemis les tuent au contact." },
 
-    { RG_HAMMER_UPGRADE, static_cast<ItemID>(ITEM_EXT_SWORD_3),
-      "You got the %rHammer Upgrade%w!&Your %rMegaton Hammer%w becomes the&%rIron Knuckle's Axe%w - the massive&tomahawk of Ganon's armored knights.^Heavy chunky swings:&%gdouble damage%w, %gdouble reach%w,&slower walk while held.^Hold %y\xA3%w + %y\xA0%w 15 frames to %rthrow%w&the axe - flies forward, then&boomerangs back to your hand.",
+    { RG_PROGRESSIVE_HAMMER, static_cast<ItemID>(ITEM_HAMMER),
+      "You got a %rProgressive Hammer%w!&First the %rMegaton Hammer%w, then the&%rIron Knuckle's Axe%w - %gdouble damage%w,&%gdouble reach%w, and a tomahawk&%rthrow%w (C-Up to aim) that&boomerangs back to your hand.",
       "Du hast das %rHammer-Upgrade%w!&Dein %rStahlhammer%w wird zur&%rEisenknöchel-Axt%w - dem massiven&Tomahawk der Ritter Ganons.^Schwerer chunky Schwung:&%gdoppelter Schaden%w, %gdoppelte Reichweite%w,&langsameres Gehen.^Halte %y\xA3%w + %y\xA0%w 15 Frames um die&Axt zu %rwerfen%w - fliegt nach vorn,&kommt dann zu dir zurück.",
       "Vous obtenez l'%rAmélioration de Masse%w!&Votre %rMasse des Titans%w devient la&%rHache d'Iron Knuckle%w - le tomahawk&massif des chevaliers de Ganon.^Coups lourds:&%gdouble dégâts%w, %gdouble portée%w,&marche plus lente.^Maintenez %y\xA3%w + %y\xA0%w 15 frames pour&%rlancer%w la hache - elle revient&en boomerang." },
 
@@ -118,13 +137,13 @@ static const CustomItemMessageEntry customItemMessages[] = {
       "Du hast ein %gKokiri-Schwert-Upgrade%w!&Schärft dein %gKokiri-Schwert%w&zum %gElfenschwert%w, dann zur&%gSchmirgelklinge%w.",
       "Vous obtenez une %gAmélioration d'Épée Kokiri%w!&Aiguise votre %gÉpée Kokiri%w&en %gLame Rasoir%w, puis en&%gExcalibur%w." },
 
-    { RG_TRUE_MASTER_SWORD, static_cast<ItemID>(ITEM_SWORD_MASTER),
-      "You got the %cTrue Master Sword%w!&Your %cMaster Sword%w awakens to&its true, fully-restored power.",
+    { RG_PROGRESSIVE_MASTER_SWORD, static_cast<ItemID>(ITEM_SWORD_MASTER),
+      "You got a %cProgressive Master Sword%w!&First the %cMaster Sword%w, then the&%cReal Master Sword%w - at full health&a swing fires a thunder beam.",
       "Du hast das %cWahre Master-Schwert%w!&Dein %cMaster-Schwert%w erwacht zu&seiner wahren Kraft.",
       "Vous obtenez la %cVéritable Épée de Légende%w!&Votre %cÉpée de Légende%w révèle&son vrai pouvoir." },
 
-    { RG_GREAT_FAIRY_SWORD, static_cast<ItemID>(ITEM_SWORD_BGS),
-      "You got the %pGreat Fairy's Sword%w!&Your %yBiggoron Sword%w is reforged&into the legendary blade blessed&by the Great Fairy.",
+    { RG_PROGRESSIVE_BGS, static_cast<ItemID>(ITEM_SWORD_BGS),
+      "You got a %pProgressive Biggoron's Sword%w!&First the %yBiggoron Sword%w, then the&%pGreat Fairy's Sword%w - long reach&that restores HP and Magic on hit.",
       "Du hast das %pSchwert der Großen Fee%w!&Dein %yBiggoron-Schwert%w wird zur&legendären Klinge der Großen Fee&umgeschmiedet.",
       "Vous obtenez l'%pÉpée de la Grande Fée%w!&Votre %yÉpée de Biggoron%w est reforgée&en lame légendaire bénie par&la Grande Fée." },
 
@@ -144,7 +163,7 @@ static const CustomItemMessageEntry customItemMessages[] = {
       "Vous obtenez le %pBouclier d'Ikana%w!&Un bouclier-miroir maudit du&royaume déchu d'Ikana.^Équipez-le dans l'%yemplacement bouclier%w.^%cVol d'Âme%w (%y\xA3%w + bloquer dans&les 12 premières frames d'une attaque):&vole les %rPV%w de l'attaquant et&vous soigne d'un demi-cœur.^%pSauvegarde de Mort%w: ressuscite&%pune fois par scène%w avec 3 cœurs&et une aura sombre." },
 
     { RG_EXT_MAGIC_CAPE, static_cast<ItemID>(ITEM_EXT_TUNIC_1),
-      "You got the %pMagic Cape%w!&Ganondorf's enchanted cloak,&woven of pure dark mantle cloth.^Equip on the %ytunic slot%w (%y\xA2%w toggles).^Real %pcloth physics%w - the cape&drapes from your shoulders and&sways with movement and wind.^You %crecover half the Magic%w&you spend each frame&(rounded up).",
+      "You got the %pMagic Cape%w!&Ganondorf's enchanted cloak,&woven of pure dark mantle cloth.^Equip on the %ytunic slot%w (%y\xA2%w toggles).^Real %pcloth physics%w - the cape&drapes from your shoulders and&sways with movement and wind.^All magic %ccosts are halved%w&(rounded down) while you own it -&cheap items become free.",
       "Du hast den %pZauberumhang%w!&Ganondorfs verzauberter Mantel,&gewebt aus dunklem Mantelstoff.^Rüste ihn am %yTunika-Platz%w aus.^Echte %pStoff-Physik%w - der Umhang&fällt von deinen Schultern und&schwingt mit Bewegung und Wind.^Du %cerhältst die halbe Magie%w&zurück die du verbrauchst&(aufgerundet).",
       "Vous obtenez la %pCape Magique%w!&Le manteau enchanté de Ganondorf,&tissé de pure étoffe sombre.^Équipez-la dans l'%yemplacement tunique%w.^%pPhysique de tissu%w réelle - la cape&pend de vos épaules et ondule&avec le mouvement et le vent.^Vous %crécupérez la moitié de la Magie%w&dépensée chaque frame (arrondi&au supérieur)." },
 
@@ -153,8 +172,8 @@ static const CustomItemMessageEntry customItemMessages[] = {
       "Du hast den %ySpirit-Brustpanzer%w!&Die goldene Rüstung der Eisenknöchel&Nabooru.^Rüste ihn am %yTunika-Platz%w aus.^Schaden kostet %gRupien%w statt&Herzen (1 HP = 1 Rupie).&%gPassiver Verbrauch%w: 1 Rupie alle&30 Frames im Tragen.^Wenn dein Beutel %rleer%w ist,&erleidest du Schaden normal und&bewegst dich halb so schnell.",
       "Vous obtenez le %yPlastron Spirituel%w!&L'armure dorée de l'Iron Knuckle&Nabooru.^Équipez-le dans l'%yemplacement tunique%w.^Les dégâts coûtent des %gRubis%w au&lieu de cœurs (1 PV = 1 Rubis).&%gDrain passif%w: 1 Rubis toutes&les 30 frames tant que porté.^Si votre bourse est %rvide%w,&vous prenez les dégâts normalement&et bougez à mi-vitesse." },
 
-    { RG_EXT_CHAMPIONS_TUNIC, static_cast<ItemID>(ITEM_EXT_TUNIC_3),
-      "You got the %cChampion's Tunic%w!&The blue garb of Hyrule's chosen,&blessed with battle aura.^Equip on the %ytunic slot%w (%y\xA2%w toggles).^Adult Link gets the full %cBOTW Link%w&model. All ages get the combat:^%gFlurry Rush%w: sidehop or backflip&near an enemy -> world slows to&15% with iframes for ~2s. Land&up to 7 hits, then bonus damage.^%cBullet Time%w: %y\xA5%w-target while airborne&with bow/slingshot/hookshot/boomerang&-> time slows, you float, stick aims&the shot.",
+    { RG_EXT_CHAMPIONS_TUNIC, static_cast<ItemID>(ITEM_EXT_TUNIC_1),
+      "You got the %cChampion's Tunic%w!&The blue garb of Hyrule's chosen,&blessed with battle aura.^Equip on the %ytunic slot%w (%y\xA2%w toggles).&Dyes your tunic %cchampion blue%w.^%gFlurry Rush%w: sidehop or backflip&near an enemy -> world slows to&15% with iframes for ~2s. Land&up to 7 hits, then bonus damage.^%cBullet Time%w: %y\xA5%w-target while airborne&with bow/slingshot/hookshot/boomerang&-> time slows, you float, stick aims&the shot.",
       "Du hast die %cRüstung des Helden%w!&Die blaue Tracht des Auserwählten&Hyrules, mit Kampfaura gesegnet.^Rüste sie am %yTunika-Platz%w aus.^Adult Link erhält das volle %cBOTW-Link%w&Modell. Beide Altersstufen kämpfen damit:^%gFlurry Rush%w: Seitsprung oder Backflip&neben einem Feind -> Welt verlangsamt&auf 15% mit i-Frames für ~2s.&Lande bis zu 7 Treffer.^%cBullet Time%w: %y\xA5%w-fokussieren in der Luft&mit Bogen/Schleuder/Greifhaken/Bumerang&-> Zeit verlangsamt, du schwebst,&Stick zielt den Schuss.",
       "Vous obtenez la %cTunique du Héros%w!&Le vêtement bleu de l'élu d'Hyrule,&béni d'une aura de combat.^Équipez-la dans l'%yemplacement tunique%w.^Link adulte obtient le modèle complet&%cLink BOTW%w. Les deux âges combattent:^%gFlurry Rush%w: esquive ou saut arrière&près d'un ennemi -> le monde ralentit&à 15% avec i-frames pendant ~2s.&Jusqu'à 7 coups.^%cBullet Time%w: %y\xA5%w-cible en l'air avec&arc/lance-pierre/grappin/boomerang ->&le temps ralentit, vous flottez,&le stick vise le tir." },
 
@@ -192,8 +211,10 @@ const CustomItemMessageEntry* GetCustomItemMessage(s16 rgId) {
         neiMsg.rgId = rgId;
         neiMsg.itemId = static_cast<ItemID>(nei->item);
         neiMsg.english = nei->nameEn;
-        neiMsg.french = nei->nameFr;
-        neiMsg.german = nei->nameDe;
+        // Rows may leave FR/DE as NULL — fall back to English so the CustomMessage
+        // std::string ctor never receives a null char* (crash on textbox open).
+        neiMsg.french = nei->nameFr != nullptr ? nei->nameFr : nei->nameEn;
+        neiMsg.german = nei->nameDe != nullptr ? nei->nameDe : nei->nameEn;
         return &neiMsg;
     }
     return nullptr;
@@ -616,6 +637,15 @@ ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerGet(RandomizerGe
             return AMMO(ITEM_BEAN) < 10 ? CAN_OBTAIN : CANT_OBTAIN_ALREADY_HAVE;
         case RG_MEGATON_HAMMER:
             return INV_CONTENT(ITEM_HAMMER) == ITEM_NONE ? CAN_OBTAIN : CANT_OBTAIN_ALREADY_HAVE;
+        // NEI progressive weapons — obtainable until the top upgrade level is reached.
+        case RG_PROGRESSIVE_HAMMER:
+            return WeaponUpgrade_HasHammerAxe() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_PROGRESSIVE_KOKIRI_SWORD:
+            return WeaponUpgrade_HasGilded() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_PROGRESSIVE_MASTER_SWORD:
+            return WeaponUpgrade_HasTrueMaster() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_PROGRESSIVE_BGS:
+            return WeaponUpgrade_HasGreatFairy() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
         case RG_FIRE_ARROWS:
             return INV_CONTENT(ITEM_ARROW_FIRE) == ITEM_NONE ? CAN_OBTAIN : CANT_OBTAIN_ALREADY_HAVE;
         case RG_ICE_ARROWS:
@@ -649,6 +679,7 @@ ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerGet(RandomizerGe
         case RG_RUTOS_LETTER:
         case RG_BOTTLE_WITH_BIG_POE:
         case RG_BOTTLE_WITH_MAGIC_MUSHROOM:
+        case RG_MM_BOTTLE_GOLD_DUST: // final cross items — fills a bottle slot like the row above
             return Inventory_HasEmptyBottleSlot() ? CAN_OBTAIN : CANT_OBTAIN_ALREADY_HAVE;
 
         // Bottle Refills
@@ -711,7 +742,7 @@ ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerGet(RandomizerGe
         case RG_FISHING_POLE:
             return !Flags_GetRandomizerInf(RAND_INF_FISHING_POLE_FOUND) ? CAN_OBTAIN : CANT_OBTAIN_ALREADY_HAVE;
         case RG_PROGRESSIVE_ROCS:
-            switch (gSaveContext.inventory.items[SLOT_ROCS]) {
+            switch (ExtInv_GetSlotItem(SLOT_ROCS)) { // Skijer's NEI
                 case ITEM_NONE:
                 case ITEM_ROCS_FEATHER_SKIJER:
                     return CAN_OBTAIN;
@@ -1267,6 +1298,21 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
 
     RandomizerGet item = (RandomizerGet)giEntry.getItemId;
 
+    // FleetShipCombo: record every FC cross item obtained in OoT into the fcId-indexed store so it
+    // syncs to MM. Bump BOTH the synced count (comboObtainedFc) and the local applied count
+    // (comboAppliedFc) together — this item is materializing here natively right now, so its
+    // deficit stays 0 and ApplyFcRegistryToNatives will not re-grant it. This is the single
+    // programmatic give choke; it is skipped while ApplyFcRegistryToNatives is itself granting the
+    // FC deficit (its Randomizer_Item_Give calls re-enter here), which would otherwise double-count.
+    if (!FleetSync_IsApplyingFc()) {
+        int fc = FcCombo_ItemForNative((int)item);
+        if (fc != FCI_NO_ITEM && fc >= 0 && fc < FC_COMBO_OBTAINED_FC_SIZE) {
+            NeiSaveData* nei = Nei_Save();
+            nei->comboObtainedFc[fc]++;
+            nei->comboAppliedFc[fc]++;
+        }
+    }
+
     // Gameplay stats: Update the time the item was obtained
     Randomizer_GameplayStats_SetTimestamp(item);
 
@@ -1325,6 +1371,18 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         for (u16 i = 0; i < 4; i++) {
             if (gSaveContext.inventory.items[SLOT_BOTTLE_1 + i] == ITEM_NONE) {
                 gSaveContext.inventory.items[SLOT_BOTTLE_1 + i] = ITEM_BOTTLE_WITH_MAGIC_MUSHROOM;
+                return Return_Item_Entry(giEntry, RG_NONE);
+            }
+        }
+    }
+
+    // MM Bottle with Gold Dust (final cross items) — same custom-bottle grant as the Magic Mushroom
+    // above: ITEM_GOLD_DUST (0xEC) into the first free bottle slot. mm_bottles_behavior.cpp maps
+    // 0xEC -> MM_BOTTLE_GOLD_DUST, so the content behaves (and empties) like MM's gold dust.
+    if (item == RG_MM_BOTTLE_GOLD_DUST) {
+        for (u16 i = 0; i < 4; i++) {
+            if (gSaveContext.inventory.items[SLOT_BOTTLE_1 + i] == ITEM_NONE) {
+                gSaveContext.inventory.items[SLOT_BOTTLE_1 + i] = ITEM_GOLD_DUST;
                 return Return_Item_Entry(giEntry, RG_NONE);
             }
         }
@@ -1569,7 +1627,7 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
             break;
         case RG_PROGRESSIVE_ROCS:
             // Progressive Roc's: Give Feather first, then Cape as upgrade
-            switch (gSaveContext.inventory.items[SLOT_ROCS]) {
+            switch (ExtInv_GetSlotItem(SLOT_ROCS)) { // Skijer's NEI
                 case ITEM_NONE:
                     ExtInv_SetItemById(ITEM_ROCS_FEATHER_SKIJER);
                     break;
@@ -1590,18 +1648,37 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         case RG_EXT_FOUR_SWORD:
             ExtEquip_GiveItem(EQUIP_TYPE_SWORD, 2);
             break;
-        // NEI Weapon Upgrades (gSaveContext.ship.weaponUpgrades bits; require base weapon)
-        case RG_HAMMER_UPGRADE:
-            WeaponUpgrade_SetHammerAxe(1);
+        // NEI Weapon Upgrades — progressive. Level 1 grants the vanilla weapon (normal
+        // SaveContext state, owned-bit only — same convention as RG_MASTER_SWORD above, no
+        // auto-equip); subsequent copies set a Nei_Save()->weaponUpgrades bit.
+        case RG_PROGRESSIVE_HAMMER:
+            if (INV_CONTENT(ITEM_HAMMER) == ITEM_NONE) {
+                INV_CONTENT(ITEM_HAMMER) = ITEM_HAMMER;
+            } else {
+                WeaponUpgrade_SetHammerAxe(1);
+            }
             break;
         case RG_PROGRESSIVE_KOKIRI_SWORD:
-            WeaponUpgrade_GiveProgressiveKokiri();
+            if (!CHECK_OWNED_EQUIP(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_KOKIRI)) {
+                gSaveContext.inventory.equipment |= OWNED_EQUIP_FLAG(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_KOKIRI);
+            } else {
+                WeaponUpgrade_GiveProgressiveKokiri(); // Razor, then Gilded
+            }
             break;
-        case RG_TRUE_MASTER_SWORD:
-            WeaponUpgrade_SetTrueMaster(1);
+        case RG_PROGRESSIVE_MASTER_SWORD:
+            if (!CHECK_OWNED_EQUIP(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_MASTER)) {
+                gSaveContext.inventory.equipment |= OWNED_EQUIP_FLAG(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_MASTER);
+            } else {
+                WeaponUpgrade_SetTrueMaster(1);
+            }
             break;
-        case RG_GREAT_FAIRY_SWORD:
-            WeaponUpgrade_SetGreatFairy(1);
+        case RG_PROGRESSIVE_BGS:
+            if (!CHECK_OWNED_EQUIP(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_BIGGORON)) {
+                gSaveContext.inventory.equipment |= OWNED_EQUIP_FLAG(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_BIGGORON);
+                gSaveContext.bgsFlag = 1; // HasItem(RG_BIGGORON_SWORD) requires bgsFlag
+            } else {
+                WeaponUpgrade_SetGreatFairy(1);
+            }
             break;
         case RG_EXT_DIVINE_SHIELD:
             ExtEquip_GiveItem(EQUIP_TYPE_SHIELD, 1);
@@ -1612,14 +1689,16 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         case RG_EXT_SHIELD_OF_IKANA:
             ExtEquip_GiveItem(EQUIP_TYPE_SHIELD, 3);
             break;
+        // Tunic slots remapped 2026-07-16: 1=Champion, 2=Spirit, 3=Snowquill. The Magic Cape is no
+        // longer a grid slot — it grants via its dedicated ownership flag.
         case RG_EXT_MAGIC_CAPE:
-            ExtEquip_GiveItem(EQUIP_TYPE_TUNIC, 1);
+            ExtEquip_GiveCape();
             break;
         case RG_EXT_SPIRIT_BREASTPLATE:
             ExtEquip_GiveItem(EQUIP_TYPE_TUNIC, 2);
             break;
         case RG_EXT_CHAMPIONS_TUNIC:
-            ExtEquip_GiveItem(EQUIP_TYPE_TUNIC, 3);
+            ExtEquip_GiveItem(EQUIP_TYPE_TUNIC, 1);
             break;
         case RG_EXT_PEGASUS_ANKLET:
             ExtEquip_GiveItem(EQUIP_TYPE_BOOTS, 1);
@@ -1672,12 +1751,269 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
                 INV_CONTENT(ITEM_TRADE_CHILD) = ITEM_MASK_ZORA;
             }
             break;
+        // MM collectibles ported to OoT rando (Stray Fairy + 4 Boss Remains). They have no OoT
+        // inventory presence — collecting the check (model + message) is the whole effect, so the
+        // give itself is a no-op. Explicit cases keep them off the registry-default assert below.
+        case RG_MM_STRAY_FAIRY:
+        case RG_MM_STRAY_FAIRY_WOODFALL:
+        case RG_MM_STRAY_FAIRY_SNOWHEAD:
+        case RG_MM_STRAY_FAIRY_GREAT_BAY:
+        case RG_MM_STRAY_FAIRY_STONE_TOWER:
+            break;
+        // MM boss remains: no OoT inventory slot, but ownership is recorded in the parallel MM
+        // quest store (Nei_Save()->mmQuestItems, FC_MMQ bits) so OoT's mirrored MM quest page
+        // lights up and FleetSync carries the bit to MM's native questItems.
+        case RG_MM_REMAINS_ODOLWA:
+            Nei_Save()->mmQuestItems |= FC_MMQ_REMAINS_ODOLWA;
+            break;
+        case RG_MM_REMAINS_GOHT:
+            Nei_Save()->mmQuestItems |= FC_MMQ_REMAINS_GOHT;
+            break;
+        case RG_MM_REMAINS_GYORG:
+            Nei_Save()->mmQuestItems |= FC_MMQ_REMAINS_GYORG;
+            break;
+        case RG_MM_REMAINS_TWINMOLD:
+            Nei_Save()->mmQuestItems |= FC_MMQ_REMAINS_TWINMOLD;
+            break;
+        // MM per-dungeon items (small key / boss key / map / compass) — model + message only, no OoT
+        // inventory slot; give is a no-op.
+        case RG_MM_SMALL_KEY_WOODFALL:
+        case RG_MM_SMALL_KEY_SNOWHEAD:
+        case RG_MM_SMALL_KEY_GREAT_BAY:
+        case RG_MM_SMALL_KEY_STONE_TOWER:
+        case RG_MM_BOSS_KEY_WOODFALL:
+        case RG_MM_BOSS_KEY_SNOWHEAD:
+        case RG_MM_BOSS_KEY_GREAT_BAY:
+        case RG_MM_BOSS_KEY_STONE_TOWER:
+        case RG_MM_MAP_WOODFALL:
+        case RG_MM_MAP_SNOWHEAD:
+        case RG_MM_MAP_GREAT_BAY:
+        case RG_MM_MAP_STONE_TOWER:
+        case RG_MM_COMPASS_WOODFALL:
+        case RG_MM_COMPASS_SNOWHEAD:
+        case RG_MM_COMPASS_GREAT_BAY:
+        case RG_MM_COMPASS_STONE_TOWER:
+        case RG_MM_SOUL_GOHT:
+        case RG_MM_SOUL_GYORG:
+        case RG_MM_SOUL_MAJORA:
+        case RG_MM_SOUL_ODOLWA:
+        case RG_MM_SOUL_TWINMOLD:
+        case RG_MM_SOUL_ALIEN:
+        case RG_MM_SOUL_ARMOS:
+        case RG_MM_SOUL_BAD_BAT:
+        case RG_MM_SOUL_BEAMOS:
+        case RG_MM_SOUL_BOE:
+        case RG_MM_SOUL_BUBBLE:
+        case RG_MM_SOUL_CAPTAIN_KEETA:
+        case RG_MM_SOUL_CHUCHU:
+        case RG_MM_SOUL_DEATH_ARMOS:
+        case RG_MM_SOUL_DEEP_PYTHON:
+        case RG_MM_SOUL_DEKU_BABA:
+        case RG_MM_SOUL_DEXIHAND:
+        case RG_MM_SOUL_DINOLFOS:
+        case RG_MM_SOUL_DODONGO:
+        case RG_MM_SOUL_DRAGONFLY:
+        case RG_MM_SOUL_EENO:
+        case RG_MM_SOUL_EYEGORE:
+        case RG_MM_SOUL_FREEZARD:
+        case RG_MM_SOUL_GARO:
+        case RG_MM_SOUL_GEKKO:
+        case RG_MM_SOUL_GIANT_BEE:
+        case RG_MM_SOUL_GOMESS:
+        case RG_MM_SOUL_GUAY:
+        case RG_MM_SOUL_HIPLOOP:
+        case RG_MM_SOUL_IGOS_DU_IKANA:
+        case RG_MM_SOUL_IRON_KNUCKLE:
+        case RG_MM_SOUL_KEESE:
+        case RG_MM_SOUL_LEEVER:
+        case RG_MM_SOUL_LIKE_LIKE:
+        case RG_MM_SOUL_MAD_SCRUB:
+        case RG_MM_SOUL_NEJIRON:
+        case RG_MM_SOUL_OCTOROK:
+        case RG_MM_SOUL_PEAHAT:
+        case RG_MM_SOUL_PIRATE:
+        case RG_MM_SOUL_POE:
+        case RG_MM_SOUL_REDEAD:
+        case RG_MM_SOUL_SHELLBLADE:
+        case RG_MM_SOUL_SKULLFISH:
+        case RG_MM_SOUL_SKULLTULA:
+        case RG_MM_SOUL_SNAPPER:
+        case RG_MM_SOUL_STALCHILD:
+        case RG_MM_SOUL_TAKKURI:
+        case RG_MM_SOUL_TEKTITE:
+        case RG_MM_SOUL_WALLMASTER:
+        case RG_MM_SOUL_WART:
+        case RG_MM_SOUL_WIZROBE:
+        case RG_MM_SOUL_WOLFOS:
+        // MM trade / quest-chain items — grant the REAL NEI inventory item, same APIs the give-all
+        // debug menu path uses: adult-trade wheel (pause kaleido slots 4/5, trade_items.c),
+        // pictobox (picto_box.c), powder keg (power_keg.c), Bombers' Notebook (mmQuestItems bit).
+        case RG_MM_MOONS_TEAR:
+            TradeAdult_GiveItem(ITEM_MM_MOONS_TEAR);
+            break;
+        case RG_MM_DEED_LAND:
+            TradeAdult_GiveItem(ITEM_MM_DEED_LAND);
+            break;
+        case RG_MM_DEED_SWAMP:
+            TradeAdult_GiveItem(ITEM_MM_DEED_SWAMP);
+            break;
+        case RG_MM_DEED_MOUNTAIN:
+            TradeAdult_GiveItem(ITEM_MM_DEED_MOUNTAIN);
+            break;
+        case RG_MM_DEED_OCEAN:
+            TradeAdult_GiveItem(ITEM_MM_DEED_OCEAN);
+            break;
+        case RG_MM_ROOM_KEY:
+            TradeAdult_GiveItem(ITEM_MM_ROOM_KEY);
+            break;
+        case RG_MM_LETTER_TO_KAFEI:
+            TradeAdult_GiveItem(ITEM_MM_LETTER_KAFEI);
+            break;
+        case RG_MM_LETTER_TO_MAMA:
+            TradeAdult_GiveItem(ITEM_MM_SPECIAL_DELIVERY);
+            break;
+        case RG_MM_PENDANT_OF_MEMORIES:
+            // Trade index 19 dual-grants: trade-wheel entry + the C-equippable pendant moveset
+            // (ExtEquip BOOTS 2) — same coupling equip_pendant.c expects. Idempotent with
+            // RG_EXT_PENDANT_OF_MEMORIES (both set the same ownership bits).
+            TradeAdult_GiveItem(ITEM_EXT_BOOTS_2);
+            break;
+        case RG_MM_PICTOGRAPH_BOX:
+            Picto_SetOwned(1);
+            break;
+        case RG_MM_POWDER_KEG:
+            PowerKeg_SetOwned(1);
+            if (PowerKeg_GetCount() < 1) {
+                PowerKeg_SetCount(1); // arrives loaded, like buying one in MM
+            }
+            break;
+        case RG_MM_BOMBERS_NOTEBOOK:
+            Nei_Save()->mmQuestItems |= FC_MMQ_BOMBERS_NOTEBOOK;
+            break;
+        // MM ocarina songs, owl-statue warps, and Tingle maps — model + message only, no OoT
+        // inventory slot; give is a no-op.
+        // MM songs: record ownership in the parallel MM quest store (Nei_Save()->mmQuestItems,
+        // FC_MMQ bits — the bits OoT's mirrored MM quest page reads) so the icon lights up and
+        // FleetSync carries it to MM's native questItems. Shared-identity songs (Saria / Sun /
+        // Time / Epona / Storms) instead set OoT's NATIVE questItems bit — the mirror page reads
+        // those rows natively and the song is the same item in both games.
+        case RG_MM_SONG_SONATA:
+            Nei_Save()->mmQuestItems |= FC_MMQ_SONG_SONATA;
+            break;
+        case RG_MM_SONG_LULLABY:
+            Nei_Save()->mmQuestItems |= FC_MMQ_SONG_GORON_LULLABY;
+            break;
+        case RG_MM_SONG_NOVA:
+            Nei_Save()->mmQuestItems |= FC_MMQ_SONG_NEW_WAVE;
+            break;
+        case RG_MM_SONG_ELEGY:
+            Nei_Save()->mmQuestItems |= FC_MMQ_SONG_ELEGY;
+            break;
+        case RG_MM_SONG_OATH:
+            Nei_Save()->mmQuestItems |= FC_MMQ_SONG_OATH;
+            break;
+        case RG_MM_SONG_HEALING:
+            Nei_Save()->mmQuestItems |= FC_MMQ_SONG_HEALING;
+            break;
+        case RG_MM_SONG_SOARING:
+            Nei_Save()->mmQuestItems |= FC_MMQ_SONG_SOARING;
+            break;
+        case RG_MM_SONG_SARIA:
+            gSaveContext.inventory.questItems |= (1 << QUEST_SONG_SARIA);
+            break;
+        case RG_MM_SONG_SUN:
+            gSaveContext.inventory.questItems |= (1 << QUEST_SONG_SUN);
+            break;
+        case RG_MM_SONG_TIME:
+            gSaveContext.inventory.questItems |= (1 << QUEST_SONG_TIME);
+            break;
+        case RG_MM_SONG_EPONA:
+            gSaveContext.inventory.questItems |= (1 << QUEST_SONG_EPONA);
+            break;
+        case RG_MM_SONG_STORMS:
+            gSaveContext.inventory.questItems |= (1 << QUEST_SONG_STORMS);
+            break;
+        case RG_MM_SONG_DOUBLE_TIME:
+            Nei_Save()->mmQuestItems |= FC_MMQ_SONG_TIME_DOUBLE;
+            break;
+        case RG_MM_SONG_INVERTED_TIME:
+            Nei_Save()->mmQuestItems |= FC_MMQ_SONG_TIME_INVERTED;
+            break;
+        // Lullaby Intro has no quest-page icon of its own (MM tracks it separately); no-op.
+        case RG_MM_SONG_LULLABY_INTRO:
+        case RG_MM_OWL_CLOCK_TOWN_SOUTH:
+        case RG_MM_OWL_GREAT_BAY_COAST:
+        case RG_MM_OWL_IKANA_CANYON:
+        case RG_MM_OWL_MILK_ROAD:
+        case RG_MM_OWL_MOUNTAIN_VILLAGE:
+        case RG_MM_OWL_SNOWHEAD:
+        case RG_MM_OWL_SOUTHERN_SWAMP:
+        case RG_MM_OWL_STONE_TOWER:
+        case RG_MM_OWL_WOODFALL:
+        case RG_MM_OWL_ZORA_CAPE:
+        case RG_MM_TINGLE_MAP_CLOCK_TOWN:
+        case RG_MM_TINGLE_MAP_WOODFALL:
+        case RG_MM_TINGLE_MAP_SNOWHEAD:
+        case RG_MM_TINGLE_MAP_ROMANI_RANCH:
+        case RG_MM_TINGLE_MAP_GREAT_BAY:
+        case RG_MM_TINGLE_MAP_STONE_TOWER:
+        // MM Clawshot expressed in OoT for cross-collection — model + message only, no OoT clawshot
+        // mechanic, so give is a no-op. The real effect is MM-side; cross-collection carries it there.
+        case RG_CLAWSHOT:
+        // Final MM cross items with no OoT store: healed frogs (Don Gero's choir), Great Spin
+        // (WEEKEVENTREG is MM-side) and the 6 clock-shuffle halves — model + message only; the FC
+        // record hook above already counted the pickup for the cross-game registry.
+        case RG_MM_FROG_BLUE:
+        case RG_MM_FROG_CYAN:
+        case RG_MM_FROG_PINK:
+        case RG_MM_FROG_WHITE:
+        case RG_MM_GREAT_SPIN_ATTACK:
+        case RG_MM_TIME_DAY_1:
+        case RG_MM_TIME_DAY_2:
+        case RG_MM_TIME_DAY_3:
+        case RG_MM_TIME_NIGHT_1:
+        case RG_MM_TIME_NIGHT_2:
+        case RG_MM_TIME_NIGHT_3:
+        // Gold Dust normally grants in the bottle-slot block ABOVE the switch; the obtainability
+        // gate keeps it from firing with full bottles. This case only stops the default-assert if
+        // it ever falls through anyway (content lost, matching the mushroom's failure mode).
+        case RG_MM_BOTTLE_GOLD_DUST:
+            break;
+        // MM Swamp/Ocean GS tokens — SoH DOES have a store: the FC registry's raw MM world-progress
+        // counters (FleetComboIds.h FC_MM_SKULLS_*; the array FleetSync max-merges with MM's
+        // comboObtained wholesale). Incrementing the cell here is the canonical obtain; MM's
+        // Inventory_IncrementSkullTokenCount picks it up on sync.
+        case RG_MM_GS_TOKEN_SWAMP: {
+            NeiSaveData* nei = Nei_Save();
+            if (nei->comboObtained[FC_MM_SKULLS_SWAMP] < 255) {
+                nei->comboObtained[FC_MM_SKULLS_SWAMP]++;
+            }
+            break;
+        }
+        case RG_MM_GS_TOKEN_OCEAN: {
+            NeiSaveData* nei = Nei_Save();
+            if (nei->comboObtained[FC_MM_SKULLS_OCEAN] < 255) {
+                nei->comboObtained[FC_MM_SKULLS_OCEAN]++;
+            }
+            break;
+        }
+        // Bottle Randomizer extra items (Skijer's NEI, custom_bottles.cpp): REAL grants. Setting the
+        // ownership flag is the whole give — mm_bottle_items.cpp's per-frame enforcement projects the
+        // item into SLOT_BOTTLE_3 (Net) / SLOT_BOTTLE_4 (Bottomless, shows as empty bottle until
+        // filled) and refreshes any C-button. Same store the debug save-editor toggles.
+        case RG_NET:
+            Bottle_SetNetOwned(1);
+            break;
+        case RG_BOTTOMLESS_BOTTLE:
+            Bottle_SetBottomlessOwned(1);
+            break;
         default: {
             // Skijer's NEI: generic give for uniform custom-item + MM-mask arms. The registry row
             // (keyed by RG) names the page-2/3 inventory item; identical to the old per-RG
             // ExtInv_SetItemById(ITEM_x). Rows without an inventory slot fall through to the warning.
             const NeiItem* neiGive = Nei_FindByRg((int16_t)item);
-            if (neiGive != NULL && neiGive->slot != NEI_NO_SLOT && neiGive->item != NEI_NO_ITEM) {
+            // Masks carry slot=NEI_NO_SLOT; ExtInv_SetItemById resolves their page-3 slot. Skijer's NEI
+            if (neiGive != NULL && neiGive->item != NEI_NO_ITEM) {
                 ExtInv_SetItemById((uint8_t)neiGive->item);
                 break;
             }

@@ -165,11 +165,22 @@ u8 ItemEquip_Update(ItemEquipState* state, ItemInputState* input, EquipCallback 
 }
 
 void ItemMagic_Consume(PlayState* play, s16 amount) {
+    // Magic Cape passive (Skijer 2026-07-15): all custom magic items cost HALF while the cape is
+    // owned — and the matching HasEnough check below means they're castable with half the magic.
+    // (Commit 10a66533's MAGIC_REQ, applied once here for every ItemMagic_* user.)
+    extern u8 ExtEquip_CapeOwned(void);
+    if (ExtEquip_CapeOwned())
+        amount /= 2;
+
     if (gSaveContext.magic >= amount)
         gSaveContext.magic -= amount;
 }
 
 s32 ItemMagic_HasEnough(PlayState* play, s16 amount) {
+    extern u8 ExtEquip_CapeOwned(void);
+    if (ExtEquip_CapeOwned())
+        amount /= 2; // Magic Cape: castable with half the base cost
+
     return (gSaveContext.magicCapacity > 0 && gSaveContext.magic >= amount);
 }
 

@@ -29,13 +29,14 @@ static void* ExtEquip_LookupNameTex(u16 itemId, u8 language) {
         case ITEM_EXT_SHIELD_3:
             return (void*)gShieldOfIkanaNameTex;
 
-        // Tunics
+        // Tunics — recolor tunics now: 1=Champion, 2=Spirit, 3=Snowquill (Skijer 2026-07-16).
+        // Spirit reuses the Magic Armor name; Snowquill has no name tex yet (placeholder).
         case ITEM_EXT_TUNIC_1:
-            return (void*)gMagicCapeNameTex;
+            return (void*)gChampionsTunicNameTex;
         case ITEM_EXT_TUNIC_2:
             return (void*)gMagicArmorNameTex;
         case ITEM_EXT_TUNIC_3:
-            return (void*)gChampionsTunicNameTex;
+            return (void*)gChampionsTunicNameTex; // TODO: dedicated Snowquill name texture
 
         // Boots
         case ITEM_EXT_BOOTS_1:

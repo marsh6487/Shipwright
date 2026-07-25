@@ -1595,9 +1595,9 @@ std::unordered_map<ItemID, RandomizerGet> ItemIDtoRandomizerGetMap{
     { ITEM_ROD_LIGHT, RG_LIGHT_ROD },
     { ITEM_BEETLE, RG_BEETLE },
     { ITEM_SHOVEL, RG_SHOVEL },
-    { ITEM_MINISH_CAP, RG_PENDING_1 },
+    { ITEM_MINISH_CAP, RG_MINISH_CAP },
     { ITEM_LANTERN, RG_LANTERN },
-    { ITEM_POKEBALL, RG_PENDING_3 },
+    { ITEM_POKEBALL, RG_POKEBALL },
     // MM Masks
     { ITEM_MM_MASK_POSTMAN, RG_MM_MASK_POSTMAN },
     { ITEM_MM_MASK_ALL_NIGHT, RG_MM_MASK_ALL_NIGHT },
@@ -1691,7 +1691,9 @@ bool VerifyArchiveVersion(OTRVersion version) {
 
 extern "C" void InitOTR(int argc, char* argv[]) {
     OTRGlobals::Instance = new OTRGlobals();
+    FleetShipCombo_ProvisionO2rBothDirs(); // pull a sibling-extracted o2r in BEFORE the presence check
     OTRGlobals::Instance->RunExtract(argc, argv);
+    FleetShipCombo_ProvisionO2rBothDirs(); // push our freshly-extracted o2r out to the sibling dir
 
     OTRGlobals::Instance->Initialize();
     CustomMessageManager::Instance = new CustomMessageManager();
@@ -1968,7 +1970,9 @@ void RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>
     static Gfx sFleetEmptyDL[] = { gsSPEndDisplayList() };
     auto fleetGui = wnd->GetGui();
     bool fleetMenuVisible = fleetGui != nullptr && fleetGui->GetMenuOrMenubarVisible();
-    if (!FleetShipCombo_IsThisGameActive() && !fleetMenuVisible) {
+    // ...also paint black while WARPING IN (arrival blackout): hides this game's stale frame + the
+    // scene-load during a cross-game flip, so the player never sees the teleport / the other game.
+    if ((!FleetShipCombo_IsThisGameActive() && !fleetMenuVisible) || FleetShipCombo_ArrivalBlackoutActive()) {
         Commands = sFleetEmptyDL;
     }
 #endif
@@ -1997,6 +2001,23 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
     }
 
     audio.cv_to_thread.notify_one();
+
+    // Fleet Ship Combo: the INACTIVE game must ignore controller input — both processes poll the same
+    // SDL gamepad, so without this the pad drives BOTH games at once. Block/unblock THIS process's
+    // game input by active state (UI/ImGui input is unaffected, so the menu still works). Standalone:
+    // IsThisGameActive() is always true -> always unblocked.
+    {
+        constexpr int32_t kFleetInputBlockId = 0x46534302; // 'FSC\2'
+        auto controlDeck = Ship::Context::GetRawInstance()->GetControlDeck();
+        if (controlDeck != nullptr) {
+            if (FleetShipCombo_IsThisGameActive()) {
+                controlDeck->UnblockGameInput(kFleetInputBlockId);
+            } else {
+                controlDeck->BlockGameInput(kFleetInputBlockId);
+            }
+        }
+    }
+
     std::vector<std::unordered_map<Mtx*, MtxF>> mtx_replacements;
     int target_fps = OTRGlobals::Instance->GetInterpolationFPS();
     static int last_fps;

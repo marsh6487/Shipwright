@@ -61,6 +61,16 @@ s32 MmMaskWear_ShouldForceNightGS(void);
 // Redeads/Gibdos to a friendly + dancing state, mirroring MM behavior).
 s32 MmMaskWear_IsGibdoMaskWorn(void);
 
+// Returns true if ANY mask that pacifies Redeads/Gibdos is worn: Gibdo Mask
+// (MM), Captain's Hat (MM), or the vanilla Skull / Spooky masks. Used by En_Rd
+// instead of the Gibdo-only check so all four masks trigger the friendly dance.
+s32 MmMaskWear_MakesRedeadsFriendly(void);
+
+// Returns true while the Giant's Mask is worn. Used by Player_GetStrength (grants
+// max lift strength without mutating save upgrades — randomizer-safe, like Goron),
+// the incoming-damage chokepoint (1/4 damage), and the melee hammer-damage hook.
+s32 MmMaskWear_IsGiantMaskActive(void);
+
 // Chateau Romani: infinite magic system (persists across scenes, cleared on death).
 s32 MmMaskWear_IsChateauRomaniActive(void);
 void MmMaskWear_ActivateChateauRomani(void);

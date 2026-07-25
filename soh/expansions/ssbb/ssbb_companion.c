@@ -10,6 +10,7 @@
 
 #include "expansions/ssbb/ssbb_companion.h"
 #include "expansions/ssbb/ssbb_skin.h"
+#include "mods/nei_save.h" // Skijer's NEI
 #include "z64.h"
 #include "macros.h"
 #include "functions.h"
@@ -209,7 +210,7 @@ void PikaCompanion_Update(PikachuCompanion* comp, PlayState* play, Player* playe
         return;
     }
     Actor* boss = PikaComp_FindBoss(comp, play);
-    u8 hasGiantMask = (gSaveContext.inventory.items[SLOT_MM_MASK_GIANT] == ITEM_MM_MASK_GIANT);
+    u8 hasGiantMask = (Nei_GetOwnedItem(SLOT_MM_MASK_GIANT) == ITEM_MM_MASK_GIANT); // Skijer's NEI
     if (boss && hasGiantMask && !comp->gigantamax && comp->aiState != PCOMP_AI_FAINT) {
         comp->gigantamax = 1;
         comp->aiState = PCOMP_AI_GIGANTAMAX;
