@@ -13,6 +13,17 @@ static u8 NEI_PlayerDamageBoostActive(void) {
 }
 
 typedef s32 (*ColChkResetFunc)(PlayState*, Collider*);
+
+// Skijer's NEI shared time control (mods/items/helpers/timestop_helper.c): caches which AC
+// colliders each actor registers so frozen actors can stay hittable during a time stop.
+void TimeCtl_NoteAcCollider(Collider* collider);
+// Skijer's NEI Champion's Tunic (mods/equipment/behaviors/equip_champion.c): snapshots
+// where every hostile attack collider is, so Flurry Rush can tell that a damage collider
+// is sweeping past Link. It has to be taken HERE because ClearContext wipes the AT list
+// before Actor_UpdateAll, so this is the only point in the frame where the list is whole.
+void Champion_NoteIncomingAttacks(PlayState* play);
+
+
 typedef void (*ColChkBloodFunc)(PlayState*, Collider*, Vec3f*);
 typedef void (*ColChkApplyFunc)(PlayState*, CollisionCheckContext*, Collider*);
 typedef void (*ColChkVsFunc)(PlayState*, CollisionCheckContext*, Collider*, Collider*);
@@ -1283,6 +1294,11 @@ s32 CollisionCheck_SetAC(PlayState* play, CollisionCheckContext* colChkCtx, Coll
     }
     index = colChkCtx->colACCount;
     colChkCtx->colAC[colChkCtx->colACCount++] = collider;
+    // Skijer's NEI time stop: remember who registered what. A frozen actor never runs
+    // its update, so it never gets here again and would drop out of the AC list —
+    // Link's sword and arrows would pass straight through a stopped enemy. The freeze
+    // pass re-registers these on the actor's behalf. No-op when nothing is frozen.
+    TimeCtl_NoteAcCollider(collider);
     return index;
 }
 
@@ -2648,6 +2664,8 @@ void CollisionCheck_AC(PlayState* play, CollisionCheckContext* colChkCtx, Collid
  */
 void CollisionCheck_AT(PlayState* play, CollisionCheckContext* colChkCtx) {
     Collider** col;
+
+    Champion_NoteIncomingAttacks(play);
 
     if (colChkCtx->colATCount == 0 || colChkCtx->colACCount == 0) {
         return;

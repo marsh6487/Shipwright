@@ -2421,7 +2421,7 @@ void BigStartGameAs(Role role) {
     gSaveContext.eventInf[1] = 0;
     gSaveContext.eventInf[2] = 0;
     gSaveContext.eventInf[3] = 0;
-    gSaveContext.unk_13EE = 0x32;
+    gSaveContext.prevHudVisibilityMode = 0x32;
     gSaveContext.nayrusLoveTimer = 0;
     gSaveContext.healthAccumulator = 0;
     gSaveContext.magicState = MAGIC_STATE_IDLE;
@@ -2442,9 +2442,9 @@ void BigStartGameAs(Role role) {
     // the chained `forceRisingButtonAlphas = ... = magicCapacity = 0` form
     // Scooter uses verbatim.
     gSaveContext.forceRisingButtonAlphas = 0;
-    gSaveContext.unk_13E8 = 0;
-    gSaveContext.unk_13EA = 0;
-    gSaveContext.unk_13EC = 0;
+    gSaveContext.nextHudVisibilityMode = 0;
+    gSaveContext.hudVisibilityMode = 0;
+    gSaveContext.hudVisibilityModeTimer = 0;
     gSaveContext.magicCapacity = 0;
     gSaveContext.magicFillTarget = gSaveContext.magic;
     // NB: Scooter zeroes magic here, but our preset already set it. Leave alone.

@@ -43,7 +43,7 @@ u8 D_80133418 = 0;
 #define Audio_SetVolScaleNow(playerIdx, volFadeTimer, volScale) \
     Audio_ProcessSeqCmd(0x40000000 | ((u8)playerIdx << 24) | ((u8)volFadeTimer << 16) | ((u8)(volScale * 127.0f)));
 
-void func_800F9280(u8 playerIdx, u8 seqId, u8 arg2, u16 fadeTimer) {
+void Audio_StartSequence(u8 playerIdx, u8 seqId, u8 arg2, u16 fadeTimer) {
     u8 i;
     u16 dur;
     u16 resolvedSeqId;
@@ -152,7 +152,7 @@ void Audio_ProcessSeqCmd(u32 cmd) {
             seqArgs = (cmd & 0xFF00) >> 8;
             fadeTimer = (cmd & 0xFF0000) >> 13;
             if ((gActiveSeqs[playerIdx].isWaitingForFonts == 0) && (seqArgs < 0x80)) {
-                func_800F9280(playerIdx, seqId, seqArgs, fadeTimer);
+                Audio_StartSequence(playerIdx, seqId, seqArgs, fadeTimer);
             }
             break;
 
@@ -171,7 +171,7 @@ void Audio_ProcessSeqCmd(u32 cmd) {
             for (i = 0; i < sNumSeqRequests[playerIdx]; i++) {
                 if (D_8016E320[playerIdx][i].unk_0 == seqId) {
                     if (i == 0) {
-                        func_800F9280(playerIdx, seqId, seqArgs, fadeTimer);
+                        Audio_StartSequence(playerIdx, seqId, seqArgs, fadeTimer);
                     }
                     return;
                 }
@@ -196,7 +196,7 @@ void Audio_ProcessSeqCmd(u32 cmd) {
             D_8016E320[playerIdx][found].unk_0 = seqId;
 
             if (found == 0) {
-                func_800F9280(playerIdx, seqId, seqArgs, fadeTimer);
+                Audio_StartSequence(playerIdx, seqId, seqArgs, fadeTimer);
             }
             break;
 
@@ -224,7 +224,8 @@ void Audio_ProcessSeqCmd(u32 cmd) {
             if (found == 0) {
                 func_800F9474(playerIdx, fadeTimer);
                 if (sNumSeqRequests[playerIdx] != 0) {
-                    func_800F9280(playerIdx, D_8016E320[playerIdx][0].unk_0, D_8016E320[playerIdx][0].unk_1, fadeTimer);
+                    Audio_StartSequence(playerIdx, D_8016E320[playerIdx][0].unk_0, D_8016E320[playerIdx][0].unk_1,
+                                        fadeTimer);
                 }
             }
             break;
@@ -387,7 +388,7 @@ void Audio_ProcessSeqCmd(u32 cmd) {
 }
 
 extern f32 D_80130F24;
-extern f32 D_80130F28;
+extern f32 sRelativeOcarinaVolume;
 
 void Audio_PrimeMmSideChannel(u8 playerIdx, u16 fullSeqId) {
     if (playerIdx >= 4) return;

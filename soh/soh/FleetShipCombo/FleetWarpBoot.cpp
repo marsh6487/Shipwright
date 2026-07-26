@@ -152,7 +152,7 @@ void ApplyDestinationAndBoot(GameState* state, int slot) {
     gSaveContext.eventInf[1] = 0;
     gSaveContext.eventInf[2] = 0;
     gSaveContext.eventInf[3] = 0;
-    gSaveContext.unk_13EE = 0x32; // HUD visibility alpha
+    gSaveContext.prevHudVisibilityMode = 0x32; // HUD visibility alpha
     gSaveContext.nayrusLoveTimer = 0;
     gSaveContext.healthAccumulator = 0;
     gSaveContext.magicState = MAGIC_STATE_IDLE;
@@ -167,7 +167,7 @@ void ApplyDestinationAndBoot(GameState* state, int slot) {
     for (int buttonIndex = 0; buttonIndex < ARRAY_COUNT(gSaveContext.buttonStatus); buttonIndex++) {
         gSaveContext.buttonStatus[buttonIndex] = BTN_ENABLED;
     }
-    gSaveContext.forceRisingButtonAlphas = gSaveContext.unk_13E8 = gSaveContext.unk_13EA = gSaveContext.unk_13EC =
+    gSaveContext.forceRisingButtonAlphas = gSaveContext.nextHudVisibilityMode = gSaveContext.hudVisibilityMode = gSaveContext.hudVisibilityModeTimer =
         gSaveContext.magicCapacity = 0;
     gSaveContext.magicFillTarget = gSaveContext.magic; // boot-time magic refill animation
     gSaveContext.magic = 0;

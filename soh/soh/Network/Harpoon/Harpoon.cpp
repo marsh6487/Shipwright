@@ -1292,12 +1292,12 @@ void Harpoon::HandlePacket_Damage(nlohmann::json payload) {
         knockSpeed = 18.0f; knockYVel = 4.0f;  invTimer = 15;
         finalDamage = 0;                        // pure utility — strips carrier without HP loss
         break;
-    case PLAYER_HIT_RESPONSE_ICE_TRAP:         // Ice arrow / Ice rod
+    case PLAYER_HIT_RESPONSE_FROZEN:         // Ice arrow / Ice rod
         self->actor.freezeTimer = 60;
         Actor_SetColorFilter(&self->actor, 0, 0xFF, 0, 60);
         knockSpeed = 0.0f; knockYVel = 0.0f; invTimer = 60;
         break;
-    case PLAYER_HIT_RESPONSE_ELECTRIC_SHOCK:   // Light arrow
+    case PLAYER_HIT_RESPONSE_ELECTRIFIED:   // Light arrow
         self->actor.freezeTimer = 20;
         Actor_SetColorFilter(&self->actor, 0, 0xFF, 0, 24);
         knockSpeed = 2.0f; knockYVel = 3.0f; invTimer = 20;
@@ -1717,7 +1717,7 @@ void Harpoon::HandlePacket_CustomDamage(nlohmann::json payload) {
             func_80837C0C(gPlayState, self, HARPOON_HIT_RESPONSE_NORMAL, 2.0f, 3.0f, yawToAttacker, 20);
             break;
         case HARPOON_CUSTOM_DMG_ELECTRIC:
-            func_80837C0C(gPlayState, self, PLAYER_HIT_RESPONSE_ELECTRIC_SHOCK, 3.0f, 4.0f, yawToAttacker, 20);
+            func_80837C0C(gPlayState, self, PLAYER_HIT_RESPONSE_ELECTRIFIED, 3.0f, 4.0f, yawToAttacker, 20);
             break;
         case HARPOON_CUSTOM_DMG_HEAVY:
             func_80837C0C(gPlayState, self, HARPOON_HIT_RESPONSE_NORMAL, 24.0f, 12.0f, yawToAttacker, 20);

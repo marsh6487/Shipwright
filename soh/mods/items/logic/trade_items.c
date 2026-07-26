@@ -260,7 +260,7 @@ void TradeAdult_PresentAndMessage(PlayState* play, Player* player, s32 item) {
     // D_80116068 gates on these three flags).
     player->stateFlags1 |= PLAYER_STATE1_TALKING | PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_IN_CUTSCENE;
     // Present camera (swings around to face Link), same setting the vanilla trade present uses.
-    Camera_ChangeSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
+    Camera_RequestSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
     Message_StartTextbox(play, MM_TRADE_USE_TEXTID, NULL);
     sTradePresentState = 1;
 }

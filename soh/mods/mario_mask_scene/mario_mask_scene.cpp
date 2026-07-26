@@ -309,7 +309,7 @@ void OnPlayerUpdateDispatch() {
 // Built with the actor-hijack pattern this fork uses everywhere (see
 // mods/actors/spiritual_stone_statue.c and mods/items/helpers/mailbox_actor.c):
 // spawn a trivially-behaved vanilla actor and overwrite its function pointers.
-// EN_LIGHTBOX is the usual host. func_8002F2CC handles the whole "in range and
+// EN_LIGHTBOX is the usual host. Actor_OfferTalk handles the whole "in range and
 // facing and not locked onto something else" offer, so we get real targeting and
 // the normal A prompt for free.
 
@@ -330,7 +330,7 @@ void Talk_Update(Actor* thisx, PlayState* play) {
     // Point the offer at our own message. Unlike the mailbox (which zeroes textId
     // to suppress the box) we want the box, so Player_SetupTalk starts it for us.
     thisx->textId = kStoneTextId;
-    func_8002F2CC(thisx, play, kTalkRadius);
+    Actor_OfferTalk(thisx, play, kTalkRadius);
 }
 
 void Talk_Draw(Actor* thisx, PlayState* play) {

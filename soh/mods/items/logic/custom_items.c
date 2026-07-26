@@ -24,6 +24,11 @@
 #include "../helpers/fx_helper.c"
 #include "../helpers/combat_helper.c"
 #include "../helpers/grappling_helper.c"
+// Shared time control + rewind + remote selection (Skijer's NEI). timestop_helper must
+// precede rewind_helper, which asks it whether the world is frozen.
+#include "../helpers/timestop_helper.c"
+#include "../helpers/rewind_helper.c"
+#include "../helpers/target_select_helper.c"
 #include "../custom_items_common.c"
 #include "../objects/object_custom_items.c"
 

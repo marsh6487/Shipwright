@@ -394,6 +394,17 @@ static void FleetWarp_Tick(Player* p, PlayState* play) {
 void CustomItems_Update(Player* p, PlayState* play) {
     FleetWarp_Tick(p, play); // cross-game loading zone (intercept vanilla exit + flip)
 
+    // Shared world-time arbiter (Champion's Tunic slow-mo, Zonai Permafrost stop, Phantom
+    // Hourglass scrub) runs ALWAYS: it is a no-op with no active claim, it re-applies the
+    // freeze to actors that spawned mid-effect, and it self-restores on scene change so a
+    // held day/night clock can never leak across a load. Skijer's NEI
+    TimeCtl_Update(play);
+
+    // Trajectory recorder for the Phantom Hourglass' rewind. Disabled by default
+    // (Rewind_SetEnabled), so this is a single compare until that item exists. Must run
+    // AFTER TimeCtl_Update so it sees this frame's freeze state. Skijer's NEI
+    Rewind_Tick(play);
+
     // Switch Hook charge regen (Epona-carrot style) runs ALWAYS — even with the hook not in hand
     // or the player blocked — so the 20s/2min timers keep counting. Skijer's NEI
     {
@@ -663,8 +674,11 @@ void CustomItems_Update(Player* p, PlayState* play) {
         return;
     }
 
-    // Zonai Permafrost must run before IsBlocked check (CASTING sets IN_ITEM_CS)
-    // During CASTING: block other items. During ACTIVE: let other items also update.
+    // Zonai Permafrost is a toggle now: there is no CASTING state, so it is always
+    // either idle or ACTIVE and this never swallows the frame. Kept ahead of the
+    // IsBlocked check so the freeze can be switched off from states that would
+    // otherwise block item input, and the "!= ACTIVE" guard below is what lets the
+    // other custom items keep updating while time is stopped.
     if (gCustomItemState.zonaiPermafrostActive) {
         Handle_ZonaiPermafrost(p, play);
         if (gCustomItemState.zonaiPermafrostState != 2 /* ZPERM_STATE_ACTIVE */) {

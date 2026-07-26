@@ -439,7 +439,7 @@ void HandleApplyStatus(const nlohmann::json& data) {
             c.combatFreezeFrames = duration;
             // Engine's ICE_TRAP path: encases Link in an ice block, plays
             // the freeze SFX, locks input. Matches Freezard behaviour.
-            func_80837C0C(gPlayState, lp, PLAYER_HIT_RESPONSE_ICE_TRAP,
+            func_80837C0C(gPlayState, lp, PLAYER_HIT_RESPONSE_FROZEN,
                           0.0f, 0.0f, 0, (s32)duration);
             // Spawn ice crystals around Link for VFX (matches Freezard
             // EnFz_SpawnIceSmokeFreeze on player hit).

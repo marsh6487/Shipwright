@@ -409,7 +409,7 @@ static void SwitchHook_UpdateProjectile(Player* p, PlayState* play) {
     }
 
     // Chain sound while shooting
-    func_8002F8F0(&p->actor, NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG);
+    Actor_PlaySfx_Flagged2(&p->actor, NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG);
 }
 
 // ============================================================================

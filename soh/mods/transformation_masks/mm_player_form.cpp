@@ -247,12 +247,12 @@ extern "C" void func_8083BA90(PlayState*, Player*, s32, f32, f32);
 // master sword smacks a wall mid-swing (see z_player.c:func_80842DF4).
 //   BgCheck_EntityLineTest1     — geometry line trace
 //   CollisionCheck_SpawnShieldParticles — white wall-spark VFX
-//   SurfaceType_IsIgnoredByEntities / func_80041D4C / func_80041F10 — surface tags
+//   SurfaceType_IsIgnoredByEntities / SurfaceType_GetFloorType / func_80041F10 — surface tags
 extern "C" s32 BgCheck_EntityLineTest1(CollisionContext*, Vec3f*, Vec3f*, Vec3f*, CollisionPoly**, s32, s32, s32, s32,
                                        s32*);
 extern "C" void CollisionCheck_SpawnShieldParticles(PlayState*, Vec3f*);
 extern "C" s32 SurfaceType_IsIgnoredByEntities(CollisionContext*, CollisionPoly*, s32);
-extern "C" u32 func_80041D4C(CollisionContext*, CollisionPoly*, s32);
+extern "C" u32 SurfaceType_GetFloorType(CollisionContext*, CollisionPoly*, s32);
 extern "C" u32 func_80041F10(CollisionContext*, CollisionPoly*, s32);
 
 // =============================================================================
@@ -499,7 +499,7 @@ void Player_Action_80845EF8(Player* this_, PlayState* play); // knob open
 void Player_Action_80845CA4(Player* this_, PlayState* play); // walk through
 
 // OOT slope-slide action (z_player.c:16029). Player_HandleSlopes (line 7968)
-// auto-switches this->actionFunc to this when on a SurfaceType_GetSlope==1
+// auto-switches this->actionFunc to this when on a SurfaceType_GetFloorType==1
 // (steep) floor moving downward. The form's custom ground movement for
 // Goron/Deku must detect this and yield, otherwise our Math_StepToF on
 // linearVelocity overwrites the slope-slide physics every frame.
@@ -4925,7 +4925,7 @@ static u8 MmForm_CheckDamage(Player* player, PlayState* play) {
     if (gFormState.goronAction == MMFORM_ACT_SHIELD && gFormState.shieldColliderInitDone) {
         if (gFormState.shieldCollider.base.acFlags & AC_BOUNCED) {
             // Rumble (from 2Ship line 6083: Player_RequestRumble 180, 20, 100)
-            func_800AA000(0.0f, 180, 20, 100);
+            Rumble_Request(0.0f, 180, 20, 100);
 
             // Shield VFX based on equipped shield type
             {
@@ -5144,7 +5144,7 @@ static u8 MmForm_CheckDamage(Player* player, PlayState* play) {
         // FREEZE: From 2Ship func_80833B18 line 5933-5940
         // In MM: Player_Action_82 with gPlayerAnim_link_normal_ice_down
         // We simplify: use front_hit anim with speed=0, long timer
-        func_800AA000(0.0f, 255, 10, 40);
+        Rumble_Request(0.0f, 255, 10, 40);
         MmForm_PlaySfx(player, MM_NA_SE_PL_FREEZE_S, NA_SE_PL_FREEZE_S);
         player->linearVelocity = 0.0f;
         player->actor.velocity.y = 0.0f;
@@ -5180,7 +5180,7 @@ static u8 MmForm_CheckDamage(Player* player, PlayState* play) {
     if (knockbackType == 4) {
         // ELECTRIC SHOCK: From 2Ship func_80833B18 line 5941-5948
         // In MM: Player_Action_83 with gPlayerAnim_link_normal_electric_shock loop
-        func_800AA000(0.0f, 255, 80, 150);
+        Rumble_Request(0.0f, 255, 80, 150);
         player->linearVelocity = 0.0f;
         player->actor.velocity.y = 0.0f;
         player->bodyShockTimer = 40;
@@ -5218,7 +5218,7 @@ static u8 MmForm_CheckDamage(Player* player, PlayState* play) {
     // Player gets launched with velocity.y = 5.0, speed = 4.0
     // Uses front_downA or back_downA animation (falling down)
     if (knockbackType == 1) {
-        func_800AA000(0.0f, 255, 20, 150); // Strong rumble (from 2Ship line 5826)
+        Rumble_Request(0.0f, 255, 20, 150); // Strong rumble (from 2Ship line 5826)
 
         // Clean up ball state if hit during roll
         if (gFormState.goronAction == GORON_ACT_GORON_ROLL || gFormState.goronAction == GORON_ACT_GORON_ROLL_JUMP ||
@@ -5284,7 +5284,7 @@ static u8 MmForm_CheckDamage(Player* player, PlayState* play) {
     // From 2Ship func_80833B18 line 5851-5857
     if ((player->linearVelocity > 4.0f) && !(player->stateFlags1 & PLAYER_STATE1_HOSTILE_LOCK_ON)) {
         gFormState.flinchTimer = 20;
-        func_800AA000(0.0f, 120, 20, 10);
+        Rumble_Request(0.0f, 120, 20, 10);
         player->cylinder.base.acFlags &= ~AC_HIT;
         return 0; // No action change - player keeps moving
     }
@@ -5305,13 +5305,13 @@ static u8 MmForm_CheckDamage(Player* player, PlayState* play) {
     // Rumble + speed (from 2Ship func_80833B18 lines 5980-5994)
     if (damage >= 5) {
         // Heavy damage: strong rumble + knockback speed
-        func_800AA000(0.0f, 180, 20, 100);
+        Rumble_Request(0.0f, 180, 20, 100);
         player->linearVelocity = 23.0f;
     } else {
         // Light damage: mild rumble, NO speed change (MM behavior!)
         // From 2Ship line 5981: only the animPtr += 4 branch sets speedXZ = 23.0
         // The else branch does NOT touch speedXZ at all.
-        func_800AA000(0.0f, 120, 20, 10);
+        Rumble_Request(0.0f, 120, 20, 10);
     }
 
     // Save prev animation translation for root motion reset
@@ -5445,7 +5445,7 @@ static void MmForm_GoronAction_Damage(Player* player, PlayState* play) {
             // Landing SFX and rumble — Goron uses MM "futtobi" (impact) voice;
             // OOT BOUND fallback covers non-MM forms.
             MmForm_PlaySfx(player, MM_NA_SE_PL_LI_FUTTOBI, NA_SE_PL_BOUND);
-            func_800AA000(0.0f, 120, 20, 10);
+            Rumble_Request(0.0f, 120, 20, 10);
         } else if (gFormState.damageTimer <= 0) {
             // Safety timeout: force recovery even if airborne
             player->linearVelocity = 0.0f;
@@ -6274,7 +6274,7 @@ static void MmForm_Action_Roll(Player* player, PlayState* play) {
                 Quake_SetQuakeValues(quakeIdx, 3, 0, 0, 0);
                 Quake_SetCountdown(quakeIdx, 12);
             }
-            func_800AA000(0.0f, 255, 20, 150);
+            Rumble_Request(0.0f, 255, 20, 150);
             MmForm_PlaySfx(player, MM_NA_SE_PL_GORON_PUNCH, NA_SE_PL_BODY_HIT);
             // MM form voice instead of OOT Link voice
             MmForm_PlayAttackVoice(player);
@@ -6876,7 +6876,7 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
     // === SLOPE EXEMPTION (from 2Ship Player_HandleSlopes, z_player.c:9986) ===
     // MM explicitly excludes the Goron roll from slope handling:
     //   `(Player_Action_96 != this->actionFunc)` — a rolling Goron NEVER slope-slides.
-    // OOT's Player_HandleSlopes has no such exemption, so on SurfaceType_GetSlope==1
+    // OOT's Player_HandleSlopes has no such exemption, so on SurfaceType_GetFloorType==1
     // floors it (a) hijacks actionFunc with Player_Action_SlideOnSlope when moving
     // downhill, and (b) applies a downhill pushedSpeed shove when moving uphill.
     // Both fight the ball's own slope model (speed/velocity.y from floorPitch) —
@@ -6887,7 +6887,7 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
         Player_SetupAction(play, player, Player_Action_Idle, 1);
     }
     if (player->actor.floorPoly != NULL &&
-        SurfaceType_GetSlope(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) == 1) {
+        SurfaceType_GetFloorType(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) == 1) {
         player->pushedSpeed = 0.0f;
     }
 
@@ -7049,7 +7049,7 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
 
             // Ground pound SFX (from 2Ship func_80857AEC line 19869: NA_SE_PL_GORON_PUNCH)
             MmForm_PlaySfx(player, MM_NA_SE_PL_GORON_PUNCH, NA_SE_PL_BODY_HIT);
-            func_800AA000(0.0f, 255, 20, 150); // Rumble (MM values)
+            Rumble_Request(0.0f, 255, 20, 150); // Rumble (MM values)
 
             // White shockwave effect (from 2Ship func_80857AEC line 19871)
             {
@@ -11095,9 +11095,9 @@ static void MmForm_UpdateGakki(Player* player, PlayState* play) {
             Audio_StopSfxById(NA_SE_OC_OCARINA); // Suppress OOT ocarina — MM forms use own instruments
 
             // Detect note from playStaff (confirmed working from logs).
-            // playStaff.state=254 when active, noteIdx=0-4 for buttons, 63 when released.
-            OcarinaStaff* playStaff = Audio_OcaGetPlayingStaff();
-            u8 curNote = (playStaff->state != 0 && playStaff->noteIdx < 5) ? playStaff->noteIdx : 0xFF;
+            // playStaff.state=254 when active, buttonIndex=0-4 for buttons, 63 when released.
+            OcarinaStaff* playStaff = AudioOcarina_GetPlayingStaff();
+            u8 curNote = (playStaff->state != 0 && playStaff->buttonIndex < 5) ? playStaff->buttonIndex : 0xFF;
 
             if (curNote != 0xFF && curNote != gFormState.gakkiLastNoteIdx) {
                 // New note pressed — stop previous, play new instrument sound
@@ -14139,7 +14139,7 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
                 if (BgCheck_EntityLineTest1(&play->colCtx, &probeEnd, &swordTips[0], &hitPos, &hitPoly, true, false,
                                             false, true, &hitBgId) &&
                     !SurfaceType_IsIgnoredByEntities(&play->colCtx, hitPoly, hitBgId) &&
-                    (func_80041D4C(&play->colCtx, hitPoly, hitBgId) != 6)) {
+                    (SurfaceType_GetFloorType(&play->colCtx, hitPoly, hitBgId) != 6)) {
                     // Sparks + SFX (soft / hard / wood depending on surface).
                     u32 surfaceCat = func_80041F10(&play->colCtx, hitPoly, hitBgId);
                     CollisionCheck_SpawnShieldParticles(play, &hitPos);

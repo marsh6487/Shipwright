@@ -144,8 +144,8 @@ static void FireRod_Backfire(Player* p, PlayState* play) {
     // Set Link on fire using the real burn system
     func_8083821C(p);
 
-    // func_8002F6D4: Applies knockback (speed, direction, height, type)
-    func_8002F6D4(play, &p->actor, 4.0f, p->actor.shape.rot.y + 0x8000, 6.0f, 0);
+    // Actor_SetPlayerKnockbackLarge: Applies knockback (speed, direction, height, type)
+    Actor_SetPlayerKnockbackLarge(play, &p->actor, 4.0f, p->actor.shape.rot.y + 0x8000, 6.0f, 0);
 }
 
 static u8 FireRod_CheckBackfire(Player* p, PlayState* play, s16 magicCost, u8 backfireChance) {

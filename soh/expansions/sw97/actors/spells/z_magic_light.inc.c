@@ -295,7 +295,7 @@ void MagicLight_Update(Actor* thisx, PlayState* play) {
     f32 temp;
 
     if (this->unk_174 >= 0.0f) {
-        func_8002F974(&this->actor, NA_SE_PL_ARROW_CHARGE_LIGHT - SFX_FLAG);
+        Actor_PlaySfx_Flagged(&this->actor, NA_SE_PL_ARROW_CHARGE_LIGHT - SFX_FLAG);
 
         // The spell's AT collider has a 3250-unit cylinder radius, which means
         // setting AT registers a "hit" against every actor in the entire room.

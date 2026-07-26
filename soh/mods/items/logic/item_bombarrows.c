@@ -128,7 +128,7 @@ static void BombArrows_UpdateTrackedArrows(PlayState* play) {
                 EffectSsGSpk_SpawnAccel(play, &arrow->actor, &arrow->actor.world.pos, &effVelocity, &effAccel,
                                         &primColor, &envColor, 40, 2);
             }
-            func_8002F974(&arrow->actor, NA_SE_IT_BOMB_IGNIT - SFX_FLAG);
+            Actor_PlaySfx_Flagged(&arrow->actor, NA_SE_IT_BOMB_IGNIT - SFX_FLAG);
         }
     }
 }
@@ -299,7 +299,7 @@ static void BombArrows_UpdateAim(Player* p, PlayState* play, ItemInputState* in)
         // Continuous charge build. Bomb fuse sizzle while held — sells the
         // "the bomb is burning down" feel, and matches the user's request
         // for the charge to sound/last like a real bomb fuse.
-        func_8002F974(&p->actor, NA_SE_IT_BOMB_IGNIT - SFX_FLAG);
+        Actor_PlaySfx_Flagged(&p->actor, NA_SE_IT_BOMB_IGNIT - SFX_FLAG);
         sBaChargeTimer++;
 
         // Visual fuse cue: spit a fire spark off Link's right hand every

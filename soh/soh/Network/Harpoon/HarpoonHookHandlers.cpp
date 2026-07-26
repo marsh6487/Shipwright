@@ -292,7 +292,7 @@ void Harpoon::RegisterHooks() {
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                             if (distSqToPeer(c) <= 50.0f * 50.0f) {
                                 Harpoon::Instance->SendPacket_Damage(
-                                    cid, PLAYER_HIT_RESPONSE_ELECTRIC_SHOCK, 2);
+                                    cid, PLAYER_HIT_RESPONSE_ELECTRIFIED, 2);
                             }
                         });
                     }
@@ -1254,7 +1254,7 @@ void Harpoon::RegisterHooks() {
 
                     Camera* cam = Play_GetCamera(gPlayState, 0);
                     if (cam != nullptr) {
-                        Camera_ChangeSetting(cam, CAM_SET_NORMAL0);
+                        Camera_RequestSetting(cam, CAM_SET_NORMAL0);
                     }
 
                     lp->stateFlags1 &= ~(PLAYER_STATE1_LOADING |

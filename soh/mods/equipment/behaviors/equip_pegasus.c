@@ -289,7 +289,7 @@ static void Pegasus_StateRunning(Player* p, PlayState* play) {
     }
 
     // Loop running sound
-    func_8002F974(&p->actor, NA_SE_PL_WALK_GROUND - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&p->actor, NA_SE_PL_WALK_GROUND - SFX_FLAG);
 
     // Wall bonk check — replicate roll bonk behavior from z_player.c:10059
     // Check bgCheckFlags 0x200 (PLAYER_WALL_INTERACT) which the engine sets
@@ -344,7 +344,7 @@ static void Pegasus_StateRunning(Player* p, PlayState* play) {
 
             // Quake + rumble
             Quake_Add(Play_GetCamera(play, 0), 3);
-            func_800AA000(255.0f, 20, 150, 0);
+            Rumble_Request(255.0f, 20, 150, 0);
 
             // Bonk sounds
             Audio_PlaySoundGeneral(NA_SE_PL_BODY_HIT, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,

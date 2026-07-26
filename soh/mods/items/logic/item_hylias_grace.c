@@ -270,7 +270,7 @@ static void HGrace_StateCasting(Player* p, PlayState* play) {
 
     // Deferred setup (Demise pattern): camera + stateFlags on first tick
     if (hgTimer == -1) {
-        Camera_ChangeSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
+        Camera_RequestSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
         Camera_SetCameraData(Play_GetCamera(play, 0), 4, NULL, NULL, 10, 0, 0);
         p->stateFlags1 |= PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_INPUT_DISABLED;
     }
@@ -371,7 +371,7 @@ static void HGrace_StateWarpEnter(Player* p, PlayState* play) {
 
     // Screen flash at midpoint
     if (hgTimer == HGRACE_WARP_IN_DURATION / 2) {
-        func_800AA000(400.0f, 200, 30, 100);
+        Rumble_Request(400.0f, 200, 30, 100);
     }
 
     // Transition to fairy mode — draw fairy DL instead of Link
@@ -495,7 +495,7 @@ static s32 HGrace_CheckDoorTransition(Player* p, PlayState* play) {
             s8 targetRoom = entry->sides[side].room;
             if (targetRoom >= 0 && targetRoom != play->roomCtx.curRoom.num) {
                 // Load the target room
-                func_8009728C(play, &play->roomCtx, targetRoom);
+                Room_RequestNewRoom(play, &play->roomCtx, targetRoom);
 
                 // Teleport fairy to the door position + push past it so it doesn't re-trigger
                 f32 pushDir = (side == 0) ? 1.0f : -1.0f;
@@ -505,7 +505,7 @@ static s32 HGrace_CheckDoorTransition(Player* p, PlayState* play) {
                 sFairyPos = p->actor.world.pos;
 
                 // Swap rooms
-                func_80097534(play, &play->roomCtx);
+                Room_FinishRoomChange(play, &play->roomCtx);
                 return 1;
             }
         }
@@ -522,7 +522,7 @@ static void HGrace_StateFairy(Player* p, PlayState* play) {
 
     // First-frame setup: ensure camera is in smooth follow mode
     if (!sFairyPosValid) {
-        Camera_ChangeSetting(Play_GetCamera(play, 0), CAM_SET_NORMAL0);
+        Camera_RequestSetting(Play_GetCamera(play, 0), CAM_SET_NORMAL0);
     }
 
     // INPUT_DISABLED prevents normal player actions; IN_ITEM_CS is NOT set
@@ -705,7 +705,7 @@ static void HGrace_StateWarpExit(Player* p, PlayState* play) {
         HGrace_SpawnWarpSparkles(play, &p->actor.world.pos);
         Audio_PlaySoundGeneral(NA_SE_PL_MAGIC_WIND_WARP, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-        func_800AA000(200.0f, 150, 20, 80);
+        Rumble_Request(200.0f, 150, 20, 80);
     }
 
     // Brief exit transition
@@ -746,7 +746,7 @@ static void HGrace_StateIvan(Player* p, PlayState* play) {
         p->actor.draw = NULL;
 
         // Flash + sound on enter
-        func_800AA000(200.0f, 150, 20, 80);
+        Rumble_Request(200.0f, 150, 20, 80);
         Audio_PlayActorSound2(&p->actor, NA_SE_EV_TRIFORCE_FLASH);
     }
 
@@ -792,7 +792,7 @@ static void HGrace_StateIvan(Player* p, PlayState* play) {
         p->invincibilityTimer = 20;
 
         // Flash + sound
-        func_800AA000(200.0f, 150, 20, 80);
+        Rumble_Request(200.0f, 150, 20, 80);
         Audio_PlayActorSound2(&p->actor, NA_SE_EV_TRIFORCE_FLASH);
 
         // Reset lighting (spirit mode dims)

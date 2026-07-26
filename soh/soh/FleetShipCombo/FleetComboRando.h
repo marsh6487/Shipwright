@@ -44,3 +44,27 @@ std::string FleetCombo_GetStatus();
 // Hook llamado desde Fill() (fill.cpp) en cada intento. true = seguir; false = reintentar.
 // No-op (true) cuando no hay generación combo activa.
 bool FleetCombo_PrePlacementHook();
+
+// ---- Options INCOMPATIBLE with the combo ----
+// Options one game can do and the other cannot, or that the combo does not model yet. Generation
+// forces them to a safe value; this table is the SAME one that applies the forcing, so the Shared
+// window's panel cannot lie about what generation will do.
+struct FleetIncompat {
+    const char* label;    // short name for the UI
+    const char* why;      // why it is incompatible (shown on hover)
+    const char* forcedTo; // what it ends up as after generating
+    // OoT CVars that get checked/forced, nullptr-terminated. nullptr = the option is not forced
+    // through a CVar (it goes straight onto the Context at generation, or is an oracle push to the
+    // MM side): there is no live state to read, the row only informs.
+    const char* const* cvars;
+    int safeValue; // value every cvar in the row is forced to
+};
+
+// The whole table (including the rows with no CVar, marked cvars == nullptr).
+const FleetIncompat* FleetCombo_GetIncompatTable(int* count);
+
+// How many rows with OoT CVars are RIGHT NOW sitting on a conflicting value.
+int FleetCombo_CountActiveConflicts();
+
+// Sets every row's OoT CVars to their safe value (the same thing generation will do).
+void FleetCombo_ResolveAllConflicts();

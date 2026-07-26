@@ -620,7 +620,7 @@ static void StateSpinning(Player* p, PlayState* play, ItemInputState* in) {
     BallChain_ApplyDamageBonus(play);
     BallChain_FeedTrail(play, &bcBallPos); // spin streak — Skijer's NEI
 
-    func_8002F974(&p->actor, BALLCHAIN_SFX_WHOOSH);
+    Actor_PlaySfx_Flagged(&p->actor, BALLCHAIN_SFX_WHOOSH);
 
     if (!in->isHeld) {
         // RELEASE: violent ballistic launch in the aimed direction (TP arc). Skijer's NEI
@@ -813,8 +813,8 @@ static void StateThrown(Player* p, PlayState* play) {
                 bcBallPos.y += dy * norm;
                 bcBallPos.z += dz * norm;
             }
-            // Retract clink — func_8002F974 is a flagged (auto-stopping) sfx, so no lingering loop.
-            func_8002F974(&p->actor, BALLCHAIN_SFX_RETRACT);
+            // Retract clink — Actor_PlaySfx_Flagged is a flagged (auto-stopping) sfx, so no lingering loop.
+            Actor_PlaySfx_Flagged(&p->actor, BALLCHAIN_SFX_RETRACT);
         } else {
             bcState = BALLCHAIN_STATE_EQUIP;
             return;

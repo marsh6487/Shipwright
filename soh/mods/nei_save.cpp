@@ -191,6 +191,7 @@ void NeiSave_Save(SaveContext* saveContext, int sectionID, bool fullSave) {
     SaveManager::Instance->SaveData("capeHidden", gNeiSave.capeHidden);
     SaveManager::Instance->SaveData("pendantEffectOff", gNeiSave.pendantEffectOff);
     SaveManager::Instance->SaveData("capeOwned", gNeiSave.capeOwned);
+    SaveManager::Instance->SaveData("extTunicLayoutVersion", gNeiSave.extTunicLayoutVersion);
     TradeItems_SyncWrite(); // mirror the MM trade-item flags next to the save for 2Ship
 }
 
@@ -254,6 +255,7 @@ void NeiSave_Load() {
     SaveManager::Instance->LoadData("capeHidden", gNeiSave.capeHidden, (uint8_t)0);
     SaveManager::Instance->LoadData("pendantEffectOff", gNeiSave.pendantEffectOff, (uint8_t)0);
     SaveManager::Instance->LoadData("capeOwned", gNeiSave.capeOwned, (uint8_t)0);
+    SaveManager::Instance->LoadData("extTunicLayoutVersion", gNeiSave.extTunicLayoutVersion, (uint8_t)0);
     // Cross-game: a pictograph synced from 2Ship (shared sidecar) wins over the SOH save copy.
     Picto_SyncRead();
     TradeItems_SyncRead(); // merge MM trade-item ownership from the cross-game sidecar

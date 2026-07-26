@@ -118,7 +118,7 @@ void EnsureTextures() {
     for (int i = 0; i < ICON_COUNT; i++) {
         sIconAvailable[i] = (am != nullptr) && am->HasFile(std::string(kIcons[i].resPath));
         if (sIconAvailable[i]) {
-            gui->LoadGuiTexture(kIcons[i].name, kIcons[i].resPath, ImVec4(1, 1, 1, 1));
+            gui->LoadGuiTexture(kIcons[i].name, kIcons[i].resPath, "", ImVec4(1, 1, 1, 1));
         }
     }
     sTexturesLoaded = true;

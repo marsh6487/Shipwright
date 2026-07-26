@@ -148,7 +148,8 @@ void EnDntDemo_Judge(EnDntDemo* this, PlayState* play) {
         }
     } else {
         if ((effMask != 0) && (this->subCamera == SUBCAM_FREE)) {
-            this->subCamera = OnePointCutscene_Init(play, 2220, -99, &this->scrubs[3]->actor, MAIN_CAM);
+            this->subCamera =
+                OnePointCutscene_Init(play, 2220, -99, &this->scrubs[3]->actor, CAM_ID_MAIN); // was MAIN_CAM
         }
         this->debugArrowTimer = 0;
         if (this->judgeTimer == 40) {
@@ -187,7 +188,7 @@ void EnDntDemo_Judge(EnDntDemo* this, PlayState* play) {
                         if (this->subCamera != SUBCAM_FREE) {
                             this->subCamera = SUBCAM_FREE;
                             reaction = DNT_SIGNAL_LOOK;
-                            OnePointCutscene_Init(play, 2340, -99, &this->leader->actor, MAIN_CAM);
+                            OnePointCutscene_Init(play, 2340, -99, &this->leader->actor, CAM_ID_MAIN);
                         }
                         break;
                     }
@@ -226,7 +227,7 @@ void EnDntDemo_Judge(EnDntDemo* this, PlayState* play) {
                             case DNT_ACTION_ATTACK:
                                 if (this->subCamera != SUBCAM_FREE) {
                                     this->subCamera = SUBCAM_FREE;
-                                    OnePointCutscene_Init(play, 2350, -99, &this->scrubs[3]->actor, MAIN_CAM);
+                                    OnePointCutscene_Init(play, 2350, -99, &this->scrubs[3]->actor, CAM_ID_MAIN);
                                 }
                                 Audio_QueueSeqCmd(SEQ_PLAYER_BGM_MAIN << 24 | NA_BGM_ENEMY | 0x800);
                                 break;

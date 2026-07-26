@@ -13,8 +13,6 @@
 #include <bit>
 #include <map>
 #include <string>
-#include <libultraship/bridge.h>
-#include <libultraship/libultraship.h>
 #include <soh_assets.h>
 
 #include <fast/Fast3dGui.h>
@@ -24,7 +22,6 @@ extern "C" {
 #include "variables.h"
 #include "functions.h"
 #include "macros.h"
-#include "soh/cvar_prefixes.h"
 extern PlayState* gPlayState;
 
 #include "textures/icon_item_static/icon_item_static.h"
@@ -421,8 +418,7 @@ void DrawInfoTab() {
     Combobox("Z Target Mode", &gSaveContext.zTargetSetting, zTargetMap,
              comboboxOptionsBase.Tooltip("Z-Targeting behavior"));
 
-    if (IS_RANDO &&
-        (OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_TRIFORCE_HUNT) != RO_TRIFORCE_HUNT_OFF)) {
+    if (IS_RANDO && (OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_TRIFORCE_HUNT_PIECES_TOTAL) > 0)) {
         PushStyleInput(THEME_COLOR);
         ImGui::InputScalar("Triforce Pieces", ImGuiDataType_U8,
                            &gSaveContext.ship.quest.data.randomizer.triforcePiecesCollected);
@@ -588,7 +584,7 @@ void DrawBottleRandoEditor() {
                 auto res =
                     Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(cit->second.texturePath, true);
                 if (res) {
-                    gui()->LoadGuiTexture(cit->second.name, cit->second.texturePath, ImVec4(1, 1, 1, 1));
+                    gui()->LoadGuiTexture(cit->second.name, cit->second.texturePath, "", ImVec4(1, 1, 1, 1));
                 }
             }
         }
@@ -874,7 +870,11 @@ void DrawInventoryTab() {
                 PushStyleButton(Colors::DarkGray);
                 if (ImGui::Button("##itemNonePicker",
                                   ImVec2(IMAGE_SIZE, IMAGE_SIZE) + ImGui::GetStyle().FramePadding * 2)) {
-                    gSaveContext.inventory.items[selectedIndex] = ITEM_NONE;
+                    // Upstream's typed grid uses SLOT_NONE (0xFF) as the sentinel; this grid keeps
+                    // the int32_t -1 one, and comparing against 0xFF here would always be true —
+                    // the None button would then index items[-1].
+                    if (selectedIndex != -1)
+                        gSaveContext.inventory.items[selectedIndex] = ITEM_NONE;
                     ImGui::CloseCurrentPopup();
                 }
                 PopStyleButton();
@@ -888,8 +888,9 @@ void DrawInventoryTab() {
                         int testIndex = (selectedIndex == SLOT_BOTTLE_1 || selectedIndex == SLOT_BOTTLE_2)
                                             ? SLOT_BOTTLE_1
                                             : selectedIndex;
-                        if (gItemSlots[slotIndex] == testIndex) {
-                            possibleItems.push_back(itemMapping[slotIndex]);
+                        if (const auto mappedItem = itemMapping.find(slotIndex);
+                            gItemSlots[slotIndex] == testIndex && mappedItem != itemMapping.end()) {
+                            possibleItems.push_back(mappedItem->second);
                         }
                     }
                 } else {
@@ -1206,7 +1207,7 @@ void DrawInventoryTab() {
             sMmIconsRegistered = true;
             auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
             for (int i = 0; i < 24; i++) {
-                gui->LoadGuiTexture(sMmMaskNames[i], sMmMaskIconOtrPaths[i], ImVec4(1, 1, 1, 1));
+                gui->LoadGuiTexture(sMmMaskNames[i], sMmMaskIconOtrPaths[i], "", ImVec4(1, 1, 1, 1));
             }
         }
 
@@ -1380,7 +1381,7 @@ static void DrawFlagTableSearchResults(const FlagTable& flagTable, ImGuiTextFilt
         uint16_t& flags = GetFlagTableEntry(flagTable, row);
 
         for (int32_t flagIndex = 15; flagIndex >= 0; flagIndex--) {
-            uint16_t index = row * 16 + flagIndex;
+            uint16_t index = static_cast<uint16_t>(row * 16 + flagIndex);
             auto descIt = flagTable.flagDescriptions.find(index);
             const char* desc = descIt != flagTable.flagDescriptions.end() ? descIt->second : "";
             std::string searchable = fmt::format("0x{:02X} {}", index, desc);
@@ -1817,19 +1818,22 @@ void DrawFlagsTab() {
 
                             switch (flagTable.flagTableType) {
                                 case EVENT_CHECK_INF:
-                                    DrawFlagTableArray16(flagTable, j, gSaveContext.eventChkInf[j]);
+                                    DrawFlagTableArray16(flagTable, static_cast<uint16_t>(j),
+                                                         gSaveContext.eventChkInf[j]);
                                     break;
                                 case ITEM_GET_INF:
-                                    DrawFlagTableArray16(flagTable, j, gSaveContext.itemGetInf[j]);
+                                    DrawFlagTableArray16(flagTable, static_cast<uint16_t>(j),
+                                                         gSaveContext.itemGetInf[j]);
                                     break;
                                 case INF_TABLE:
-                                    DrawFlagTableArray16(flagTable, j, gSaveContext.infTable[j]);
+                                    DrawFlagTableArray16(flagTable, static_cast<uint16_t>(j), gSaveContext.infTable[j]);
                                     break;
                                 case EVENT_INF:
-                                    DrawFlagTableArray16(flagTable, j, gSaveContext.eventInf[j]);
+                                    DrawFlagTableArray16(flagTable, static_cast<uint16_t>(j), gSaveContext.eventInf[j]);
                                     break;
                                 case RANDOMIZER_INF:
-                                    DrawFlagTableArray16(flagTable, j, gSaveContext.ship.randomizerInf[j]);
+                                    DrawFlagTableArray16(flagTable, static_cast<uint16_t>(j),
+                                                         gSaveContext.ship.randomizerInf[j]);
                                     break;
                             }
                         },
@@ -1886,7 +1890,7 @@ void DrawUpgrade(const std::string& categoryName, int32_t categoryId, const std:
     if (ImGui::BeginCombo("##upgrade", name)) {
         for (size_t i = 0; i < names.size(); i++) {
             if (ImGui::Selectable(names[i].c_str())) {
-                Inventory_ChangeUpgrade(categoryId, i);
+                Inventory_ChangeUpgrade(categoryId, static_cast<s16>(i));
             }
         }
 
@@ -1906,19 +1910,13 @@ void DrawUpgradeIcon(const std::string& categoryName, int32_t categoryId, const 
     PushStyleButton(Colors::DarkGray);
     auto value = (size_t)CUR_UPG_VALUE(categoryId);
     uint8_t item = value < items.size() ? items[value] : ITEM_NONE;
-    if (item != ITEM_NONE) {
-        const ItemMapEntry& slotEntry = itemMapping[item];
-        if (ImGui::ImageButton(
-                slotEntry.name.c_str(),
-                std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
-                    ->GetTextureByName(slotEntry.name),
-                ImVec2(IMAGE_SIZE, IMAGE_SIZE), ImVec2(0, 0), ImVec2(1, 1))) {
-            ImGui::OpenPopup(upgradePopupPicker);
-        }
-    } else {
-        if (ImGui::Button("##itemNone", ImVec2(IMAGE_SIZE, IMAGE_SIZE) + ImGui::GetStyle().FramePadding * 2)) {
-            ImGui::OpenPopup(upgradePopupPicker);
-        }
+    const ItemMapEntry& slotEntry = itemMapping[item];
+    if (ImGui::ImageButton(
+            slotEntry.name.c_str(),
+            std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                ->GetTextureByName(item != ITEM_NONE ? slotEntry.name : itemMapping[items[1]].nameFaded),
+            ImVec2(IMAGE_SIZE, IMAGE_SIZE), ImVec2(0, 0), ImVec2(1, 1))) {
+        ImGui::OpenPopup(upgradePopupPicker);
     }
     PopStyleButton();
     Tooltip(categoryName.c_str());
@@ -1933,7 +1931,7 @@ void DrawUpgradeIcon(const std::string& categoryName, int32_t categoryId, const 
             if (items[pickerIndex] == ITEM_NONE) {
                 if (ImGui::Button("##upgradePopupPicker",
                                   ImVec2(IMAGE_SIZE, IMAGE_SIZE) + ImGui::GetStyle().FramePadding * 2)) {
-                    Inventory_ChangeUpgrade(categoryId, pickerIndex);
+                    Inventory_ChangeUpgrade(categoryId, static_cast<s16>(pickerIndex));
                     ImGui::CloseCurrentPopup();
                 }
                 Tooltip("None");
@@ -1945,7 +1943,7 @@ void DrawUpgradeIcon(const std::string& categoryName, int32_t categoryId, const 
                         ->GetTextureByName(slotEntry.name),
                     ImVec2(IMAGE_SIZE, IMAGE_SIZE), ImVec2(0, 0), ImVec2(1, 1));
                 if (ret) {
-                    Inventory_ChangeUpgrade(categoryId, pickerIndex);
+                    Inventory_ChangeUpgrade(categoryId, static_cast<s16>(pickerIndex));
                     ImGui::CloseCurrentPopup();
                 }
                 Tooltip(SohUtils::GetItemName(slotEntry.id).c_str());
@@ -1973,7 +1971,7 @@ void DrawEquipmentTab() {
             ImGui::SameLine();
         }
 
-        ImGui::PushID(i);
+        ImGui::PushID(static_cast<int>(i));
         uint32_t bitMask = 1 << i;
         bool hasEquip = (bitMask & gSaveContext.inventory.equipment) != 0;
         const ItemMapEntry& entry = itemMapping[equipmentValues[i]];
@@ -2197,7 +2195,7 @@ void DrawEquipmentTab() {
                             auto res = Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(iconPath,
                                                                                                            true);
                             if (res) {
-                                gui->LoadGuiTexture(iconPath, iconPath, ImVec4(1, 1, 1, 1));
+                                gui->LoadGuiTexture(iconPath, iconPath, "", ImVec4(1, 1, 1, 1));
                                 texReady = gui->HasTextureByName(iconPath);
                             }
                         }
@@ -2293,7 +2291,7 @@ void DrawEquipmentTab() {
         if (ImGui::BeginCombo("##upgrade", name)) {
             for (size_t i = 0; i < bombchuNames.size(); i++) {
                 if (ImGui::Selectable(bombchuNames[i].c_str())) {
-                    gSaveContext.ship.quest.data.randomizer.bombchuUpgradeLevel = i;
+                    gSaveContext.ship.quest.data.randomizer.bombchuUpgradeLevel = static_cast<u8>(i);
                     if (i > 0) {
                         INV_CONTENT(ITEM_BOMBCHU) = ITEM_BOMBCHU;
                     } else {
@@ -2860,5 +2858,5 @@ void SaveEditorWindow::DrawElement() {
 
 void SaveEditorWindow::InitElement() {
     std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
-        ->LoadGuiTexture("ROCS_FEATHER", gRocsFeatherTex, ImVec4(1, 1, 1, 1));
+        ->LoadGuiTexture("ROCS_FEATHER", gRocsFeatherTex, "", ImVec4(1, 1, 1, 1));
 }

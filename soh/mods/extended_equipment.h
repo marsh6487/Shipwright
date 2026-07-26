@@ -258,7 +258,7 @@ typedef struct {
 
 extern ExtEquipBehaviorState gExtEquipBehavior;
 
-// Champion's Tunic slow factor — 1.0f normal, 0.15f during Flurry Rush / Bullet Time
+// Champion's Tunic slow factor — 1.0f normal, 0.33f during Flurry Rush / Bullet Time
 // Used in z_actor.c Actor_UpdatePos to scale non-player actor movement.
 extern f32 gChampionSlowFactor;
 
@@ -315,6 +315,15 @@ u8 ExtEquip_SlotRetired(s16 equipType, u8 index);
 u8 ExtEquip_IsChampionTunic(void);   // ext tunic 1 (blue) equipped
 u8 ExtEquip_IsSpiritTunic(void);     // ext tunic 2 (orange/black) equipped
 u8 ExtEquip_IsSnowquillTunic(void);  // ext tunic 3 (white) equipped
+typedef enum {
+    SNOWQUILL_RESIST_ICE,
+    SNOWQUILL_RESIST_FIRE,
+    SNOWQUILL_RESIST_THUNDER,
+    SNOWQUILL_RESIST_STUN,
+    SNOWQUILL_RESIST_FALL,
+    SNOWQUILL_RESIST_WIND,
+} SnowquillResistance;
+u8 ExtEquip_HasSnowquillResistance(SnowquillResistance resistance);
 u8 ExtEquip_SpiritHasMoney(void);    // Spirit equipped AND rupees > 0
 void ExtEquip_GiveCape(void);        // grant the Magic Cape (dedicated ownership flag)
 void* ExtEquip_GetCapeIcon(void);    // upgrade-column icon (decoupled from the ext grid slot)
@@ -326,7 +335,7 @@ void* ExtEquip_GetPendantIcon(void);
 // items), at Magic_RequestChange (vanilla spells + API users) and at the direct-writer sites (Four
 // Sword clones, Deku Leaf). Passive: active whenever the cape is OWNED, independent of visibility.
 #define MAGIC_REQ(cost) (ExtEquip_CapeOwned() ? ((cost) / 2) : (cost))
-u8 ExtEquip_CapeOwned(void);            // owns the Magic Cape (ext TUNIC 1 bit)
+u8 ExtEquip_CapeOwned(void);
 u8 ExtEquip_CapeVisible(void);          // owned && not hidden (draw the cloth)
 void ExtEquip_ToggleCapeVisibility(void);
 u8 ExtEquip_PendantOwned(void);         // owns the Pendant of Memories (ext BOOTS 2 bit)

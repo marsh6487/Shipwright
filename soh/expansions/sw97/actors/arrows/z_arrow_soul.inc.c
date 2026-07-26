@@ -276,7 +276,7 @@ static void ArrowSoul_Charge(ArrowSoul* this, PlayState* play) {
     this->actor.world.pos = arrow->actor.world.pos;
     this->actor.shape.rot = arrow->actor.shape.rot;
 
-    func_8002F974(&this->actor, NA_SE_EV_SPIRIT_STONE - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&this->actor, NA_SE_EV_SPIRIT_STONE - SFX_FLAG);
     Audio_PlayActorSound2(&this->actor, NA_SE_EV_HEALING - SFX_FLAG);
 
     if (arrow->actor.parent == NULL) {

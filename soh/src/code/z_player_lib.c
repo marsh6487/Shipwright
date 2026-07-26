@@ -5,6 +5,7 @@
 #include "objects/object_link_child/object_link_child.h"
 #include "overlays/actors/ovl_Demo_Effect/z_demo_effect.h"
 
+#include <libultraship/bridge/resourcebridge.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/draw.h"
@@ -736,7 +737,9 @@ void Player_UpdateBottleHeld(PlayState* play, Player* this, s32 item, s32 action
         this->heldItemAction = actionParam;
     }
 
-    this->itemAction = actionParam;
+    if (GameInteractor_Should(VB_PLAYER_UPDATE_BOTTLE_HELD, true, this)) {
+        this->itemAction = actionParam;
+    }
 }
 
 void Player_ReleaseLockOn(Player* this) {
@@ -750,7 +753,7 @@ void Player_ReleaseLockOn(Player* this) {
  * TODO: Learn more about this and give a name to PLAYER_STATE1_19
  */
 void Player_ClearZTargeting(Player* this) {
-    if ((this->actor.bgCheckFlags & 1) ||
+    if ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) ||
         (this->stateFlags1 & (PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_IN_WATER)) ||
         (!(this->stateFlags1 & (PLAYER_STATE1_JUMPING | PLAYER_STATE1_FREEFALL)) &&
          ((this->actor.world.pos.y - this->actor.floorHeight) < 100.0f))) {
@@ -1013,7 +1016,7 @@ s32 Player_GetEnvironmentalHazard(PlayState* play) {
         envHazard = PLAYER_ENV_HAZARD_HOTROOM - 1;
     } else if ((this->underwaterTimer > 80) &&
                ((this->currentBoots == PLAYER_BOOTS_IRON) || (this->underwaterTimer >= 300))) { // Deep underwater
-        envHazard = ((this->currentBoots == PLAYER_BOOTS_IRON) && (this->actor.bgCheckFlags & 1))
+        envHazard = ((this->currentBoots == PLAYER_BOOTS_IRON) && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND))
                         ? (PLAYER_ENV_HAZARD_UNDERWATER_FLOOR - 1)
                         : (PLAYER_ENV_HAZARD_UNDERWATER_FREE - 1);
     } else if (this->stateFlags1 & PLAYER_STATE1_IN_WATER) { // Swimming
@@ -1230,7 +1233,8 @@ void Player_DrawImpl(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dL
         SkelAnime_DrawFlexLod(play, skeleton, jointTable, dListCount, overrideLimbDraw, postLimbDraw, data, lod);
     }
 
-    if (((CVarGetInteger(CVAR_ENHANCEMENT("FirstPersonGauntlets"), 0) && LINK_IS_ADULT) ||
+    if (!GameInteractor_InvisibleLinkActive() &&
+        ((CVarGetInteger(CVAR_ENHANCEMENT("FirstPersonGauntlets"), 0) && LINK_IS_ADULT) ||
          (overrideLimbDraw != Player_OverrideLimbDrawGameplayFirstPerson)) &&
         (overrideLimbDraw != Player_OverrideLimbDrawGameplayCrawling) &&
         (gSaveContext.gameMode != GAMEMODE_END_CREDITS)) {
@@ -1422,7 +1426,7 @@ void func_8008F87C(PlayState* play, Player* this, SkelAnime* skelAnime, Vec3f* p
             skelAnime->jointTable[shinLimbIndex].z = skelAnime->jointTable[shinLimbIndex].z + temp1;
             skelAnime->jointTable[footLimbIndex].z = skelAnime->jointTable[footLimbIndex].z + temp2 - temp1;
 
-            temp3 = func_80041D4C(&play->colCtx, sp88, sp84);
+            temp3 = SurfaceType_GetFloorType(&play->colCtx, sp88, sp84);
 
             if ((temp3 >= 2) && (temp3 < 4) && !SurfaceType_IsWallDamage(&play->colCtx, sp88, sp84)) {
                 footprintPos.y = sp80;
@@ -2100,7 +2104,8 @@ void Player_DrawGetItemImpl(PlayState* play, Player* this, Vec3f* refPos, s32 dr
 
     if (this->getItemEntry.modIndex == MOD_RANDOMIZER && this->getItemEntry.getItemId == RG_ICE_TRAP) {
         Player_DrawGetItemIceTrap(play, this, refPos, drawIdPlusOne, height);
-    } else if (this->getItemEntry.modIndex == MOD_RANDOMIZER && this->getItemEntry.getItemId == RG_TRIFORCE_PIECE) {
+    } else if (this->getItemEntry.modIndex == MOD_RANDOMIZER &&
+               (this->getItemEntry.getItemId == RG_TRIFORCE_PIECE || this->getItemEntry.getItemId == RG_TRIFORCE)) {
         Randomizer_DrawTriforcePieceGI(play, this->getItemEntry);
     } else if (this->getItemEntry.drawFunc != NULL) {
         this->getItemEntry.drawFunc(play, &this->getItemEntry);
@@ -2367,8 +2372,10 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
             OPEN_DISPS(play->state.gfxCtx);
 
             gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-            gDPSetEnvColor(POLY_XLU_DISP++, bottleColor->r, bottleColor->g, bottleColor->b, 0);
-            gSPDisplayList(POLY_XLU_DISP++, sBottleDLists[(gSaveContext.linkAge)]);
+            if (GameInteractor_Should(VB_PLAYER_DRAW_BOTTLE, true, this, play)) {
+                gDPSetEnvColor(POLY_XLU_DISP++, bottleColor->r, bottleColor->g, bottleColor->b, 0);
+                gSPDisplayList(POLY_XLU_DISP++, sBottleDLists[gSaveContext.linkAge]);
+            }
 
             CLOSE_DISPS(play->state.gfxCtx);
         }

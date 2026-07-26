@@ -83,6 +83,7 @@ typedef struct NeiSaveData {
     // tunic slot 1 is now a real recolor tunic (Champion's Tunic), so the Cape can't squat on that
     // bit anymore. Migrated from the old bit in ExtEquip_Init.
     uint8_t capeOwned;              // 1 = owns the Magic Cape (upgrade-column passive)
+    uint8_t extTunicLayoutVersion;  // 1 = Champion/Spirit/Snowquill
     // --- Generic fcId-indexed cross-item sync (FleetComboItems.h FcComboItemId space) ------------
     // SEPARATE id space from comboObtained[128] (that is FC_* registry indices). This store is indexed
     // by FcComboItemId (the X-macro item table); each entry is a u8 COUNT. On obtaining ANY FC cross

@@ -6,7 +6,6 @@
 #include <vector>
 #include <string>
 #include "soh/OTRGlobals.h"
-#include "soh/cvar_prefixes.h"
 #include <soh/Enhancements/item-tables/ItemTableManager.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/FleetShipCombo/FleetShipCombo.h"
@@ -14,6 +13,7 @@
 #include "soh/Enhancements/audio/AudioEditor.h"
 #include "soh/Enhancements/randomizer/logic.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
+#include "soh/Enhancements/randomizer/randomizer_check_tracker.h"
 
 #define Path _Path
 #define PATH_HACK
@@ -21,8 +21,6 @@
 
 #include <ship/window/Window.h>
 #include <ship/Context.h>
-#include <imgui.h>
-#include <imgui_internal.h>
 #undef PATH_HACK
 #undef Path
 

@@ -168,7 +168,7 @@ static void DS_StateSensing(Player* p, PlayState* play) {
 
     // Frame -1: Camera setup + lock player (Demise pattern deferred setup)
     if (dsTimer == -1) {
-        Camera_ChangeSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
+        Camera_RequestSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
         Camera_SetCameraData(Play_GetCamera(play, 0), 4, NULL, NULL, 10, 0, 0);
         p->stateFlags1 |= PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_INPUT_DISABLED;
     }
@@ -188,7 +188,7 @@ static void DS_StateSensing(Player* p, PlayState* play) {
 
     // Subtle screen rumble in the last third
     if (dsTimer > 30 && dsTimer % 6 == 0) {
-        func_800AA000(50.0f, 80, 8, 4);
+        Rumble_Request(50.0f, 80, 8, 4);
     }
 
     // End of sensing phase -> reveal result
@@ -217,13 +217,13 @@ static void DS_StateResult(Player* p, PlayState* play) {
             DS_SpawnGoldenBurst(p, play);
             Audio_PlaySoundGeneral(DSENSOR_SE_FOUND, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-            func_800AA000(300.0f, 255, 40, 80);
+            Rumble_Request(300.0f, 255, 40, 80);
         } else {
             // NO MAJOR ITEM
             DS_SpawnDarkFlash(p, play);
             Audio_PlaySoundGeneral(DSENSOR_SE_NOTHING, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-            func_800AA000(100.0f, 100, 10, 20);
+            Rumble_Request(100.0f, 100, 10, 20);
         }
     }
 

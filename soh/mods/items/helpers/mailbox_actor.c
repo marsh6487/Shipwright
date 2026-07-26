@@ -134,7 +134,7 @@ static void Mailbox_EnsureAssets(void) {
 // UPDATE — offer-talk pattern (mirror MM's En_Pst SubS_Offer flow)
 // ============================================================================
 // MM's En_Pst calls SubS_Offer to register its "SPEAK" A-prompt. OOT's
-// equivalent is `func_8002F2CC(actor, play, radius)` which sets the player's
+// equivalent is `Actor_OfferTalk(actor, play, radius)` which sets the player's
 // talkActor when in range + facing, making the engine paint the A label.
 //
 // When the player accepts (A press), `Actor_ProcessTalkRequest` returns true.
@@ -181,10 +181,10 @@ static void Mailbox_Update(Actor* thisx, PlayState* play) {
     }
 
     // --- Offer SPEAK prompt when the player is near and facing ---
-    // func_8002F2CC handles the "in range + facing + no lock-on" logic itself;
+    // Actor_OfferTalk handles the "in range + facing + no lock-on" logic itself;
     // we just have to nuke textId so Message_StartTextbox never runs on A.
     thisx->textId = 0;
-    func_8002F2CC(thisx, play, MAILBOX_TALK_RADIUS);
+    Actor_OfferTalk(thisx, play, MAILBOX_TALK_RADIUS);
 }
 
 // ============================================================================

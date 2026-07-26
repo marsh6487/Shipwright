@@ -143,7 +143,6 @@ file(GLOB_RECURSE expansions__ RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "expansions/
 list(APPEND soh__ ${expansions__})
 
 # Add specific files that don't match the pattern
-list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/soh/Enhancements/savestates_extern.inc)
 list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/soh/Enhancements/speechsynthesizer/DarwinSpeechSynthesizer.mm)
 
 # Create source groups that match the real file directory paths
@@ -430,6 +429,9 @@ if(MSVC)
                 /Gy;
             >
             /W3;
+            # /WX (upstream) is deliberately off here: upstream's tree is warning-clean, this fork
+            # carries hundreds of extra files that are not, and turning every warning into an error
+            # buries the real build breaks under noise from unrelated code.
             /bigobj;
             /sdl-;
             /permissive-;

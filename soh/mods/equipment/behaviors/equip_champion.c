@@ -1,35 +1,48 @@
 /**
- * equip_champion.c - Champion's Tunic (Extended Tunic Slot 3)
+ * equip_champion.c - Champion's Tunic (Extended Tunic Slot 1)
  *
  * Features:
- *  1. BOTW Link model forced for adult Link. Child keeps vanilla model but
- *     still gets the combat mechanics.
- *  2. Flurry Rush: rising-edge PLAYER_STATE2_HOPPING + ENEMY/BOSS within
- *     range → world slows to 15%, Link gets iframes, up to 7-hit window.
- *  3. Bullet Time: use aimable item while airborne → world slows to 15%,
- *     Link floats, analog stick controls pitch+yaw (Zora boomerang style).
- *     Camera follows behind Link. Items fire in aimed direction.
+ *  1. Flurry Rush: Z-targeting + sidehop/backflip on the frame an incoming
+ *     attack sweeps past Link → he blinks to the far side of the locked-on
+ *     enemy, facing it, with iframes and the world in slow motion.
+ *  2. Bullet Time: aim any aimable item while airborne → the world slows and
+ *     Link hangs in the air. Aiming itself is the game's own first-person aim;
+ *     this module does not touch it.
  *
- * Slow-motion via gChampionSlowFactor (z_actor.c Actor_UpdatePos).
+ * Slow-motion goes through timestop_helper (TIMECTL_OWNER_CHAMPION), which owns
+ * gChampionSlowFactor for everyone. Champion holds the LOWEST priority claim: a
+ * hard time stop always wins over bullet time.
+ *
  * Screen tint via play->envCtx.fillScreen + screenFillColor[].
  * Champion_Cleanup() takes PlayState* so it can clear the tint on unequip.
  *
  * Included by ext_equip_behavior.c (unity build).
  */
 
+#include "../../items/helpers/timestop_helper.h"
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-#define CHAMPION_FLURRY_DURATION 120 // real frames the slow window lasts (~2s)
+#define CHAMPION_FLURRY_DURATION 100 // real frames the slow window lasts
 #define CHAMPION_FLURRY_HIT_MAX 7    // hits that end the window early
-#define CHAMPION_SLOW_FACTOR 0.15f   // world speed multiplier during both modes
-#define CHAMPION_ENEMY_RANGE 150.0f  // units to scan for enemies/bosses at dodge time
-#define CHAMPION_SCREEN_FLASH 5      // initial bright-tint burst frames
-#define CHAMPION_BULLET_FLOAT 1.15f  // velocity.y counterforce each frame (net fall ≈ -0.05/frame, near-suspension)
-#define CHAMPION_AIM_SENSITIVITY 10  // stick-to-rotation scale (s8 stick * this = s16 delta/frame)
-#define CHAMPION_YAW_LIMIT 0x5555    // ±120° yaw range from initial facing
-#define CHAMPION_PITCH_LIMIT 0x2000  // ±45° pitch range
-#define CHAMPION_TINT_ALPHA 30       // subtle blue tint (BOTW has no heavy overlay)
+
+// World speed during both modes. This is SLOW MOTION, not a stop: the world
+// still visibly moves, you just get time to read it. See the note in z_actor.c —
+// the engine expresses a partial slowdown by letting actors tick 1 frame in N
+// (N = 1/factor), and it must NOT also scale their motion on the frames they do
+// run, or the two multiply and 0.33 turns into a dead stop.
+#define CHAMPION_SLOW_FACTOR 0.33f
+
+#define CHAMPION_SCREEN_FLASH 5     // initial bright-tint burst frames
+#define CHAMPION_BULLET_FLOAT 1.15f // velocity.y counterforce each frame (net fall ~= -0.05/frame)
+#define CHAMPION_TINT_ALPHA 30      // subtle blue tint (BOTW has no heavy overlay)
+
+// Flurry Rush trigger + blink.
+#define CHAMPION_DODGE_RANGE 140.0f    // how close an incoming attack must sweep
+#define CHAMPION_TELEPORT_DIST 65.0f   // where Link lands relative to the enemy
+#define CHAMPION_MAX_TELEPORT 600.0f   // never blink across the room to a far target
+#define CHAMPION_ATTACK_SNAPSHOT_MAX 24 // incoming attacks tracked per frame
 
 #ifndef BGCHECKFLAG_GROUND
 #define BGCHECKFLAG_GROUND 0x0001
@@ -37,6 +50,7 @@
 
 // Forward declarations (defined later in z_player.c unity build)
 extern void Player_SetIntangibility(Player* player, s32 timer);
+extern int Player_IsZTargeting(Player* this);
 
 // ---------------------------------------------------------------------------
 // State machine
@@ -55,9 +69,102 @@ static s16 sChampionTimer = 0;
 static u8 sChampionHitCount = 0;
 static u8 sPrevHopping = 0; // for rising-edge detection
 static s16 sScreenFlashTimer = 0;
-static s16 sLockedYaw = 0; // Link's yaw when Bullet Time starts
-static s16 sAimYaw = 0;    // relative yaw offset from locked direction
-static s16 sAimPitch = 0;  // relative pitch offset (up/down)
+
+// ---------------------------------------------------------------------------
+// Incoming-attack snapshot
+//
+// Flurry Rush has to know that a damage collider is sweeping past Link RIGHT NOW.
+// The obvious way — walk play->colChkCtx.colAT from the behavior — does not work:
+// CollisionCheck_ClearContext runs BEFORE Actor_UpdateAll every frame, so by the
+// time Link updates the AT list only holds whatever the first couple of actor
+// categories have re-registered. The list is complete exactly once per frame, at
+// CollisionCheck_AT, which runs before the wipe. So we snapshot POSITIONS there
+// (never pointers, so nothing can go stale) and the behavior reads the snapshot.
+// ---------------------------------------------------------------------------
+static Vec3f sChampionAttackPos[CHAMPION_ATTACK_SNAPSHOT_MAX];
+static s32 sChampionAttackCount = 0;
+
+/** Best-effort world position of a collider, whatever its shape. */
+static s32 Champion_ColliderPos(Collider* col, Vec3f* out) {
+    switch (col->shape) {
+        case COLSHAPE_QUAD: {
+            // Sword swings and most weapon arcs are quads. Their centre is a far
+            // better "where is the blade" answer than the wielder's own position.
+            ColliderQuad* quad = (ColliderQuad*)col;
+
+            out->x = (quad->dim.quad[0].x + quad->dim.quad[1].x + quad->dim.quad[2].x + quad->dim.quad[3].x) * 0.25f;
+            out->y = (quad->dim.quad[0].y + quad->dim.quad[1].y + quad->dim.quad[2].y + quad->dim.quad[3].y) * 0.25f;
+            out->z = (quad->dim.quad[0].z + quad->dim.quad[1].z + quad->dim.quad[2].z + quad->dim.quad[3].z) * 0.25f;
+            return 1;
+        }
+        case COLSHAPE_CYLINDER: {
+            ColliderCylinder* cyl = (ColliderCylinder*)col;
+
+            out->x = (f32)cyl->dim.pos.x;
+            out->y = (f32)cyl->dim.pos.y;
+            out->z = (f32)cyl->dim.pos.z;
+            return 1;
+        }
+        default:
+            // JNTSPH / TRIS: their element geometry is per-element, so fall back to
+            // the owning actor. Good enough — those are mostly bodies and projectiles,
+            // where the actor IS roughly where the danger is.
+            if (col->actor != NULL) {
+                *out = col->actor->world.pos;
+                return 1;
+            }
+            return 0;
+    }
+}
+
+/**
+ * Called from CollisionCheck_AT, the one point in the frame where the AT list is
+ * complete. Records where every hostile attack collider is, so Flurry Rush can
+ * ask "is something swinging at me" later in the same frame.
+ */
+void Champion_NoteIncomingAttacks(PlayState* play) {
+    Player* player;
+    s32 i;
+
+    sChampionAttackCount = 0;
+    if (play == NULL) {
+        return;
+    }
+    player = GET_PLAYER(play);
+    if (player == NULL) {
+        return;
+    }
+
+    for (i = 0; (i < play->colChkCtx.colATCount) && (sChampionAttackCount < CHAMPION_ATTACK_SNAPSHOT_MAX); i++) {
+        Collider* col = play->colChkCtx.colAT[i];
+
+        if ((col == NULL) || !(col->atFlags & AT_ON)) {
+            continue;
+        }
+        // Link's own sword, and anything he spawned, are not incoming attacks.
+        if (col->actor == &player->actor) {
+            continue;
+        }
+        if ((col->actor != NULL) && (col->actor->parent == &player->actor)) {
+            continue;
+        }
+        if (Champion_ColliderPos(col, &sChampionAttackPos[sChampionAttackCount])) {
+            sChampionAttackCount++;
+        }
+    }
+}
+
+/** Is one of this frame's hostile attacks sweeping within dodge range of Link? */
+static u8 Champion_IncomingAttackNearby(Player* player) {
+    s32 i;
+
+    for (i = 0; i < sChampionAttackCount; i++) {
+        if (Math_Vec3f_DistXYZ(&sChampionAttackPos[i], &player->actor.world.pos) <= CHAMPION_DODGE_RANGE) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -65,8 +172,7 @@ static s16 sAimPitch = 0;  // relative pitch offset (up/down)
 
 /**
  * Returns 1 if Link is holding any first-person aimable item:
- * bow variants (0x08-0x0E), slingshot (0x0F), hookshot/longshot (0x10-0x11),
- * boomerang (0x14).
+ * bow variants, slingshot, hookshot/longshot, boomerang.
  */
 static u8 Champion_IsAimableItem(Player* player) {
     PlayerItemAction ia = player->heldItemAction;
@@ -77,26 +183,43 @@ static u8 Champion_IsAimableItem(Player* player) {
     return 0;
 }
 
-/**
- * Returns 1 if any ENEMY or BOSS actor is within CHAMPION_ENEMY_RANGE in the
- * same room as the player. Only these categories trigger Flurry Rush — doors,
- * chests, NPCs and props are intentionally excluded.
- */
-static u8 Champion_EnemyNearby(Player* player, PlayState* play) {
-    static const s32 sCats[] = { ACTORCAT_ENEMY, ACTORCAT_BOSS };
-    s32 i;
-    for (i = 0; i < 2; i++) {
-        Actor* a = play->actorCtx.actorLists[sCats[i]].head;
-        while (a != NULL) {
-            if (a->room == player->actor.room) {
-                if (Math_Vec3f_DistXYZ(&a->world.pos, &player->actor.world.pos) <= CHAMPION_ENEMY_RANGE) {
-                    return 1;
-                }
-            }
-            a = a->next;
-        }
+/** Is Link actually aiming the thing, as opposed to merely holding it? */
+static u8 Champion_IsAiming(Player* player) {
+    return (player->stateFlags1 & (PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_READY_TO_FIRE)) != 0;
+}
+
+// ---------------------------------------------------------------------------
+// Mid-air aim permission — read by z_player.c
+//
+// Vanilla flatly refuses to let Link raise an aimable item off the ground:
+// Player_ActionHandler_13 (the C-button item-use handler) gates on
+// bgCheckFlags & BGCHECKFLAG_GROUND, and on top of that the airborne action
+// function never runs an action-handler list at all. Both have to give way for
+// Bullet Time to be reachable, because entering it REQUIRES the aim state that
+// vanilla is refusing — without this the trigger is circular and never fires.
+//
+// This is the single switch both z_player relaxations consult, so the exception
+// is exactly "wearing the Champion's Tunic, holding something aimable" and
+// nothing wider.
+// ---------------------------------------------------------------------------
+u8 Champion_AllowsMidairAim(Player* player) {
+    if ((player == NULL) || !ExtEquip_IsChampionTunic()) {
+        return 0;
     }
-    return 0;
+    return Champion_IsAimableItem(player);
+}
+
+/** The locked-on actor, but only when it is something worth flurrying around. */
+static Actor* Champion_LockedEnemy(Player* player) {
+    Actor* target = player->focusActor;
+
+    if ((target == NULL) || (target->update == NULL)) {
+        return NULL;
+    }
+    if ((target->category != ACTORCAT_ENEMY) && (target->category != ACTORCAT_BOSS)) {
+        return NULL;
+    }
+    return target;
 }
 
 /**
@@ -131,12 +254,60 @@ static void Champion_SetScreenTint(PlayState* play, u8 golden, u8 alpha) {
 // State transitions
 // ---------------------------------------------------------------------------
 
-static void Champion_EnterFlurry(Player* player, PlayState* play) {
+/**
+ * The BOTW blink: drop Link on the far side of the enemy he is locked onto,
+ * turned to face it, so the dodge ends with the enemy's back to him.
+ *
+ * prevPos is written alongside world.pos and bgCheckFlags cleared so the engine
+ * does not treat the jump as a collision sweep and drag him back — the same trick
+ * the Switch Hook's swap uses. Y comes from the ENEMY, not from Link, so blinking
+ * past a flying or elevated target does not leave him standing in the air.
+ */
+static void Champion_BlinkBehindTarget(Player* player, Actor* target) {
+    f32 dx = player->actor.world.pos.x - target->world.pos.x;
+    f32 dz = player->actor.world.pos.z - target->world.pos.z;
+    f32 distXZ = sqrtf((dx * dx) + (dz * dz));
+    Vec3f dest;
+
+    if (distXZ > CHAMPION_MAX_TELEPORT) {
+        return; // too far to be a dodge — leave him where he is, just slow the world
+    }
+    if (distXZ < 1.0f) {
+        // Standing on top of it: fall back to pushing him out along its facing.
+        dx = Math_SinS(target->shape.rot.y);
+        dz = Math_CosS(target->shape.rot.y);
+        distXZ = 1.0f;
+    }
+
+    // Mirror Link to the OPPOSITE side of the enemy, at a fixed reach.
+    dest.x = target->world.pos.x - (dx / distXZ) * CHAMPION_TELEPORT_DIST;
+    dest.z = target->world.pos.z - (dz / distXZ) * CHAMPION_TELEPORT_DIST;
+    dest.y = target->world.pos.y;
+
+    player->actor.world.pos = dest;
+    player->actor.prevPos = dest;
+    player->actor.bgCheckFlags = 0;
+    player->actor.velocity.x = 0.0f;
+    player->actor.velocity.z = 0.0f;
+    player->linearVelocity = 0.0f;
+    player->actor.speedXZ = 0.0f;
+
+    // Face the target from the new spot.
+    player->actor.shape.rot.y = Math_Vec3f_Yaw(&player->actor.world.pos, &target->world.pos);
+    player->actor.world.rot.y = player->actor.shape.rot.y;
+    player->yaw = player->actor.shape.rot.y;
+}
+
+static void Champion_EnterFlurry(Player* player, PlayState* play, Actor* target) {
     sChampionState = CHAMPION_FLURRY_RUSH;
     sChampionTimer = CHAMPION_FLURRY_DURATION;
     sChampionHitCount = 0;
 
-    gChampionSlowFactor = CHAMPION_SLOW_FACTOR;
+    if (target != NULL) {
+        Champion_BlinkBehindTarget(player, target);
+    }
+
+    TimeCtl_Request(TIMECTL_OWNER_CHAMPION, CHAMPION_SLOW_FACTOR, 0);
     Player_SetIntangibility(player, CHAMPION_FLURRY_DURATION);
 
     sScreenFlashTimer = CHAMPION_SCREEN_FLASH;
@@ -150,26 +321,22 @@ static void Champion_ExitFlurry(PlayState* play) {
     sChampionState = CHAMPION_IDLE;
     sChampionTimer = 0;
     sChampionHitCount = 0;
-    gChampionSlowFactor = 1.0f;
+    TimeCtl_Release(TIMECTL_OWNER_CHAMPION);
     Champion_SetScreenTint(play, 1, 0);
 }
 
 static void Champion_EnterBulletTime(Player* player, PlayState* play) {
     sChampionState = CHAMPION_BULLET_TIME;
-    gChampionSlowFactor = CHAMPION_SLOW_FACTOR;
+    TimeCtl_Request(TIMECTL_OWNER_CHAMPION, CHAMPION_SLOW_FACTOR, 0);
     player->actor.speedXZ = 0.0f;
     player->linearVelocity = 0.0f;
-    // Save initial facing direction, zero aim offsets
-    sLockedYaw = player->actor.shape.rot.y;
-    sAimYaw = 0;
-    sAimPitch = 0;
     Champion_SetScreenTint(play, 0, CHAMPION_TINT_ALPHA);
 }
 
 static void Champion_ExitBulletTime(Player* player, PlayState* play) {
     (void)player;
     sChampionState = CHAMPION_IDLE;
-    gChampionSlowFactor = 1.0f;
+    TimeCtl_Release(TIMECTL_OWNER_CHAMPION);
     Champion_SetScreenTint(play, 0, 0);
 }
 
@@ -223,16 +390,17 @@ static void Champion_Behavior(Player* player, PlayState* play) {
     switch (sChampionState) {
 
         case CHAMPION_IDLE: {
-            // Bullet Time: Z-target held + airborne + aiming or aimable item
-            if (!onGround && CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_Z) &&
-                (player->unk_6AD == 2 || Champion_IsAimableItem(player))) {
+            // Bullet Time: aim an aimable item while airborne. No Z-targeting
+            // required — being in the air with the thing raised IS the gesture.
+            if (!onGround && Champion_IsAimableItem(player) && Champion_IsAiming(player)) {
                 Champion_EnterBulletTime(player, play);
                 break;
             }
-            // Flurry Rush: first frame of sidehop/backflip near an enemy or boss
+            // Flurry Rush: the first frame of a sidehop/backflip, while locked on,
+            // with a damage collider sweeping past. That is the BOTW perfect dodge.
             u8 risingEdge = curHopping && !sPrevHopping;
-            if (risingEdge && Champion_EnemyNearby(player, play)) {
-                Champion_EnterFlurry(player, play);
+            if (risingEdge && Player_IsZTargeting(player) && Champion_IncomingAttackNearby(player)) {
+                Champion_EnterFlurry(player, play, Champion_LockedEnemy(player));
             }
             break;
         }
@@ -250,53 +418,17 @@ static void Champion_Behavior(Player* player, PlayState* play) {
         }
 
         case CHAMPION_BULLET_TIME: {
-            // Exit: landed or Z released
-            u8 zHeld = CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_Z);
-            u8 cancel = onGround || !zHeld;
-            if (cancel) {
+            // Exit on landing or the moment he stops aiming / puts the item away.
+            if (onGround || !Champion_IsAimableItem(player) || !Champion_IsAiming(player)) {
                 Champion_ExitBulletTime(player, play);
                 break;
             }
 
-            // Suspend fall
+            // Suspend the fall. That is the ONLY thing this state does to Link —
+            // aiming is the game's own first-person aim, untouched. The old build
+            // drove yaw/pitch off the analog stick and wrote shape.rot/focus.rot
+            // every frame, which fought the real aim camera and felt wrong.
             player->actor.velocity.y = CHAMPION_BULLET_FLOAT;
-
-            // Maintain aim state for OOT items that need sustained aim (hookshot,
-            // longshot, bow, slingshot). z_player.c:3296 cancels their aim if
-            // unk_6AD == 0 AND not Z-targeting AND not FIRST_PERSON — so the
-            // hookshot would unequip without firing. unk_6AD = 2 keeps aim active.
-            // (PLAYER_STATE1_FIRST_PERSON is suppressed in camera_helper.c when
-            // Bullet Time is active, so custom items don't flip to first-person.)
-            player->unk_6AD = 2;
-
-            // Stick → aim offsets (yaw = horizontal, pitch = vertical)
-            s8 stickX = play->state.input[0].cur.stick_x;
-            s8 stickY = play->state.input[0].cur.stick_y;
-
-            if (ABS(stickX) > 10)
-                sAimYaw -= stickX * CHAMPION_AIM_SENSITIVITY;
-            if (ABS(stickY) > 10)
-                sAimPitch += stickY * CHAMPION_AIM_SENSITIVITY;
-
-            // Clamp rotation range
-            if (sAimYaw > (s16)CHAMPION_YAW_LIMIT)
-                sAimYaw = (s16)CHAMPION_YAW_LIMIT;
-            if (sAimYaw < -(s16)CHAMPION_YAW_LIMIT)
-                sAimYaw = -(s16)CHAMPION_YAW_LIMIT;
-            if (sAimPitch > (s16)CHAMPION_PITCH_LIMIT)
-                sAimPitch = (s16)CHAMPION_PITCH_LIMIT;
-            if (sAimPitch < -(s16)CHAMPION_PITCH_LIMIT)
-                sAimPitch = -(s16)CHAMPION_PITCH_LIMIT;
-
-            // Apply aim: body rotation + camera focus direction.
-            // These persist across frames so when an item spawns in the NEXT
-            // frame's Player_UpdateCommon (which runs before us), it reads
-            // the rotated direction correctly.
-            player->actor.shape.rot.y = sLockedYaw + sAimYaw;
-            player->yaw = player->actor.shape.rot.y;
-            player->upperLimbRot.x = sAimPitch;
-            player->actor.focus.rot.y = player->actor.shape.rot.y;
-            player->actor.focus.rot.x = sAimPitch;
 
             Champion_SetScreenTint(play, 0, CHAMPION_TINT_ALPHA);
             break;
@@ -308,12 +440,12 @@ static void Champion_Behavior(Player* player, PlayState* play) {
 
 // ---------------------------------------------------------------------------
 // Cleanup — called from ExtEquip_DispatchBehavior with PlayState* when the
-// tunic slot is no longer 3. Takes PlayState* unlike other cleanups so that
+// tunic slot is no longer 1. Takes PlayState* unlike other cleanups so that
 // the screen tint (fillScreen) can be properly cleared immediately.
 // ---------------------------------------------------------------------------
 static void Champion_Cleanup(PlayState* play) {
     // (BOTW skin force removed 2026-07-16 — nothing to clear model-side.)
-    gChampionSlowFactor = 1.0f;
+    TimeCtl_Release(TIMECTL_OWNER_CHAMPION);
 
     if (play != NULL) {
         Champion_SetScreenTint(play, 0, 0);
@@ -324,7 +456,4 @@ static void Champion_Cleanup(PlayState* play) {
     sChampionHitCount = 0;
     sPrevHopping = 0;
     sScreenFlashTimer = 0;
-    sLockedYaw = 0;
-    sAimYaw = 0;
-    sAimPitch = 0;
 }

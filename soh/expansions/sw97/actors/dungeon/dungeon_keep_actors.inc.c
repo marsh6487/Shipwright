@@ -323,7 +323,7 @@ void BetaFloorSwitch_Press(DungeonKeep* this, PlayState* play) {
     if (this->dyna.actor.scale.y <= SCALE_DOWN) {
         BetaFloorSwitch_SetupPressed(this);
         Audio_PlayActorSound2(&this->dyna.actor, NA_SE_EV_FOOT_SWITCH);
-        func_800AA000(this->dyna.actor.xyzDistToPlayerSq, 120, 20, 10);
+        Rumble_Request(this->dyna.actor.xyzDistToPlayerSq, 120, 20, 10);
     }
 }
 
@@ -339,7 +339,7 @@ void BetaFloorSwitch_Rise(DungeonKeep* this, PlayState* play) {
     if (this->dyna.actor.scale.y >= SCALE_UP) {
         BetaFloorSwitch_SetupWait(this);
         Audio_PlayActorSound2(&this->dyna.actor, NA_SE_EV_FOOT_SWITCH);
-        func_800AA000(this->dyna.actor.xyzDistToPlayerSq, 120, 20, 10);
+        Rumble_Request(this->dyna.actor.xyzDistToPlayerSq, 120, 20, 10);
     }
 }
 
@@ -564,7 +564,7 @@ void FlameThrower_Update(Actor* thisx, PlayState* play) {
         if (player->actor.world.pos.y >= this->dyna.actor.world.pos.y - 300.0f) {
             // Is currently flaming and player is on this floor
             CollisionCheck_SetAT(play, &play->colChkCtx, &this->colliderSph.base);
-            func_8002F974(&this->dyna.actor, NA_SE_EV_FIRE_PILLAR - SFX_FLAG);
+            Actor_PlaySfx_Flagged(&this->dyna.actor, NA_SE_EV_FIRE_PILLAR - SFX_FLAG);
         }
     }
 }

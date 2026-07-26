@@ -288,7 +288,7 @@ void EnCow_Talk(EnCow* this, PlayState* play) {
         this->actionFunc = EnCow_CheckForEmptyBottle;
     } else {
         this->actor.flags |= ACTOR_FLAG_TALK_OFFER_AUTO_ACCEPTED;
-        func_8002F2CC(&this->actor, play, 170.0f);
+        Actor_OfferTalk(&this->actor, play, 170.0f);
         this->actor.textId = 0x2006;
     }
     EnCow_UpdateAnimation(this, play);
@@ -305,7 +305,7 @@ void EnCow_Idle(EnCow* this, PlayState* play) {
         } else if ((this->actor.xzDistToPlayer < 150.0f) &&
                    (ABS((s16)(this->actor.yawTowardsPlayer - this->actor.shape.rot.y)) < 0x61A8)) {
             if (GameInteractor_Should(VB_GIVE_ITEM_FROM_COW, true, this)) {
-                func_8002F2CC(&this->actor, play, 170.0f);
+                Actor_OfferTalk(&this->actor, play, 170.0f);
                 this->actor.textId = 0x2006;
             }
         }
@@ -325,7 +325,7 @@ void EnCow_Idle(EnCow* this, PlayState* play) {
                     if (GameInteractor_Should(VB_GIVE_ITEM_FROM_COW, true, this)) {
                         this->actionFunc = EnCow_Talk;
                         this->actor.flags |= ACTOR_FLAG_TALK_OFFER_AUTO_ACCEPTED;
-                        func_8002F2CC(&this->actor, play, 170.0f);
+                        Actor_OfferTalk(&this->actor, play, 170.0f);
                         this->actor.textId = 0x2006;
                     } else {
                         return;

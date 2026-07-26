@@ -70,7 +70,7 @@ static inline void Matrix_MultZ(f32 scale, Vec3f* dst) {
 typedef NpcInteractInfo NpcInfo;
 #define Npc_TurnTowardsFocus Npc_TrackPoint
 #define Actor_IsTalking Actor_ProcessTalkRequest
-#define Actor_RequestToTalkInRange(actor, play, range) func_8002F2CC(actor, play, range)
+#define Actor_RequestToTalkInRange(actor, play, range) Actor_OfferTalk(actor, play, range)
 #define Actor_MoveForwardXZ Actor_MoveXZGravity
 
 // SW97 decomp uses old decompiled names for these functions

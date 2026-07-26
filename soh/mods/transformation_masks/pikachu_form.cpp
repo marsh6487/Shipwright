@@ -2358,7 +2358,7 @@ advance_anim:
             Environment_AdjustLights(play, chargePct * 0.6f, 850.0f, 0.2f, 0.9f);
 
             // Electric charge buzz SFX
-            func_8002F974(&player->actor, NA_SE_EN_BIRI_SPARK - SFX_FLAG);
+            Actor_PlaySfx_Flagged(&player->actor, NA_SE_EN_BIRI_SPARK - SFX_FLAG);
 
             // Freeze position during charge
             player->linearVelocity = 0;
@@ -2523,7 +2523,7 @@ advance_anim:
         Environment_AdjustLights(play, intensity, 850.0f, 0.2f, 0.9f);
 
         // Electric buzz SFX
-        func_8002F974(&player->actor, NA_SE_EN_BIRI_SPARK - SFX_FLAG);
+        Actor_PlaySfx_Flagged(&player->actor, NA_SE_EN_BIRI_SPARK - SFX_FLAG);
 
         // Growing electric aura (KiraKira sparkles + Lightning bolts)
         if ((fr % 2) == 0) {
@@ -2724,7 +2724,7 @@ advance_anim:
                                         10, 3);
             }
             // Continuous whoosh SFX
-            func_8002F974(&player->actor, NA_SE_IT_BOOMERANG_FLY - SFX_FLAG);
+            Actor_PlaySfx_Flagged(&player->actor, NA_SE_IT_BOOMERANG_FLY - SFX_FLAG);
         }
 
         // ── Skull Bash CHARGE: electric sparks while charging ──

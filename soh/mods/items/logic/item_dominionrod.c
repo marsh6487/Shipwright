@@ -61,7 +61,7 @@ static void DomRod_PlaySound(Vec3f* pos, u16 sfxId) {
 }
 
 static void DomRod_PlayLoopSound(Actor* actor, u16 sfxId) {
-    func_8002F974(actor, sfxId - SFX_FLAG);
+    Actor_PlaySfx_Flagged(actor, sfxId - SFX_FLAG);
 }
 
 // ============================================================================

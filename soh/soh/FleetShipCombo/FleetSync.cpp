@@ -23,6 +23,10 @@
 #include "soh/ShipInit.hpp"
 
 #include <libultraship/bridge/consolevariablebridge.h> // CVar: persist last-saved game/slot for boot
+#include <algorithm>
+#include <cstdlib>
+#include <string>
+#include <vector>
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -51,6 +55,7 @@ extern PlayState* gPlayState;
 // and a setter that wears/removes the matching transformation mask on next gameplay frame.
 int MmForm_GetCurrentForm(void);
 void MmForm_FleetApplyForm(int mmForm);
+void SwitchAge(void); // flips gSaveContext.linkAge + respawns at the current entrance (Enhancements/SwitchAge.cpp)
 }
 
 // Cross-game restart: the raw reset of THIS game (defined in debugconsole.cpp), called by the
@@ -209,8 +214,32 @@ void ApplyInvItem(const nlohmann::json& inv, const char* key, int slot, uint8_t 
     }
 }
 
+// HEALING: MM's ownedItems extract used to publish uninitialized (0x00) slots through
+// FcEquip_MmToOot, and 0x00 is MM's Ocarina of Time, so every empty slot arrived here as OoT id
+// 0x08 and got stored as a real owned item -- the "half my items turned into Ocarinas of Time"
+// bug. Valid entries are ONLY page-2 customs (0x9E..0xB7) in [0..23] and mask ids (0xB8+) in
+// [24..47], so anything outside those ranges is provably garbage and is cleared. Runs on every
+// extract, so a poisoned save heals itself once and stays healed.
+void HealBogusOwnedItems() {
+    NeiSaveData* nei = Nei_Save();
+    for (int i = 0; i < 48; i++) {
+        uint8_t v = nei->ownedItems[i];
+        if (v == 0xFF) {
+            continue;
+        }
+        const bool validPage2 = (i < 24) && v >= FC_OOT_PAGE2_FIRST && v <= FC_OOT_PAGE2_LAST;
+        const bool validMask = (i >= 24) && v >= FC_OOT_MM_MASK_ITEM_BASE &&
+                               v < FC_OOT_MM_MASK_ITEM_BASE + FC_MM_MASK_COUNT;
+        if (!validPage2 && !validMask) {
+            SPDLOG_WARN("[FleetSync] clearing bogus ownedItems[{}] = 0x{:02X}", i, v);
+            nei->ownedItems[i] = 0xFF;
+        }
+    }
+}
+
 void FoldNativesIntoRegistry() {
     NeiSaveData* nei = Nei_Save();
+    HealBogusOwnedItems();
     uint16_t equip = gSaveContext.inventory.equipment;
     if (equip & (1 << 1)) nei->comboObtained[FC_OOT_SWORD_MASTER] = 1;   // EQUIP_FLAG_SWORD_MASTER
     if (equip & (1 << 2)) nei->comboObtained[FC_OOT_SWORD_BIGGORON] = 1; // EQUIP_FLAG_SWORD_BGS
@@ -256,7 +285,8 @@ void ExtractShared(nlohmann::json& sh) {
                      { "doubleDefense", gSaveContext.isDoubleDefenseAcquired },
                      { "defenseHearts", gSaveContext.inventory.defenseHearts },
                      { "magic", gSaveContext.magic },
-                     { "magicLevel", gSaveContext.magicLevel },
+                     // magicLevel is NOT published: it is the game's own meter-build handshake, not
+                     // shared state. See the magic block in ApplyShared.
                      { "isMagic", gSaveContext.isMagicAcquired },
                      { "isDoubleMagic", gSaveContext.isDoubleMagicAcquired },
                      { "rupees", gSaveContext.rupees } };
@@ -334,6 +364,9 @@ void ExtractShared(nlohmann::json& sh) {
 
     int form = MmForm_GetCurrentForm();
     sh["form"] = (form >= 0 && form <= 4) ? form : 4; // custom forms sync as Human
+
+    // Adult/child age <-> MM's timeGateAdultMode. LINK_AGE_ADULT == 0. Last-writer-wins (not OR-merged).
+    sh["adult"] = (gSaveContext.linkAge == LINK_AGE_ADULT);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -347,24 +380,49 @@ void ApplyShared(const nlohmann::json& sh) {
         gSaveContext.healthCapacity = (int16_t)v.value("healthCapacity", (int)gSaveContext.healthCapacity);
         gSaveContext.health =
             (int16_t)std::min<int>(v.value("health", (int)gSaveContext.health), gSaveContext.healthCapacity);
-        gSaveContext.isDoubleDefenseAcquired = (uint8_t)v.value("doubleDefense", 0);
-        gSaveContext.inventory.defenseHearts = (int8_t)v.value("defenseHearts", 0);
-        gSaveContext.magicLevel = (int8_t)v.value("magicLevel", 0);
-        gSaveContext.magic = (int8_t)v.value("magic", 0);
-        gSaveContext.isMagicAcquired = (uint8_t)v.value("isMagic", 0);
-        gSaveContext.isDoubleMagicAcquired = (uint8_t)v.value("isDoubleMagic", 0);
+        // EVERY default here MUST be the current value, never 0: this block also runs for PARTIAL
+        // deltas (FleetNet sends one leaf at a time), so a default of 0 would wipe magic and defense
+        // hearts every time an unrelated vital -- a single rupee -- changed.
+        gSaveContext.isDoubleDefenseAcquired =
+            (uint8_t)v.value("doubleDefense", (int)gSaveContext.isDoubleDefenseAcquired);
+        gSaveContext.inventory.defenseHearts =
+            (int8_t)v.value("defenseHearts", (int)gSaveContext.inventory.defenseHearts);
+
+        // Magic syncs as the two OWNERSHIP FLAGS only -- magicLevel is deliberately not copied.
+        // magicLevel is not "how much magic you have", it is the handshake the game uses to build
+        // the meter: z_parameter.c waits for (isMagicAcquired && magicLevel == 0), then sets
+        // magicLevel = isDoubleMagicAcquired + 1 and steps magicCapacity up from zero. Copying the
+        // peer's magicLevel = 1 skips that init, magicCapacity stays 0, and the bar never appears
+        // even though you own the magic. So: take the flags, and whenever they GAIN something, clear
+        // magicLevel so this game runs its own init next frame -- exactly what a native grant does.
+        const bool hadMagic = gSaveContext.isMagicAcquired != 0;
+        const bool hadDouble = gSaveContext.isDoubleMagicAcquired != 0;
+        const bool hasMagic = v.value("isMagic", (int)gSaveContext.isMagicAcquired) != 0;
+        const bool hasDouble = v.value("isDoubleMagic", (int)gSaveContext.isDoubleMagicAcquired) != 0;
+        gSaveContext.isMagicAcquired = hasMagic;
+        gSaveContext.isDoubleMagicAcquired = hasDouble;
+        if ((hasMagic && !hadMagic) || (hasDouble && !hadDouble)) {
+            gSaveContext.magicLevel = 0; // re-run the native meter init (grows magicCapacity)
+        }
+        gSaveContext.magic = (int8_t)v.value("magic", (int)gSaveContext.magic);
         gSaveContext.rupees = (int16_t)v.value("rupees", (int)gSaveContext.rupees);
     }
     if (sh.contains("upgrades")) {
         const auto& u = sh["upgrades"];
-        Inventory_ChangeUpgrade(UPG_WALLET, u.value("wallet", 0));
-        Inventory_ChangeUpgrade(UPG_QUIVER, u.value("quiver", 0));
-        Inventory_ChangeUpgrade(UPG_BOMB_BAG, u.value("bombBag", 0));
-        Inventory_ChangeUpgrade(UPG_STICKS, u.value("sticks", 0));
-        Inventory_ChangeUpgrade(UPG_NUTS, u.value("nuts", 0));
-        Inventory_ChangeUpgrade(UPG_STRENGTH, u.value("strength", 0));
-        Inventory_ChangeUpgrade(UPG_SCALE, u.value("scale", 0));
-        Inventory_ChangeUpgrade(UPG_BULLET_BAG, u.value("bulletBag", 0));
+        // These are UNCONDITIONAL writes, so the default matters twice over. This block also runs
+        // for PARTIAL deltas, and a default of 0 would reset every upgrade the delta did not happen
+        // to mention -- a wallet change alone would wipe the quiver, bomb bag, strength and scale.
+        // Take the max as well: none of these ever decrease in either game, so a stale or
+        // differently-scaled reading from the peer can never walk an upgrade backwards.
+        auto upg = [&u](const char* key, int cur) { return std::max(cur, u.value(key, cur)); };
+        Inventory_ChangeUpgrade(UPG_WALLET, upg("wallet", CUR_UPG_VALUE(UPG_WALLET)));
+        Inventory_ChangeUpgrade(UPG_QUIVER, upg("quiver", CUR_UPG_VALUE(UPG_QUIVER)));
+        Inventory_ChangeUpgrade(UPG_BOMB_BAG, upg("bombBag", CUR_UPG_VALUE(UPG_BOMB_BAG)));
+        Inventory_ChangeUpgrade(UPG_STICKS, upg("sticks", CUR_UPG_VALUE(UPG_STICKS)));
+        Inventory_ChangeUpgrade(UPG_NUTS, upg("nuts", CUR_UPG_VALUE(UPG_NUTS)));
+        Inventory_ChangeUpgrade(UPG_STRENGTH, upg("strength", CUR_UPG_VALUE(UPG_STRENGTH)));
+        Inventory_ChangeUpgrade(UPG_SCALE, upg("scale", CUR_UPG_VALUE(UPG_SCALE)));
+        Inventory_ChangeUpgrade(UPG_BULLET_BAG, upg("bulletBag", CUR_UPG_VALUE(UPG_BULLET_BAG)));
     }
     if (sh.contains("weaponUpgrades")) {
         nei->weaponUpgrades |= (uint8_t)sh["weaponUpgrades"].get<int>(); // additive
@@ -451,7 +509,10 @@ void ApplyShared(const nlohmann::json& sh) {
     if (sh.contains("ownedItems") && sh["ownedItems"].is_array()) {
         for (int i = 0; i < 48 && i < (int)sh["ownedItems"].size(); i++) {
             uint8_t v = (uint8_t)sh["ownedItems"][i].get<int>();
-            if (v != 0xFF) nei->ownedItems[i] = v; // additive
+            // Skip 0x00 as well as 0xFF: an uninitialized slot on either side reads as a raw 0x00,
+            // and letting it through writes a spurious item. Mirrors the guard MM's copy of this
+            // loop already had.
+            if (v != 0xFF && v != 0x00) nei->ownedItems[i] = v; // additive
         }
     }
     if (sh.contains("tradeAdultOwned")) nei->tradeAdultOwned |= sh["tradeAdultOwned"].get<uint32_t>();
@@ -498,6 +559,16 @@ void ApplyShared(const nlohmann::json& sh) {
 
     if (sh.contains("form")) {
         MmForm_FleetApplyForm(sh["form"].get<int>());
+    }
+
+    // Adult/child age from MM's timeGateAdultMode. Flip only when it actually differs AND we're not
+    // mid-transition, so a continuous FleetNet apply can't re-fire SwitchAge()'s scene reload each frame.
+    if (sh.contains("adult")) {
+        bool wantAdult = sh["adult"].get<bool>();
+        bool curAdult = (gSaveContext.linkAge == LINK_AGE_ADULT);
+        if (wantAdult != curAdult && gPlayState != NULL && gPlayState->transitionTrigger == TRANS_TRIGGER_OFF) {
+            SwitchAge();
+        }
     }
 }
 
@@ -562,6 +633,345 @@ void RefreshSharedInTemp() {
     WriteTemp(temp);
 }
 
+// =================================================================================================
+// FleetNet - continuous Anchor-style state sync over the shared-memory packet rings
+// =================================================================================================
+// The temp-file handshake above only fires on a SAVE or a game CHANGE. FleetNet keeps the two games
+// agreeing the whole time, and it does it WITHOUT a second translator: ExtractShared/ApplyShared
+// already map live state <-> the canonical "shared" json, so we just run them continuously and send
+// what moved.
+//
+//   scan  -> ExtractShared into our running snapshot, flatten() it to JSON-pointer leaves
+//            ("/vitals/health" -> 16), diff against what we last published, send the changed leaves.
+//   apply -> unflatten() the leaves into a PARTIAL shared object and hand it to ApplyShared, which
+//            is already partial-safe (every field is contains()/value() guarded with the current
+//            value as default), then fold them into our snapshot so we never echo them back.
+//   verify-> every few seconds each side sends a hash of its snapshot. Deltas can be lost (ring
+//            overrun while a game is mid scene-load), so this is what guarantees convergence:
+//            a repeated mismatch triggers a full resend. Without it a single dropped packet would
+//            desync the two games permanently.
+//
+// This block is TEXTUALLY IDENTICAL in Ship and 2ship -- both sides speak the canonical schema, so
+// neither needs to know which game it is.
+
+constexpr int kNetScanPeriod = 20;      // frames between delta scans (~3x/sec)
+constexpr int kNetVerifyPeriod = 300;   // frames between hash reports (~5s)
+constexpr int kNetResyncCooldown = 900; // min frames between full resends (~15s), anti-loop
+constexpr size_t kNetBatchBytes = 3800; // leave room for the {"op":"delta","d":{}} envelope in 4095
+
+nlohmann::json sNetShared = nlohmann::json::object(); // running canonical state (unflattened)
+nlohmann::json sNetFlat = nlohmann::json::object();   // its flattened form = what the peer has
+int sNetScanTick = 0;
+int sNetVerifyTick = 0;
+int sNetResyncCooldownLeft = 0;
+int sNetMismatchStreak = 0;
+int sNetFutileResyncs = 0; // consecutive resyncs that did NOT make the hashes agree
+bool sNetPrimed = false; // first scan publishes nothing: it only establishes the baseline
+
+// FNV-1a over the dumped snapshot. nlohmann objects are key-sorted, so the dump -- and therefore
+// the hash -- is order-independent on both sides.
+uint64_t NetHash(const nlohmann::json& flat) {
+    const std::string s = flat.dump();
+    uint64_t h = 1469598103934665603ull;
+    for (unsigned char c : s) {
+        h ^= c;
+        h *= 1099511628211ull;
+    }
+    return h;
+}
+
+void NetSend(const nlohmann::json& j) {
+    FleetShipCombo_PushPacket(j.dump().c_str());
+}
+
+// A delta carries two kinds of change, and the split is load-bearing.
+//
+// Scalars travel as flattened JSON-pointer leaves ("/vitals/rupees": 40), which ApplyShared can
+// take partially because every field there is contains()/value() guarded.
+//
+// ARRAYS travel as WHOLE SUBTREES ("/ownedItems": [ ... ]), never as leaves. Two independent
+// reasons, and missing either one corrupts the save:
+//   1. unflatten() of a sparse index set fills the gaps with null, and ApplyShared then reads a
+//      null as a value (json type_error.302) or writes a bogus item.
+//   2. Even when every leaf of the array is queued, the packet batching below would split a large
+//      array across two packets, and the second packet unflattens to exactly that sparse, mostly
+//      null array. ownedItems alone is 48 entries at ~21 bytes per pointer-keyed leaf, so it does
+//      not fit in one packet -- this is what made the bug survive the first fix.
+// Sending an array as a single JSON value is also about 5x smaller than one leaf per entry.
+struct NetDelta {
+    nlohmann::json leaves; // {"/vitals/rupees": 40}
+    nlohmann::json arrays; // {"/ownedItems": [ ... ]}
+    bool empty() const {
+        return leaves.empty() && arrays.empty();
+    }
+};
+
+// VOLATILE leaves: live meters the PLAYER moves, as opposed to one-way unlocks. Only the ACTIVE
+// game may author these. Without that rule the two games fight over rupees: the wallet scales are
+// not the same on both sides (OoT can shuffle the child wallet, MM has no "no wallet" state), so
+// the frozen game clamps the value to ITS capacity, republishes the clamped number, and the active
+// game's real rupees get dragged down -- money visibly draining on its own. Unlocks stay two-way;
+// only these follow whoever is actually being played.
+bool NetIsVolatileLeaf(const std::string& key) {
+    return key.rfind("/vitals/health", 0) == 0 || key.rfind("/vitals/magic", 0) == 0 ||
+           key.rfind("/vitals/rupees", 0) == 0;
+}
+
+// If `key` points inside an array, return that array's root pointer ("/ownedItems"); else "".
+std::string NetArrayRootOf(const std::string& key) {
+    size_t pos = 0;
+    while (true) {
+        const size_t next = key.find('/', pos + 1);
+        if (next == std::string::npos) {
+            return "";
+        }
+        const std::string path = key.substr(0, next);
+        try {
+            if (sNetShared.at(nlohmann::json::json_pointer(path)).is_array()) {
+                return path;
+            }
+        } catch (...) {
+            return ""; // not a real path in our snapshot
+        }
+        pos = next;
+    }
+}
+
+// Send a delta. Scalars are batched to fill packets; every array goes in a packet of its own so it
+// can never be split. An array too big even for one packet is dropped with a loud log rather than
+// sent half-formed -- a half-formed one is precisely what corrupts the save.
+void NetSendDelta(const NetDelta& delta) {
+    nlohmann::json batch = nlohmann::json::object();
+    auto flush = [&]() {
+        if (!batch.empty()) {
+            NetSend({ { "op", "delta" }, { "d", batch } });
+            batch = nlohmann::json::object();
+        }
+    };
+    for (auto it = delta.leaves.begin(); it != delta.leaves.end(); ++it) {
+        batch[it.key()] = it.value();
+        if (batch.dump().size() > kNetBatchBytes) {
+            // This leaf overflowed the batch: pull it back out, ship the rest, restart with it.
+            nlohmann::json held = batch[it.key()];
+            batch.erase(it.key());
+            flush();
+            batch[it.key()] = held;
+        }
+    }
+    flush();
+
+    for (auto it = delta.arrays.begin(); it != delta.arrays.end(); ++it) {
+        nlohmann::json pkt = { { "op", "delta" }, { "a", { { it.key(), it.value() } } } };
+        const size_t size = pkt.dump().size();
+        if (size > kNetBatchBytes) {
+            SPDLOG_ERROR("[FleetNet] array {} is {} bytes and does not fit a packet -- not sent", it.key(), size);
+            continue;
+        }
+        NetSend(pkt);
+    }
+}
+
+// Split a whole flattened snapshot into scalars + whole arrays (used by the full resync).
+NetDelta NetSplitAll(const nlohmann::json& flat) {
+    NetDelta out;
+    out.leaves = nlohmann::json::object();
+    out.arrays = nlohmann::json::object();
+    for (auto it = flat.begin(); it != flat.end(); ++it) {
+        const std::string root = NetArrayRootOf(it.key());
+        if (root.empty()) {
+            out.leaves[it.key()] = it.value();
+        } else if (!out.arrays.contains(root)) {
+            out.arrays[root] = sNetShared.at(nlohmann::json::json_pointer(root));
+        }
+    }
+    return out;
+}
+
+// Refresh the snapshot from live state. Returns what changed since the last publish.
+NetDelta NetRescan() {
+    // ExtractShared merges INTO sNetShared, which is what keeps the one-way-unlock bitfields
+    // (ootQuestItems / mmQuestItems) from clobbering bits the peer published: same contract the
+    // temp-file path relies on, just held in memory instead of re-read from disk 3x a second.
+    ExtractShared(sNetShared);
+    nlohmann::json flat = sNetShared.flatten();
+    const bool active = FleetShipCombo_IsThisGameActive();
+
+    NetDelta out;
+    out.leaves = nlohmann::json::object();
+    out.arrays = nlohmann::json::object();
+    std::vector<std::string> changedArrays;
+
+    for (auto it = flat.begin(); it != flat.end(); ++it) {
+        auto prev = sNetFlat.find(it.key());
+        if (prev != sNetFlat.end() && *prev == it.value()) {
+            continue;
+        }
+        if (!active && NetIsVolatileLeaf(it.key())) {
+            // Not ours to publish right now. Keep the PEER's value as our published baseline so
+            // that when we become active again we diff against what they last said, not against
+            // our own frozen reading -- otherwise becoming active would replay a stale meter.
+            if (prev != sNetFlat.end()) {
+                it.value() = *prev;
+            }
+            continue;
+        }
+        const std::string root = NetArrayRootOf(it.key());
+        if (root.empty()) {
+            out.leaves[it.key()] = it.value();
+        } else if (std::find(changedArrays.begin(), changedArrays.end(), root) == changedArrays.end()) {
+            changedArrays.push_back(root);
+        }
+    }
+    sNetFlat = flat;
+    for (const std::string& root : changedArrays) {
+        out.arrays[root] = sNetShared.at(nlohmann::json::json_pointer(root));
+    }
+    return out;
+}
+
+void NetHandleDelta(const nlohmann::json& p) {
+    const nlohmann::json d = p.value("d", nlohmann::json::object()); // scalar leaves
+    const nlohmann::json a = p.value("a", nlohmann::json::object()); // whole arrays
+    if (d.empty() && a.empty()) {
+        return;
+    }
+    nlohmann::json partial = nlohmann::json::object();
+    if (!d.empty()) {
+        nlohmann::json flat = nlohmann::json::object();
+        for (auto it = d.begin(); it != d.end(); ++it) {
+            flat[it.key()] = it.value();
+        }
+        partial = flat.unflatten();
+    }
+    // Arrays are set WHOLE, by pointer -- no unflatten, so null gaps are structurally impossible.
+    for (auto it = a.begin(); it != a.end(); ++it) {
+        partial[nlohmann::json::json_pointer(it.key())] = it.value();
+    }
+    try {
+        ApplyShared(partial);
+    } catch (const std::exception& e) {
+        SPDLOG_ERROR("[FleetNet] ApplyShared threw on delta: {}", e.what());
+        return;
+    } catch (...) {
+        SPDLOG_ERROR("[FleetNet] ApplyShared threw a non-std exception on delta");
+        return;
+    }
+    // Fold the peer's change into our snapshot BEFORE our next scan, so applying it does not read
+    // back as a local change and bounce straight back to them.
+    for (auto it = d.begin(); it != d.end(); ++it) {
+        sNetFlat[it.key()] = it.value();
+    }
+    for (auto it = a.begin(); it != a.end(); ++it) {
+        // Flatten just this subtree so the snapshot keeps its leaf-wise form.
+        nlohmann::json one = nlohmann::json::object();
+        one[nlohmann::json::json_pointer(it.key())] = it.value();
+        const nlohmann::json oneFlat = one.flatten();
+        for (auto lf = oneFlat.begin(); lf != oneFlat.end(); ++lf) {
+            sNetFlat[lf.key()] = lf.value();
+        }
+    }
+    sNetShared = sNetFlat.unflatten();
+}
+
+void NetSendFullState() {
+    NetRescan(); // make sure the snapshot is current before we declare it authoritative
+    const NetDelta all = NetSplitAll(sNetFlat);
+    SPDLOG_INFO("[FleetNet] full resync: {} scalar leaves + {} arrays", all.leaves.size(), all.arrays.size());
+    NetSendDelta(all);
+    sNetResyncCooldownLeft = kNetResyncCooldown;
+}
+
+void NetHandlePacket(const nlohmann::json& p) {
+    const std::string op = p.value("op", "");
+    if (op == "delta") {
+        NetHandleDelta(p);
+    } else if (op == "hash") {
+        // The peer told us what it thinks the state is. Agreeing is the common case and costs
+        // nothing; disagreeing once is usually just a delta still in flight, so we only act on a
+        // SECOND consecutive mismatch.
+        const uint64_t theirs = std::strtoull(p.value("h", "0").c_str(), nullptr, 10);
+        if (theirs == NetHash(sNetFlat)) {
+            sNetMismatchStreak = 0;
+            sNetFutileResyncs = 0;
+        } else if (++sNetMismatchStreak >= 2 && sNetResyncCooldownLeft == 0) {
+            // A resync that does NOT restore agreement means the two hashes can never match: the
+            // translator is asymmetric somewhere (a field one game extracts and the other cannot
+            // reproduce). Resending forever would be a silent 15-second storm, so back off hard and
+            // say so once -- the fix belongs in ExtractShared, not here.
+            if (++sNetFutileResyncs >= 3) {
+                if (sNetFutileResyncs == 3) {
+                    SPDLOG_ERROR("[FleetNet] repeated resyncs did not reconcile the snapshots -- the shared "
+                                 "schema is asymmetric between the two games. Backing off; deltas keep working.");
+                }
+                sNetResyncCooldownLeft = kNetResyncCooldown * 20; // ~5 min
+                sNetMismatchStreak = 0;
+                return;
+            }
+            SPDLOG_WARN("[FleetNet] state hash mismatch twice in a row -- requesting full resync");
+            sNetMismatchStreak = 0;
+            NetSend({ { "op", "resync" } });
+            sNetResyncCooldownLeft = kNetResyncCooldown; // don't ask again while one is inbound
+        }
+    } else if (op == "resync") {
+        NetSendFullState();
+    } else if (op == "saveRequest") {
+        // The peer is about to hand over (game change) or just saved: publish everything we have so
+        // its snapshot is complete before it writes its own file. See FleetNet_RequestPeerSave.
+        NetSendFullState();
+        NetSend({ { "op", "saveAck" } });
+    } else if (op == "saveAck") {
+        SPDLOG_INFO("[FleetNet] peer acknowledged the save request");
+    }
+}
+
+void NetPump() {
+    if (FleetShipCombo_GetActiveGame() < 0 || gPlayState == NULL) {
+        return; // no combo, or no live save context to read/write
+    }
+    if (sNetResyncCooldownLeft > 0) {
+        sNetResyncCooldownLeft--;
+    }
+
+    // Drain first: apply what the peer sent before scanning, so their changes land in this frame's
+    // snapshot instead of racing our own diff.
+    char buf[4200];
+    while (FleetShipCombo_PopPacket(buf, (int)sizeof(buf))) {
+        try {
+            NetHandlePacket(nlohmann::json::parse(buf));
+        } catch (const std::exception& e) {
+            SPDLOG_ERROR("[FleetNet] bad packet dropped: {}", e.what());
+        }
+    }
+
+    if (++sNetScanTick >= kNetScanPeriod) {
+        sNetScanTick = 0;
+        const NetDelta changed = NetRescan();
+        if (!sNetPrimed) {
+            // First scan after boot/arrival: the "changes" are just the entire existing state, and
+            // the peer already has it from the arrival overlay. Publishing it would be a pointless
+            // storm, so we only record the baseline.
+            sNetPrimed = true;
+        } else if (!changed.empty()) {
+            NetSendDelta(changed);
+        }
+    }
+
+    if (++sNetVerifyTick >= kNetVerifyPeriod) {
+        sNetVerifyTick = 0;
+        NetSend({ { "op", "hash" }, { "h", std::to_string(NetHash(sNetFlat)) } });
+    }
+}
+
+// Re-seed the snapshot from a known-agreed state (the temp-file overlay at a departure/arrival) and
+// re-prime, so the first scan after a game change does not report the whole save as "changed".
+void NetResetBaseline(const nlohmann::json& sh) {
+    sNetShared = sh.is_object() ? sh : nlohmann::json::object();
+    sNetFlat = sNetShared.flatten();
+    sNetPrimed = false;
+    sNetMismatchStreak = 0;
+    sNetScanTick = 0;
+}
+
 void HandleOwnSave(int32_t fileNum, int32_t sectionID) {
     if (FleetShipCombo_GetActiveGame() < 0 || !FleetShipCombo_IsThisGameActive()) {
         return; // combo off, or we're the frozen responder (avoid signal loops)
@@ -577,6 +987,9 @@ void HandleOwnSave(int32_t fileNum, int32_t sectionID) {
         CVarSave();
     }
     RefreshSharedInTemp();
+    // Publish everything BEFORE signalling: the responder saves its own slot the moment it sees the
+    // signal, so any delta still queued behind it would land in the peer's file one save too late.
+    NetSendFullState();
     FleetShipCombo_SignalSyncSave(fileNum);
     sWaitingAckSeq = FleetShipCombo_GetSyncSaveSeq();
 }
@@ -645,6 +1058,9 @@ void ProcessSignals() {
         sWaitingAckSeq = 0;
         DeleteTemp();
     }
+    // Continuous state sync. Runs in BOTH exes, active or frozen -- the frozen one still gets this
+    // hook, which is exactly what makes the responder path above work.
+    NetPump();
 }
 
 void RegisterFleetSync() {
@@ -679,6 +1095,10 @@ void FleetSync_WriteDeparture(int slot) {
     ExtractShared(sh);
     temp["shared"] = sh;
     WriteTemp(temp);
+    // We are about to freeze: hand the peer everything, so whatever it does while we are asleep is
+    // built on our final state rather than on deltas that may still have been in flight.
+    NetResetBaseline(sh);
+    NetSendFullState();
     SPDLOG_INFO("[FleetSync] OoT departure written (slot {})", slot);
 }
 
@@ -718,6 +1138,12 @@ void FleetSync_ApplyArrival(int slot) {
             SPDLOG_ERROR("[FleetSync] ApplyShared threw a non-std exception on arrival");
         }
     }
+    // Re-baseline on the state we just arrived with, then ASK the peer for its full state (Anchor's
+    // request/response shape). The temp file only carries what the peer knew when it wrote the
+    // departure; anything it changed afterwards -- or any delta lost while we were frozen -- comes
+    // back through this. Its answer is a normal resync, applied by the pump.
+    NetResetBaseline(temp.contains("shared") ? temp["shared"] : nlohmann::json::object());
+    NetSend({ { "op", "saveRequest" } });
     if (dirty) {
         WriteTemp(temp);
     }

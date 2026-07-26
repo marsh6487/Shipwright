@@ -73,7 +73,7 @@ static void LightRod_Backfire(Player* p, PlayState* play) {
     Audio_PlayActorSound2(&p->actor, LIGHT_ROD_SFX_BACKFIRE_HIT);
     ItemVoice_PlayId(p, NA_SE_VO_LI_DAMAGE_S);
 
-    // Electrocute Link using the electric shock response (PLAYER_HIT_RESPONSE_ELECTRIC_SHOCK = 4)
+    // Electrocute Link using the electric shock response (PLAYER_HIT_RESPONSE_ELECTRIFIED = 4)
     func_80837C0C(play, p, 4, 0.0f, 0.0f, 0, 20);
 
     // Spawn golden sparkles on backfire

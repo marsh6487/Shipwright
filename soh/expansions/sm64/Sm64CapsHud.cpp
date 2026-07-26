@@ -45,7 +45,7 @@ extern SaveContext gSaveContext;
 // World→view projection (z_actor.c). projectedPos = clip-space x,y,z; *invW is
 // the clamped inverse W. Screen NDC = projectedPos.xy * invW (see
 // Actor_GetScreenPos). Used to float the HP dial above Mario's head.
-void func_8002BE04(PlayState* play, Vec3f* worldPos, Vec3f* projectedPos, f32* invW);
+void Actor_ProjectPos(PlayState* play, Vec3f* worldPos, Vec3f* projectedPos, f32* invW);
 
 // Cap timer accessors (sm64_mario_items.c). Slot index order matches the HUD
 // top→bottom: 0 = Wing, 1 = Metal, 2 = Vanish, 3 = Fire.
@@ -114,14 +114,14 @@ void EnsureTextures() {
     }
     auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
     for (const auto& slot : kSlots) {
-        gui->LoadGuiTexture(slot.texName, slot.resPath, ImVec4(1, 1, 1, 1));
+        gui->LoadGuiTexture(slot.texName, slot.resPath, "", ImVec4(1, 1, 1, 1));
     }
-    gui->LoadGuiTexture(kMaskTexName, kMaskResPath, ImVec4(1, 1, 1, 1));
+    gui->LoadGuiTexture(kMaskTexName, kMaskResPath, "", ImVec4(1, 1, 1, 1));
     // SM64 power-meter dial — 9 states (0..8 wedges). Replaces the OOT hearts.
     for (int n = 0; n <= 8; n++) {
         std::string name = "Sm64HP" + std::to_string(n);
         std::string path = "textures/mario_hp/gMarioHP" + std::to_string(n) + "Tex";
-        gui->LoadGuiTexture(name, path, ImVec4(1, 1, 1, 1));
+        gui->LoadGuiTexture(name, path, "", ImVec4(1, 1, 1, 1));
     }
     // Button indicators (raw PNGs). Use the user's d-right.png if it's been packed
     // into the o2r; otherwise fall back to the always-shipped DPadRight.png (same
@@ -143,7 +143,7 @@ void EnsureTextures() {
         const char* nm = nullptr;
         const char* pth = nullptr;
         if (CDownItemTex(it, &nm, &pth) && ResourceMgr_FileExists(pth)) {
-            gui->LoadGuiTexture(nm, pth, ImVec4(1, 1, 1, 1));
+            gui->LoadGuiTexture(nm, pth, "", ImVec4(1, 1, 1, 1));
         }
     }
     sTexturesLoaded = true;
@@ -310,7 +310,7 @@ void Sm64CapsHudWindow::Draw() {
                 world.y += 64.0f; // above the head (OOT units)
                 Vec3f proj;
                 f32 invW;
-                func_8002BE04(gPlayState, &world, &proj, &invW);
+                Actor_ProjectPos(gPlayState, &world, &proj, &invW);
                 float sx = (proj.x * invW * 0.5f + 0.5f) * disp.x;
                 float sy = (proj.y * invW * -0.5f + 0.5f) * disp.y;
 

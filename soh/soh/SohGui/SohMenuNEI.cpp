@@ -66,15 +66,6 @@ int TradeAdult_OwnedCount(void);
 void PikachuControls_OpenWindow(void); // pikachu_hud.cpp — Pikachu mode bindings window
 extern PlayState* gPlayState;
 u8 GerudoForm_IsActive(void); // gerudo_form.cpp
-
-// MHR moveset overrides — TEMPORARY cataloguing tool, implemented at the
-// bottom of THIS file (no separate TU so it stays easy to rip out later).
-// z_player.c calls these via local extern decls at its 5 choke points
-// (melee start, shield raise, shield loop, roll, dodge hops).
-void MhrMoveset_Reload(void);
-LinkAnimationHeader* MhrMoveset_GetMeleeAnim(s32 mwa);
-LinkAnimationHeader* MhrMoveset_GetShieldAnim(s32 loopPhase);
-LinkAnimationHeader* MhrMoveset_GetMoveAnim(s32 moveId);
 }
 
 namespace SohGui {
@@ -83,508 +74,145 @@ extern std::shared_ptr<SohMenu> mSohMenu;
 using namespace UIWidgets;
 
 // =============================================================================
-// MHR Anims tab — anim-viewer-style browser over the converted MHR animations
-// (gPlayerAnim_mhr_*) with per-anim NOTES, RENAME proposals and ACTION BINDINGS.
-// Everything is persisted to nei/mhr_anim_notes.json:
-//   - "note"/"rename" are the communication channel for offline repacking
-//     (apps/mhr_to_oot reads them to alias the .o2r entries).
-//   - "binding" is consumed live by soh/mods/mhr_moveset (z_player.c hooks):
-//     B melee slots (PLAYER_MWA_*), R shield raise/loop, A roll, Z hops.
+// Item Editor - per-item live tuning (Skijer's NEI)
 // =============================================================================
+// One section per custom item. Every control writes a `gItemEditor.<Item>.*`
+// CVar that the item's behavior TU reads once per frame, so edits land live and
+// the CVar names are shared with 2ship (a preset carries over between games).
+// More items get their own section below as they are made tunable.
 namespace {
 
-constexpr const char* kMhrNotesPath = "nei/mhr_anim_notes.json";
-constexpr s32 kMhrS16PerFrame = 67;
-
-struct MhrNoteEntry {
-    std::string path;
-    char note[512] = "";
-    char rename[96] = "";
-    std::string binding;
-};
-
-std::vector<std::pair<std::string, std::string>> sMhrAnims; // {name, path}
-std::map<std::string, MhrNoteEntry> sMhrNotes;              // keyed by anim name
-char sMhrFilter[64] = "";
-bool sMhrScanned = false;
-bool sMhrNotesLoaded = false;
-bool sMhrDirty = false;
-std::string sMhrSelected;
-
-bool sMhrPreview = false;
-int sMhrAnimMode = ANIMMODE_LOOP;
-float sMhrPlaySpeed = 1.0f;
-bool sMhrForceRestart = false;
-int sMhrFrameCount = 0;
-std::string sMhrLastApplied;
-uint32_t sMhrPlayerHook = 0;
-
-// Pointer-stable wrappers, same pattern as the Animation Viewer.
-std::map<std::string, LinkAnimationHeader> sMhrWrappers;
-
-void MhrScanAnims() {
-    sMhrAnims.clear();
-    auto archiveManager = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
-    if (archiveManager == nullptr) {
-        return;
-    }
-    auto results = archiveManager->ListFiles("*PlayerAnim_mhr_*");
-    if (results == nullptr) {
-        return;
-    }
-    for (const auto& path : *results) {
-        size_t pos = path.find_last_of('/');
-        std::string name = (pos == std::string::npos) ? path : path.substr(pos + 1);
-        sMhrAnims.emplace_back(name, path);
-    }
-    std::sort(sMhrAnims.begin(), sMhrAnims.end());
-    sMhrScanned = true;
-}
-
-LinkAnimationHeader* MhrLoadAnim(const std::string& path) {
-    auto res = ResourceMgr_GetResourceByNameHandlingMQ(path.c_str());
-    if (res == nullptr) {
-        return nullptr;
-    }
-    if (res->GetInitData()->Type == static_cast<uint32_t>(SOH::ResourceType::SOH_PlayerAnimation)) {
-        auto playerAnim = std::static_pointer_cast<SOH::PlayerAnimation>(res);
-        LinkAnimationHeader& wrapper = sMhrWrappers[path];
-        size_t totalS16 = playerAnim->GetPointerSize() / sizeof(int16_t);
-        wrapper.common.frameCount = (s16)(totalS16 / kMhrS16PerFrame);
-        wrapper.segment = (void*)playerAnim->GetPointer();
-        return &wrapper;
-    }
-    return (LinkAnimationHeader*)ResourceMgr_LoadAnimByName(path.c_str());
-}
-
-void MhrLoadNotes() {
-    sMhrNotesLoaded = true;
-    sMhrNotes.clear();
-    std::ifstream f(kMhrNotesPath);
-    if (!f.is_open()) {
-        return;
-    }
-    try {
-        nlohmann::json root;
-        f >> root;
-        if (root.contains("anims") && root["anims"].is_object()) {
-            for (auto& [name, e] : root["anims"].items()) {
-                MhrNoteEntry& entry = sMhrNotes[name];
-                entry.path = e.value("path", std::string("misc/link_animetion/") + name);
-                snprintf(entry.note, sizeof(entry.note), "%s", e.value("note", "").c_str());
-                snprintf(entry.rename, sizeof(entry.rename), "%s", e.value("rename", "").c_str());
-                entry.binding = e.value("binding", "");
-            }
-        }
-    } catch (const std::exception&) {
-        // Corrupt file: start empty. MhrSaveNotes() merges with the on-disk
-        // file and stashes unparseable bytes as .corrupt, so nothing is lost.
-    }
-}
-
-void MhrSaveNotes() {
-    // MERGE with the on-disk file instead of blind overwrite. Keys never
-    // touched this session are preserved — protects against losing notes
-    // when the in-memory map started incomplete (failed parse, different
-    // CWD when launched from VS, or pack_o2r.py migrating the file while
-    // the game runs). Keys present in sMhrNotes always win; an entry the
-    // user emptied deletes its key.
-    nlohmann::json root = nlohmann::json::object();
-    std::error_code ec;
-    if (std::filesystem::exists(kMhrNotesPath, ec)) {
-        try {
-            std::ifstream f(kMhrNotesPath);
-            f >> root;
-            // Safety net: keep the pre-save content around.
-            std::ofstream bak(std::string(kMhrNotesPath) + ".prev");
-            bak << root.dump(1);
-        } catch (const std::exception&) {
-            // Unparseable: preserve the raw bytes before we overwrite.
-            std::filesystem::copy_file(kMhrNotesPath, std::string(kMhrNotesPath) + ".corrupt",
-                                       std::filesystem::copy_options::overwrite_existing, ec);
-            root = nlohmann::json::object();
-        }
-    }
-    if (!root.contains("anims") || !root["anims"].is_object()) {
-        root["anims"] = nlohmann::json::object();
-    }
-    nlohmann::json& anims = root["anims"];
-    for (const auto& [name, e] : sMhrNotes) {
-        if (e.note[0] == '\0' && e.rename[0] == '\0' && e.binding.empty()) {
-            anims.erase(name); // cleared this session -> delete its key
-            continue;
-        }
-        anims[name] = { { "path", e.path }, { "note", e.note }, { "rename", e.rename }, { "binding", e.binding } };
-    }
-    root["version"] = 1;
-    std::filesystem::create_directories("nei");
-    std::ofstream f(kMhrNotesPath);
-    f << root.dump(1);
-    sMhrDirty = false;
-    MhrMoveset_Reload();
-}
-
-// Re-applied every frame while preview is on — identical strategy to the
-// Animation Viewer: only restart on a real change, otherwise just keep
-// skelAnime pinned so curFrame advances naturally.
-void MhrApplyPreview() {
-    if (!sMhrPreview || gPlayState == nullptr || sMhrSelected.empty()) {
-        return;
-    }
-    Player* player = GET_PLAYER(gPlayState);
-    if (player == nullptr) {
-        return;
-    }
-    auto it = std::find_if(sMhrAnims.begin(), sMhrAnims.end(),
-                           [](const auto& p) { return p.first == sMhrSelected; });
-    if (it == sMhrAnims.end()) {
-        return;
-    }
-    LinkAnimationHeader* anim = MhrLoadAnim(it->second);
-    if (anim == nullptr) {
-        return;
-    }
-    s16 lastFrame = Animation_GetLastFrame(anim);
-    sMhrFrameCount = lastFrame;
-
-    bool needRestart = sMhrForceRestart || (sMhrLastApplied != sMhrSelected) ||
-                       (player->skelAnime.animation != (void*)anim);
-    sMhrLastApplied = sMhrSelected;
-    sMhrForceRestart = false;
-
-    if (needRestart) {
-        LinkAnimation_Change(gPlayState, &player->skelAnime, anim, sMhrPlaySpeed, 0.0f, (f32)lastFrame,
-                             (u8)sMhrAnimMode, 0.0f);
-    } else {
-        player->skelAnime.playSpeed = sMhrPlaySpeed;
-        player->skelAnime.endFrame = (f32)lastFrame;
-    }
-}
-
-// ---------------------------------------------------------------------------
-// MHR moveset binding backend (TEMPORARY — same TU as the tab on purpose).
-// Binding keys stored in nei/mhr_anim_notes.json:
-//   "mwa:<0..27>"  PLAYER_MWA_* melee slot (jump slash flows through these)
-//   "shield:raise" / "shield:loop"
-//   "move:roll" / "move:hop_fwd" / "move:hop_right" / "move:backflip" / "move:hop_left"
-//   "action:1..4"  reserved future custom-action slots (recorded only)
-// CVars: gMods.MhrMoveset.Enabled (default 0), gMods.MhrMoveset.Scope
-//        (0 = Gerudo form only, 1 = always).
-// ---------------------------------------------------------------------------
-
-// Move ids: 0..3 match the controlStickDirection index of D_80853D4C.
-constexpr int kMhrMoveRoll = 4;
-constexpr int kMhrMoveMax = 5;
-
-struct MhrBindingOption {
-    const char* key;
+struct CapeFloatParam {
     const char* label;
+    const char* cvar;
+    float min;
+    float max;
+    float def;
+    const char* tooltip;
 };
 
-constexpr MhrBindingOption kMhrBindingOptions[] = {
-    { "", "(none)" },
-    // --- B: sword/melee (PLAYER_MWA_*) ---
-    { "mwa:0", "B: Forward Slash 1H" },
-    { "mwa:1", "B: Forward Slash 2H" },
-    { "mwa:2", "B: Forward Combo 1H" },
-    { "mwa:3", "B: Forward Combo 2H" },
-    { "mwa:4", "B: Right Slash 1H" },
-    { "mwa:5", "B: Right Slash 2H" },
-    { "mwa:6", "B: Right Combo 1H" },
-    { "mwa:7", "B: Right Combo 2H" },
-    { "mwa:8", "B: Left Slash 1H" },
-    { "mwa:9", "B: Left Slash 2H" },
-    { "mwa:10", "B: Left Combo 1H" },
-    { "mwa:11", "B: Left Combo 2H" },
-    { "mwa:12", "B: Stab 1H" },
-    { "mwa:13", "B: Stab 2H" },
-    { "mwa:14", "B: Stab Combo 1H" },
-    { "mwa:15", "B: Stab Combo 2H" },
-    { "mwa:16", "B: Flip Slash (air)" },
-    { "mwa:17", "B: Jump Slash (air)" },
-    { "mwa:18", "B: Flip Slash (landing)" },
-    { "mwa:19", "B: Jump Slash (landing)" },
-    { "mwa:20", "B: Back Slash Right" },
-    { "mwa:21", "B: Back Slash Left" },
-    { "mwa:22", "B: Hammer Forward" },
-    { "mwa:23", "B: Hammer Side" },
-    { "mwa:24", "B: Spin Attack 1H" },
-    { "mwa:25", "B: Spin Attack 2H" },
-    { "mwa:26", "B: Big Spin 1H" },
-    { "mwa:27", "B: Big Spin 2H" },
-    // --- R: shield ---
-    { "shield:raise", "R: Shield Raise" },
-    { "shield:loop", "R: Shield Hold (loop)" },
-    // --- A / Z-target movement ---
-    { "move:roll", "A: Roll" },
-    { "move:hop_fwd", "Z: Hop Forward" },
-    { "move:hop_right", "Z: Sidehop Right" },
-    { "move:backflip", "Z: Backflip" },
-    { "move:hop_left", "Z: Sidehop Left" },
-    // --- Future custom action slots (recorded only) ---
-    { "action:1", "Action Slot 1 (future)" },
-    { "action:2", "Action Slot 2 (future)" },
-    { "action:3", "Action Slot 3 (future)" },
-    { "action:4", "Action Slot 4 (future)" },
+// Shape ------------------------------------------------------------------
+const CapeFloatParam kCapeShapeParams[] = {
+    { "Scale", "gItemEditor.Cape.Scale", 0.1f, 5.0f, 1.0f,
+      "Master multiplier over both the cape's length and its width." },
+    { "Segment Length", "gItemEditor.Cape.Length", 0.5f, 30.0f, 4.5f,
+      "Length of one cloth segment. The cape is 12 joints deep, so the total\n"
+      "hanging length is about 11x this value. Vanilla: 4.5." },
+    { "Width", "gItemEditor.Cape.Width", 0.1f, 5.0f, 1.0f,
+      "Multiplier over the shoulder-to-shoulder span the cloth is pinned across." },
+    { "Arc Span (deg)", "gItemEditor.Cape.ArcSpan", 10.0f, 360.0f, 180.0f,
+      "Angle the 12 strand roots are spread over. 180 is the vanilla half-circle\n"
+      "around the shoulders; lower values bunch the cape into a narrower cloak,\n"
+      "higher values wrap it further around the body." },
+    { "Arc Bulge", "gItemEditor.Cape.ArcBulge", 0.0f, 4.0f, 1.0f,
+      "Depth of the parabolic arc the roots trace - how far the middle of the cape\n"
+      "bows out behind Link. 0 flattens the arc into a straight line across the\n"
+      "shoulders." },
+    { "Arc Spread", "gItemEditor.Cape.ArcSpread", 0.0f, 4.0f, 1.0f,
+      "Width of that same arc along the shoulder line." },
 };
 
-LinkAnimationHeader* sMhrMeleeAnims[PLAYER_MWA_MAX] = {};
-LinkAnimationHeader* sMhrShieldAnims[2] = {};
-LinkAnimationHeader* sMhrMoveAnims[kMhrMoveMax] = {};
-bool sMhrBindingsLoaded = false;
+// Placement & rotation ---------------------------------------------------
+const CapeFloatParam kCapePlacementParams[] = {
+    { "Offset Back/Forward", "gItemEditor.Cape.OffsetX", -50.0f, 50.0f, 0.0f,
+      "Shifts the whole attachment arc backwards (+) or into Link's back (-)." },
+    { "Offset Up/Down", "gItemEditor.Cape.OffsetY", -50.0f, 50.0f, 0.0f,
+      "Raises (+) or lowers (-) the attachment arc along Link's spine." },
+    { "Offset Left/Right", "gItemEditor.Cape.OffsetZ", -50.0f, 50.0f, 0.0f,
+      "Slides the attachment arc sideways along the shoulder line." },
+    { "Yaw (deg)", "gItemEditor.Cape.Yaw", -180.0f, 180.0f, 0.0f,
+      "Turns the cape around Link's vertical axis, on top of the angle derived\n"
+      "from his shoulders." },
+    { "Pitch (deg)", "gItemEditor.Cape.Pitch", -180.0f, 180.0f, 0.0f,
+      "Tips the cape forwards/backwards." },
+    { "Roll (deg)", "gItemEditor.Cape.Roll", -180.0f, 180.0f, 0.0f, "Banks the cape sideways." },
+};
 
-void MhrAssignBinding(const std::string& key, const std::string& animPath) {
-    LinkAnimationHeader* anim = MhrLoadAnim(animPath);
-    if (anim == nullptr) {
-        return;
-    }
-    if (key.rfind("mwa:", 0) == 0) {
-        int idx = std::atoi(key.c_str() + 4);
-        if (idx >= 0 && idx < PLAYER_MWA_MAX) {
-            sMhrMeleeAnims[idx] = anim;
-        }
-    } else if (key == "shield:raise") {
-        sMhrShieldAnims[0] = anim;
-    } else if (key == "shield:loop") {
-        sMhrShieldAnims[1] = anim;
-    } else if (key == "move:hop_fwd") {
-        sMhrMoveAnims[0] = anim;
-    } else if (key == "move:hop_right") {
-        sMhrMoveAnims[1] = anim;
-    } else if (key == "move:backflip") {
-        sMhrMoveAnims[2] = anim;
-    } else if (key == "move:hop_left") {
-        sMhrMoveAnims[3] = anim;
-    } else if (key == "move:roll") {
-        sMhrMoveAnims[kMhrMoveRoll] = anim;
-    }
-    // "action:*" keys: recorded in the JSON for planning, no runtime yet.
-}
+// Physics ----------------------------------------------------------------
+const CapeFloatParam kCapePhysicsParams[] = {
+    { "Gravity", "gItemEditor.Cape.Gravity", -20.0f, 5.0f, -3.0f,
+      "Downward pull applied to every joint each tick. Vanilla: -3.0.\n"
+      "Positive values make the cape float upwards." },
+    { "Back Push", "gItemEditor.Cape.BackPush", -20.0f, 20.0f, -4.0f,
+      "Constant push away from Link's back that keeps the cloth from clipping\n"
+      "into him while standing still. Vanilla: -4.0." },
+    { "Body Radius", "gItemEditor.Cape.MinDist", 0.0f, 60.0f, 8.0f,
+      "How far from Link's center the cloth is held off. Raise it if the cape\n"
+      "clips through a wider custom model. Vanilla: 8.0." },
+    { "Floor Limit", "gItemEditor.Cape.FloorOffset", -400.0f, 0.0f, -200.0f,
+      "Lowest the cloth may hang, relative to Link's feet. Vanilla: -200." },
+    { "Back Sway", "gItemEditor.Cape.BackSway", 0.0f, 3.0f, 0.3f,
+      "Backwards billow per unit of running speed. Vanilla: 0.3." },
+    { "Side Sway", "gItemEditor.Cape.SideSway", 0.0f, 3.0f, 0.15f,
+      "Sideways flutter per unit of running speed. Vanilla: 0.15." },
+    { "Damping", "gItemEditor.Cape.Damping", 0.0f, 1.0f, 0.8f,
+      "Fraction of a joint's velocity carried into the next tick. Lower = stiffer,\n"
+      "higher = floatier and slower to settle. Vanilla: 0.8." },
+    { "Velocity Clamp", "gItemEditor.Cape.VelClamp", 0.5f, 30.0f, 5.0f,
+      "Per-axis speed limit for a joint. Keeps the cloth from exploding on hard\n"
+      "camera cuts. Vanilla: 5.0." },
+    { "Settle Rate", "gItemEditor.Cape.Decel", 0.0f, 1.0f, 0.1f,
+      "How quickly leftover motion bleeds away when Link stops. Vanilla: 0.1." },
+};
 
-bool MhrMovesetActive() {
-    if (!CVarGetInteger("gMods.MhrMoveset.Enabled", 0)) {
-        return false;
-    }
-    if (CVarGetInteger("gMods.MhrMoveset.Scope", 0) == 1) {
-        return true;
-    }
-    return GerudoForm_IsActive() != 0;
-}
+void ItemEditorCapeColorWidget(WidgetInfo& info) {
+    float col[4] = {
+        CVarGetInteger("gItemEditor.Cape.ColorR", 255) / 255.0f,
+        CVarGetInteger("gItemEditor.Cape.ColorG", 255) / 255.0f,
+        CVarGetInteger("gItemEditor.Cape.ColorB", 255) / 255.0f,
+        CVarGetInteger("gItemEditor.Cape.ColorA", 255) / 255.0f,
+    };
 
-void MhrAnimNotesWidget(WidgetInfo& info) {
-    if (sMhrPlayerHook == 0) {
-        sMhrPlayerHook = GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerUpdate>(MhrApplyPreview);
-    }
-    if (!sMhrScanned) {
-        MhrScanAnims();
-    }
-    if (!sMhrNotesLoaded) {
-        MhrLoadNotes();
-    }
-
-    // --- Master toggles ---
-    bool enabled = CVarGetInteger("gMods.MhrMoveset.Enabled", 0) != 0;
-    if (ImGui::Checkbox("Enable MHR Moveset Bindings", &enabled)) {
-        CVarSetInteger("gMods.MhrMoveset.Enabled", enabled ? 1 : 0);
+    if (ImGui::ColorEdit4("Cape Color##ItemEditorCape", col, ImGuiColorEditFlags_AlphaBar)) {
+        CVarSetInteger("gItemEditor.Cape.ColorR", (int32_t)(col[0] * 255.0f + 0.5f));
+        CVarSetInteger("gItemEditor.Cape.ColorG", (int32_t)(col[1] * 255.0f + 0.5f));
+        CVarSetInteger("gItemEditor.Cape.ColorB", (int32_t)(col[2] * 255.0f + 0.5f));
+        CVarSetInteger("gItemEditor.Cape.ColorA", (int32_t)(col[3] * 255.0f + 0.5f));
         Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     }
-    ImGui::SameLine();
-    int scope = CVarGetInteger("gMods.MhrMoveset.Scope", 0);
-    ImGui::SetNextItemWidth(160.0f);
-    if (ImGui::Combo("Scope", &scope, "Gerudo form only\0Always\0")) {
-        CVarSetInteger("gMods.MhrMoveset.Scope", scope);
-        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    UIWidgets::Tooltip("Tints the Ganondorf cape texture. White = untouched.\n"
+                       "Dropping the alpha below 255 also switches the cloth to a translucent\n"
+                       "render mode so it actually blends instead of being drawn opaque.");
+}
+
+void ItemEditorResetCape() {
+    static const char* kIntCVars[] = { "gItemEditor.Cape.ColorR", "gItemEditor.Cape.ColorG",
+                                       "gItemEditor.Cape.ColorB", "gItemEditor.Cape.ColorA" };
+
+    for (const auto& p : kCapeShapeParams) {
+        CVarSetFloat(p.cvar, p.def);
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Reload Bindings")) {
-        MhrMoveset_Reload();
+    for (const auto& p : kCapePlacementParams) {
+        CVarSetFloat(p.cvar, p.def);
     }
-
-    // --- Anim list ---
-    ImGui::Separator();
-    ImGui::SetNextItemWidth(220.0f);
-    ImGui::InputText("Filter##MhrFilter", sMhrFilter, sizeof(sMhrFilter));
-    ImGui::SameLine();
-    if (ImGui::Button("Rescan")) {
-        MhrScanAnims();
+    for (const auto& p : kCapePhysicsParams) {
+        CVarSetFloat(p.cvar, p.def);
     }
-    ImGui::SameLine();
-    ImGui::Text("%zu anims", sMhrAnims.size());
-    if (sMhrAnims.empty()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.4f, 1.0f),
-                           "No gPlayerAnim_mhr_* found — is nei/mhr_anims.o2r present?");
+    for (const char* cvar : kIntCVars) {
+        CVarSetInteger(cvar, 255);
     }
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+}
 
-    std::string filter(sMhrFilter);
-    std::transform(filter.begin(), filter.end(), filter.begin(), ::tolower);
-
-    if (ImGui::BeginChild("MhrAnimList", ImVec2(0, 220), true)) {
-        for (const auto& [name, path] : sMhrAnims) {
-            if (!filter.empty()) {
-                std::string lower = name;
-                std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-                if (lower.find(filter) == std::string::npos) {
-                    continue;
-                }
-            }
-            auto noteIt = sMhrNotes.find(name);
-            bool hasNote = noteIt != sMhrNotes.end() && noteIt->second.note[0] != '\0';
-            bool hasBind = noteIt != sMhrNotes.end() && !noteIt->second.binding.empty();
-            bool hasRename = noteIt != sMhrNotes.end() && noteIt->second.rename[0] != '\0';
-            std::string label = name;
-            if (hasBind) label += "  [BIND]";
-            if (hasRename) label += "  [REN]";
-            if (hasNote) label += "  [NOTE]";
-            if (ImGui::Selectable(label.c_str(), sMhrSelected == name)) {
-                if (sMhrDirty) {
-                    MhrSaveNotes(); // autosave when moving between anims
-                }
-                sMhrSelected = name;
-                sMhrForceRestart = true;
-            }
-        }
+// Shared PreFunc for every cape slider: greyed out until the section's master
+// switch is on, so the vanilla-vs-tuned A/B is a single click.
+void ItemEditorCapeGate(WidgetInfo& info) {
+    if (!CVarGetInteger("gItemEditor.Cape.Custom", 0)) {
+        info.options->disabled = true;
+        info.options->disabledTooltip = "Enable 'Enable Custom Cape Settings' first.";
     }
-    ImGui::EndChild();
-
-    // --- Selected anim: preview + editor ---
-    if (!sMhrSelected.empty()) {
-        ImGui::Separator();
-        ImGui::Text("Selected: %s  (%d frames)", sMhrSelected.c_str(), sMhrFrameCount);
-
-        ImGui::Checkbox("Preview on Link", &sMhrPreview);
-        ImGui::SameLine();
-        if (ImGui::Button("Restart")) {
-            sMhrForceRestart = true;
-        }
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Loop", sMhrAnimMode == ANIMMODE_LOOP)) {
-            sMhrAnimMode = ANIMMODE_LOOP;
-            sMhrForceRestart = true;
-        }
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Once", sMhrAnimMode == ANIMMODE_ONCE)) {
-            sMhrAnimMode = ANIMMODE_ONCE;
-            sMhrForceRestart = true;
-        }
-        ImGui::SetNextItemWidth(200.0f);
-        ImGui::SliderFloat("Speed", &sMhrPlaySpeed, 0.0f, 3.0f, "%.2fx");
-        if (gPlayState == nullptr) {
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.4f, 1.0f), "No active gameplay — load a save to preview.");
-        }
-
-        MhrNoteEntry& entry = sMhrNotes[sMhrSelected];
-        if (entry.path.empty()) {
-            auto it = std::find_if(sMhrAnims.begin(), sMhrAnims.end(),
-                                   [](const auto& p) { return p.first == sMhrSelected; });
-            if (it != sMhrAnims.end()) {
-                entry.path = it->second;
-            }
-        }
-
-        if (ImGui::InputTextMultiline("Note##MhrNote", entry.note, sizeof(entry.note), ImVec2(-1, 60))) {
-            sMhrDirty = true;
-        }
-        UIWidgets::Tooltip("Free text for a description of the animation: what this anim is, what to use it for, etc.");
-        if (ImGui::InputText("Rename to##MhrRename", entry.rename, sizeof(entry.rename))) {
-            sMhrDirty = true;
-        }
-        UIWidgets::Tooltip("Proposed final name (e.g. gPlayerAnim_mhr_db_demon_dance). Applied on the next repack.");
-
-        const char* curLabel = "(none)";
-        for (const auto& opt : kMhrBindingOptions) {
-            if (entry.binding == opt.key) {
-                curLabel = opt.label;
-                break;
-            }
-        }
-        ImGui::SetNextItemWidth(260.0f);
-        if (ImGui::BeginCombo("Bind to action##MhrBind", curLabel)) {
-            for (const auto& opt : kMhrBindingOptions) {
-                bool selected = (entry.binding == opt.key);
-                if (ImGui::Selectable(opt.label, selected)) {
-                    entry.binding = opt.key;
-                    sMhrDirty = true;
-                }
-                if (selected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
-        UIWidgets::Tooltip("Which Link action this anim should replace while the moveset is enabled:\n"
-                           "B melee slots (slashes/combos/stabs/jump slash/spin), R shield, A roll, Z hops.\n"
-                           "'Action Slot' entries are recorded for the future custom-action system.");
-    }
-
-    ImGui::Separator();
-    if (ImGui::Button(sMhrDirty ? "Save Notes*" : "Save Notes")) {
-        MhrSaveNotes();
-    }
-    ImGui::SameLine();
-    ImGui::TextDisabled("-> %s%s", kMhrNotesPath, sMhrDirty ? "  (unsaved changes)" : "");
 }
 
 } // namespace
 
-// --- MHR moveset C API (consumed by z_player.c via local extern decls) ---
-
-extern "C" void MhrMoveset_Reload(void) {
-    std::fill(std::begin(sMhrMeleeAnims), std::end(sMhrMeleeAnims), nullptr);
-    std::fill(std::begin(sMhrShieldAnims), std::end(sMhrShieldAnims), nullptr);
-    std::fill(std::begin(sMhrMoveAnims), std::end(sMhrMoveAnims), nullptr);
-    sMhrBindingsLoaded = true;
-
-    // Only hit the disk when the notes were never loaded this session (e.g.
-    // the lazy first call from z_player.c before the tab was ever opened).
-    // Re-reading unconditionally here was the "my notes got overwritten" bug:
-    // the first sword swing reloaded the file and silently discarded any
-    // unsaved UI edits, so the next Save wrote the file without them.
-    if (!sMhrNotesLoaded) {
-        MhrLoadNotes();
-    }
-    int count = 0;
-    for (const auto& [name, e] : sMhrNotes) {
-        if (!e.binding.empty()) {
-            MhrAssignBinding(e.binding, e.path);
-            count++;
-        }
-    }
-    SPDLOG_INFO("[MhrMoveset] loaded {} bindings from {}", count, kMhrNotesPath);
-}
-
-extern "C" LinkAnimationHeader* MhrMoveset_GetMeleeAnim(s32 mwa) {
-    if (!MhrMovesetActive() || mwa < 0 || mwa >= PLAYER_MWA_MAX) {
-        return nullptr;
-    }
-    if (!sMhrBindingsLoaded) {
-        MhrMoveset_Reload();
-    }
-    return sMhrMeleeAnims[mwa];
-}
-
-extern "C" LinkAnimationHeader* MhrMoveset_GetShieldAnim(s32 loopPhase) {
-    if (!MhrMovesetActive() || loopPhase < 0 || loopPhase > 1) {
-        return nullptr;
-    }
-    if (!sMhrBindingsLoaded) {
-        MhrMoveset_Reload();
-    }
-    return sMhrShieldAnims[loopPhase];
-}
-
-extern "C" LinkAnimationHeader* MhrMoveset_GetMoveAnim(s32 moveId) {
-    if (!MhrMovesetActive() || moveId < 0 || moveId >= kMhrMoveMax) {
-        return nullptr;
-    }
-    if (!sMhrBindingsLoaded) {
-        MhrMoveset_Reload();
-    }
-    return sMhrMoveAnims[moveId];
-}
-
 // =============================================================================
-// "Skijer's NEI" — dedicated top-level menu gathering every NEI feature into
-// its own tabs (Masks, Spells, Pak Loader, Custom Items, Randomizer, Controls).
+// "Skijer's NEI" - dedicated top-level menu gathering every NEI feature into
+// its own tabs (Custom Items, Item Editor, Masks, Spells, Modes, Pak Loader,
+// Randomizer, Controls). The tab list and its contents are kept 1:1 with 2ship's
+// mm/2s2h/BenGui/BenMenu.cpp AddNEI() so a feature is always in the same place in
+// both games; anything a game genuinely lacks (2ship has no .pak player models,
+// Ship has no boss remains) is simply absent from that game's tab rather than
+// shown as a dead toggle.
 // Built as its own translation unit so the rest of Settings stays clean.
 // Widgets are grouped by SIDEBAR (not file order), so each block below just
 // (re)sets path.sidebarName to land in the right tab.
@@ -593,23 +221,102 @@ void RegisterNEIMenu() {
     WidgetPath path = { "Skijer's NEI", "Masks", SECTION_COLUMN_1 };
 
     mSohMenu->AddMenuEntry("Skijer's NEI", CVAR_SETTING("Menu.SkijerNEISidebarSection"));
+    // Sidebar order is shared with 2ship's Skijer's NEI menu.
+    mSohMenu->AddSidebarEntry("Skijer's NEI", "Custom Items", 1);
+    mSohMenu->AddSidebarEntry("Skijer's NEI", "Item Editor", 2);
     mSohMenu->AddSidebarEntry("Skijer's NEI", "Masks", 1);
     mSohMenu->AddSidebarEntry("Skijer's NEI", "Spells", 1);
+    mSohMenu->AddSidebarEntry("Skijer's NEI", "Modes", 1);
     mSohMenu->AddSidebarEntry("Skijer's NEI", "Pak Loader", 3);
-    mSohMenu->AddSidebarEntry("Skijer's NEI", "Custom Items", 1);
     mSohMenu->AddSidebarEntry("Skijer's NEI", "Randomizer", 1);
     mSohMenu->AddSidebarEntry("Skijer's NEI", "Controls", 1);
-    mSohMenu->AddSidebarEntry("Skijer's NEI", "MHR Anims", 1);
     path.sectionName = "Skijer's NEI";
 
-    // ===================== Tab: MHR Anims =====================
-    // Anim-viewer-style browser + notes/rename/binding editor for the MHR
-    // converted animations. See MhrAnimNotesWidget above.
-    path.sidebarName = "MHR Anims";
+    // ===================== Tab: Item Editor =====================
+    path.sidebarName = "Item Editor";
     path.column = SECTION_COLUMN_1;
-    mSohMenu->AddWidget(path, "MHR Animation Notes & Bindings", WIDGET_CUSTOM)
-        .CustomFunction(MhrAnimNotesWidget)
+    mSohMenu->AddWidget(path, "Item Editor", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path,
+                        "Live tuning for the custom items. Everything here writes gItemEditor.* CVars that "
+                        "the item's behavior reads every frame, so changes apply instantly and are shared "
+                        "with 2ship (the same preset works in both games). One section per item - more items "
+                        "land here as they are made tunable.",
+                        WIDGET_TEXT);
+
+    mSohMenu->AddWidget(path, "Magic Cape", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Enable Custom Cape Settings", WIDGET_CVAR_CHECKBOX)
+        .CVar("gItemEditor.Cape.Custom")
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Master switch for this section. OFF (default) makes the cape use its built-in\n"
+            "values and ignore every control below, so you can A/B a tune against vanilla\n"
+            "without resetting anything."));
+    mSohMenu->AddWidget(path, "Reset Cape to Defaults", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) { ItemEditorResetCape(); })
+        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
+            "Puts every cape control below back to the value the cloth ships with."));
+
+    mSohMenu->AddWidget(path, "Cape: Shape & Size", WIDGET_SEPARATOR_TEXT);
+    for (const auto& p : kCapeShapeParams) {
+        mSohMenu->AddWidget(path, p.label, WIDGET_CVAR_SLIDER_FLOAT)
+            .CVar(p.cvar)
+            .RaceDisable(false)
+            .PreFunc(ItemEditorCapeGate)
+            .Options(FloatSliderOptions()
+                         .Min(p.min)
+                         .Max(p.max)
+                         .DefaultValue(p.def)
+                         .Step(0.05f)
+                         .Format("%.2f")
+                         .Tooltip(p.tooltip));
+    }
+
+    mSohMenu->AddWidget(path, "Cape: Placement & Rotation", WIDGET_SEPARATOR_TEXT);
+    for (const auto& p : kCapePlacementParams) {
+        mSohMenu->AddWidget(path, p.label, WIDGET_CVAR_SLIDER_FLOAT)
+            .CVar(p.cvar)
+            .RaceDisable(false)
+            .PreFunc(ItemEditorCapeGate)
+            .Options(FloatSliderOptions()
+                         .Min(p.min)
+                         .Max(p.max)
+                         .DefaultValue(p.def)
+                         .Step(0.5f)
+                         .Format("%.1f")
+                         .Tooltip(p.tooltip));
+    }
+
+    path.column = SECTION_COLUMN_2;
+    mSohMenu->AddWidget(path, "Cape: Physics", WIDGET_SEPARATOR_TEXT);
+    for (const auto& p : kCapePhysicsParams) {
+        mSohMenu->AddWidget(path, p.label, WIDGET_CVAR_SLIDER_FLOAT)
+            .CVar(p.cvar)
+            .RaceDisable(false)
+            .PreFunc(ItemEditorCapeGate)
+            .Options(FloatSliderOptions()
+                         .Min(p.min)
+                         .Max(p.max)
+                         .DefaultValue(p.def)
+                         .Step(0.05f)
+                         .Format("%.2f")
+                         .Tooltip(p.tooltip));
+    }
+
+    mSohMenu->AddWidget(path, "Cape: Color", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Cape Color", WIDGET_CUSTOM)
+        .CustomFunction(ItemEditorCapeColorWidget)
         .HideInSearch(true);
+
+    // ===================== Tab: Modes =====================
+    path.sidebarName = "Modes";
+    path.column = SECTION_COLUMN_1;
+    mSohMenu->AddWidget(path, "Broken Modes", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Enable Broken Modes", WIDGET_CVAR_CHECKBOX)
+        .CVar("gBrokenItems.Enabled")
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Form selector (Link / Mario / Pikachu) on the equipment page's transform sub-page (L cycles)."));
 
     // ===================== Tab: Custom Items =====================
     path.sidebarName = "Custom Items";

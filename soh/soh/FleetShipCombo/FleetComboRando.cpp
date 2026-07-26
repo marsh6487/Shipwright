@@ -848,24 +848,10 @@ void ApplyComboSettingsToBothGames() {
     CVarSetInteger("gRandoSettings.LogicRules", logic);
     CVarSave();
 
-    // --- FORCE-VANILLA (OoT): opciones que el combo no modela (entrances, MQ) -> off/default ---
-    static const char* kForceVanilla[] = {
-        "gRandoSettings.ShuffleEntrances",           "gRandoSettings.ShuffleDungeonsEntrances",
-        "gRandoSettings.ShuffleBossEntrances",       "gRandoSettings.ShuffleGanonTowerEntrance",
-        "gRandoSettings.ShuffleOverworldEntrances",  "gRandoSettings.ShuffleInteriorsEntrances",
-        "gRandoSettings.ShuffleThievesHideoutEntrances", "gRandoSettings.ShuffleGrottosEntrances",
-        "gRandoSettings.ShuffleOwlDrops",            "gRandoSettings.ShuffleWarpSongs",
-        "gRandoSettings.ShuffleOverworldSpawns",     "gRandoSettings.MixedEntrances",
-        "gRandoSettings.MixDungeons",                "gRandoSettings.MixBosses",
-        "gRandoSettings.MixOverworld",               "gRandoSettings.MixInteriors",
-        "gRandoSettings.MixThievesHideout",          "gRandoSettings.MixGrottos",
-        "gRandoSettings.DecoupleEntrances",          "gRandoSettings.MQDungeons",
-        "gRandoSettings.MQDungeonsSelection",
-    };
-    for (const char* cv : kForceVanilla) {
-        CVarSetInteger(cv, 0);
-    }
-    CVarSave();
+    // --- FORCE: options incompatible with the combo -> safe value ---
+    // This is the SAME table the Shared window's "Compatibility" panel reads, so what the panel
+    // promises and what generation actually does cannot drift apart.
+    FleetCombo_ResolveAllConflicts();
 
     // --- MM (gRando.Options.*; el manifest los leerá) — push bloqueante ANTES del manifest ---
     // Solo lo COMBO-global (pool/logic/triforce). El resto de opciones rando es POR-JUEGO
@@ -910,9 +896,16 @@ void GenerateCombo(std::string seedString) {
         ctx->GetOption(RSK_MIXED_ENTRANCE_POOLS).Set(0);
         ctx->GetOption(RSK_DECOUPLED_ENTRANCES).Set(0);
         ctx->GetOption(RSK_SHUFFLE_SONGS).Set(RO_SONG_SHUFFLE_ANYWHERE);
+        // Wallet scale must match MM's (see the kIncompat table): no shuffled child wallet, no Tycoon.
+        ctx->GetOption(RSK_SHUFFLE_CHILD_WALLET).Set(0);
+        ctx->GetOption(RSK_INCLUDE_TYCOON_WALLET).Set(0);
         // El goal Triforce del combo maneja sus propias piezas (FC, contador comboTriforce):
         // el sistema nativo de Triforce Hunt de SoH queda apagado durante la generación combo.
-        ctx->GetOption(RSK_TRIFORCE_HUNT).Set(0);
+        // Upstream sustituyó RSK_TRIFORCE_HUNT por un selector de condición de victoria, donde el
+        // Triforce Hunt nativo es ahora RO_WINCON_TRIFORCE_PIECES. Fijar DEFEAT_GANON deja la
+        // Trifuerza en Ganon (item_pool.cpp) y desactiva toda recolección nativa, que es lo que
+        // hacía el Set(0) anterior — DEFEAT_GANON es además el primer valor del enum.
+        ctx->GetOption(RSK_WINCON).Set(RO_WINCON_DEFEAT_GANON);
 
         if (seedString.empty()) {
             seedString = std::to_string(std::random_device{}());
@@ -947,6 +940,107 @@ void GenerateCombo(std::string seedString) {
 }
 
 } // namespace
+
+// =================================================================================================
+// Options incompatible with the combo
+// =================================================================================================
+// SINGLE source of truth: ApplyComboSettingsToBothGames forces exactly this table, and the Shared
+// window's "Compatibility" panel draws it. Adding an incompatibility = adding one row here, so the
+// panel can never promise something different from what generation actually does.
+
+namespace {
+
+const char* const kCvEntrances[] = {
+    "gRandoSettings.ShuffleEntrances",
+    "gRandoSettings.ShuffleDungeonsEntrances",
+    "gRandoSettings.ShuffleBossEntrances",
+    "gRandoSettings.ShuffleGanonTowerEntrance",
+    "gRandoSettings.ShuffleOverworldEntrances",
+    "gRandoSettings.ShuffleInteriorsEntrances",
+    "gRandoSettings.ShuffleThievesHideoutEntrances",
+    "gRandoSettings.ShuffleGrottosEntrances",
+    "gRandoSettings.ShuffleOwlDrops",
+    "gRandoSettings.ShuffleWarpSongs",
+    "gRandoSettings.ShuffleOverworldSpawns",
+    "gRandoSettings.MixedEntrances",
+    "gRandoSettings.MixDungeons",
+    "gRandoSettings.MixBosses",
+    "gRandoSettings.MixOverworld",
+    "gRandoSettings.MixInteriors",
+    "gRandoSettings.MixThievesHideout",
+    "gRandoSettings.MixGrottos",
+    "gRandoSettings.DecoupleEntrances",
+    nullptr,
+};
+const char* const kCvMq[] = { "gRandoSettings.MQDungeons", "gRandoSettings.MQDungeonsSelection", nullptr };
+const char* const kCvWallet[] = { "gRandoSettings.ShuffleChildWallet", "gRandoSettings.IncludeTycoonWallet",
+                                  nullptr };
+
+const FleetIncompat kIncompat[] = {
+    { "Wallets (no wallet / Tycoon)",
+      "The shared state syncs the wallet LEVEL, so a level has to mean the same thing in both games. "
+      "MM cannot represent 'no wallet' (its level 0 already holds 99 rupees) and has no Tycoon tier. "
+      "If OoT runs on a scale MM cannot reproduce, the frozen game clamps the value and republishes "
+      "it, and your rupees drain on their own.",
+      "Shuffle Child's Wallet OFF, Include Tycoon Wallet OFF (level 0/1/2 = 99/200/500 in both)",
+      kCvWallet, 0 },
+    { "Entrance Shuffle",
+      "The combo already connects the two worlds through its own loading zones. Shuffling entrances "
+      "on top of that is not modelled by the combo logic yet, and the combo's pre-placement may use "
+      "any location.",
+      "All entrance shuffle back to vanilla (including mixed and decoupled)", kCvEntrances, 0 },
+    { "Master Quest",
+      "The combo logic works on OoT's vanilla dungeons; the MM oracle does not know the MQ layouts.",
+      "MQ Dungeons set to 0", kCvMq, 0 },
+    // No CVar: these are forced straight onto the Context at generation (RSK_SHUFFLE_SONGS /
+    // RSK_WINCON) rather than through a menu CVar, so there is no live state to read here. The rows
+    // exist only to tell the player what will change.
+    { "Songs (OoT)",
+      "The combo's pre-placement may use any location, and the restricted song stages do not support "
+      "having their spots taken.",
+      "Song Shuffle set to 'Anywhere'", nullptr, 0 },
+    { "Native Triforce Hunt",
+      "The combo's Triforce goal keeps its own cross-game counter (comboTriforce). Each game's native "
+      "Triforce Hunt would collect pieces in parallel.",
+      "Native win condition set to 'Defeat Ganon'; pieces are handled by the combo goal", nullptr, 0 },
+};
+
+} // namespace
+
+const FleetIncompat* FleetCombo_GetIncompatTable(int* count) {
+    if (count) {
+        *count = (int)(sizeof(kIncompat) / sizeof(kIncompat[0]));
+    }
+    return kIncompat;
+}
+
+int FleetCombo_CountActiveConflicts() {
+    int n = 0;
+    for (const auto& e : kIncompat) {
+        if (!e.cvars) {
+            continue; // no CVar to read: forced onto the Context at generation, not via the menu
+        }
+        for (const char* const* cv = e.cvars; *cv; ++cv) {
+            if (CVarGetInteger(*cv, 0) != e.safeValue) {
+                n++;
+                break; // a row counts once, even when several of its CVars are in conflict
+            }
+        }
+    }
+    return n;
+}
+
+void FleetCombo_ResolveAllConflicts() {
+    for (const auto& e : kIncompat) {
+        if (!e.cvars) {
+            continue;
+        }
+        for (const char* const* cv = e.cvars; *cv; ++cv) {
+            CVarSetInteger(*cv, e.safeValue);
+        }
+    }
+    CVarSave();
+}
 
 bool FleetCombo_PrePlacementHook() {
     if (!sComboActive) {

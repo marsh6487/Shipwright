@@ -2,6 +2,9 @@
 #include "objects/object_link_boy/object_link_boy.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+// Skijer's NEI: the switch hook's live "look at it to pick it" selection is now the shared
+// remote selector, so the Phantom Hourglass and friends reuse the exact same feel.
+#include "../../../../mods/items/helpers/target_select_helper.h"
 
 extern u8 TransformMasks_IsTransformed(void);
 
@@ -38,82 +41,28 @@ s32 SwitchHook_PlayerNoClip(void) {
 
 // Skijer's NEI switchhook — an actor is swappable if it's an enemy, a prop (pots, crates, torches,
 // grass...), a chest, or an NPC (signs, scarecrows, cuccos...). Bosses, the player, background and
-// scene actors are never swapped.
+// scene actors are never swapped. This is exactly target_select_helper's common-target notion, so
+// the definition lives there now and both games (and every other item that wants a remote pick)
+// share one copy.
 static s32 ArmsHook_IsSwappable(Actor* actor) {
-    return (actor != NULL) && (actor->update != NULL) &&
-           ((actor->category == ACTORCAT_ENEMY) || (actor->category == ACTORCAT_PROP) ||
-            (actor->category == ACTORCAT_CHEST) || (actor->category == ACTORCAT_NPC));
+    return TargetSelect_IsCommonTarget(actor);
 }
 
 // Skijer's NEI switchhook — Ultrahand-style CONTINUOUS selection: while the switch hook is in hand,
 // the swappable actor closest to Link's LOOK DIRECTION (yaw only — Y is ignored), within longshot
 // range, is the live selection. It's tinted blue every frame; firing auto-aims the hook at it, so
-// you can swap without precise aiming.
-#define ARMSHOOK_SELECT_RANGE 520.0f  // longshot reach (20 speed * 26 frames)
-#define ARMSHOOK_SELECT_CONE 0x1800   // +-33.75 deg around Link's facing
+// you can swap without precise aiming. The scan itself is TargetSelect_Scan.
 static Actor* sSwitchSelection = NULL;
 
-static Actor* ArmsHook_SelectSwapCandidate(PlayState* play);
+static Actor* ArmsHook_SelectSwapCandidate(PlayState* play) {
+    return TargetSelect_Scan(play, TargetSelect_IsCommonTarget);
+}
 
 // Nearest swappable actor within `range` of `pos` (scans only the swappable categories). The switch
 // hook uses this to find its target by PROXIMITY, so the swap can start before the hook's collider
 // reaches the actor and breaks it (pots) / grabs it (chests).
 static Actor* ArmsHook_FindSwappable(PlayState* play, Vec3f* pos, f32 range) {
-    static const s32 sSwappableCats[] = { ACTORCAT_ENEMY, ACTORCAT_PROP, ACTORCAT_CHEST, ACTORCAT_NPC };
-    f32 rangeSq = range * range;
-    s32 i;
-
-    for (i = 0; i < 4; i++) {
-        Actor* actor = play->actorCtx.actorLists[sSwappableCats[i]].head;
-        while (actor != NULL) {
-            if (ArmsHook_IsSwappable(actor)) {
-                f32 dx = actor->world.pos.x - pos->x;
-                f32 dy = actor->world.pos.y - pos->y;
-                f32 dz = actor->world.pos.z - pos->z;
-                if (((dx * dx) + (dy * dy) + (dz * dz)) < rangeSq) {
-                    return actor;
-                }
-            }
-            actor = actor->next;
-        }
-    }
-    return NULL;
-}
-
-// The live-selection scan: the swappable actor whose XZ direction from Link best matches Link's
-// facing yaw (Y IGNORED), inside the selection cone and range. Ties break toward the smaller yaw
-// error, so "the object in the direction you look" wins over closer-but-off-angle ones.
-static Actor* ArmsHook_SelectSwapCandidate(PlayState* play) {
-    static const s32 sSelectCats[] = { ACTORCAT_ENEMY, ACTORCAT_PROP, ACTORCAT_CHEST, ACTORCAT_NPC };
-    Player* player = GET_PLAYER(play);
-    Actor* best = NULL;
-    s32 bestYawErr = ARMSHOOK_SELECT_CONE;
-    s32 i;
-
-    for (i = 0; i < 4; i++) {
-        Actor* actor = play->actorCtx.actorLists[sSelectCats[i]].head;
-        while (actor != NULL) {
-            if (ArmsHook_IsSwappable(actor)) {
-                f32 dx = actor->world.pos.x - player->actor.world.pos.x;
-                f32 dz = actor->world.pos.z - player->actor.world.pos.z;
-                f32 distXZ = sqrtf((dx * dx) + (dz * dz)); // Y ignored on purpose
-
-                if ((distXZ > 30.0f) && (distXZ <= ARMSHOOK_SELECT_RANGE)) {
-                    s32 yawErr = (s16)(Math_Atan2S(dz, dx) - player->actor.shape.rot.y);
-
-                    if (yawErr < 0) {
-                        yawErr = -yawErr;
-                    }
-                    if (yawErr < bestYawErr) {
-                        bestYawErr = yawErr;
-                        best = actor;
-                    }
-                }
-            }
-            actor = actor->next;
-        }
-    }
-    return best;
+    return TargetSelect_FindNearest(play, NULL, 0, TargetSelect_IsCommonTarget, pos, range);
 }
 
 const ActorInit Arms_Hook_InitVars = {
@@ -208,7 +157,7 @@ void ArmsHook_Wait(ArmsHook* this, PlayState* play) {
                 sSwitchSelection = ArmsHook_SelectSwapCandidate(play);
                 if (sSwitchSelection != NULL) {
                     // Blue tint (colorFlag 0 = blue, xluFlag 0 = OPA buffer)
-                    Actor_SetColorFilter(sSwitchSelection, 0, 255, 0, 4);
+                    TargetSelect_Highlight(sSwitchSelection, 4);
                 }
             }
         } else {
@@ -294,7 +243,7 @@ void ArmsHook_Wait(ArmsHook* this, PlayState* play) {
             this->actor.world.rot.y = Math_Atan2S(dz, dx);
             this->actor.world.rot.x = Math_Atan2S(distXZ, -dy);
             this->actor.shape.rot = this->actor.world.rot;
-            Actor_SetColorFilter(sSwitchSelection, 0, 255, 0, 30);
+            TargetSelect_Highlight(sSwitchSelection, 30);
         }
 
         ArmsHook_SetupAction(this, ArmsHook_Shoot);
@@ -392,14 +341,26 @@ static void ArmsHook_StartSwap(ArmsHook* this, Player* player, Actor* target) {
     // what got swapped. (colorFlag 0 = blue, xluFlag 0 = OPA)
     Actor_SetColorFilter(target, 0, 255, 0, 80);
     // Kill the flying-hook chain rattle at its SOURCE: it's a flagged sfx re-emitted from the
-    // player actor every frame while actor.sfx stays set (func_8002F8F0's "dragging" drone) —
+    // player actor every frame while actor.sfx stays set (Actor_PlaySfx_Flagged2's "dragging" drone) —
     // stopping the playing instance alone lets it re-spawn next frame.
     player->actor.sfx = 0;
     Audio_StopSfxByPos(&player->actor.projectedPos);
+    // Same treatment for the actor that just got yanked across the room: a continuous
+    // sfx it was holding would carry on from its new spot with nothing to stop it.
+    if (target->sfx != 0) {
+        target->sfx = 0;
+        Audio_StopSfxByPos(&target->projectedPos);
+    }
     // Short ONE-SHOT swap cue. A long looping ambience sample (e.g. NA_SE_EV_WARP_HOLE) never stops
     // reliably — it droned on forever after the swap.
-    Audio_PlaySoundGeneral(NA_SE_IT_HOOKSHOT_STICK_OBJ, &this->actor.projectedPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    // Fired ONCE, so the continuous flag must come off. Bit 0x800 marks an sfx that the
+    // caller re-requests every frame; the sound bank only ages those while they sit in
+    // SFX_STATE_QUEUED, and its auto-reclaim path is explicitly gated on !(sfxId & 0xC00).
+    // Fire one with the flag on and never ask again and it parks in PLAYING forever — that
+    // is the sound that kept ringing after every swap. The sample is picked by sfxId & 0x1FF,
+    // so clearing 0x800 changes the lifetime, never which sound you hear.
+    Audio_PlaySoundGeneral(NA_SE_IT_HOOKSHOT_STICK_OBJ - SFX_FLAG, &this->actor.projectedPos, 4,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     ArmsHook_SetupAction(this, ArmsHook_SwitchSwap);
 }
 
@@ -436,7 +397,7 @@ void ArmsHook_Shoot(ArmsHook* this, PlayState* play) {
         return;
     }
 
-    func_8002F8F0(&player->actor, NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG);
+    Actor_PlaySfx_Flagged2(&player->actor, NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG);
     ArmsHook_CheckForCancel(this);
 
     if ((this->timer != 0) && (this->collider.base.atFlags & AT_HIT) &&
@@ -640,7 +601,15 @@ void ArmsHook_Shoot(ArmsHook* this, PlayState* play) {
 // (free to move / re-fire) instead of leaving him frozen in the aim pose after the swap.
 static void ArmsHook_ReleaseAfterSwap(ArmsHook* this, Player* player) {
     sSwapTarget = NULL;
-    // (Both swap sfx are short one-shots now — nothing lingering to stop here.)
+    // Belt and braces on the chain rattle. It is a CONTINUOUS flagged sfx, and the
+    // flagged-audio pass in Actor_UpdateAll runs off the projection loop that walks
+    // every actor — so anything that leaves it latched keeps re-emitting it with no
+    // owner left to clear it. StartSwap already clears the source on the player;
+    // this kills any instance that is still ringing when the swap lets go.
+    // The de-flagged id is what actually reaches the sound bank (the drone is queued as
+    // NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG), and the stop compares sfxId for exact equality,
+    // so the flagged constant would silently match nothing.
+    Audio_StopSfxById(NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG);
     Math_Vec3f_Copy(&this->actor.world.pos, &player->unk_3C8);
     this->unk_1E8 = player->unk_3C8;
     this->timer = 0;
@@ -690,8 +659,9 @@ void ArmsHook_SwitchSwap(ArmsHook* this, PlayState* play) {
     this->unk_1E8 = sSwapTargetStart;
 
     if (++sSwapTimer >= ARMSHOOK_SWAP_HOLD_FRAMES) {
-        Audio_PlaySoundGeneral(NA_SE_EV_ROLL_STAND, &player->actor.projectedPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        // One-shot: clear the continuous flag (see ArmsHook_StartSwap).
+        Audio_PlaySoundGeneral(NA_SE_EV_ROLL_STAND - SFX_FLAG, &player->actor.projectedPos, 4,
+                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         ArmsHook_ReleaseAfterSwap(this, player);
     }
 }

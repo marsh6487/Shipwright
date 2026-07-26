@@ -11,17 +11,15 @@
 extern s32 CVarGetInteger(const char* name, s32 defaultValue);
 extern int Player_IsZTargeting(Player* this);
 
-// Champion's Tunic Bullet Time factor (defined in extended_equipment.c).
-// When < 1.0f, Bullet Time is active — skip first-person camera so third-person
-// Z-target view is kept and items fall back to shape.rot.y for aim direction.
-extern f32 gChampionSlowFactor;
+// Champion's Tunic Bullet Time no longer touches the aim camera at all. It used to
+// suppress PLAYER_STATE1_FIRST_PERSON so a custom stick-driven aim could take over,
+// which fought the real aim camera and felt wrong. Bullet Time now only slows the
+// world and holds Link up; aiming in the air is the game's ordinary first-person aim,
+// so this flag is set unconditionally again.
 
 void FirstPerson_Init(Player* player, PlayState* play) {
     player->unk_6AD = 2; // weapon aiming mode
-    // Skip FIRST_PERSON flag during Bullet Time — our third-person camera handles it
-    if (gChampionSlowFactor >= 1.0f) {
-        player->stateFlags1 |= PLAYER_STATE1_FIRST_PERSON;
-    }
+    player->stateFlags1 |= PLAYER_STATE1_FIRST_PERSON;
     player->stateFlags1 |= PLAYER_STATE1_ITEM_IN_HAND;
     player->stateFlags1 |= PLAYER_STATE1_READY_TO_FIRE;
     player->unk_834 = 14;
@@ -37,10 +35,7 @@ void FirstPerson_Update(Player* player, PlayState* play) {
         player->unk_834 = 1;
     }
 
-    // Skip FIRST_PERSON flag during Bullet Time — prevents flip-flop with our code
-    if (gChampionSlowFactor >= 1.0f) {
-        player->stateFlags1 |= PLAYER_STATE1_FIRST_PERSON;
-    }
+    player->stateFlags1 |= PLAYER_STATE1_FIRST_PERSON;
     player->stateFlags1 |= PLAYER_STATE1_READY_TO_FIRE;
 }
 

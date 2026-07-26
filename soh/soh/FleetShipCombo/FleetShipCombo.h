@@ -78,6 +78,16 @@ int FleetShipCombo_GetSendFadeAlpha(void);
 void FleetShipCombo_SetDoorDLIndex(int index);
 int FleetShipCombo_GetDoorDLIndex(void);
 
+// ---- Anchor-style packet channel (shared-memory rings, region version 2) ----
+// The transport under FleetNet: one JSON message per call, same shape as an Anchor packet, but
+// through shared memory instead of a socket. Two one-way rings mean no lock and no file, so a
+// delta costs microseconds and cannot hit the oracle's "sharing violation" retry loop.
+// Push returns 1 if the packet was queued (0 = no combo, peer too old, or payload > 1023 bytes).
+// Pop fills `out` with ONE pending packet and returns 1, or returns 0 when the queue is empty --
+// call it in a loop from the per-frame pump until it returns 0.
+int FleetShipCombo_PushPacket(const char* json);
+int FleetShipCombo_PopPacket(char* out, int cap);
+
 // True if THIS process (Ocarina of Time) is the active game, OR if shared memory is
 // unavailable (standalone). Drives the FrameAdvance freeze of the inactive game.
 bool FleetShipCombo_IsThisGameActive(void);

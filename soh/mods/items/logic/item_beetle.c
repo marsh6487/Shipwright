@@ -69,7 +69,7 @@ static void Beetle_PlaySound(Vec3f* pos, u16 sfxId) {
 }
 
 static void Beetle_PlayLoopSound(Actor* actor, u16 sfxId) {
-    func_8002F974(actor, sfxId - SFX_FLAG);
+    Actor_PlaySfx_Flagged(actor, sfxId - SFX_FLAG);
 }
 
 u8 Beetle_IsFlying(void) {
@@ -78,15 +78,15 @@ u8 Beetle_IsFlying(void) {
 
 static void Beetle_DestroySubCam(PlayState* play) {
     if (beetleSubCamId != SUBCAM_FREE) {
-        // Force MAIN_CAM out of CAM_MODE_FOLLOWBOOMERANG before reactivating it.
+        // Force CAM_ID_MAIN out of CAM_MODE_FOLLOWBOOMERANG before reactivating it.
         // While the beetle flew we set PLAYER_STATE1_BOOMERANG_THROWN, which
-        // makes z_player.c put MAIN_CAM into FOLLOWBOOMERANG mode pointed at
+        // makes z_player.c put CAM_ID_MAIN into FOLLOWBOOMERANG mode pointed at
         // a stale Player.boomerangActor. Reactivating in that mode can deref
         // freed memory (Camera_KeepOn1) and crash — common during Barinade
         // phase 4 where actor churn fills the freed En_Boom slot with valid-
         // looking data, defeating the camera->target->update == NULL guard.
-        Camera_ChangeMode(Play_GetCamera(play, MAIN_CAM), CAM_MODE_NORMAL);
-        Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_ACTIVE);
+        Camera_ChangeMode(Play_GetCamera(play, CAM_ID_MAIN), CAM_MODE_NORMAL);
+        Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_ACTIVE);
         Play_ClearCamera(play, beetleSubCamId);
         beetleSubCamId = SUBCAM_FREE;
     }
@@ -95,7 +95,7 @@ static void Beetle_DestroySubCam(PlayState* play) {
 static void Beetle_CreateSubCam(PlayState* play) {
     if (beetleSubCamId == SUBCAM_FREE) {
         beetleSubCamId = Play_CreateSubCamera(play);
-        Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_WAIT);
+        Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_WAIT);
         Play_ChangeCameraStatus(play, beetleSubCamId, CAM_STAT_ACTIVE);
     }
 }
@@ -550,11 +550,11 @@ static void Beetle_StateFlying(Player* p, PlayState* play) {
 // autonomous. Skijer's NEI
 void Beetle_DrawOffer(Player* p, PlayState* play) {
     // Draw the game's NATIVE offer arrow over the beetle's candidate while flying and NOT locked. The
-    // arrow (gZTargetArrowDL, the spinning yellow arrow) is drawn by func_8002C124 over targetCtx->unk_94
+    // arrow (gZTargetArrowDL, the spinning yellow arrow) is drawn by Attention_Draw over targetCtx->unk_94
     // — NOT over arrowPointedActor (that field only drives Navi/En_Elf, which is hidden during flight).
-    // unk_94 is normally filled by func_80032AF0 searching near LINK, which finds nothing while the
+    // unk_94 is normally filled by Attention_FindActor searching near LINK, which finds nothing while the
     // beetle is off flying, so it stays NULL → no arrow. We set it here in the DRAW phase (this runs
-    // before func_8002C124, same as MM's arrowHoverActor override). It's the same world-space arrow the
+    // before Attention_Draw, same as MM's arrowHoverActor override). It's the same world-space arrow the
     // game uses, correctly sized. Skijer's NEI
     if (beetleActive && (beetleState == BEETLE_STATE_FLYING) && !sBeetleAutonomous && (sBeetleTarget == NULL) &&
         (sBeetleCandidate != NULL) && (sBeetleCandidate->update != NULL)) {

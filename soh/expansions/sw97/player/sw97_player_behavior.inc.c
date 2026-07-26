@@ -559,7 +559,7 @@ void Sw97_TickCuccoMode(PlayState* play, Player* player) {
             Sw97_ActivateCuccoMode();
             // Flash + sound on actual entry (mirrors magic_soul's flash
             // before kill on line 123).
-            func_800AA000(200.0f, 150, 20, 80);
+            Rumble_Request(200.0f, 150, 20, 80);
             Audio_PlayActorSound2(&player->actor, NA_SE_EV_CHICKEN_CRY_M);
         }
     }
@@ -575,7 +575,7 @@ void Sw97_TickCuccoMode(PlayState* play, Player* player) {
             player->invincibilityTimer = 20;
             sCuccoSkelInited = 0;
             Audio_PlayActorSound2(&player->actor, NA_SE_EV_CHICKEN_CRY_M);
-            func_800AA000(200.0f, 150, 20, 80);
+            Rumble_Request(200.0f, 150, 20, 80);
         }
         gSw97CuccoLastScene = -1;
         return;

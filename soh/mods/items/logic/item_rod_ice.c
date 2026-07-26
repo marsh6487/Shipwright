@@ -58,7 +58,7 @@ static void IceRod_Backfire(Player* p, PlayState* play) {
     Audio_PlayActorSound2(&p->actor, ICE_ROD_SFX_BACKFIRE_HIT);
     ItemVoice_PlayId(p, NA_SE_VO_LI_FREEZE);
 
-    // Freeze Link using the ice trap response (PLAYER_HIT_RESPONSE_ICE_TRAP = 3)
+    // Freeze Link using the ice trap response (PLAYER_HIT_RESPONSE_FROZEN = 3)
     func_80837C0C(play, p, 3, 0.0f, 0.0f, 0, 20);
 }
 

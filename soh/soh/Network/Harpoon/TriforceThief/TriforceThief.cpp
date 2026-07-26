@@ -995,7 +995,7 @@ void HandleRoundResult(const nlohmann::json& p) {
     // the round ended in the middle of the intro orbit). Restore the main
     // camera so the player isn't stuck looking at a static subcam frame.
     if (sLocal.cutsceneSubCam != SUBCAM_FREE && gPlayState != nullptr) {
-        Play_ChangeCameraStatus(gPlayState, MAIN_CAM, CAM_STAT_ACTIVE);
+        Play_ChangeCameraStatus(gPlayState, CAM_ID_MAIN, CAM_STAT_ACTIVE);
         Play_ClearCamera(gPlayState, sLocal.cutsceneSubCam);
     }
     sLocal.cutsceneSubCam = SUBCAM_FREE;
@@ -1746,11 +1746,11 @@ void DrawHud() {
             }
 
             Vec3f proj; f32 w;
-            func_8002BE04(gPlayState, &world, &proj, &w);
+            Actor_ProjectPos(gPlayState, &world, &proj, &w);
             auto vp = ImGui::GetMainViewport();
             ImDrawList* fg = ImGui::GetForegroundDrawList(vp);
 
-            // World → screen projection. `func_8002BE04` returns NDC in
+            // World → screen projection. `Actor_ProjectPos` returns NDC in
             // the engine's FIXED 4:3 projection (viewport is hardcoded
             // 320×240 in z_view.c:46). Shipwright's rasterizer then
             // applies an aspect-correction multiplier to NDC X via
@@ -2511,7 +2511,7 @@ void TickCutscene() {
             localPlayer->stateFlags1 &= ~PLAYER_STATE1_IN_CUTSCENE;
             return;
         }
-        Play_ChangeCameraStatus(gPlayState, MAIN_CAM, CAM_STAT_WAIT);
+        Play_ChangeCameraStatus(gPlayState, CAM_ID_MAIN, CAM_STAT_WAIT);
         Play_ChangeCameraStatus(gPlayState, sLocal.cutsceneSubCam, CAM_STAT_ACTIVE);
         // Audio cue on the first ready frame.
         Sfx_PlaySfxCentered(NA_SE_EV_TRIFORCE_FLASH);
@@ -2533,7 +2533,7 @@ void TickCutscene() {
     sLocal.cutsceneTimer--;
     if (sLocal.cutsceneTimer <= 0) {
         if (sLocal.cutsceneSubCam != SUBCAM_FREE) {
-            Play_ChangeCameraStatus(gPlayState, MAIN_CAM, CAM_STAT_ACTIVE);
+            Play_ChangeCameraStatus(gPlayState, CAM_ID_MAIN, CAM_STAT_ACTIVE);
             Play_ClearCamera(gPlayState, sLocal.cutsceneSubCam);
             sLocal.cutsceneSubCam = SUBCAM_FREE;
         }
@@ -3053,7 +3053,7 @@ void BigStartGame() {
     gSaveContext.eventInf[1] = 0;
     gSaveContext.eventInf[2] = 0;
     gSaveContext.eventInf[3] = 0;
-    gSaveContext.unk_13EE = 0x32;
+    gSaveContext.prevHudVisibilityMode = 0x32;
     gSaveContext.nayrusLoveTimer = 0;
     gSaveContext.healthAccumulator = 0;
     gSaveContext.magicState = MAGIC_STATE_IDLE;
@@ -3070,9 +3070,9 @@ void BigStartGame() {
         gSaveContext.buttonStatus[i] = BTN_ENABLED;
     }
     gSaveContext.forceRisingButtonAlphas = 0;
-    gSaveContext.unk_13E8 = 0;
-    gSaveContext.unk_13EA = 0;
-    gSaveContext.unk_13EC = 0;
+    gSaveContext.nextHudVisibilityMode = 0;
+    gSaveContext.hudVisibilityMode = 0;
+    gSaveContext.hudVisibilityModeTimer = 0;
     gSaveContext.magicCapacity = 0;
     gSaveContext.magicFillTarget = gSaveContext.magic;
     gSaveContext.naviTimer = 0;

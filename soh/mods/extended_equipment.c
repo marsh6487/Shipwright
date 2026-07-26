@@ -71,7 +71,7 @@ static Gfx* Byrna_GetCaneDL(void) {
 // Per-piece age requirement: [equipType][index-1]
 //   SWORD:  Byrna,            Four Sword,    Drillshaft
 //   SHIELD: Divine Shield,    Gerudo Scim.,  Shield of Ikana
-//   TUNIC:  Magic Cape,       Pending4,      Champion's Tunic
+//   TUNIC:  Champion's Tunic, Spirit Tunic,  Snowquill
 //   BOOTS:  Pegasus Anklet,   Pendant Mem.,  Water Dragon Scale
 static const u8 sExtEquipAgeReqs[4][3] = {
     { AGE_REQ_NONE,  AGE_REQ_CHILD, AGE_REQ_ADULT },
@@ -120,21 +120,29 @@ void ExtEquip_Init(void) {
     gExtEquipState.currentExtTunic = Nei_Save()->extEquipTunic;
     gExtEquipState.currentExtBoots = Nei_Save()->extEquipBoots;
 
-    // Old saves may still have the retired slots EQUIPPED (Cape as tunic 1, Pendant as boots 2,
-    // Dragon Scale as boots 3). Migrate: equipped implies OWNED, so set the ownership bit (the
-    // moved-out passives read ownership now) BEFORE clearing the equipped field. Dragon Scale (boots
-    // 3) is gone entirely, so just clear it.
-    // Magic Cape ownership migration (Skijer 2026-07-16): the Cape used to own the ext TUNIC-1 bit,
-    // which is now the Champion's Tunic slot. Move any old cape ownership (bit set, or the cape was
-    // equipped in slot 1 pre-rework) to the dedicated capeOwned flag, then CLEAR the TUNIC-1 bit so
-    // it no longer reads as "owns Champion".
-    if (ExtEquip_HasItem(EQUIP_TYPE_TUNIC, 1) || gExtEquipState.currentExtTunic == 1) {
-        Nei_Save()->capeOwned = 1;
+    // Migrate the old tunic layout (Cape/Spirit/Champion) to
+    // Champion/Spirit/Snowquill exactly once. Equipped implies owned.
+    if (Nei_Save()->extTunicLayoutVersion < 1) {
+        u8 hadCape = ExtEquip_HasItem(EQUIP_TYPE_TUNIC, 1);
+        u8 hadChampion = ExtEquip_HasItem(EQUIP_TYPE_TUNIC, 3);
+        u8 legacyEquippedTunic = gExtEquipState.currentExtTunic;
+
         ExtEquip_RemoveItem(EQUIP_TYPE_TUNIC, 1);
-        if (gExtEquipState.currentExtTunic == 1) {
+        ExtEquip_RemoveItem(EQUIP_TYPE_TUNIC, 3);
+        if (hadCape || legacyEquippedTunic == 1) {
+            Nei_Save()->capeOwned = 1;
+        }
+        if (hadChampion || legacyEquippedTunic == 3) {
+            ExtEquip_GiveItem(EQUIP_TYPE_TUNIC, 1);
+        }
+        if (legacyEquippedTunic == 3) {
+            gExtEquipState.currentExtTunic = 1;
+            Nei_Save()->extEquipTunic = 1;
+        } else if (legacyEquippedTunic == 1) {
             gExtEquipState.currentExtTunic = 0;
             Nei_Save()->extEquipTunic = 0;
         }
+        Nei_Save()->extTunicLayoutVersion = 1;
     }
     if (ExtEquip_SlotRetired(EQUIP_TYPE_BOOTS, gExtEquipState.currentExtBoots)) {
         if (gExtEquipState.currentExtBoots == 2) {
@@ -326,7 +334,7 @@ void ExtEquip_TogglePendantEffect(void) {
 // color in Player_DrawImpl. Predicates = "this ext tunic is currently equipped".
 //   Slot 1 = Champion's Tunic (blue) — flurry rush + bullet time
 //   Slot 2 = Spirit Tunic (orange w/ rupees, black without) — rupee-immunity + fire/water timer skip
-//   Slot 3 = Snowquill Tunic (white) — total ice / freeze immunity
+//   Slot 3 = Snowquill Tunic (white) — medallion-driven passive resistances
 // ---------------------------------------------------------------------------
 // Dedicated upgrade-column icons — the Cape/Pendant no longer live in the ext grid (the TUNIC-1 grid
 // slot is Champion now), so their kaleido icons come from here, NOT ExtEquip_GetIcon(grid).
@@ -347,6 +355,16 @@ u8 ExtEquip_IsSnowquillTunic(void) {
     return ExtEquip_IsEnabled() && ExtEquip_GetCurrent(EQUIP_TYPE_TUNIC) == 3;
 }
 // Spirit Tunic "has money" gate — its damage-immunity + fire/water-timer-skip only work with rupees.
+u8 ExtEquip_HasSnowquillResistance(SnowquillResistance resistance) {
+    static const s32 sQuestItems[] = {
+        QUEST_MEDALLION_WATER,  QUEST_MEDALLION_FIRE,   QUEST_MEDALLION_LIGHT,
+        QUEST_MEDALLION_SHADOW, QUEST_MEDALLION_SPIRIT, QUEST_MEDALLION_FOREST,
+    };
+
+    return ExtEquip_IsSnowquillTunic() && resistance >= SNOWQUILL_RESIST_ICE &&
+           resistance <= SNOWQUILL_RESIST_WIND && CHECK_QUEST_ITEM(sQuestItems[resistance]);
+}
+
 u8 ExtEquip_SpiritHasMoney(void) {
     return ExtEquip_IsSpiritTunic() && (gSaveContext.rupees > 0);
 }
@@ -583,10 +601,25 @@ void ExtEquip_UpdateBehavior(void* playerVoid, void* playVoid) {
         if (WeaponUpgrade_HasGreatFairy()) {
             GreatFairySword_Behavior(player, play);
         }
+
+        // Zora Tunic swim and upgrade-column passives are ownership/equipment based,
+        // not extended-page-cheat based.
+        DragonScale_Behavior(player, play);
+        if (ExtEquip_CapeVisible()) {
+            MagicCape_Behavior(player, play);
+        }
+        MagicCape_Cleanup();
+        if (ExtEquip_PendantActive()) {
+            Pendant_Behavior(player, play);
+        } else {
+            Pendant_Reset();
+        }
     }
 
-    if (!ExtEquip_IsEnabled())
+    if (!ExtEquip_IsEnabled()) {
+        Champion_Cleanup(play);
         return;
+    }
 
     ExtEquip_DispatchBehavior(player, play);
 }
@@ -626,6 +659,12 @@ void ExtEquip_DrawBehavior(void* playerVoid, void* playVoid) {
     // Hammer upgrade reticle — independent of the ext-equipment cheat.
     if (WeaponUpgrade_HasHammerAxe()) {
         IKAxe_DrawReticle(player, play);
+    }
+
+    // Ownership/equipped passives draw independently of the extended-page cheat.
+    DScale_Draw(player, play);
+    if (ExtEquip_CapeVisible()) {
+        MagicCape_Draw(player, play);
     }
 
     if (!ExtEquip_IsEnabled())

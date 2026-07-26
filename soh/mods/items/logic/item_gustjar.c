@@ -235,7 +235,7 @@ static void GustJar_Absorb(Player* player, PlayState* play, Vec3f* nozzle, s16 a
     gjHeatTimer++;
 
     // Looping wind sound
-    func_8002F974(&player->actor, NA_SE_EV_WIND_TRAP - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_EV_WIND_TRAP - SFX_FLAG);
 
     // Freezard-style suction VFX (cone of particles toward nozzle)
     GustJar_SpawnSuckVFX(play, nozzle, aimYaw);
@@ -395,7 +395,7 @@ static void GustJar_Blow(Player* player, PlayState* play, Vec3f* nozzle, s16 aim
     GustJar_SpawnBlowVFX(play, nozzle, aimYaw, gjElement);
 
     // Wind sound
-    func_8002F974(&player->actor, NA_SE_EV_WIND_TRAP - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_EV_WIND_TRAP - SFX_FLAG);
 
     // === AT COLLIDER SWEEP along cone for environmental effects ===
     // Place collider at 3 positions along the cone so torches/sun switches get hit

@@ -60,14 +60,14 @@ static void Demise_FinalExplosion(PlayState* play, Player* p) {
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     Audio_PlaySoundGeneral(NA_SE_IT_BOMB_EXPLOSION, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-    func_800AA000(800.0f, 0xFF, 0x28, 0xC8);
+    Rumble_Request(800.0f, 0xFF, 0x28, 0xC8);
 }
 
 static void Demise_StateWindup(Player* p, PlayState* play) {
     ddTimer++;
 
     if (ddTimer == -1) {
-        Camera_ChangeSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
+        Camera_RequestSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
         Camera_SetCameraData(Play_GetCamera(play, 0), 4, NULL, NULL, 10, 0, 0);
         p->stateFlags1 |= PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_INPUT_DISABLED;
     }
@@ -117,7 +117,7 @@ static void Demise_StateWindup(Player* p, PlayState* play) {
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         }
         if (ddTimer % 2 == 0)
-            func_800AA000(200.0f, 180, 20, 10);
+            Rumble_Request(200.0f, 180, 20, 10);
     }
 
     if (ddTimer == DEMISE_WINDUP_DURATION) {

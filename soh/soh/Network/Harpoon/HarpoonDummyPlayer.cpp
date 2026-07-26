@@ -273,13 +273,13 @@ static DamageTable HarpoonDummyPlayerDamageTable = {
     /* Master sword  */ DMG_ENTRY(2, HARPOON_HIT_RESPONSE_NORMAL),
     /* Giant's Knife */ DMG_ENTRY(4, HARPOON_HIT_RESPONSE_NORMAL),
     /* Fire arrow    */ DMG_ENTRY(2, HARPOON_HIT_RESPONSE_FIRE),     // + burn DOT via status
-    /* Ice arrow     */ DMG_ENTRY(0, PLAYER_HIT_RESPONSE_ICE_TRAP),  // freeze only, no damage
+    /* Ice arrow     */ DMG_ENTRY(0, PLAYER_HIT_RESPONSE_FROZEN),  // freeze only, no damage
     /* Light arrow   */ DMG_ENTRY(4, HARPOON_HIT_RESPONSE_LIGHT),    // dedicated LIGHT type
     /* Unk arrow 1   */ DMG_ENTRY(3, HARPOON_HIT_RESPONSE_DARK),     // sw97 dark arrow + blindness
     /* Unk arrow 2   */ DMG_ENTRY(1, HARPOON_HIT_RESPONSE_SOUL_DRAIN), // sw97 soul arrow
     /* Unk arrow 3   */ DMG_ENTRY(0, HARPOON_HIT_RESPONSE_WIND_PUSH),  // sw97 wind arrow
     /* Fire magic    */ DMG_ENTRY(3, HARPOON_HIT_RESPONSE_FIRE),     // SW97 magic fire
-    /* Ice magic     */ DMG_ENTRY(0, PLAYER_HIT_RESPONSE_ICE_TRAP),  // freeze 5s
+    /* Ice magic     */ DMG_ENTRY(0, PLAYER_HIT_RESPONSE_FROZEN),  // freeze 5s
     /* Light magic   */ DMG_ENTRY(0, HARPOON_HIT_RESPONSE_LIGHT),    // heals friendlies via status
     /* Shield        */ DMG_ENTRY(0, PLAYER_HIT_RESPONSE_NONE),
     /* Mirror Ray    */ DMG_ENTRY(0, PLAYER_HIT_RESPONSE_NONE),

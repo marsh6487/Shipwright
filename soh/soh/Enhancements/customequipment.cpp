@@ -1,4 +1,5 @@
 #include <initializer_list>
+#include <libultraship/bridge/resourcebridge.h>
 #include "objects/object_link_boy/object_link_boy.h"
 #include "objects/object_link_child/object_link_child.h"
 #include "objects/object_custom_equip/object_custom_equip.h"
@@ -10,6 +11,7 @@
 #include "soh/frame_interpolation.h"
 
 extern "C" {
+#include "z64.h"
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
@@ -56,6 +58,26 @@ static const char* ResolveCustomChain(std::initializer_list<const char*> paths) 
     return fallback;
 }
 
+static const char* ResolveCustomFPSHand(const char* path) {
+    const bool isAdult = path == gCustomAdultFPSHandDL;
+    const bool isChild = path == gCustomChildFPSHandDL;
+
+    if (!isAdult && !isChild) {
+        return path;
+    }
+
+    switch (TUNIC_EQUIP_TO_PLAYER(CUR_EQUIP_VALUE(EQUIP_TYPE_TUNIC))) {
+        case PLAYER_TUNIC_GORON:
+            return ResolveCustomChain(
+                { isAdult ? gCustomAdultGoronFPSHandDL : gCustomChildGoronFPSHandDL, path, nullptr });
+        case PLAYER_TUNIC_ZORA:
+            return ResolveCustomChain(
+                { isAdult ? gCustomAdultZoraFPSHandDL : gCustomChildZoraFPSHandDL, path, nullptr });
+        default:
+            return path;
+    }
+}
+
 static Gfx* LoadGfxByName(const char* path) {
     return path ? ResourceMgr_LoadGfxByName(path) : nullptr;
 }
@@ -63,7 +85,8 @@ static Gfx* LoadGfxByName(const char* path) {
 static Gfx* LoadCustomGfx(const char* path) {
     if (!path)
         return nullptr;
-    if (!ResourceGetIsCustomByName(path) && !ResourceMgr_FileAltExists(path))
+    path = ResolveCustomFPSHand(path);
+    if (!ResourceMgr_FileAltExists(path) && !ResourceGetIsCustomByName(path))
         return nullptr;
     return ResourceMgr_LoadGfxByName(path);
 }
@@ -239,6 +262,22 @@ static bool IsScalingAdultItemAsChild() {
     return CVarGetInteger(CVAR_ENHANCEMENT("EquipmentAlwaysVisible"), 0) &&
            CVarGetInteger(CVAR_ENHANCEMENT("ScaleAdultEquipmentAsChild"), 0) && !LINK_IS_ADULT;
 }
+
+const char* bottleContentDLs[] = {
+    nullptr,                    // 0: PLAYER_IA_BOTTLE (empty - no custom content needed)
+    gCustomBottleFishDL,        // 1: PLAYER_IA_BOTTLE_FISH
+    gCustomBottleBlueFireDL,    // 2: PLAYER_IA_BOTTLE_FIRE
+    gCustomBottleBugDL,         // 3: PLAYER_IA_BOTTLE_BUG
+    gCustomBottlePoeDL,         // 4: PLAYER_IA_BOTTLE_POE
+    gCustomBottleBigPoeDL,      // 5: PLAYER_IA_BOTTLE_BIG_POE
+    gCustomBottleLetterDL,      // 6: PLAYER_IA_BOTTLE_RUTOS_LETTER
+    gCustomBottleRedPotionDL,   // 7: PLAYER_IA_BOTTLE_POTION_RED
+    gCustomBottleBluePotionDL,  // 8: PLAYER_IA_BOTTLE_POTION_BLUE
+    gCustomBottleGreenPotionDL, // 9: PLAYER_IA_BOTTLE_POTION_GREEN
+    gCustomBottleMilkDL,        // 10: PLAYER_IA_BOTTLE_MILK_FULL
+    gCustomBottleMilkHalfDL,    // 11: PLAYER_IA_BOTTLE_MILK_HALF
+    gCustomBottleFairyDL,       // 12: PLAYER_IA_BOTTLE_FAIRY
+};
 
 static void RegisterCustomEquipment() {
     // World (gameplay) character
@@ -601,6 +640,40 @@ static void RegisterCustomEquipment() {
             gSPDisplayList(play->state.gfxCtx->polyOpa.p++, resolvedChain);
         }
     });
+
+    COND_VB_SHOULD(VB_PLAYER_DRAW_BOTTLE, CVarGetInteger(CVAR_SETTING("AltAssets"), 1), {
+        Player* player = va_arg(args, Player*);
+        PlayState* play = va_arg(args, PlayState*);
+        const char* contentDL = nullptr;
+        Gfx* resolvedContent = nullptr;
+        Gfx* resolvedBottle = LoadCustomGfx(gCustomBottleDL);
+        if (resolvedBottle) {
+            *should = false;
+            gSPDisplayList(play->state.gfxCtx->polyXlu.p++, resolvedBottle);
+
+            if (player->itemAction >= PLAYER_IA_BOTTLE &&
+                player->itemAction < PLAYER_IA_BOTTLE + std::size(bottleContentDLs)) {
+                contentDL = bottleContentDLs[player->itemAction - PLAYER_IA_BOTTLE];
+            }
+
+            if (contentDL) {
+                resolvedContent = LoadCustomGfx(contentDL);
+            }
+
+            if (resolvedContent) {
+                gSPDisplayList(play->state.gfxCtx->polyOpa.p++, resolvedContent);
+            }
+        }
+    });
+
+    COND_VB_SHOULD(VB_PLAYER_UPDATE_BOTTLE_HELD, CVarGetInteger(CVAR_SETTING("AltAssets"), 1), {
+        Player* player = va_arg(args, Player*);
+        const bool isFullMilk = player->itemAction == PLAYER_IA_BOTTLE_MILK_FULL;
+        if (isFullMilk) {
+            *should = false;
+            player->itemAction = PLAYER_IA_BOTTLE_MILK_HALF;
+        }
+    });
 }
 
 static RegisterShipInitFunc initFunc(RegisterCustomEquipment, { CVAR_SETTING("AltAssets") });
@@ -742,6 +815,44 @@ static void RegisterCuccoArrowEggHooks() {
 }
 static RegisterShipInitFunc initFuncCuccoArrowEggHooks(RegisterCuccoArrowEggHooks, {});
 
+static void RegisterSnowquillHooks() {
+    REGISTER_VB_SHOULD(VB_RECIEVE_FALL_DAMAGE, {
+        if (ExtEquip_HasSnowquillResistance(SNOWQUILL_RESIST_FALL)) {
+            *should = false;
+        }
+    });
+    REGISTER_VB_SHOULD(VB_LIKE_LIKE_GRAB_PLAYER, {
+        if (ExtEquip_HasSnowquillResistance(SNOWQUILL_RESIST_STUN)) {
+            *should = false;
+        }
+    });
+    REGISTER_VB_SHOULD(VB_REDEAD_GIBDO_FREEZE_LINK, {
+        if (ExtEquip_HasSnowquillResistance(SNOWQUILL_RESIST_STUN)) {
+            *should = false;
+        }
+    });
+    REGISTER_VB_SHOULD(VB_ENEMY_GRAB_PLAYER, {
+        if (ExtEquip_HasSnowquillResistance(SNOWQUILL_RESIST_STUN)) {
+            *should = false;
+        }
+    });
+}
+
+static RegisterShipInitFunc initFuncSnowquillHooks(RegisterSnowquillHooks, {});
+
+extern "C" u8 Champion_AllowsMidairAim(Player* player);
+
+static void RegisterChampionHooks() {
+    REGISTER_VB_SHOULD(VB_PLAYER_ALLOW_MIDAIR_AIM, {
+        Player* player = va_arg(args, Player*);
+        if (Champion_AllowsMidairAim(player)) {
+            *should = true;
+        }
+    });
+}
+
+static RegisterShipInitFunc initFuncChampionHooks(RegisterChampionHooks, {});
+
 // Skijer's NEI: SM64 pre-UpdateCommon pre-pass (z_player pieces 1-2,5-7; 3-4 stay inline)
 #define SM64_SWAP_AB(b) (((b) & ~(BTN_A | BTN_B)) | (((b) & BTN_A) ? BTN_B : 0) | (((b) & BTN_B) ? BTN_A : 0))
 static void RegisterSm64PreUpdateCommonNEI() {
@@ -792,14 +903,14 @@ static RegisterShipInitFunc initFuncSm64PreUpdateCommon(RegisterSm64PreUpdateCom
 extern "C" {
 LinkAnimationHeader* MmForm_GetJumpSlashAnim(s32 phase);
 LinkAnimationHeader* MmForm_GetZoraBoomerangAnim(s32 phase);
-LinkAnimationHeader* MhrMoveset_GetMoveAnim(s32 moveId);
-LinkAnimationHeader* MhrMoveset_GetShieldAnim(s32 loopPhase);
 }
 
 static void RegisterPlayerAnimOverrideNEI() {
     REGISTER_VB_SHOULD(VB_PLAYER_ANIM_OVERRIDE, {
         s32 siteId = va_arg(args, s32);
-        s32 siteArg = va_arg(args, s32);
+        // siteArg still has to be consumed from the va_list even though no surviving case
+        // reads it — the hook's argument order is fixed.
+        (void)va_arg(args, s32);
         LinkAnimationHeader** animOut = va_arg(args, LinkAnimationHeader**);
         Player* player = va_arg(args, Player*);
 
@@ -819,38 +930,6 @@ static void RegisterPlayerAnimOverrideNEI() {
                     TransformMasks_IsTransformed() ? MmForm_GetZoraBoomerangAnim(2) : nullptr;
                 if (zoraCatch != nullptr) {
                     *animOut = zoraCatch;
-                }
-                break;
-            }
-            case VB_PLAYER_ANIM_SITE_ROLL: {
-                // MHR roll (moveId 4)
-                LinkAnimationHeader* rollAnim = MhrMoveset_GetMoveAnim(4 /* MHR_MOVE_ROLL */);
-                if (rollAnim != nullptr) {
-                    *animOut = rollAnim;
-                }
-                break;
-            }
-            case VB_PLAYER_ANIM_SITE_DODGE_HOP: {
-                // MHR dodge-hop, direction in siteArg
-                LinkAnimationHeader* hopAnim = MhrMoveset_GetMoveAnim(siteArg);
-                if (hopAnim != nullptr) {
-                    *animOut = hopAnim;
-                }
-                break;
-            }
-            case VB_PLAYER_ANIM_SITE_SHIELD_RAISE: {
-                // MHR shield raise (phase 0)
-                LinkAnimationHeader* mhrShield = MhrMoveset_GetShieldAnim(0);
-                if (mhrShield != nullptr) {
-                    *animOut = mhrShield;
-                }
-                break;
-            }
-            case VB_PLAYER_ANIM_SITE_SHIELD_LOOP: {
-                // MHR shield hold loop (phase 1)
-                LinkAnimationHeader* shieldLoop = MhrMoveset_GetShieldAnim(1);
-                if (shieldLoop != nullptr) {
-                    *animOut = shieldLoop;
                 }
                 break;
             }

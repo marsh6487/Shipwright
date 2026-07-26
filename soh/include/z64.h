@@ -440,7 +440,7 @@ typedef struct {
     char unk_150[0x10];
 } SkyboxContext;
 
-typedef enum {
+typedef enum OcarinaSongId {
     /*  0 */ OCARINA_SONG_MINUET,
     /*  1 */ OCARINA_SONG_BOLERO,
     /*  2 */ OCARINA_SONG_SERENADE,
@@ -453,7 +453,7 @@ typedef enum {
     /*  9 */ OCARINA_SONG_SUNS,
     /* 10 */ OCARINA_SONG_TIME,
     /* 11 */ OCARINA_SONG_STORMS,
-    /* 12 */ OCARINA_SONG_SCARECROW,
+    /* 12 */ OCARINA_SONG_SCARECROW_SPAWN,
     /* 13 */ OCARINA_SONG_MEMORY_GAME,
     // Skijer's NEI: MM-unique songs + 3 custom brought to OoT's quest page (mirror of the OoT songs
     // ported into MM). OoT's song-flag bitmask has bits 14-29 free (mode flags at 30/31), so these
@@ -528,14 +528,14 @@ typedef enum {
     /* 0x2F */ OCARINA_ACTION_FROGS,
     /* 0x30 */ OCARINA_ACTION_CHECK_NOWARP, // Check for any of sarias - storms
     /* 0x31 */ OCARINA_ACTION_CHECK_NOWARP_DONE
-} OcarinaSongActionIDs;
+} OcarinaSongActionId;
 
-typedef enum {
+typedef enum OcarinaMode {
     /* 0x00 */ OCARINA_MODE_00,
     /* 0x01 */ OCARINA_MODE_01,
     /* 0x02 */ OCARINA_MODE_02,
     /* 0x03 */ OCARINA_MODE_03,
-    /* 0x04 */ OCARINA_MODE_04,
+    /* 0x04 */ OCARINA_MODE_04, // Stop playing
     /* 0x05 */ OCARINA_MODE_05,
     /* 0x06 */ OCARINA_MODE_06,
     /* 0x07 */ OCARINA_MODE_07,
@@ -1103,7 +1103,7 @@ typedef struct {
     /* 0x00 */ Room  curRoom;
     /* 0x14 */ Room  prevRoom;
     /* 0x28 */ void* bufPtrs[2];
-    /* 0x30 */ u8    unk_30;
+    /* 0x30 */ u8    activeBufPage;
     /* 0x31 */ s8    status;
     /* 0x34 */ void* unk_34;
     /* 0x38 */ DmaRequest dmaRequest;
@@ -1442,7 +1442,7 @@ typedef struct PlayState {
     /* 0x000B0 */ void* sceneSegment;
     /* 0x000B8 */ View view;
     /* 0x001E0 */ Camera mainCamera;
-    /* 0x0034C */ Camera subCameras[NUM_CAMS - SUBCAM_FIRST];
+    /* 0x0034C */ Camera subCameras[NUM_CAMS - CAM_ID_SUB_FIRST];
     /* 0x00790 */ Camera* cameraPtrs[NUM_CAMS];
     /* 0x007A0 */ s16 activeCamera;
     /* 0x007A2 */ s16 nextCamera;
@@ -1480,7 +1480,7 @@ typedef struct PlayState {
     /* 0x11DE0 */ Mtx* billboardMtx;
     /* 0x11DE4 */ u32 gameplayFrames;
     /* 0x11DE8 */ u8 linkAgeOnLoad;
-    /* 0x11DE9 */ u8 unk_11DE9;
+    /* 0x11DE9 */ u8 haltAllActors;
     /* 0x11DEA */ u8 curSpawn;
     /* 0x11DEB */ u8 numSetupActors;
     /* 0x11DEC */ u8 numRooms;
@@ -1496,7 +1496,7 @@ typedef struct PlayState {
     /* 0x11E14 */ u8 skyboxId;
     /* 0x11E15 */ s8 transitionTrigger; // "fade_direction"
     /* 0x11E16 */ s16 unk_11E16;
-    /* 0x11E18 */ s16 unk_11E18;
+    /* 0x11E18 */ s16 bgCoverAlpha;
     /* 0x11E1A */ s16 nextEntranceIndex;
     /* 0x11E1C */ char unk_11E1C[0x40];
     /* 0x11E5C */ s8 shootingGalleryStatus;

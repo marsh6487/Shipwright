@@ -233,7 +233,7 @@ void MagicDark_OrbUpdate(Actor* thisx, PlayState* play) {
     s32 pad;
     Player* player = PLAYER;
 
-    func_8002F974(&this->actor, NA_SE_PL_MAGIC_SOUL_BALL - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&this->actor, NA_SE_PL_MAGIC_SOUL_BALL - SFX_FLAG);
     if (this->timer < 35) {
         MagicDark_DimLighting(play, this->timer * (1 / 45.0f));
         Math_SmoothStepToF(&thisx->scale.x, this->scale * (1 / 12.000001f), 0.05f, 0.01f, 0.0001f);

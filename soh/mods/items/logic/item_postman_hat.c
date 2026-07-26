@@ -167,7 +167,7 @@ static s32 PostmanHat_ProximityUnlock(Player* p, PlayState* play) {
 }
 
 // Interaction radius/facing detection was moved into Mailbox_Update
-// (mailbox_actor.c) where the actor offers a SPEAK prompt via func_8002F2CC
+// (mailbox_actor.c) where the actor offers a SPEAK prompt via Actor_OfferTalk
 // and catches the accept with Actor_ProcessTalkRequest.
 
 // ============================================================

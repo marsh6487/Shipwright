@@ -201,7 +201,7 @@ static void MushroomSpot_Update(Actor* thisx, PlayState* play) {
 
     // Offer the SPEAK prompt when in range + facing.
     thisx->textId = 0;
-    func_8002F2CC(thisx, play, MUSHROOM_SPOT_RADIUS);
+    Actor_OfferTalk(thisx, play, MUSHROOM_SPOT_RADIUS);
 }
 
 // ────────── Draw ──────────

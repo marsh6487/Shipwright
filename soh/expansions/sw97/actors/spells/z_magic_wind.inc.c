@@ -924,8 +924,8 @@ void MagicWind_Update(Actor* thisx, PlayState* play) {
 
         // Layered wind audio centered on the tornado actor — the magic-wind
         // hum (low constant) plus the GustJar-style suction howl (heavier).
-        func_8002F974(&this->actor, NA_SE_PL_MAGIC_WIND_NORMAL - SFX_FLAG);
-        func_8002F974(&this->actor, NA_SE_EV_WIND_TRAP - SFX_FLAG);
+        Actor_PlaySfx_Flagged(&this->actor, NA_SE_PL_MAGIC_WIND_NORMAL - SFX_FLAG);
+        Actor_PlaySfx_Flagged(&this->actor, NA_SE_EV_WIND_TRAP - SFX_FLAG);
 
         if (this->tornadoTimer >= TORNADO_TOTAL_FRAMES) {
             this->tornadoActive = 0;

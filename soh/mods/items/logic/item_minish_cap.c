@@ -407,7 +407,7 @@ void MinishTiny_AdjustCameraView(Camera* camera, Vec3f* eye, Vec3f* at) {
     Player* p;
     f32 f;
 
-    if (camera == NULL || camera->thisIdx != MAIN_CAM)
+    if (camera == NULL || camera->thisIdx != CAM_ID_MAIN)
         return;
     if (!gCustomItemState.minishTinyActive && gCustomItemState.minishTinyAnim == 0)
         return;

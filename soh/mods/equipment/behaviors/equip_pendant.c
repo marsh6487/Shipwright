@@ -193,7 +193,7 @@ static void Pendant_UpdateMortalDraw(Player* player, PlayState* play) {
         Quake_SetCountdown(quakeIdx, MORTAL_DRAW_HITSTOP);
 
         // Rumble
-        func_800AA000(180.0f, 14, 100, 0);
+        Rumble_Request(180.0f, 14, 100, 0);
 
         // Heavy impact sound
         Audio_PlaySoundGeneral(NA_SE_IT_SWORD_STRIKE, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
@@ -339,7 +339,7 @@ static void Pendant_UpdateGPoundFalling(Player* player, PlayState* play) {
         Pendant_UpdateAtkCol(play, player);
 
         // Screen shake + rumble
-        func_800AA000(255.0f, 20, 150, 0);
+        Rumble_Request(255.0f, 20, 150, 0);
         s16 quakeIdx = Quake_Add(play->cameraPtrs[0], 3);
         Quake_SetSpeed(quakeIdx, 28000);
         Quake_SetQuakeValues(quakeIdx, 14, 2, 100, 0);

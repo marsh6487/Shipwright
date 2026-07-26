@@ -258,11 +258,89 @@ std::string sMmStatus;
 // Todo lo demás del randomizer se edita EN CADA JUEGO (menú propio de OoT / BenGui de MM).
 // Regla combo: si un item está shuffled y su política lo permite "anywhere", puede salir en
 // CUALQUIER juego (limitado hoy a los items expresables en ambos — tabla FC).
+// "Compatibility" panel: options one game can do and the other cannot. The table comes from
+// FleetComboRando (the SAME one that applies the forcing at generation), so this panel cannot
+// promise one thing while generation does another.
+void DrawCompatWidget(WidgetInfo& info) {
+    (void)info;
+    int count = 0;
+    const FleetIncompat* table = FleetCombo_GetIncompatTable(&count);
+    const int conflicts = FleetCombo_CountActiveConflicts();
+
+    ImGui::TextWrapped("These options are not compatible with the combo yet. Generation forces them to a "
+                       "safe value automatically, so you do not have to change anything by hand. This list "
+                       "is here so you know WHAT will change and why.");
+    ImGui::Separator();
+
+    if (conflicts > 0) {
+        ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f),
+                           "%d OoT option(s) are currently set to a value that generation will change.", conflicts);
+        if (ImGui::Button("Fix all now")) {
+            FleetCombo_ResolveAllConflicts();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Applies the same values generation would apply, but right now, so OoT's "
+                              "Randomizer menu reflects what you are actually going to play.");
+        }
+    } else {
+        ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "No OoT option is currently in conflict.");
+    }
+    ImGui::Separator();
+
+    if (ImGui::BeginTable("##FleetIncompat", 3,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Option", ImGuiTableColumnFlags_WidthStretch, 0.30f);
+        ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 0.18f);
+        ImGui::TableSetupColumn("Forced to", ImGuiTableColumnFlags_WidthStretch, 0.52f);
+        ImGui::TableHeadersRow();
+
+        for (int i = 0; i < count; ++i) {
+            const FleetIncompat& e = table[i];
+            bool conflicting = false;
+            if (e.cvars) {
+                for (const char* const* cv = e.cvars; *cv; ++cv) {
+                    if (CVarGetInteger(*cv, 0) != e.safeValue) {
+                        conflicting = true;
+                        break;
+                    }
+                }
+            }
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(e.label);
+            if (ImGui::IsItemHovered()) {
+                ImGui::BeginTooltip();
+                ImGui::PushTextWrapPos(460.0f);
+                ImGui::TextUnformatted(e.why);
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
+            }
+
+            ImGui::TableNextColumn();
+            if (!e.cvars) {
+                // No menu CVar: forced straight onto the Context at generation, nothing live to read.
+                ImGui::TextDisabled("applied on generate");
+            } else if (conflicting) {
+                ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f), "will change");
+            } else {
+                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "already correct");
+            }
+
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", e.forcedTo);
+        }
+        ImGui::EndTable();
+    }
+    ImGui::Separator();
+    ImGui::TextDisabled("Hover an option's name to see why it is incompatible.");
+}
+
 void DrawRandoGeneralWidget(WidgetInfo& info) {
     (void)info;
     ImGui::TextWrapped("Combo Randomizer. Configure each game's shuffles in its OWN Randomizer menu (use the top "
-                       "tabs); this section only holds the combo-wide knobs and seed generation. Entrance shuffle "
-                       "and MQ are forced to vanilla when generating.");
+                       "tabs); this section only holds the combo-wide knobs and seed generation. Some options "
+                       "are not compatible with the combo yet and are forced at generation — see the "
+                       "\"Compatibility\" tab for the full list and why.");
     ImGui::Separator();
 
     // combo-wide: pool size + logic (applied to BOTH generators at generate time)
@@ -735,6 +813,7 @@ void RegisterFleetSharedMenu() {
     mSohMenu->AddMenuEntry("Randomizer##FleetShared", "gFleetShared.RandoSection");
     mSohMenu->AddSidebarEntry("Randomizer##FleetShared", "General", 1);
     mSohMenu->AddSidebarEntry("Randomizer##FleetShared", "MM Options", 1);
+    mSohMenu->AddSidebarEntry("Randomizer##FleetShared", "Compatibility", 1);
     mSohMenu->AddSidebarEntry("Randomizer##FleetShared", "Tests", 1);
     rp.sidebarName = "General";
     mSohMenu->AddWidget(rp, "Generate / Load", WIDGET_CUSTOM).CustomFunction(DrawRandoGeneralWidget).HideInSearch(true);
@@ -742,6 +821,8 @@ void RegisterFleetSharedMenu() {
     // "menú propio de MM" accesible sin flip. Las opciones de OoT: su menú Randomizer normal.
     rp.sidebarName = "MM Options";
     mSohMenu->AddWidget(rp, "MM Randomizer", WIDGET_CUSTOM).CustomFunction(DrawRandoMMWidget).HideInSearch(true);
+    rp.sidebarName = "Compatibility";
+    mSohMenu->AddWidget(rp, "Incompatible Options", WIDGET_CUSTOM).CustomFunction(DrawCompatWidget).HideInSearch(true);
     rp.sidebarName = "Tests";
     mSohMenu->AddWidget(rp, "Oracle Tests", WIDGET_CUSTOM).CustomFunction(DrawTestsWidget).HideInSearch(true);
 

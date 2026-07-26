@@ -224,7 +224,7 @@ static void MarioItem_UseHammer(PlayState* play, Player* player, u8 started) {
     // Knockback-like impulse on nearby actors. xzDistToPlayer/yDistToPlayer
     // are measured from Player, which is co-located with Mario.
     if (player->actor.xzDistToPlayer < 100.0f && player->actor.yDistToPlayer < 35.0f) {
-        func_8002F71C(play, &player->actor, 8.0f, player->actor.yawTowardsPlayer, 8.0f);
+        Actor_SetPlayerKnockbackLargeNoDamage(play, &player->actor, 8.0f, player->actor.yawTowardsPlayer, 8.0f);
     }
 }
 

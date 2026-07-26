@@ -2,6 +2,7 @@
 #include "overlays/actors/ovl_En_Horse/z_en_horse.h"
 #include "objects/object_in/object_in.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY | ACTOR_FLAG_UPDATE_CULLING_DISABLED)
 
@@ -436,7 +437,7 @@ void func_80A79BAC(EnIn* this, PlayState* play, s32 index, u32 transitionType) {
     play->transitionType = transitionType;
     play->transitionTrigger = TRANS_TRIGGER_START;
     Player_SetCsActionWithHaltedActors(play, &this->actor, 8);
-    Interface_ChangeAlpha(1);
+    Interface_ChangeHudVisibilityMode(1);
     if (index == 0) {
         AREG(6) = 0;
     }
@@ -450,7 +451,7 @@ void func_80A79C78(EnIn* this, PlayState* play) {
     Vec3s zeroVec = { 0, 0, 0 };
 
     this->camId = Play_CreateSubCamera(play);
-    Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_WAIT);
+    Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_WAIT);
     Play_ChangeCameraStatus(play, this->camId, CAM_STAT_ACTIVE);
     sp48.x = this->actor.world.pos.x;
     sp48.y = this->actor.world.pos.y + 60.0f;
@@ -473,8 +474,8 @@ void func_80A79C78(EnIn* this, PlayState* play) {
     }
     player->actor.freezeTimer = 10;
     this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
-    ShrinkWindow_SetVal(0x20);
-    Interface_ChangeAlpha(2);
+    Letterbox_SetSizeTarget(0x20);
+    Interface_ChangeHudVisibilityMode(2);
 }
 
 static s32 D_80A7B998 = 0;
@@ -694,7 +695,9 @@ void func_80A7A568(EnIn* this, PlayState* play) {
             phi_a2 = 0;
             transitionType = TRANS_TYPE_CIRCLE(TCA_NORMAL, TCC_BLACK, TCS_FAST);
         }
-        func_80A79BAC(this, play, phi_a2, transitionType);
+        if (GameInteractor_Should(VB_RACE_INGO, true, phi_a2)) {
+            func_80A79BAC(this, play, phi_a2, transitionType);
+        }
         play->msgCtx.stateTimer = 0;
         gSaveContext.eventInf[0] = (gSaveContext.eventInf[0] & ~0x8000) | 0x8000;
         play->msgCtx.msgMode = MSGMODE_TEXT_CLOSING;
@@ -795,8 +798,8 @@ void func_80A7AA40(EnIn* this, PlayState* play) {
     this->interactInfo.talkState = NPC_TALK_STATE_TALKING;
     this->unk_1FC = 0;
     play->csCtx.frames = 0;
-    ShrinkWindow_SetVal(0x20);
-    Interface_ChangeAlpha(2);
+    Letterbox_SetSizeTarget(0x20);
+    Interface_ChangeHudVisibilityMode(2);
     this->actionFunc = func_80A7ABD4;
 }
 
@@ -861,7 +864,7 @@ void func_80A7AE84(EnIn* this, PlayState* play) {
     Play_ChangeCameraStatus(play, this->activeCamId, CAM_STAT_ACTIVE);
     Play_ClearCamera(play, this->camId);
     Player_SetCsActionWithHaltedActors(play, &this->actor, 7);
-    Interface_ChangeAlpha(0x32);
+    Interface_ChangeHudVisibilityMode(0x32);
     this->actionFunc = func_80A7AEF0;
 }
 

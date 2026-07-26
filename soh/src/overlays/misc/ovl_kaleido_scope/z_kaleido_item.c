@@ -1677,11 +1677,13 @@ static void Bottle_WheelHandle(PlayState* play, u8 wheel, u8 kaleidoSlot) {
 }
 
 void KaleidoScope_HandleItemCycles(PlayState* play) {
-    // handle the mask select — only on the vanilla item page (0); on pages 1/2 the cell is a custom
-    // item / MM mask, so the wheel must not respond there (same as the bottle wheels). Skijer's NEI
+    // handle the mask select — only on the vanilla item page (0); on pages 1/2 the cell holds a
+    // custom item / MM mask, so the wheel must not respond there (same as the bottle wheels).
+    // Skijer's NEI. The IS_RANDO term is upstream's: in rando the wheel stays usable even when
+    // CanMaskSelect() says no, and that has to keep working on page 0.
     if (ExtInv_GetCurrentPage() == 0)
         KaleidoScope_HandleItemCycleExtras(
-        play, SLOT_TRADE_CHILD, CanMaskSelect(),
+        play, SLOT_TRADE_CHILD, IS_RANDO || CanMaskSelect(),
         IS_RANDO ? Randomizer_GetPrevChildTradeItem()
                  : (INV_CONTENT(ITEM_TRADE_CHILD) <= ITEM_MASK_KEATON || INV_CONTENT(ITEM_TRADE_CHILD) > ITEM_MASK_TRUTH
                         ? ITEM_MASK_TRUTH
@@ -1776,9 +1778,10 @@ void KaleidoScope_HandleItemCycles(PlayState* play) {
 void KaleidoScope_DrawItemCycles(PlayState* play) {
     // draw the mask select
     // mask-select overlay only on the vanilla item page (0) — pages 1/2 show custom items / masks. Skijer's NEI
+    // IS_RANDO term from upstream, same reasoning as the input handler above.
     if (ExtInv_GetCurrentPage() == 0)
         KaleidoScope_DrawItemCycleExtras(
-        play, SLOT_TRADE_CHILD, CanMaskSelect(),
+        play, SLOT_TRADE_CHILD, IS_RANDO || CanMaskSelect(),
         IS_RANDO ? Randomizer_GetPrevChildTradeItem()
                  : (INV_CONTENT(ITEM_TRADE_CHILD) <= ITEM_MASK_KEATON || INV_CONTENT(ITEM_TRADE_CHILD) > ITEM_MASK_TRUTH
                         ? ITEM_MASK_TRUTH

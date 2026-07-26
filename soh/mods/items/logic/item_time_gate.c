@@ -124,7 +124,7 @@ static void TimeGate_StateCasting(Player* p, PlayState* play) {
 
     // Deferred setup on frame -1: camera + state flags
     if (tgTimer == -1) {
-        Camera_ChangeSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
+        Camera_RequestSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
         Camera_SetCameraData(Play_GetCamera(play, 0), 4, NULL, NULL, 10, 0, 0);
         p->stateFlags1 |= PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_INPUT_DISABLED;
     }
@@ -305,7 +305,7 @@ static void TimeGate_StateSwitching(Player* p, PlayState* play) {
     ItemMagic_Consume(play, TGATE_MAGIC_COST);
 
     // Screen flash effect
-    func_800AA000(400.0f, 200, 30, 100);
+    Rumble_Request(400.0f, 200, 30, 100);
 
     // Play transition sound
     Audio_PlaySoundGeneral(NA_SE_SY_WHITE_OUT_T, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,

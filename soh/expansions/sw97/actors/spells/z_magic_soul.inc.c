@@ -86,7 +86,7 @@ void MagicSoul_Destroy(Actor* thisx, PlayState* play) {
     // When handing off to Hylia's Grace fairy system, skip cleanup —
     // the fairy system handles camera/magic/restore on its own.
     if (!gCustomItemState.hyliasGraceActive) {
-        Camera_ChangeSetting(Play_GetCamera(play, MAIN_CAM), CAM_SET_NORMAL0);
+        Camera_RequestSetting(Play_GetCamera(play, CAM_ID_MAIN), CAM_SET_NORMAL0);
         func_800876C8(play);
         Audio_PlayActorSound2(thisx, NA_SE_EV_TRIFORCE_FLASH);
     }
@@ -111,7 +111,7 @@ void MagicSoul_DiamondUpdate(Actor* thisx, PlayState* play) {
     }
 
     // Sound effect while waiting
-    func_8002F974(&player->actor, NA_SE_PL_MAGIC_SOUL_NORMAL - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_PL_MAGIC_SOUL_NORMAL - SFX_FLAG);
 
     // Wait for player to leave spell action before activating fairy mode
     if (player->stateFlags1 & PLAYER_STATE1_IN_ITEM_CS) {
@@ -120,7 +120,7 @@ void MagicSoul_DiamondUpdate(Actor* thisx, PlayState* play) {
 
     // Player is free — hand off to Hylia's Grace fairy system
     // Screen flash + sound
-    func_800AA000(400.0f, 200, 30, 100);
+    Rumble_Request(400.0f, 200, 30, 100);
     Audio_PlayActorSound2(thisx, NA_SE_EV_TRIFORCE_FLASH);
 
     // Activate Ivan possess mode (skip casting/warp — spawn real EnPartner)
@@ -176,7 +176,7 @@ void MagicSoul_OrbUpdate(Actor* thisx, PlayState* play) {
     //     navi->active_mode = 8;
     // }
 
-    func_8002F974(&player->actor, NA_SE_PL_MAGIC_SOUL_BALL - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_PL_MAGIC_SOUL_BALL - SFX_FLAG);
     if (this->timer < 35) {
         MagicSoul_UpdateFlash(&this->actor, 1);
         MagicSoul_DimLighting(play, this->timer * (1 / 45.0f));

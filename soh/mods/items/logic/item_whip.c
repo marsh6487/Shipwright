@@ -199,13 +199,13 @@ static Actor* Whip_FindNearbyEnemy(PlayState* play, Vec3f* pos, f32 radius) {
 
 // =============================================================================
 // Swing camera (Wind-Waker-style behind-follow) — same subcam pattern as the beetle: take control from
-// MAIN_CAM, sit the eye BEHIND Link along the swing direction (elevated), look at Link, and let the cam
+// CAM_ID_MAIN, sit the eye BEHIND Link along the swing direction (elevated), look at Link, and let the cam
 // yaw CHASE the swing yaw slowly so it's "semi-fixed" and only medio-follows as you steer. Skijer's NEI
 // =============================================================================
 static void Whip_DestroySwingCam(PlayState* play) {
     if (whipSwingSubCamId != SUBCAM_FREE) {
-        Camera_ChangeMode(Play_GetCamera(play, MAIN_CAM), CAM_MODE_NORMAL);
-        Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_ACTIVE);
+        Camera_ChangeMode(Play_GetCamera(play, CAM_ID_MAIN), CAM_MODE_NORMAL);
+        Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_ACTIVE);
         Play_ClearCamera(play, whipSwingSubCamId);
         whipSwingSubCamId = SUBCAM_FREE;
     }
@@ -214,7 +214,7 @@ static void Whip_DestroySwingCam(PlayState* play) {
 static void Whip_CreateSwingCam(Player* p, PlayState* play) {
     if (whipSwingSubCamId == SUBCAM_FREE) {
         whipSwingSubCamId = Play_CreateSubCamera(play);
-        Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_WAIT);
+        Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_WAIT);
         Play_ChangeCameraStatus(play, whipSwingSubCamId, CAM_STAT_ACTIVE);
         whipSwingCamYaw = whipSwingYaw; // start already behind the swing dir so it doesn't snap frame 1
     }
@@ -549,7 +549,7 @@ static void WhipStateHitEnemy(Player* p, PlayState* play) {
     }
 
     whipPullTarget->speedXZ = 0.0f;
-    func_8002F974(&p->actor, WHIP_SFX_SWING);
+    Actor_PlaySfx_Flagged(&p->actor, WHIP_SFX_SWING);
 }
 
 // =============================================================================
@@ -671,7 +671,7 @@ static void WhipStateSwinging(Player* p, PlayState* play, ItemInputState* in) {
         p->actor.shape.rot.y = whipSwingYaw + 0x8000;
     }
 
-    func_8002F974(&p->actor, WHIP_SFX_SWING);
+    Actor_PlaySfx_Flagged(&p->actor, WHIP_SFX_SWING);
 
     // Keep the swing camera behind Link (semi-follows the swing yaw).
     Whip_UpdateSwingCam(p, play);
@@ -805,7 +805,7 @@ static void WhipStateRetracting(Player* p, PlayState* play) {
         whipTipPos.z += dz * norm;
     }
 
-    func_8002F974(&p->actor, WHIP_SFX_SWING);
+    Actor_PlaySfx_Flagged(&p->actor, WHIP_SFX_SWING);
 }
 
 // =============================================================================

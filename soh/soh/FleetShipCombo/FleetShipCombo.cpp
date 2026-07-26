@@ -4,7 +4,9 @@
 #include <libultraship/bridge.h>
 #include <spdlog/spdlog.h>
 
+#include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -148,7 +150,23 @@ bool Launch2ShipChild(const std::filesystem::path& twoShipExe) {
 // THIS_GAME identity for this build: 0 = Ocarina of Time (Ship).
 constexpr int kThisGame = 0;
 constexpr uint32_t kFscMagic = 0x46534331u;   // 'FSC1'
-constexpr uint32_t kFscVersion = 1u;
+constexpr uint32_t kFscVersion = 3u;
+
+// ---- Anchor-style packet channel (version 3) ----
+// One JSON message per slot, same shape as an Anchor packet. A slot must hold the LARGEST single
+// thing a delta can carry, and that is a whole array: arrays are sent as one JSON value precisely
+// so they can never be split across packets (a split one unflattens with null gaps and corrupts
+// the save). comboObtainedFc is 512 entries, ~2KB dumped, so 1KB slots were too small -- it would
+// have been silently dropped, taking the cross-game item grants with it. Anything bigger than a
+// delta (a whole save) still goes through the temp file and is only ANNOUNCED here.
+constexpr uint32_t kFscPacketBytes = 4096;
+constexpr uint32_t kFscRingSlots = 256;
+
+struct FscPacket {
+    uint32_t len;                  // bytes used in payload (0 = never written)
+    uint32_t kind;                 // reserved fast-path opcode; 0 = plain JSON
+    char payload[kFscPacketBytes]; // JSON text, NUL-terminated
+};
 
 // Layout shared between Ship and 2ship. MUST stay byte-identical to the 2ship copy.
 struct FscShared {
@@ -175,6 +193,18 @@ struct FscShared {
     int32_t sendFadeAlpha;   // 0..255 sending-fade overlay, written by the ACTIVE (sending) game, drawn by the host consumer
     int32_t doorDLIndex;     // DEV: which Lost Woods room-DL the MM door tunnel tool is showing (for the on-screen readout)
     uint64_t reservedU[12];
+    // ---- Anchor-style packet rings (version 3) ----
+    // TWO one-way rings, so neither side ever writes the ring it reads: no lock is needed. The
+    // writer fills slot (head % kFscRingSlots) and THEN bumps head; the reader keeps its own
+    // PRIVATE tail (process-local, not shared) and consumes up to head. If the reader falls more
+    // than kFscRingSlots behind, the oldest packets are overwritten and it jumps forward -- a
+    // stalled or frozen game can drop deltas but can never deadlock the writer. That is exactly
+    // why the periodic hash validation exists: it repairs anything a drop lost.
+    // Appended AFTER reservedU so every version-1 field keeps its old offset.
+    uint32_t ringToMmHead;  // written ONLY by Ship (OoT)
+    uint32_t ringToOotHead; // written ONLY by 2ship (MM)
+    FscPacket ringToMm[kFscRingSlots];
+    FscPacket ringToOot[kFscRingSlots];
 };
 
 #ifdef _WIN32
@@ -224,6 +254,13 @@ void InitFreshRegion() {
     sShared->doorDLIndex = 0;
     for (int i = 0; i < 12; ++i) {
         sShared->reservedU[i] = 0;
+    }
+    sShared->ringToMmHead = 0;
+    sShared->ringToOotHead = 0;
+    // Only the len/kind headers need clearing; a slot's payload is never read unless its len says so.
+    for (uint32_t i = 0; i < kFscRingSlots; ++i) {
+        sShared->ringToMm[i].len = sShared->ringToMm[i].kind = 0;
+        sShared->ringToOot[i].len = sShared->ringToOot[i].kind = 0;
     }
 }
 
@@ -482,6 +519,67 @@ void FleetShipCombo_SetDoorDLIndex(int index) {
 int FleetShipCombo_GetDoorDLIndex(void) {
     FscShared* s = LazyOpen();
     return s ? s->doorDLIndex : 0;
+}
+
+// ================== Anchor-style packet channel (version 2) ==================
+// This block is TEXTUALLY IDENTICAL in Ship and 2ship -- kThisGame picks which ring is ours at
+// compile time, so there is no "which side am I" branch to get wrong. We only ever WRITE the ring
+// the other game reads, and only ever READ the ring it writes, so the channel needs no lock.
+
+int FleetShipCombo_PushPacket(const char* json) {
+    FscShared* s = LazyOpen();
+    if (!s || !json || s->version < 2) {
+        return 0; // no combo, or the other exe is an old build without the rings
+    }
+    const size_t len = strlen(json);
+    if (len + 1 > kFscPacketBytes) {
+        SPDLOG_WARN("[FleetNet] packet dropped: {} bytes does not fit the {}-byte slot", len, kFscPacketBytes);
+        return 0;
+    }
+    FscPacket* ring = (kThisGame == 0) ? s->ringToMm : s->ringToOot;
+    uint32_t* head = (kThisGame == 0) ? &s->ringToMmHead : &s->ringToOotHead;
+
+    FscPacket& slot = ring[*head % kFscRingSlots];
+    memcpy(slot.payload, json, len + 1);
+    slot.kind = 0;
+    slot.len = (uint32_t)len;
+    // Publish the head LAST: the reader must never see a bumped head pointing at a half-written slot.
+    std::atomic_thread_fence(std::memory_order_release);
+    ++(*head);
+    return 1;
+}
+
+int FleetShipCombo_PopPacket(char* out, int cap) {
+    FscShared* s = LazyOpen();
+    if (!s || !out || cap <= 0 || s->version < 2) {
+        return 0;
+    }
+    FscPacket* ring = (kThisGame == 0) ? s->ringToOot : s->ringToMm;
+    const uint32_t head = (kThisGame == 0) ? s->ringToOotHead : s->ringToMmHead;
+    std::atomic_thread_fence(std::memory_order_acquire);
+
+    // The tail is PROCESS-LOCAL on purpose: it is ours alone, so the writer can never touch it and
+    // a crashed/restarted peer cannot rewind us.
+    static uint32_t sTail = 0;
+    const uint32_t pending = head - sTail; // unsigned: wraps correctly
+    if (pending == 0) {
+        return 0;
+    }
+    if (pending > kFscRingSlots) {
+        // We fell more than a whole ring behind (frozen game, long scene load) and the oldest
+        // packets were overwritten. Jump to what is still intact; the periodic hash validation is
+        // what repairs the deltas lost here -- that is the whole reason it exists.
+        SPDLOG_WARN("[FleetNet] ring overrun: dropped {} packets", pending - kFscRingSlots);
+        sTail = head - kFscRingSlots;
+    }
+    const FscPacket& slot = ring[sTail % kFscRingSlots];
+    ++sTail;
+    if (slot.len == 0 || slot.len + 1 > (uint32_t)cap) {
+        return 0; // empty or too big for the caller's buffer: skip, do not truncate JSON
+    }
+    memcpy(out, slot.payload, slot.len);
+    out[slot.len] = '\0';
+    return 1;
 }
 
 bool FleetShipCombo_IsThisGameActive(void) {

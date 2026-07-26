@@ -3,6 +3,7 @@
 #include "expansions/sw97/sw97_config.h"
 
 extern "C" {
+#include "z64.h"
 #include "macros.h"
 #include "variables.h"
 #include "functions.h"

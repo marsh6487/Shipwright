@@ -73,7 +73,7 @@ static void ExtEquip_Behavior_Tunic2(Player* player, PlayState* play) {
 }
 
 static void ExtEquip_Behavior_Tunic3(Player* player, PlayState* play) {
-    Snowquill_Behavior(player, play); // white recolor + total ice immunity (mostly gate-based)
+    Snowquill_Behavior(player, play);
 }
 
 // ---------------------------------------------------------------------------
@@ -127,23 +127,8 @@ static const ExtEquipBehaviorFunc sExtBootsBehaviors[3] = {
 };
 
 static void ExtEquip_DispatchBehavior(Player* player, PlayState* play) {
-    // ZORA TUNIC swim (formerly Water Dragon Scale): runs every frame, self-gated on the worn tunic.
-    DragonScale_Behavior(player, play);
-
-    // Upgrade-column passives (Skijer 2026-07-15) — decoupled from the ext slots:
-    // Magic Cape: the HALF-COST passive lives at the magic-cost sites (Magic_RequestChange /
-    // ItemMagic_* / MAGIC_REQ) and is always active once owned; the cloth physics only run
-    // while the cape is set visible (kaleido upgrade-cell toggle).
-    if (ExtEquip_CapeVisible()) {
-        MagicCape_Behavior(player, play);
-    }
-    // Pendant of Memories: its moveset runs while its effect toggle is ON.
-    if (ExtEquip_PendantActive()) {
-        Pendant_Behavior(player, play);
-    }
-
-    // Always run cleanup for behaviors that need it (cape boost removal, etc.)
-    MagicCape_Cleanup();
+    // Upgrade-column passives and the Zora Tunic swim run cheat-independently
+    // from ExtEquip_UpdateBehavior.
 
     // Byrna cleanup: restore original sword when Byrna is no longer active
     if (gExtEquipState.currentExtSword != 1) {
@@ -199,13 +184,7 @@ static void ExtEquip_DrawDispatch(Player* player, PlayState* play) {
     if (gExtEquipState.currentExtBoots == 1) {
         Pegasus_Draw(player, play);
     }
-    // Zora Tunic swim: blue water-entry sparkles (self-timed; triggered on swim entry)
-    DScale_Draw(player, play);
-    // Magic Cape: Ganondorf cloth physics cape — draws whenever owned and set visible (the effect
-    // itself is passive; this is only the look)
-    if (ExtEquip_CapeVisible()) {
-        MagicCape_Draw(player, play);
-    }
+    // Zora Tunic and Magic Cape visuals are dispatched cheat-independently.
     // Four Sword: ghost clone Links
     if (gExtEquipState.currentExtSword == 2) {
         FourSword_Draw(player, play);
