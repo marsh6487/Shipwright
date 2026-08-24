@@ -82,8 +82,7 @@ static void BottleItems_Enforce(PlayState* play) {
     // [Wheel A][Wheel B][Net][Bottomless] and no vanilla remnants can fight them again.
     {
         u8 cur3 = gSaveContext.inventory.items[SLOT_BOTTLE_3];
-        if (cur3 != ITEM_NET && BottleItems_IsVanillaBottle(cur3) &&
-            BottleItems_MigrateToWheel(cur3, BOTTLE_WHEEL_A)) {
+        if (cur3 != ITEM_NET && BottleItems_IsVanillaBottle(cur3) && BottleItems_MigrateToWheel(cur3, BOTTLE_WHEEL_A)) {
             gSaveContext.inventory.items[SLOT_BOTTLE_3] = ITEM_NONE; // Net enforcement refills below
             Bottle_SetNetOwned(1);
             Bottle_SetBottomlessOwned(1);

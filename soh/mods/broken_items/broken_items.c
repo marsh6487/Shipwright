@@ -14,7 +14,7 @@
 #include "broken_items.h"
 
 #define CVAR_BROKEN_ITEMS_ENABLED "gBrokenItems.Enabled"
-#define CVAR_SM64_MARIO           "gSm64Mario"
+#define CVAR_SM64_MARIO "gSm64Mario"
 
 // Pikachu MODE — persistent CVar like Mario's gSm64Mario. The per-frame watcher
 // in mm_player_form.cpp (MmForm_Update) sees the CVar and holds the Pikachu form
@@ -38,50 +38,28 @@ typedef struct {
 } BrokenMode;
 
 static const BrokenCtrl sLinkControls[] = {
-    { "Stick", "Move / run" },
-    { "A",     "Action/roll" },
-    { "B",     "Sword" },
-    { "C",     "Items" },
-    { "Z",     "Z-target" },
-    { "R",     "Shield" },
+    { "Stick", "Move / run" }, { "A", "Action/roll" }, { "B", "Sword" },
+    { "C", "Items" },          { "Z", "Z-target" },    { "R", "Shield" },
 };
 
 static const BrokenCtrl sMarioControls[] = {
-    { "Stick", "Move (SM64)" },
-    { "A",     "Jump x2/x3" },
-    { "B",     "Fire/punch" },
-    { "Z",     "Crouch/GP" },
-    { "D-Dn",  "Wing Cap" },
-    { "D-Lf",  "Metal Cap" },
-    { "D-Rt",  "Vanish Cap" },
-    { "D-Up",  "Fire (soon)" },
+    { "Stick", "Move (SM64)" }, { "A", "Jump x2/x3" },   { "B", "Fire/punch" },    { "Z", "Crouch/GP" },
+    { "D-Dn", "Wing Cap" },     { "D-Lf", "Metal Cap" }, { "D-Rt", "Vanish Cap" }, { "D-Up", "Fire (soon)" },
 };
 
 // Physical X / Y / RB are expected mapped to C-Left / C-Right / C-Down in the
 // input editor (right stick stays free for the camera). Rebindable: gPikaBind.*.
 static const BrokenCtrl sPikachuControls[] = {
-    { "A",    "Fight/talk" },
-    { "B",    "Electric" },
-    { "R",    "Shield" },
-    { "C-Lf", "Jump" },
-    { "C-Rt", "Quick Atk" },
-    { "C-Dn", "Grass dash" },
-    { "D-Up", "GMax/Charge" },
-    { "D-Dn", "Iron Tail" },
-    { "D-Rt", "Dark bomb" },
-    { "D-Lf", "Sleep" },
+    { "A", "Fight/talk" },   { "B", "Electric" },      { "R", "Shield" },         { "C-Lf", "Jump" },
+    { "C-Rt", "Quick Atk" }, { "C-Dn", "Grass dash" }, { "D-Up", "GMax/Charge" }, { "D-Dn", "Iron Tail" },
+    { "D-Rt", "Dark bomb" }, { "D-Lf", "Sleep" },
 };
 
-typedef enum {
-    BROKEN_MODE_LINK,
-    BROKEN_MODE_MARIO,
-    BROKEN_MODE_PIKACHU,
-    BROKEN_MODE_COUNT
-} BrokenModeId;
+typedef enum { BROKEN_MODE_LINK, BROKEN_MODE_MARIO, BROKEN_MODE_PIKACHU, BROKEN_MODE_COUNT } BrokenModeId;
 
 static const BrokenMode sModes[BROKEN_MODE_COUNT] = {
-    { "LINK MODE",    sLinkControls,    ARRAY_COUNT(sLinkControls) },
-    { "MARIO MODE",   sMarioControls,   ARRAY_COUNT(sMarioControls) },
+    { "LINK MODE", sLinkControls, ARRAY_COUNT(sLinkControls) },
+    { "MARIO MODE", sMarioControls, ARRAY_COUNT(sMarioControls) },
     { "PIKACHU MODE", sPikachuControls, ARRAY_COUNT(sPikachuControls) },
 };
 
@@ -109,6 +87,11 @@ s32 BrokenItems_FormUnlocked(s32 i) {
     if (i == BROKEN_MODE_MARIO) {
         return Flags_GetRandomizerInf(RAND_INF_OBTAINED_MARIO_MASK) != 0;
     }
+    // PIKACHU MODE belongs to the Pokeball, which left page 2 for this page (2026-08-06 re-layout).
+    // Ownership = NeiSaveData.pokeballOwned, set by the rando give / the page-2 relayout heal.
+    if (i == BROKEN_MODE_PIKACHU) {
+        return Nei_Save()->pokeballOwned != 0;
+    }
     return 1;
 }
 
@@ -117,7 +100,8 @@ s32 BrokenItems_FormUnlocked(s32 i) {
 // the other, transient system and doesn't change the equipped MODE.)
 static s32 BrokenItems_CurrentEquipped(void) {
     if (CVarGetInteger(CVAR_PIKACHU_MODE, 0) != 0) {
-        return BROKEN_MODE_PIKACHU;
+        // Same guard as Mario below: a set-but-unearned CVar (another file's leftovers) reads LINK.
+        return BrokenItems_FormUnlocked(BROKEN_MODE_PIKACHU) ? BROKEN_MODE_PIKACHU : BROKEN_MODE_LINK;
     }
     if (CVarGetInteger(CVAR_SM64_MARIO, 0) != 0) {
         return BrokenItems_FormUnlocked(BROKEN_MODE_MARIO) ? BROKEN_MODE_MARIO : BROKEN_MODE_LINK;

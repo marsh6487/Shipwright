@@ -888,7 +888,7 @@ void SohMenu::AddMenuEnhancements() {
                               "The effects of either option are not accounted for in Randomizer logic.\n"
                               "Also disables NPC's reactions to wearing the Bunny Hood."))
         .PreFunc([](WidgetInfo& info) {
-            if (CVarGetInteger("gMods.MmMasks.InventoryEnabled", 0)) {
+            if (CVarGetInteger("gMods.MmMasks.InventoryEnabled", 1)) {
                 CVarSetInteger(CVAR_ENHANCEMENT("MMBunnyHood"), 2); // Force Fast + Jump
                 info.options->disabled = true;
                 info.options->disabledTooltip = "Automatically set to Fast + Jump by MM Masks Inventory";
@@ -898,7 +898,7 @@ void SohMenu::AddMenuEnhancements() {
         .CVar(CVAR_ENHANCEMENT("AdultMasks"))
         .Options(CheckboxOptions().Tooltip("Allows masks to be equipped normally from the pause menu as adult."))
         .PreFunc([](WidgetInfo& info) {
-            if (CVarGetInteger("gMods.MmMasks.InventoryEnabled", 0)) {
+            if (CVarGetInteger("gMods.MmMasks.InventoryEnabled", 1)) {
                 CVarSetInteger(CVAR_ENHANCEMENT("AdultMasks"), 1); // Force enabled
                 info.options->disabled = true;
                 info.options->disabledTooltip = "Automatically enabled by MM Masks Inventory";
@@ -921,7 +921,8 @@ void SohMenu::AddMenuEnhancements() {
         .Options(CheckboxOptions().Tooltip(
             "Turns all MM non-transformation masks invisible while still maintaining their effects.\n"
             "Transformation masks (Deku, Goron, Zora, Fierce Deity) remain visible.\n"
-            "Only affects MM masks; vanilla OOT child masks are unaffected (use Invisible Bunny Hood for OOT bunny hood)."));
+            "Only affects MM masks; vanilla OOT child masks are unaffected (use Invisible Bunny Hood for OOT bunny "
+            "hood)."));
     AddWidget(path, "Mask Select in Inventory", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("MaskSelect"))
         .PreFunc([](WidgetInfo& info) {
@@ -1317,7 +1318,8 @@ void SohMenu::AddMenuEnhancements() {
         .Options(CheckboxOptions().Tooltip(
             "Makes L and R switch kaleido pages like on the GameCube. Z opens the Debug Menu instead.\n"
             "Also mirrored by 'Kaleido Page Switch Button' in Skijer's NEI > Controls. When ON, the NEI in-page\n"
-            "features (inventory sub-page, extended equipment, SW97 arrow mode) use Z; when OFF (default) they use L."));
+            "features (inventory sub-page, extended equipment, SW97 arrow mode) use Z; when OFF (default) they use "
+            "L."));
     AddWidget(path, "Wide Door Ranges", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("WideShutterDoorRange"))
         .Options(CheckboxOptions().Tooltip("Restores the wider range of certain shutter doors from NTSC 1.0.\n"

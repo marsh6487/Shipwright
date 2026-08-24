@@ -715,7 +715,7 @@ static void WhipStateSwinging(Player* p, PlayState* play, ItemInputState* in) {
                 if (hMag > WHIP_MAX_RELEASE_SPEED) {
                     hMag = WHIP_MAX_RELEASE_SPEED;
                 }
-                Whip_Stop(p, play); // fully drop the whip (subcam + camera back to Link, clears state)
+                Whip_Stop(p, play);                 // fully drop the whip (subcam + camera back to Link, clears state)
                 p->actor.shape.rot.y = momentumYaw; // re-affirm facing (func_8083BA90 launches along it)
                 p->yaw = momentumYaw;
                 // OoT's real sword jump-attack: sets linearVelocity + velocity.y from these + enters the

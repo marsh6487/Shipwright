@@ -244,6 +244,14 @@ typedef struct ShipQuestSaveContextData {
     ShipQuestSpecificSaveContextData data;
 } ShipQuestSaveContextData;
 
+// Extended-button storage — the real (u16) item id per button, only meaningful where
+// equips.buttonItems[button] == ITEM_EXT_BUTTON (the reserved u8 marker in z64item.h); everywhere
+// else it stays 0. Unlike MM, OoT's equips arrays are FLAT (no per-form dimension), so this array is
+// indexed exactly like buttonItems: 0 = B, 1-3 = C-left/down/right, 4-7 = D-pad.
+typedef struct ExtButtonSaveInfo {
+    u16 items[8];
+} ExtButtonSaveInfo;
+
 typedef struct ShipSaveContextData {
     u16 pendingSale;
     u16 pendingSaleMod;
@@ -255,6 +263,9 @@ typedef struct ShipSaveContextData {
     u8 filenameLanguage;
     //TODO: Move non-rando specific flags to a new sohInf and move the remaining randomizerInf to ShipRandomizerSaveContextData
     u16 randomizerInf[(RAND_INF_MAX + 15) / 16];
+    // APPEND-ONLY past this point: members are serialized by name but the struct is also snapshotted
+    // wholesale (SaveContext copies), so inserting above shifts existing offsets.
+    ExtButtonSaveInfo extButtons;
 } ShipSaveContextData;
 
 #pragma endregion
@@ -393,6 +404,10 @@ typedef enum {
 #define IS_OOTXMM (gSaveContext.ship.quest.id == QUEST_OOTXMM)
 #define IS_RANDO (gSaveContext.ship.quest.id == QUEST_RANDOMIZER || IS_OOTXMM)
 #define IS_BOSS_RUSH (gSaveContext.ship.quest.id == QUEST_BOSSRUSH)
+
+// Extended-button real (u16) id for a button slot marked ITEM_EXT_BUTTON in equips.buttonItems.
+// `btn` uses the flat buttonItems indexing (0 = B, 1-3 = C, 4-7 = D-pad) — OoT has no form dimension.
+#define EXT_BUTTON_ITEM(btn) (gSaveContext.ship.extButtons.items[btn])
 
 typedef enum {
     /* 0x00 */ BTN_ENABLED,

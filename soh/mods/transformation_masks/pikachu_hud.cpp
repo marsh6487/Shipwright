@@ -43,21 +43,21 @@ extern SaveContext gSaveContext;
 
 // Pikachu form state (pikachu_form.cpp / mm_player_form.cpp).
 u8 MmForm_IsPikachuActive(void);
-extern u8 gPikaStatus;          // 0 none, 1 paralyzed, 2 burned, 3 freeze, 4 sleep
-extern u8 gPikaInWater;         // A slot shows the water (fast swim) icon
-extern u8 gPikaGigantamaxMode;  // Gigantamax currently on
+extern u8 gPikaStatus;         // 0 none, 1 paralyzed, 2 burned, 3 freeze, 4 sleep
+extern u8 gPikaInWater;        // A slot shows the water (fast swim) icon
+extern u8 gPikaGigantamaxMode; // Gigantamax currently on
 }
 
 namespace {
 
 // ── Palette (from the mockup) ───────────────────────────────────────────────
-constexpr ImU32 kInk = IM_COL32(44, 40, 37, 255);        // #2c2825 outlines/text
-constexpr ImU32 kInkShadow = IM_COL32(44, 40, 37, 217);  // solid sticker shadow
-constexpr ImU32 kCream = IM_COL32(255, 253, 248, 255);   // #fffdf8 panel fill
-constexpr ImU32 kHpGreen = IM_COL32(109, 187, 90, 255);  // #6dbb5a
-constexpr ImU32 kGmaxPink = IM_COL32(210, 81, 127, 255); // #d2517f
+constexpr ImU32 kInk = IM_COL32(44, 40, 37, 255);           // #2c2825 outlines/text
+constexpr ImU32 kInkShadow = IM_COL32(44, 40, 37, 217);     // solid sticker shadow
+constexpr ImU32 kCream = IM_COL32(255, 253, 248, 255);      // #fffdf8 panel fill
+constexpr ImU32 kHpGreen = IM_COL32(109, 187, 90, 255);     // #6dbb5a
+constexpr ImU32 kGmaxPink = IM_COL32(210, 81, 127, 255);    // #d2517f
 constexpr ImU32 kBadgeYellow = IM_COL32(224, 177, 58, 255); // #e0b13a (ESTADO ring)
-constexpr ImU32 kMuted = IM_COL32(107, 100, 93, 255);    // #6b645d labels
+constexpr ImU32 kMuted = IM_COL32(107, 100, 93, 255);       // #6b645d labels
 
 struct PikaIcon {
     const char* name;    // GUI texture registration name
@@ -146,8 +146,7 @@ void StickerRect(ImDrawList* dl, ImVec2 mn, ImVec2 mx, ImU32 fill, float roundin
     dl->AddRect(mn, mx, kInk, rounding, 0, 2.2f * s);
 }
 
-void IconInCircle(ImDrawList* dl, ImVec2 c, float r, int iconIdx, float s, ImU32 fill = kCream,
-                  float ringMul = 1.0f) {
+void IconInCircle(ImDrawList* dl, ImVec2 c, float r, int iconIdx, float s, ImU32 fill = kCream, float ringMul = 1.0f) {
     StickerCircle(dl, c, r, fill, s, ringMul);
     ImTextureID tex = IconTex(iconIdx);
     if (tex != 0) {
@@ -184,9 +183,12 @@ void Bar(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float ratio, ImU32 fillCol, const
 class PikachuHudWindow final : public Ship::GuiWindow {
   public:
     using GuiWindow::GuiWindow;
-    void InitElement() override {}
-    void DrawElement() override {}
-    void UpdateElement() override {}
+    void InitElement() override {
+    }
+    void DrawElement() override {
+    }
+    void UpdateElement() override {
+    }
     void Draw() override;
 };
 
@@ -231,18 +233,15 @@ void PikachuHudWindow::Draw() {
         dl->AddText(ImVec2(cardMin.x + 70.0f * s, cardMin.y + 8.0f * s), kInk, "PIKACHU");
 
         // HP (hearts) + G-MAX (magic) bars
-        float hpRatio = (gSaveContext.healthCapacity > 0)
-                            ? (float)gSaveContext.health / (float)gSaveContext.healthCapacity
-                            : 0.0f;
-        float mpRatio = (gSaveContext.magicCapacity > 0)
-                            ? (float)gSaveContext.magic / (float)gSaveContext.magicCapacity
-                            : 0.0f;
+        float hpRatio =
+            (gSaveContext.healthCapacity > 0) ? (float)gSaveContext.health / (float)gSaveContext.healthCapacity : 0.0f;
+        float mpRatio =
+            (gSaveContext.magicCapacity > 0) ? (float)gSaveContext.magic / (float)gSaveContext.magicCapacity : 0.0f;
         float barX0 = cardMin.x + 102.0f * s;
         float barX1 = cardMax.x - 44.0f * s;
-        Bar(dl, ImVec2(barX0, cardMin.y + 32.0f * s), ImVec2(barX1, cardMin.y + 42.0f * s), hpRatio, kHpGreen, "HP",
+        Bar(dl, ImVec2(barX0, cardMin.y + 32.0f * s), ImVec2(barX1, cardMin.y + 42.0f * s), hpRatio, kHpGreen, "HP", s);
+        Bar(dl, ImVec2(barX0, cardMin.y + 52.0f * s), ImVec2(barX1, cardMin.y + 62.0f * s), mpRatio, kGmaxPink, "G-MAX",
             s);
-        Bar(dl, ImVec2(barX0, cardMin.y + 52.0f * s), ImVec2(barX1, cardMin.y + 62.0f * s), mpRatio, kGmaxPink,
-            "G-MAX", s);
 
         // ESTADO chip (status): pokeball-ish default, else the status icon.
         ImVec2 chip(cardMax.x - 22.0f * s, (cardMin.y + cardMax.y) * 0.5f);
@@ -285,8 +284,7 @@ void PikachuHudWindow::Draw() {
         dl->AddText(ImVec2(lbMin.x + 34.0f * s, lbMin.y + 7.0f * s), kMuted, "crouch");
         // Up: Gigantamax when on/affordable (placeholder pikachu icon), else Dragon charge.
         int upIcon = (gPikaGigantamaxMode || gSaveContext.magic >= 48) ? ICON_PIKACHU : ICON_DRAGON;
-        IconInCircle(dl, ImVec2(center.x, center.y - gap), r, upIcon, s,
-                     gPikaGigantamaxMode ? kBadgeYellow : kCream);
+        IconInCircle(dl, ImVec2(center.x, center.y - gap), r, upIcon, s, gPikaGigantamaxMode ? kBadgeYellow : kCream);
         IconInCircle(dl, ImVec2(center.x, center.y + gap), r, ICON_METAL, s);
         IconInCircle(dl, ImVec2(center.x + gap, center.y), r, ICON_DARKNESS, s);
         IconInCircle(dl, ImVec2(center.x - gap, center.y), r, ICON_PSYCHIC, s);
@@ -333,25 +331,23 @@ struct PikaBindDef {
     int def;
 };
 const PikaBindDef kBindDefs[] = {
-    { "Jump (X)", "gPikaBind.Jump", BTN_CLEFT },
-    { "Quick Attack (Y)", "gPikaBind.QuickAttack", BTN_CRIGHT },
-    { "Grass Dash (RB)", "gPikaBind.Grass", BTN_CDOWN },
-    { "Gigantamax / Charge", "gPikaBind.Gmax", BTN_DUP },
-    { "Iron Tail", "gPikaBind.Iron", BTN_DDOWN },
-    { "Dark Bomb", "gPikaBind.Dark", BTN_DRIGHT },
+    { "Jump (X)", "gPikaBind.Jump", BTN_CLEFT },         { "Quick Attack (Y)", "gPikaBind.QuickAttack", BTN_CRIGHT },
+    { "Grass Dash (RB)", "gPikaBind.Grass", BTN_CDOWN }, { "Gigantamax / Charge", "gPikaBind.Gmax", BTN_DUP },
+    { "Iron Tail", "gPikaBind.Iron", BTN_DDOWN },        { "Dark Bomb", "gPikaBind.Dark", BTN_DRIGHT },
     { "Sleep", "gPikaBind.Sleep", BTN_DLEFT },
 };
 const int kBindBtnMasks[] = { BTN_CLEFT, BTN_CRIGHT, BTN_CDOWN,  BTN_CUP, BTN_DUP,
                               BTN_DDOWN, BTN_DLEFT,  BTN_DRIGHT, BTN_Z };
-const char* kBindBtnNames[] = { "C-Left", "C-Right", "C-Down", "C-Up", "D-Up",
-                                "D-Down", "D-Left",  "D-Right", "Z" };
+const char* kBindBtnNames[] = { "C-Left", "C-Right", "C-Down", "C-Up", "D-Up", "D-Down", "D-Left", "D-Right", "Z" };
 constexpr int kBindBtnCount = 9;
 
 class PikachuControlsWindow final : public Ship::GuiWindow {
   public:
     using GuiWindow::GuiWindow;
-    void InitElement() override {}
-    void UpdateElement() override {}
+    void InitElement() override {
+    }
+    void UpdateElement() override {
+    }
     void DrawElement() override {
         ImGui::TextWrapped("Controls for the SECRET Pikachu mode (Broken Modes). The classic "
                            "pokeball transformation is untouched (items on C, vanilla UI).");
@@ -435,115 +431,15 @@ extern "C" void PikachuHud_DrawImGui(void) {
 }
 
 // ===========================================================================
-// Gerudo MHR Dual Blades HUD — wirebug pips + demon gauge.
+// The Gerudo HUD used to live here: a row of wirebug pips plus a demon gauge.
+// Both readouts are gone. Wirebugs became free — there is one, and touching the
+// ground gives it back, so the pips counted a resource you cannot run out of —
+// and demon mode was removed from the moveset entirely. Nothing Gerudo tracks
+// needs an on-screen readout any more, so the window went with them.
 //
-// Lives here (not its own gerudo_hud.cpp) because this TU is already in the VS
-// solution with the exact ImGui/Ship includes — avoids a new-file build step.
-// Texture-free (ImDrawList primitives). Reads state via the extern "C" getters
-// defined in gerudo_mhr_combat.inc.c. Skijer's NEI.
+// GerudoHud_DrawImGui stays as a no-op: Interface_Draw still calls it
+// (z_parameter.c:5697), and leaving the symbol here keeps that call site and the
+// extern declaration valid without touching the interface code.
 // ===========================================================================
-extern "C" {
-u8  GerudoMhr_IsActive(void);
-u8  GerudoMhr_GetWirebugs(void);
-f32 GerudoMhr_GetWirebugFill(void);
-u8  GerudoMhr_IsDemonActive(void);
-f32 GerudoMhr_GetDemonMeter01(void);
-}
-
-#define CVAR_GERUDO_TRANSFORM "gMods.GerudoMaskTransform"
-#define GMHR_WIREBUG_MAX 3
-
-namespace {
-
-class GerudoHudWindow final : public Ship::GuiWindow {
-  public:
-    using GuiWindow::GuiWindow;
-    void InitElement() override {}
-    void DrawElement() override {}
-    void UpdateElement() override {}
-    void Draw() override;
-};
-
-void GerudoHudWindow::Draw() {
-    if (!CVarGetInteger(CVAR_GERUDO_TRANSFORM, 0) || !GerudoMhr_IsActive()) {
-        return;
-    }
-    if (gPlayState == nullptr || gPlayState->pauseCtx.state != 0) {
-        return;
-    }
-    auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
-    if (gui->GetMenuOrMenubarVisible()) {
-        return;
-    }
-
-    ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImDrawList* dl = ImGui::GetForegroundDrawList(vp);
-    ImVec2 disp = vp->Size;
-    float s = disp.y / 600.0f;
-    if (s < 0.6f) {
-        s = 0.6f;
-    }
-
-    // Wirebug pips (top-left, under the magic bar)
-    u8 count = GerudoMhr_GetWirebugs();
-    f32 fill = GerudoMhr_GetWirebugFill();
-    float r = 9.0f * s;
-    float gap = 8.0f * s;
-    float ox = 28.0f * s;
-    float oy = 70.0f * s;
-    for (int i = 0; i < GMHR_WIREBUG_MAX; i++) {
-        ImVec2 c(ox + (r * 2.0f + gap) * i + r, oy + r);
-        if (i < count) {
-            dl->AddCircleFilled(c, r, IM_COL32(120, 230, 180, 235), 20);
-            dl->AddCircle(c, r, IM_COL32(20, 60, 40, 255), 20, 2.0f * s);
-        } else if (i == count) {
-            dl->AddCircleFilled(c, r, IM_COL32(40, 50, 50, 160), 20);
-            if (fill > 0.0f) {
-                const float kPi = 3.14159265f;
-                dl->PathLineTo(c);
-                dl->PathArcTo(c, r, -kPi * 0.5f, -kPi * 0.5f + 2.0f * kPi * fill, 18);
-                dl->PathFillConvex(IM_COL32(90, 170, 140, 200));
-            }
-            dl->AddCircle(c, r, IM_COL32(20, 60, 40, 200), 20, 2.0f * s);
-        } else {
-            dl->AddCircle(c, r, IM_COL32(60, 70, 70, 150), 20, 1.5f * s);
-        }
-    }
-
-    // Demon gauge (bar below the pips)
-    f32 meter = GerudoMhr_GetDemonMeter01();
-    bool on = GerudoMhr_IsDemonActive() != 0;
-    ImVec2 bmin(ox, oy + r * 2.0f + 8.0f * s);
-    ImVec2 bmax(ox + (r * 2.0f + gap) * GMHR_WIREBUG_MAX - gap, bmin.y + 9.0f * s);
-    dl->AddRectFilled(bmin, bmax, IM_COL32(25, 15, 15, 180), 2.0f * s);
-    ImVec2 fmax(bmin.x + (bmax.x - bmin.x) * meter, bmax.y);
-    ImU32 fillCol = on ? IM_COL32(255, 70, 60, 240) : IM_COL32(180, 60, 70, 200);
-    dl->AddRectFilled(bmin, fmax, fillCol, 2.0f * s);
-    dl->AddRect(bmin, bmax, IM_COL32(255, 120, 110, on ? 255 : 160), 2.0f * s, 0, 1.5f * s);
-}
-
-std::shared_ptr<GerudoHudWindow> sGerudoHudWindow = nullptr;
-
-} // namespace
-
-// Called every frame from Interface_Draw (z_parameter.c). Self-registers on
-// first use; cheap no-op after. Same pattern as PikachuHud_DrawImGui.
 extern "C" void GerudoHud_DrawImGui(void) {
-    if (sGerudoHudWindow != nullptr) {
-        return;
-    }
-    auto ctx = Ship::Context::GetRawInstance();
-    if (ctx == nullptr) {
-        return;
-    }
-    auto window = ctx->GetWindow();
-    if (window == nullptr) {
-        return;
-    }
-    auto gui = window->GetGui();
-    if (gui == nullptr) {
-        return;
-    }
-    sGerudoHudWindow = std::make_shared<GerudoHudWindow>("gGerudoHudWindow", "Gerudo HUD");
-    gui->AddGuiWindow(sGerudoHudWindow);
 }

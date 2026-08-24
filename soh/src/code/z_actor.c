@@ -2163,11 +2163,33 @@ s32 GiveItemEntryFromActorWithFixedRange(Actor* actor, PlayState* play, GetItemE
 s32 Actor_OfferGetItem(Actor* actor, PlayState* play, s32 getItemId, f32 xzRange, f32 yRange) {
     Player* player = GET_PLAYER(play);
 
-    if (!(player->stateFlags1 &
-          (PLAYER_STATE1_DEAD | PLAYER_STATE1_CHARGING_SPIN_ATTACK | PLAYER_STATE1_HANGING_OFF_LEDGE |
-           PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_JUMPING | PLAYER_STATE1_FREEFALL | PLAYER_STATE1_FIRST_PERSON |
-           PLAYER_STATE1_CLIMBING_LADDER)) &&
-        Player_GetExplosiveHeld(player) < 0) {
+    // Transformation masks (Skijer's NEI): the Zora swim needs a wider offer window.
+    // Vanilla's yRange is 10.0f (Actor_OfferGetItemNearby) — fine on land, where the
+    // player and a floor item share the ground plane, but a swimming Zora floats well
+    // above sea-floor drops, so heart pieces / small keys / rando checks were never
+    // offered at all and MmForm_HandleFormInteractions had nothing to accept. The
+    // JUMPING/FREEFALL veto is dropped for the same reason: the dolphin jump and the
+    // fast-swim arcs set them, and there is nothing unsafe about accepting an item
+    // mid-arc underwater. Deliberately NOT applied on land — this is swim-only.
+    u32 blockedStates = PLAYER_STATE1_DEAD | PLAYER_STATE1_CHARGING_SPIN_ATTACK | PLAYER_STATE1_HANGING_OFF_LEDGE |
+                        PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_JUMPING | PLAYER_STATE1_FREEFALL |
+                        PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_CLIMBING_LADDER;
+
+    {
+        extern u8 MmForm_IsZoraSwimming(Player * player);
+
+        if (MmForm_IsZoraSwimming(player)) {
+            if (xzRange < 60.0f) {
+                xzRange = 60.0f;
+            }
+            if (yRange < 60.0f) {
+                yRange = 60.0f;
+            }
+            blockedStates &= ~(PLAYER_STATE1_JUMPING | PLAYER_STATE1_FREEFALL);
+        }
+    }
+
+    if (!(player->stateFlags1 & blockedStates) && Player_GetExplosiveHeld(player) < 0) {
         if ((((player->heldActor != NULL) || (actor == player->talkActor)) &&
              ((getItemId > GI_NONE) && (getItemId < GI_MAX))) ||
             (!(player->stateFlags1 & (PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_IN_CUTSCENE)))) {
@@ -2291,7 +2313,7 @@ void Player_PlaySfx(Actor* actor, u16 sfxId) {
     // Keep: floor/surface SFX (WALK, JUMP, LAND, SLIP), environmental, water, status effects.
     extern u8 TransformMasks_IsTransformed(void);
     extern u8 GerudoForm_IsActive(void);
-    // Gerudo is the exception — gerudo.o2r doesn't ship MM combat SFX, so its
+    // Gerudo is the exception — soh.o2r doesn't ship MM combat SFX, so its
     // dual-scimitar combo plays vanilla OOT sword sounds (NA_SE_IT_SWORD_SWING,
     // etc.) directly. Without this carve-out the swing audio is silently
     // dropped by the NA_SE_IT_* block below. Same pattern as
@@ -2324,7 +2346,7 @@ void Player_PlaySfx(Actor* actor, u16 sfxId) {
         // Custom voice pack interception: a loaded pack may replace this Link
         // voice id with a sample from a .pak in mods/. If it handles the id we
         // skip the vanilla SFX so we don't double-play.
-        extern u8 VoicePack_PlayIfMatch(u16 sfxId, Vec3f* pos);
+        extern u8 VoicePack_PlayIfMatch(u16 sfxId, Vec3f * pos);
         if (!VoicePack_PlayIfMatch(sfxId, &actor->projectedPos)) {
             freqMultiplier = CVarGetFloat(CVAR_AUDIO("LinkVoiceFreqMultiplier"), 1.0);
             if (freqMultiplier <= 0) {
@@ -2611,7 +2633,9 @@ void func_80030488(PlayState* play) {
 void Actor_DisableLens(PlayState* play) {
     if (play->actorCtx.lensActive) {
         play->actorCtx.lensActive = false;
-        play->actorCtx.lensFromLantern = 0;
+        // lensFromLantern is NOT cleared here: it belongs to the Poe-fire lantern, which
+        // re-asserts it every frame anyway. Clearing it made turning the Lens of Truth off
+        // (or any cutscene calling this) fight the lantern for the flag. Skijer's NEI
         Magic_Reset(play);
     }
 }
@@ -2976,11 +3000,25 @@ void Actor_DrawLensActors(PlayState* play, s32 numInvisibleActors, Actor** invis
     GraphicsContext* gfxCtx;
     s32 i;
 
-    // Poe lantern: draw lens actors without any overlay (no red tint, no mask)
-    if (play->actorCtx.lensFromLantern) {
-        invisibleActor = &invisibleActors[0];
-        for (i = 0; i < numInvisibleActors; i++) {
-            Actor_Draw(play, *(invisibleActor++));
+    // Poe lantern: whole-screen lens with no overlay (no red tint, no circle mask).
+    //
+    // The room's lens mode still decides WHAT the lens does to these actors, and the
+    // two modes are opposites — go by the value, the LensMode enum names above read
+    // the wrong way round:
+    //   0 (LENS_MODE_HIDE_ACTORS): actors invisible by default → the lens reveals them.
+    //   1 (LENS_MODE_SHOW_ACTORS): actors visible by default (fake walls, fake floors,
+    //                              illusory chests) → the lens has to make them vanish.
+    // Drawing both cases is what made fake geometry stay solid on screen while only the
+    // hidden actors appeared; in mode 1 the correct output is to draw nothing at all.
+    // ...but only when the lantern is the one driving the lens. The Lens of Truth ITEM parks
+    // magicState in MAGIC_STATE_CONSUME_LENS while it runs; the lantern never does, so that is
+    // what tells the two apart — and it keeps the real Lens' circle overlay intact.
+    if (play->actorCtx.lensFromLantern && (gSaveContext.magicState != MAGIC_STATE_CONSUME_LENS)) {
+        if (play->roomCtx.curRoom.lensMode != LENS_MODE_SHOW_ACTORS) {
+            invisibleActor = &invisibleActors[0];
+            for (i = 0; i < numInvisibleActors; i++) {
+                Actor_Draw(play, *(invisibleActor++));
+            }
         }
         return;
     }
@@ -3232,7 +3270,7 @@ void Actor_DrawAll(PlayState* play, ActorContext* actorCtx) {
                     // #endregion
                     if ((actor->flags & ACTOR_FLAG_REACT_TO_LENS) &&
                         ((play->roomCtx.curRoom.lensMode == LENS_MODE_HIDE_ACTORS) || play->actorCtx.lensActive ||
-                         (actor->room != play->roomCtx.curRoom.num))) {
+                         play->actorCtx.lensFromLantern || (actor->room != play->roomCtx.curRoom.num))) {
                         assert(invisibleActorCounter < INVISIBLE_ACTOR_MAX);
                         invisibleActors[invisibleActorCounter] = actor;
                         invisibleActorCounter++;
@@ -3258,7 +3296,9 @@ void Actor_DrawAll(PlayState* play, ActorContext* actorCtx) {
     }
 
     if ((HREG(64) != 1) || (HREG(72) != 0)) {
-        if (play->actorCtx.lensActive) {
+        // Skijer's NEI: lensFromLantern is the Poe-fire lantern's own lens; it is
+        // independent of the Lens of Truth (no magic, no lensActive) so both can be on.
+        if (play->actorCtx.lensActive || play->actorCtx.lensFromLantern) {
             Actor_DrawLensActors(play, invisibleActorCounter, invisibleActors);
             if ((play->csCtx.state != CS_STATE_IDLE) || Player_InCsMode(play)) {
                 Actor_DisableLens(play);
@@ -3790,9 +3830,17 @@ Actor* Actor_Find(ActorContext* actorCtx, s32 actorId, s32 actorCategory) {
  * Play the death sound effect and flash the screen white for 4 frames.
  * While the screen flashes, the game freezes.
  */
+// Trirod kill-to-learn (Skijer's NEI): enemies teach their echo when defeated
+// with the rod drawn. Defined in expansions/trirod/trirod.c, which lives in the
+// custom_items.c unity TU — hence the extern, not an include.
+void Trirod_NotifyEnemyDown(PlayState* play, Actor* actor);
+
 void Enemy_StartFinishingBlow(PlayState* play, Actor* actor) {
     play->actorCtx.freezeFlashTimer = 5;
     SoundSource_PlaySfxAtFixedWorldPos(play, &actor->world.pos, 20, NA_SE_EN_LAST_DAMAGE);
+    // Nearly every enemy funnels its death through here, which makes it the one
+    // spot the Trirod can watch without touching each actor. Skijer's NEI
+    Trirod_NotifyEnemyDown(play, actor);
 }
 
 s16 FaceChange_UpdateBlinking(s16* arg0, s16 arg1, s16 arg2, s16 arg3) {

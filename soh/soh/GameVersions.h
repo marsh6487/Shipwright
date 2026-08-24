@@ -26,10 +26,10 @@
 
 // Majora's Mask ROM CRC32s (mirrored from ZAPDTR/ZAPD/ZRom.cpp).
 // Used to validate mm.o2r against the required MM 1.0 USA (NTSC) ROM.
-#define MM_NTSC_US_10              0x5354631C
+#define MM_NTSC_US_10 0x5354631C
 #define MM_NTSC_US_10_UNCOMPRESSED 0xDA6983E7
-#define MM_NTSC_US_GC              0xB443EB08
-#define MM_NTSC_JP_GC              0x8473D0C1
+#define MM_NTSC_US_GC 0xB443EB08
+#define MM_NTSC_JP_GC 0x8473D0C1
 
 #define UNKNOWN_GAME_VERSION 0xFFFFFFFF
 

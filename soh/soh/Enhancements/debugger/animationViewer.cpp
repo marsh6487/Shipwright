@@ -77,23 +77,34 @@ void PerformAnimationSearch() {
         return;
     }
 
-    auto results = archiveManager->ListFiles("*PlayerAnim*");
-    if (results == nullptr) {
-        return;
-    }
-
     std::string filter(sAnimSearchString);
 
-    for (size_t i = 0; i < results->size(); i++) {
-        const std::string& path = results->at(i);
-        if (path.find("PlayerAnim_") == std::string::npos) {
-            continue;
+    // Two queries, because not every player animation is called "PlayerAnim" any
+    // more: the imported Monster Hunter Rise clips carry the animation catalog's
+    // own names (gMonsterHunterRise_DualBlade_...), so a name-based filter alone
+    // made all 530 of them invisible here. Everything under misc/link_animetion/
+    // is a player animation by definition, whatever it happens to be called.
+    auto addFrom = [&](const char* glob, bool requireNameMatch) {
+        auto results = archiveManager->ListFiles(glob);
+        if (results == nullptr) {
+            return;
         }
-        if (!filter.empty() && !ContainsCaseInsensitive(path, filter)) {
-            continue;
+        for (size_t i = 0; i < results->size(); i++) {
+            const std::string& path = results->at(i);
+            if (requireNameMatch && (path.find("PlayerAnim_") == std::string::npos)) {
+                continue;
+            }
+            if (!filter.empty() && !ContainsCaseInsensitive(path, filter)) {
+                continue;
+            }
+            if (std::find(sAnimList.begin(), sAnimList.end(), path) == sAnimList.end()) {
+                sAnimList.push_back(path);
+            }
         }
-        sAnimList.push_back(path);
-    }
+    };
+
+    addFrom("*PlayerAnim*", true);
+    addFrom("misc/link_animetion/*", false);
 
     std::sort(sAnimList.begin(), sAnimList.end(), [](const std::string& a, const std::string& b) {
         return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end(),
@@ -164,9 +175,8 @@ void ApplyAnimationToPlayer() {
     // Otherwise we just keep skelAnime->animation pinned to our anim so the player's
     // own SkelAnime_Update advances curFrame naturally. Calling LinkAnimation_Change
     // every frame freezes the pose because it re-queues a load at startFrame=0.
-    bool needRestart = sForceRestart || (sLastAppliedAnim != sSelectedAnim) ||
-                       (sLastAppliedMode != sAnimMode) || (sLastAppliedScrub != sScrubMode) ||
-                       (player->skelAnime.animation != (void*)anim);
+    bool needRestart = sForceRestart || (sLastAppliedAnim != sSelectedAnim) || (sLastAppliedMode != sAnimMode) ||
+                       (sLastAppliedScrub != sScrubMode) || (player->skelAnime.animation != (void*)anim);
 
     sLastAppliedAnim = sSelectedAnim;
     sLastAppliedMode = sAnimMode;
@@ -175,8 +185,10 @@ void ApplyAnimationToPlayer() {
 
     if (sScrubMode) {
         float frame = sScrubFrame;
-        if (frame < 0.0f) frame = 0.0f;
-        if (frame > (float)lastFrame) frame = (float)lastFrame;
+        if (frame < 0.0f)
+            frame = 0.0f;
+        if (frame > (float)lastFrame)
+            frame = (float)lastFrame;
 
         if (needRestart) {
             LinkAnimation_Change(gPlayState, &player->skelAnime, anim, 0.0f, frame, frame, ANIMMODE_ONCE, 0.0f);
@@ -186,8 +198,8 @@ void ApplyAnimationToPlayer() {
         player->skelAnime.playSpeed = 0.0f;
     } else {
         if (needRestart) {
-            LinkAnimation_Change(gPlayState, &player->skelAnime, anim, sPlaySpeed, 0.0f, (f32)lastFrame,
-                                 (u8)sAnimMode, 0.0f);
+            LinkAnimation_Change(gPlayState, &player->skelAnime, anim, sPlaySpeed, 0.0f, (f32)lastFrame, (u8)sAnimMode,
+                                 0.0f);
         } else {
             // Keep these in sync in case the user adjusted the slider mid-playback.
             player->skelAnime.playSpeed = sPlaySpeed;
@@ -281,9 +293,65 @@ void AnimationViewerWindow::DrawElement() {
     }
     UIWidgets::PopStyleCombobox();
 
+    // Step through the CURRENT match list in order. Walking a filtered family one
+    // clip at a time is the whole point — reopening the combo and hunting for the
+    // next entry by eye makes comparing neighbouring clips useless. Skijer's NEI
+    if (!sAnimList.empty()) {
+        auto it = std::find(sAnimList.begin(), sAnimList.end(), sSelectedAnim);
+        size_t idx = (it == sAnimList.end()) ? 0 : (size_t)(it - sAnimList.begin());
+        bool hasSel = (it != sAnimList.end());
+
+        auto stepTo = [&](size_t newIdx) {
+            sSelectedAnim = sAnimList[newIdx];
+            LinkAnimationHeader* anim = LoadSelectedAnim();
+            if (anim != nullptr) {
+                sCachedFrameCount = Animation_GetLastFrame(anim);
+                if (sScrubFrame > (float)sCachedFrameCount) {
+                    sScrubFrame = 0.0f;
+                }
+            }
+            sForceRestart = true; // replay from the top so the new clip is seen whole
+        };
+
+        // Wrap around at both ends: the list is a ring, so sweeping a family never
+        // dead-ends and you can keep going in one direction.
+        if (ImGui::Button("<< Prev")) {
+            stepTo(!hasSel ? sAnimList.size() - 1 : (idx == 0 ? sAnimList.size() - 1 : idx - 1));
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Next >>")) {
+            stepTo(!hasSel ? 0 : ((idx + 1) % sAnimList.size()));
+        }
+        ImGui::SameLine();
+        if (hasSel) {
+            ImGui::Text("%zu / %zu", idx + 1, sAnimList.size());
+        } else {
+            ImGui::Text("- / %zu", sAnimList.size());
+        }
+    }
+
     if (!sSelectedAnim.empty()) {
         ImGui::TextWrapped("Path: %s", sSelectedAnim.c_str());
         ImGui::Text("Last Frame: %d", sCachedFrameCount);
+
+        // Two copies because the two are wanted for different jobs: the bare
+        // resource name is what goes into a clip table in C, the full OTR path is
+        // what goes into a ResourceMgr call. Skijer's NEI
+        if (ImGui::Button("Copy Name")) {
+            ImGui::SetClipboardText(GetDisplayName(sSelectedAnim));
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Copy Full Path")) {
+            ImGui::SetClipboardText(sSelectedAnim.c_str());
+        }
+        ImGui::SameLine();
+        // Selectable text as well, so a partial hand-picked substring is possible
+        // without going through the buttons at all.
+        ImGui::TextDisabled("(or select below)");
+        char nameBuf[256];
+        snprintf(nameBuf, sizeof(nameBuf), "%s", GetDisplayName(sSelectedAnim));
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputText("##animNameCopy", nameBuf, sizeof(nameBuf), ImGuiInputTextFlags_ReadOnly);
     }
 
     ImGui::Separator();
@@ -299,9 +367,8 @@ void AnimationViewerWindow::DrawElement() {
     if (ImGui::Button("Restart")) {
         sForceRestart = true;
     }
-    ImGui::TextWrapped(
-        "While enabled, the selected animation is re-applied to the player every frame, "
-        "overriding the normal state machine. Disable to return Link to normal behavior.");
+    ImGui::TextWrapped("While enabled, the selected animation is re-applied to the player every frame, "
+                       "overriding the normal state machine. Disable to return Link to normal behavior.");
 
     ImGui::Separator();
 

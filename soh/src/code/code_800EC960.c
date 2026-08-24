@@ -1077,70 +1077,114 @@ OcarinaNote sOcarinaSongNotes[OCARINA_SONG_MAX][20] = {
     // 2=D4,5=F4,9=A4,11=B4,14=D5). Format = OoT { pitch, unk, length, volume, vibrato, bend, bFlat }.
     // OCARINA_SONG_MM_SONATA
     {
-        { 14, 19, 92, 0, 0, 0 }, { 11, 19, 90, 0, 0, 0 }, { 14, 19, 90, 0, 0, 0 },
-        { 11, 38, 90, 0, 0, 0 }, { 2, 39, 92, 0, 0, 0 },  { 9, 76, 89, 0, 0, 0 },
-        { 2, 77, 82, 0, 0, 0 },  { 0xFF, 0, 86, 0, 0, 0 },
+        { 14, 19, 92, 0, 0, 0 },
+        { 11, 19, 90, 0, 0, 0 },
+        { 14, 19, 90, 0, 0, 0 },
+        { 11, 38, 90, 0, 0, 0 },
+        { 2, 39, 92, 0, 0, 0 },
+        { 9, 76, 89, 0, 0, 0 },
+        { 2, 77, 82, 0, 0, 0 },
+        { 0xFF, 0, 86, 0, 0, 0 },
     },
     // OCARINA_SONG_MM_GORON_LULLABY
     {
-        { 2, 41, 80, 0, 0, 0 },  { 9, 40, 72, 0, 0, 0 },  { 11, 39, 84, 0, 0, 0 },
-        { 2, 42, 76, 0, 0, 0 },  { 9, 40, 84, 0, 0, 0 },  { 11, 39, 76, 0, 0, 0 },
-        { 9, 41, 84, 0, 0, 0 },  { 2, 80, 76, 0, 0, 0 },  { 0xFF, 40, 76, 0, 0, 0 },
+        { 2, 41, 80, 0, 0, 0 },
+        { 9, 40, 72, 0, 0, 0 },
+        { 11, 39, 84, 0, 0, 0 },
+        { 2, 42, 76, 0, 0, 0 },
+        { 9, 40, 84, 0, 0, 0 },
+        { 11, 39, 76, 0, 0, 0 },
+        { 9, 41, 84, 0, 0, 0 },
+        { 2, 80, 76, 0, 0, 0 },
+        { 0xFF, 40, 76, 0, 0, 0 },
         { 0xFF, 0, 66, 0, 0, 0 },
     },
     // OCARINA_SONG_MM_NEW_WAVE
     {
-        { 11, 64, 74, 0, 0, 0 }, { 14, 13, 88, 0, 0, 0 }, { 11, 12, 90, 0, 0, 0 },
-        { 9, 78, 88, 0, 0, 0 },  { 5, 12, 76, 0, 0, 0 },  { 11, 13, 76, 0, 0, 0 },
-        { 9, 114, 76, 6, 0, 0 }, { 0xFF, 0, 90, 0, 0, 0 },
+        { 11, 64, 74, 0, 0, 0 },
+        { 14, 13, 88, 0, 0, 0 },
+        { 11, 12, 90, 0, 0, 0 },
+        { 9, 78, 88, 0, 0, 0 },
+        { 5, 12, 76, 0, 0, 0 },
+        { 11, 13, 76, 0, 0, 0 },
+        { 9, 114, 76, 6, 0, 0 },
+        { 0xFF, 0, 90, 0, 0, 0 },
     },
     // OCARINA_SONG_MM_ELEGY
     {
-        { 9, 85, 93, 0, 0, 0 },  { 11, 43, 91, 0, 0, 0 }, { 9, 43, 93, 0, 0, 0 },
-        { 5, 21, 88, 0, 0, 0 },  { 9, 21, 88, 0, 0, 0 },  { 14, 43, 101, 0, 0, 0 },
-        { 11, 85, 95, 0, 0, 0 }, { 0xFF, 0, 94, 0, 0, 0 },
+        { 9, 85, 93, 0, 0, 0 },
+        { 11, 43, 91, 0, 0, 0 },
+        { 9, 43, 93, 0, 0, 0 },
+        { 5, 21, 88, 0, 0, 0 },
+        { 9, 21, 88, 0, 0, 0 },
+        { 14, 43, 101, 0, 0, 0 },
+        { 11, 85, 95, 0, 0, 0 },
+        { 0xFF, 0, 94, 0, 0, 0 },
     },
     // OCARINA_SONG_MM_OATH
     {
-        { 9, 97, 104, 0, 0, 0 }, { 5, 48, 88, 0, 0, 0 },  { 2, 49, 78, 0, 0, 0 },
-        { 5, 49, 78, 0, 0, 0 },  { 9, 48, 94, 0, 0, 0 },  { 14, 97, 100, 0, 0, 0 },
+        { 9, 97, 104, 0, 0, 0 },
+        { 5, 48, 88, 0, 0, 0 },
+        { 2, 49, 78, 0, 0, 0 },
+        { 5, 49, 78, 0, 0, 0 },
+        { 9, 48, 94, 0, 0, 0 },
+        { 14, 97, 100, 0, 0, 0 },
         { 0xFF, 0, 96, 0, 0, 0 },
     },
     // OCARINA_SONG_MM_SOARING
     {
-        { 5, 18, 84, 0, 0, 0 },  { 11, 18, 80, 0, 0, 0 }, { 14, 36, 94, 0, 0, 0 },
-        { 5, 18, 73, 0, 0, 0 },  { 11, 18, 76, 0, 0, 0 }, { 14, 108, 96, 2, 0, 0 },
+        { 5, 18, 84, 0, 0, 0 },
+        { 11, 18, 80, 0, 0, 0 },
+        { 14, 36, 94, 0, 0, 0 },
+        { 5, 18, 73, 0, 0, 0 },
+        { 11, 18, 76, 0, 0, 0 },
+        { 14, 108, 96, 2, 0, 0 },
         { 0xFF, 0, 90, 0, 0, 0 },
     },
     // OCARINA_SONG_MM_HEALING
     {
-        { 11, 32, 88, 0, 0, 0 }, { 9, 33, 88, 0, 0, 0 },  { 5, 33, 69, 0, 0, 0 },
-        { 11, 32, 94, 0, 0, 0 }, { 9, 33, 88, 0, 0, 0 },  { 5, 121, 86, 2, 0, 0 },
-        { 0xFF, 10, 84, 0, 0, 0 }, { 0xFF, 0, 90, 0, 0, 0 },
+        { 11, 32, 88, 0, 0, 0 },
+        { 9, 33, 88, 0, 0, 0 },
+        { 5, 33, 69, 0, 0, 0 },
+        { 11, 32, 94, 0, 0, 0 },
+        { 9, 33, 88, 0, 0, 0 },
+        { 5, 121, 86, 2, 0, 0 },
+        { 0xFF, 10, 84, 0, 0, 0 },
+        { 0xFF, 0, 90, 0, 0, 0 },
     },
 
     // Skijer's NEI custom songs (mirror of the 2ship side; fingering = the base notes, playback may add
     // ornament/cycle notes). OCARINA_SONG_NEI_FUGUE_OF_HOME — 6-note base played 3 rising cycles.
     {
-        { 2, 10, 86, 0, 0, 0 },  { 5, 10, 86, 0, 0, 0 },  { 9, 10, 88, 0, 0, 0 },
-        { 14, 10, 88, 0, 0, 0 }, { 9, 10, 88, 0, 0, 0 },  { 11, 10, 90, 0, 0, 0 },
-        { 4, 10, 86, 0, 0, 0 },  { 7, 10, 86, 0, 0, 0 },  { 11, 10, 88, 0, 0, 0 },
-        { 16, 10, 88, 0, 0, 0 }, { 11, 10, 88, 0, 0, 0 }, { 13, 10, 90, 0, 0, 0 },
-        { 6, 10, 88, 0, 0, 0 },  { 9, 10, 88, 0, 0, 0 },  { 13, 10, 90, 0, 0, 0 },
-        { 18, 10, 90, 0, 0, 0 }, { 13, 10, 90, 0, 0, 0 }, { 15, 40, 92, 0, 0, 0 },
-        { 0xFF, 0, 90, 0, 0, 0 },
+        { 2, 10, 86, 0, 0, 0 },  { 5, 10, 86, 0, 0, 0 },  { 9, 10, 88, 0, 0, 0 },   { 14, 10, 88, 0, 0, 0 },
+        { 9, 10, 88, 0, 0, 0 },  { 11, 10, 90, 0, 0, 0 }, { 4, 10, 86, 0, 0, 0 },   { 7, 10, 86, 0, 0, 0 },
+        { 11, 10, 88, 0, 0, 0 }, { 16, 10, 88, 0, 0, 0 }, { 11, 10, 88, 0, 0, 0 },  { 13, 10, 90, 0, 0, 0 },
+        { 6, 10, 88, 0, 0, 0 },  { 9, 10, 88, 0, 0, 0 },  { 13, 10, 90, 0, 0, 0 },  { 18, 10, 90, 0, 0, 0 },
+        { 13, 10, 90, 0, 0, 0 }, { 15, 40, 92, 0, 0, 0 }, { 0xFF, 0, 90, 0, 0, 0 },
     },
     // OCARINA_SONG_NEI_COMMAND_MELODY
     {
-        { 2, 40, 86, 0, 0, 0 },  { 11, 40, 86, 0, 0, 0 }, { 2, 40, 86, 0, 0, 0 },
-        { 9, 80, 90, 0, 0, 0 },  { 2, 40, 86, 0, 0, 0 },  { 11, 40, 86, 0, 0, 0 },
-        { 2, 40, 86, 0, 0, 0 },  { 9, 80, 90, 0, 0, 0 },  { 0xFF, 0, 90, 0, 0, 0 },
+        { 2, 40, 86, 0, 0, 0 },
+        { 11, 40, 86, 0, 0, 0 },
+        { 2, 40, 86, 0, 0, 0 },
+        { 9, 80, 90, 0, 0, 0 },
+        { 2, 40, 86, 0, 0, 0 },
+        { 11, 40, 86, 0, 0, 0 },
+        { 2, 40, 86, 0, 0, 0 },
+        { 9, 80, 90, 0, 0, 0 },
+        { 0xFF, 0, 90, 0, 0, 0 },
     },
     // OCARINA_SONG_NEI_BALLAD_OF_HERO (185 BPM, ornament eighth on note 4)
     {
-        { 2, 19, 86, 0, 0, 0 },  { 5, 19, 86, 0, 0, 0 },  { 14, 58, 90, 0, 0, 0 },
-        { 12, 10, 88, 0, 0, 0 }, { 11, 10, 88, 0, 0, 0 }, { 9, 39, 90, 0, 0, 0 },
-        { 11, 19, 88, 0, 0, 0 }, { 9, 58, 92, 0, 0, 0 },  { 0xFF, 0, 90, 0, 0, 0 },
+        { 2, 19, 86, 0, 0, 0 },
+        { 5, 19, 86, 0, 0, 0 },
+        { 14, 58, 90, 0, 0, 0 },
+        { 12, 10, 88, 0, 0, 0 },
+        { 11, 10, 88, 0, 0, 0 },
+        { 9, 39, 90, 0, 0, 0 },
+        { 11, 19, 88, 0, 0, 0 },
+        { 9, 58, 92, 0, 0, 0 },
+        { 0xFF, 0, 90, 0, 0, 0 },
     },
 };
 
@@ -1321,35 +1365,45 @@ OcarinaSongButtons gOcarinaSongButtons[OCARINA_SONG_MAX] = {
     // Skijer's NEI: MM-unique + custom song RECOGNITION note sequences (the fingering; playback in
     // sOcarinaSongNotes may add ornament/cycle notes but the player plays only these).
     // MM Sonata
-    { 7, { OCARINA_BTN_C_UP, OCARINA_BTN_C_LEFT, OCARINA_BTN_C_UP, OCARINA_BTN_C_LEFT, OCARINA_BTN_A,
-           OCARINA_BTN_C_RIGHT, OCARINA_BTN_A } },
+    { 7,
+      { OCARINA_BTN_C_UP, OCARINA_BTN_C_LEFT, OCARINA_BTN_C_UP, OCARINA_BTN_C_LEFT, OCARINA_BTN_A, OCARINA_BTN_C_RIGHT,
+        OCARINA_BTN_A } },
     // MM Goron Lullaby
-    { 8, { OCARINA_BTN_A, OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_LEFT, OCARINA_BTN_A, OCARINA_BTN_C_RIGHT,
-           OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT, OCARINA_BTN_A } },
+    { 8,
+      { OCARINA_BTN_A, OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_LEFT, OCARINA_BTN_A, OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_LEFT,
+        OCARINA_BTN_C_RIGHT, OCARINA_BTN_A } },
     // MM New Wave Bossa Nova
-    { 7, { OCARINA_BTN_C_LEFT, OCARINA_BTN_C_UP, OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_DOWN,
-           OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT } },
+    { 7,
+      { OCARINA_BTN_C_LEFT, OCARINA_BTN_C_UP, OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_DOWN,
+        OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT } },
     // MM Elegy of Emptiness
-    { 7, { OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_DOWN, OCARINA_BTN_C_RIGHT,
-           OCARINA_BTN_C_UP, OCARINA_BTN_C_LEFT } },
+    { 7,
+      { OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_DOWN, OCARINA_BTN_C_RIGHT,
+        OCARINA_BTN_C_UP, OCARINA_BTN_C_LEFT } },
     // MM Oath to Order
-    { 6, { OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_DOWN, OCARINA_BTN_A, OCARINA_BTN_C_DOWN, OCARINA_BTN_C_RIGHT,
-           OCARINA_BTN_C_UP } },
+    { 6,
+      { OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_DOWN, OCARINA_BTN_A, OCARINA_BTN_C_DOWN, OCARINA_BTN_C_RIGHT,
+        OCARINA_BTN_C_UP } },
     // MM Song of Soaring
-    { 6, { OCARINA_BTN_C_DOWN, OCARINA_BTN_C_LEFT, OCARINA_BTN_C_UP, OCARINA_BTN_C_DOWN, OCARINA_BTN_C_LEFT,
-           OCARINA_BTN_C_UP } },
+    { 6,
+      { OCARINA_BTN_C_DOWN, OCARINA_BTN_C_LEFT, OCARINA_BTN_C_UP, OCARINA_BTN_C_DOWN, OCARINA_BTN_C_LEFT,
+        OCARINA_BTN_C_UP } },
     // MM Song of Healing
-    { 6, { OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_DOWN, OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT,
-           OCARINA_BTN_C_DOWN } },
+    { 6,
+      { OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_DOWN, OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT,
+        OCARINA_BTN_C_DOWN } },
     // NEI Fugue of Home (6-note base)
-    { 6, { OCARINA_BTN_A, OCARINA_BTN_C_DOWN, OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_UP, OCARINA_BTN_C_RIGHT,
-           OCARINA_BTN_C_LEFT } },
+    { 6,
+      { OCARINA_BTN_A, OCARINA_BTN_C_DOWN, OCARINA_BTN_C_RIGHT, OCARINA_BTN_C_UP, OCARINA_BTN_C_RIGHT,
+        OCARINA_BTN_C_LEFT } },
     // NEI Command Melody
-    { 8, { OCARINA_BTN_A, OCARINA_BTN_C_LEFT, OCARINA_BTN_A, OCARINA_BTN_C_RIGHT, OCARINA_BTN_A,
-           OCARINA_BTN_C_LEFT, OCARINA_BTN_A, OCARINA_BTN_C_RIGHT } },
+    { 8,
+      { OCARINA_BTN_A, OCARINA_BTN_C_LEFT, OCARINA_BTN_A, OCARINA_BTN_C_RIGHT, OCARINA_BTN_A, OCARINA_BTN_C_LEFT,
+        OCARINA_BTN_A, OCARINA_BTN_C_RIGHT } },
     // NEI Ballad of Hero (7-note fingering; ornament is playback-only)
-    { 7, { OCARINA_BTN_A, OCARINA_BTN_C_DOWN, OCARINA_BTN_C_UP, OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT,
-           OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT } },
+    { 7,
+      { OCARINA_BTN_A, OCARINA_BTN_C_DOWN, OCARINA_BTN_C_UP, OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT,
+        OCARINA_BTN_C_LEFT, OCARINA_BTN_C_RIGHT } },
 };
 // clang-format on
 
@@ -1717,13 +1771,11 @@ void AudioOcarina_Start(u32 ocarinaFlags) {
         ocarinaFlags |= 0x1000;
     }
 
-    if (((ocarinaFlags & 0xFFFF) == 0xCFFF) &&
-        (sOcarinaSongNotes[OCARINA_SONG_SCARECROW_SPAWN][1].volume != 0xFF)) {
+    if (((ocarinaFlags & 0xFFFF) == 0xCFFF) && (sOcarinaSongNotes[OCARINA_SONG_SCARECROW_SPAWN][1].volume != 0xFF)) {
         ocarinaFlags = (ocarinaFlags & ~0xFFFFu) | 0xDFFF;
     }
 
-    if (((ocarinaFlags & 0xFFFF) == 0xFFF) &&
-        (sOcarinaSongNotes[OCARINA_SONG_SCARECROW_SPAWN][1].volume != 0xFF)) {
+    if (((ocarinaFlags & 0xFFFF) == 0xFFF) && (sOcarinaSongNotes[OCARINA_SONG_SCARECROW_SPAWN][1].volume != 0xFF)) {
         ocarinaFlags = (ocarinaFlags & ~0xFFFFu) | 0x1FFF;
     }
 

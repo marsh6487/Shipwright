@@ -29,7 +29,17 @@ typedef enum MmPlayerTransformation {
     MM_PLAYER_FORM_PIKACHU = 5,
     MM_PLAYER_FORM_GARO = 6,
     MM_PLAYER_FORM_GERUDO = 7,
-    MM_PLAYER_FORM_MAX = 8
+    // Rito — Link-rigged bird body from soh.o2r (objects/forms/rito), same deal as
+    // Gerudo: full transformation cutscene + form state, but every gameplay system
+    // stays vanilla Link. Appended at the END on purpose — every table indexed by
+    // this enum keeps its existing rows valid, so no other form can shift.
+    MM_PLAYER_FORM_RITO = 8,
+    // Keaton — Link-rigged fox body from soh.o2r (objects/forms/keaton). Same
+    // arrangement as Rito: full transformation cutscene, gameplay stays vanilla.
+    // Its three tails are NOT limbs (21 is the hard ceiling) — they are drawn as
+    // appendages with their own matrices, like the Bunny Hood ears.
+    MM_PLAYER_FORM_KEATON = 9,
+    MM_PLAYER_FORM_MAX = 10
 } MmPlayerTransformation;
 
 // OOT mask type enum (for transformation mask identification)
@@ -39,9 +49,11 @@ typedef enum TransformMaskId {
     TRANSFORM_MASK_ZORA,
     TRANSFORM_MASK_DEKU,
     TRANSFORM_MASK_FIERCE_DEITY,
-    TRANSFORM_MASK_KEATON,
+    TRANSFORM_MASK_PIKACHU, // Pokeball-triggered (the Keaton Mask now belongs to the Keaton SKIN form)
     TRANSFORM_MASK_GARO,
-    TRANSFORM_MASK_GERUDO
+    TRANSFORM_MASK_GERUDO,
+    TRANSFORM_MASK_RITO,       // ITEM_RITO_MASK (shares the Farore's Wind cell)
+    TRANSFORM_MASK_KEATON_FORM // Keaton Mask (OoT or MM copy)
 } TransformMaskId;
 
 // =============================================================================
@@ -214,6 +226,223 @@ u8 TransformMasks_IsTransformedAny(void);
 u8 TransformMasks_IsZoraSwimEnabled(void);
 void TransformMasks_SetZoraSwimEnabled(u8 enabled);
 
+// =============================================================================
+// Tunic effects without the tunic (Skijer 2026-07-28)
+//
+// Goron/Zora transform wearing the KOKIRI Tunic — the Goron/Zora Tunic is never
+// equipped by a form any more. These two grant the tunics' gameplay effects (and
+// only those) as a property of the form's body:
+//   fire resistance  → Goron  (hot rooms, body burn, hot/lava floors)
+//   water breathing  → Zora   (underwater timer never starts)
+// Every OOT `currentTunic == PLAYER_TUNIC_GORON/ZORA` resistance check ORs these in.
+// =============================================================================
+u8 MmForm_HasFireResistance(void);
+u8 MmForm_HasWaterBreathing(void);
+u8 TransformMasks_HasFireResistance(void);
+u8 TransformMasks_HasWaterBreathing(void);
+
+// =============================================================================
+// Shield decoupling (Skijer 2026-07-28)
+//
+// No form is affected by, or affects, the equipped shield. Forms never write
+// player->currentShield and never read it for collision type / VFX / reflection;
+// their guard works identically with any shield or with none. OOT's vanilla shield
+// pipeline gates on currentShield, so it asks the form which mode it is in.
+// =============================================================================
+#define MMFORM_SHIELD_VANILLA 0    // human Link — OOT decides normally
+#define MMFORM_SHIELD_FORM_GUARD 1 // form rides OOT's upper-body shield; ignore the equipment gates
+#define MMFORM_SHIELD_BLOCK 2      // form owns R itself; OOT's shield actions must not engage
+#define MMFORM_SHIELD_TWO_HANDED \
+    3 // Fierce Deity: full vanilla shield pipeline, but always as if
+      // holding the Biggoron's Sword (two-handed guard, no shield in
+      // hand) and with the "must have a shield equipped" gates bypassed
+
+u8 MmForm_GetShieldMode(void);
+u8 TransformMasks_GetShieldMode(void);
+
+// Water regime. Each OOT water gate used to re-derive its own form list inline, and they drifted.
+#define MMFORM_WATER_VANILLA 0   // OOT owns water completely
+#define MMFORM_WATER_SINK 1      // cannot swim — hop / curl / void out
+#define MMFORM_WATER_ZORA_SWIM 2 // OOT's surface swim, but A is the fast swim
+
+u8 MmForm_GetWaterMode(void);
+u8 TransformMasks_GetWaterMode(void);
+
+// ---------------------------------------------------------------------------
+// Form animation tables (defined in z_player.c, next to the tables themselves).
+//
+// The way a form re-skins Link without touching his behaviour: OOT's own tables
+// decide which animation each action plays, so a form swaps entries instead of
+// writing action functions. D_80853914[group][animType] holds idle / walk / run /
+// strafe / backwalk / turn / roll / landing / damage; D_80854190[mwa] holds every
+// sword swing with its recovery pair and hit-frame window.
+//
+// animType column 1 is the "fighter" (weapon drawn) set, 0/4/5 the free-handed
+// set, 3 the two-handed set — but Player_SetModelGroup demotes animType to 0
+// when no shield is equipped, so a form with no shield should write every column
+// of the groups it cares about rather than betting on one.
+//
+// Save/restore is the caller's job: read a slot before overwriting it and put the
+// original back when the form ends.
+// ---------------------------------------------------------------------------
+// The spin-attack charge lives in six two-entry arrays of its own, outside both
+// animation tables — one per phase, indexed [0] one-handed / [1] two-handed.
+typedef enum ExtPlayerChargeAnimPhase {
+    EXTPLAYER_CHARGE_START,     // windup
+    EXTPLAYER_CHARGE_START_L,   // windup, left-foot variant
+    EXTPLAYER_CHARGE_WAIT,      // held, standing
+    EXTPLAYER_CHARGE_WAIT_END,  // release of the held pose
+    EXTPLAYER_CHARGE_WALK,      // held, walking
+    EXTPLAYER_CHARGE_SIDE_WALK, // held, strafing
+    EXTPLAYER_CHARGE_PHASE_MAX
+} ExtPlayerChargeAnimPhase;
+
+LinkAnimationHeader* ExtPlayer_GetChargeAnim(s32 phase, s32 twoHanded);
+void ExtPlayer_SetChargeAnim(s32 phase, s32 twoHanded, LinkAnimationHeader* anim);
+
+LinkAnimationHeader* ExtPlayer_GetAnimGroupAnim(s32 group, s32 animType);
+void ExtPlayer_SetAnimGroupAnim(s32 group, s32 animType, LinkAnimationHeader* anim);
+void ExtPlayer_GetMeleeAnim(s32 mwa, LinkAnimationHeader** swing, LinkAnimationHeader** end,
+                            LinkAnimationHeader** endLockOn, u8* hitStart, u8* hitEnd);
+// NULL animation arguments and 0xFF hit-window arguments mean "leave that slot".
+void ExtPlayer_SetMeleeAnim(s32 mwa, LinkAnimationHeader* swing, LinkAnimationHeader* end,
+                            LinkAnimationHeader* endLockOn, u8 hitStart, u8 hitEnd);
+
+// The four evasive jumps. dir: 0 front, 1 side-left, 2 backflip, 3 side-right.
+// slot: 0 the jump itself, 1 its landing, 2 its landing when locked the other way.
+// These live in their own table (D_80853D4C), not in D_80853914.
+#define EXTPLAYER_JUMP_FRONT 0
+#define EXTPLAYER_JUMP_SIDE_L 1
+#define EXTPLAYER_JUMP_BACKFLIP 2
+#define EXTPLAYER_JUMP_SIDE_R 3
+LinkAnimationHeader* ExtPlayer_GetJumpAnim(s32 dir, s32 slot);
+void ExtPlayer_SetJumpAnim(s32 dir, s32 slot, LinkAnimationHeader* anim);
+
+// Fidget/idle-variation table, indexed by FidgetType (z_player.c); column 0 is the
+// normal set and 1 the sword-drawn one. FIDGET_CRIT_HEALTH_START/_LOOP (7/8) are
+// the low-health idle.
+#define EXTPLAYER_FIDGET_CRIT_START 7
+#define EXTPLAYER_FIDGET_CRIT_LOOP 8
+LinkAnimationHeader* ExtPlayer_GetFidgetAnim(s32 fidget, s32 col);
+void ExtPlayer_SetFidgetAnim(s32 fidget, s32 col, LinkAnimationHeader* anim);
+
+// ---------------------------------------------------------------------------
+// Gerudo Dual Blades (gerudo_mhr_combat.inc.c). Gerudo IS vanilla Link wearing
+// other clips: these are the hooks OOT asks so its own sword/shield/roll/hop
+// pipeline runs for her. All the behaviour lives in the .inc.c.
+// ---------------------------------------------------------------------------
+// Light hit-reaction table (D_808544B0): 0-3 short flinches, 4-7 the big ones.
+LinkAnimationHeader* ExtPlayer_GetHitAnim(s32 index);
+void ExtPlayer_SetHitAnim(s32 index, LinkAnimationHeader* anim);
+
+// 1 while Gerudo is a fighter (blades in hand, or guarding). Player_SetModelGroup
+// promotes her to the weapon-drawn animation column on it.
+u8 GerudoMhr_ForcesFighter(Player* player);
+// Her real sword index (1..3) for Player_GetMeleeWeaponHeld; 0 = nothing/not Gerudo.
+s32 GerudoMhr_MeleeWeaponIndex(Player* player);
+// Damage-tier row for func_80837948 (rage = one tier up = double).
+s32 GerudoMhr_DamageTier(Player* player, s32 tier);
+// Speed multiplier hooked into Player_GetMovementSpeedAndYaw (hold-A sprint).
+f32 GerudoMhr_RunSpeedMul(void);
+// Walk/run cycle frame-advance multiplier (func_8084029C): the sprint keeps cadence.
+f32 GerudoMhr_RunAnimRateMul(void);
+// 1 when R must not raise the guard (L held: L+R is rage).
+u8 GerudoMhr_BlockShieldRaise(Player* player);
+// R = the blade guard, no shield item needed; the raise plays from frame 0.
+u8 GerudoMhr_UsesBladeGuard(Player* player);
+// The installed frame of the charge-release swing that throws the thunder wedge
+// (source frame GMHR_CHARGE_FAST_BEG). 0 = the clip was not built; fall back.
+s16 GerudoMhr_ChargeSummonFrame(void);
+// Hold-B charge rate multiplier (func_80844E3C): she charges three times as fast.
+f32 GerudoMhr_ChargeRateMul(Player* player);
+// En_M_Thunder asks: 1 when the charge release is hers — a third of a cylinder thrown
+// forward out of the blades instead of the whole ring around Link.
+u8 GerudoMhr_UsesConeBurst(Player* player);
+// Her RIGHT hand matrix, captured in MmForm_PostLimbDraw. player->mf_9E0 is the LEFT
+// hand (vanilla writes it at L_HAND — Link is left-handed); the charge glow needs both.
+extern MtxF gGerudoRightHandMtx;
+// ...and what that cone feeds back: it has its own collider, so its hits never reach
+// GerudoMhr_ScanBladeHits. Worth GMHR_RAGE_CHARGE_MUL times a blade hit.
+void GerudoMhr_AddChargeRage(void);
+// Draw-time upper-body offset while guarding (MmForm_OverrideLimbDraw applies it).
+u8 GerudoMhr_GetShieldUpperRot(Player* player, Vec3s* out);
+// Same, per shoulder (PLAYER_LIMB_L_SHOULDER / PLAYER_LIMB_R_SHOULDER). 0 = nothing to do.
+u8 GerudoMhr_GetShieldShoulderRot(Player* player, s32 limbIndex, Vec3s* out);
+// The B chain (4 hits, 2 in rage) and the thrust: which row func_80837948 swings.
+s32 GerudoMhr_NextComboMwa(Player* player, s32 requested);
+u8 GerudoMhr_OwnsComboRow(Player* player);
+// Roll clip through VB_PLAYER_ANIM_SITE_ROLL; and the roll's speed factor.
+LinkAnimationHeader* GerudoMhr_GetRollAnim(void);
+u8 GerudoMhr_WantsLongRoll(void);
+// Hold A = sprint, tap A = roll / sheathe. Player_SetupRoll asks this first and
+// swallows the press; the controller fires the roll itself on a short release.
+u8 GerudoMhr_SuppressRoll(Player* player);
+// Player_ActionHandler_Roll's "A standing = put the sword away": Gerudo does that
+// with her own clip, so vanilla must not.
+u8 GerudoMhr_OwnsPutaway(Player* player);
+// Player_UseItem asks: 1 when Gerudo takes the draw/sheathe herself.
+u8 GerudoMhr_InterceptUseItem(PlayState* play, Player* player, s32 item);
+// Player_StartChangingHeldItem asks: her clip for the RUNNING draw (upper body only,
+// so she keeps running). NULL = keep Link's. Flips itemChangeType so it plays backwards.
+LinkAnimationHeader* GerudoMhr_GetItemChangeAnim(Player* player, s8 newIA, s32* itemChangeType);
+// Jump slash, called from inside Player_Action_80844AF4 (after its gravity stamp and
+// its air control): rise -> hang at the apex -> drill down, homing on the lock-on.
+void GerudoMhr_TickJumpSlash(Player* player, PlayState* play);
+// Sidehop/backflip: rage travel factor + clip (VB_PLAYER_ANIM_SITE_DODGE_HOP).
+f32 GerudoMhr_HopSpeedMul(void);
+LinkAnimationHeader* GerudoMhr_GetHopAnim(s32 dir);
+// Free-fall pose (VB_PLAYER_ANIM_SITE_FALL_WAIT).
+LinkAnimationHeader* GerudoMhr_GetFallAnim(Player* player);
+// Jump slash launch tweak (func_8083BA90): higher arc, aimed at the lock-on.
+void GerudoMhr_AdjustJumpSlash(Player* player, s32 mwa);
+// Called from Player_UpdateCommon BEFORE the melee quads' AT reset: the only place
+// this frame's blade hits are still readable for the form (rage meter).
+void GerudoMhr_ScanBladeHits(Player* player);
+// Draw-callback gate: trail on?, per-blade mask, and whether the form writes the
+// quads' damage flags itself (controller clip) or keeps OOT's (OOT swing).
+u8 GerudoMhr_GetBladeGate(u8* mask, u8* ownFlags, u32* dmgFlags, u8* damage);
+// 1 while the controller drives a clip of its own (MmForm_UsesOotAnim asks).
+u8 GerudoMhr_DrivingClip(void);
+// Are the scimitars drawn in the hands (gerudo_form.cpp).
+u8 GerudoMhr_SwordsOut(void);
+// Guard clip by phase (0 raise, 1 loop, 2 release) for OOT's shield code paths.
+LinkAnimationHeader* GerudoMhr_GetGuardAnim(Player* player, s32 phase);
+// 1 while a Gerudo swing runs with B held: Player_UpdateCommon pins unk_844 so the
+// hold-B charge is reachable after her long swings.
+u8 GerudoMhr_HoldsChargeWindow(Player* player);
+// 1 while L is held as Gerudo: TransformMasks_FilterB strips B from OOT's input copy.
+u8 GerudoMhr_LOwnsB(void);
+// 1 while the Rito form is active: B is its bow, never OOT's sword.
+u8 MmForm_RitoBowOwnsB(void);
+// The Rito's bow state, read by the draw path (reticle, and the shield hides).
+u8 MmForm_RitoBowIsOut(void);
+u8 MmForm_RitoBowIsAiming(void);
+// EnArrow asks these: whether the Rito's bow spawned this arrow (its aim must not be
+// re-derived from the camera), and to fire the thunder ring where a charged one lands.
+u8 MmForm_RitoBowOwnsArrow(Actor* arrow);
+void MmForm_RitoBowOnArrowStick(PlayState* play, Actor* arrow);
+// 1 while the Rito is guarding with its own shield. The Mirror Shield predicates in
+// z_player_lib.c defer to it, so every reflection site inherits the behaviour.
+u8 MmForm_RitoShieldIsUp(void);
+// The rage meter HUD (drawn under the magic bar). Call from Interface_Draw.
+void GerudoMhr_DrawRageMeter(PlayState* play);
+
+// Rage: charged by landing blades, L+R with the blades out. Swaps every table row.
+u8 GerudoMhr_RageActive(void);
+u8 GerudoMhr_RageReady(void);
+f32 GerudoMhr_RageFill(void); // 0..1 — meter while charging, time left while active
+
+// Rage parry: a hit caught in the guard's first frames, in rage. Called from
+// func_808382DC ahead of both damage branches. 1 = the hit is eaten.
+u8 GerudoMhr_TryParry(PlayState* play, Player* player);
+
+// True when OOT already has a contextual meaning for the A button (open/enter door,
+// speak/check/read, grab, climb, enter, drop/throw a carried actor, drop off a ledge).
+// A form's custom A move must yield when this is set. Does NOT cover roll — callers
+// that also need to yield to the roll gate on movement themselves. See
+// GaroForm_VanillaWantsAButton for the narrower, grab-excluding Garo variant.
+u8 TransformMasks_AButtonIsOffered(Player* player);
+
 // Load a DL from mm.o2r with hash pre-resolution (safe for drawing)
 void* TransformMasks_LoadMmDL(const char* path);
 u8 TransformMasks_DragonScaleEnterSwim(void* play, void* player);
@@ -249,6 +478,16 @@ void TransformMasks_Draw(PlayState* play, Player* player);
 // Blast Mask + Great Fairy Mask reactions, Garo attack kit). Called from
 // z_player.c right after the input copy.
 void TransformMasks_FilterB(Input* input);
+
+/**
+ * True while a textbox or the ocarina owns the buttons.
+ *
+ * TransformMasks_FilterB already strips A/B/C from the FILTERED input copy the forms
+ * normally read, but forms that read the RAW play->state.input[0] (Garo's moveset
+ * dispatcher, Pikachu's bindings) bypass it — they must check this themselves before
+ * acting on a press, or they will fire their moveset while the player is playing notes.
+ */
+u8 MmForm_InputOwnedByMessage(void);
 
 // Reset transformation state (call on scene transition, death, etc.)
 void TransformMasks_Reset(void);
@@ -289,7 +528,7 @@ void MmForm_KillTrail(PlayState* play, s32* effectIndex, u8* active);
 // uses an OOT fallback SFX (NA_SE_VO_SK_LAUGH, Skull Kid taunt).
 #define VOICE_ACTION_ATTACK 0x00
 #define VOICE_ACTION_DAMAGE 0x05
-#define VOICE_ACTION_DEATH  0x0B
+#define VOICE_ACTION_DEATH 0x0B
 
 // Water entry: called when player enters deep water (swim depth).
 // Returns 1 if swimming was blocked (Goron/Deku can't swim), 0 if allowed (Zora/FD).

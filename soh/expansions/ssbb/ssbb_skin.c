@@ -100,10 +100,18 @@ static void SSBBSkin_BuildLocalMatrix(const SSBBBoneFrame* bf, MtxF* out) {
 // Uses SkinMatrix_MtxFMtxFMult directly to avoid FrameInterpolation interference.
 // Matches Three.js: bone.matrixWorld = parent.matrixWorld × bone.localMatrix
 
-static void SSBBSkin_ComputeBoneMatricesFromAnim(void** skeleton, const struct SSBBAnim* anim, u16 frame,
-                                                 MtxF* parentWorld, u8 limbIdx, s32 numLimbs) {
+// Shortest-path lerp for a rotation component in degrees.
+static f32 SSBBSkin_LerpAngle(f32 a, f32 b, f32 t) {
+    f32 d = fmodf(b - a + 540.0f, 360.0f) - 180.0f;
+    return a + d * t;
+}
+
+static void SSBBSkin_ComputeBoneMatricesFromAnim(void** skeleton, const struct SSBBAnim* anim, u16 frame, u16 nextFrame,
+                                                 f32 blend, MtxF* parentWorld, u8 limbIdx, s32 numLimbs,
+                                                 u8 neutralizeRootMotion) {
     StandardLimb* limb;
     const SSBBBoneFrame* bf;
+    SSBBBoneFrame blended;
     MtxF localMat;
 
     if (limbIdx == LIMB_DONE || limbIdx >= numLimbs)
@@ -111,6 +119,22 @@ static void SSBBSkin_ComputeBoneMatricesFromAnim(void** skeleton, const struct S
 
     limb = (StandardLimb*)skeleton[limbIdx];
     bf = SSBBAnim_GetBoneFrame(anim, frame, limbIdx);
+
+    if (bf && blend > 0.0f && nextFrame != frame) {
+        const SSBBBoneFrame* nf = SSBBAnim_GetBoneFrame(anim, nextFrame, limbIdx);
+        if (nf) {
+            blended.tx = bf->tx + (nf->tx - bf->tx) * blend;
+            blended.ty = bf->ty + (nf->ty - bf->ty) * blend;
+            blended.tz = bf->tz + (nf->tz - bf->tz) * blend;
+            blended.rx = SSBBSkin_LerpAngle(bf->rx, nf->rx, blend);
+            blended.ry = SSBBSkin_LerpAngle(bf->ry, nf->ry, blend);
+            blended.rz = SSBBSkin_LerpAngle(bf->rz, nf->rz, blend);
+            blended.sx = bf->sx + (nf->sx - bf->sx) * blend;
+            blended.sy = bf->sy + (nf->sy - bf->sy) * blend;
+            blended.sz = bf->sz + (nf->sz - bf->sz) * blend;
+            bf = &blended;
+        }
+    }
 
     if (bf) {
         SSBBSkin_BuildLocalMatrix(bf, &localMat);
@@ -120,12 +144,12 @@ static void SSBBSkin_ComputeBoneMatricesFromAnim(void** skeleton, const struct S
         // In OOT, movement is handled by Player.actor.world.pos — we only want rotation.
         // Keep bind-pose translation (from the animation frame's tx/ty/tz at frame 0).
         // For bone 2 (TransN): zero out X and Z translation, keep Y (height bobbing ok).
-        if (limbIdx == 0 || limbIdx == 1) {
+        if (neutralizeRootMotion && (limbIdx == 0 || limbIdx == 1)) {
             localMat.mf[3][0] = 0.0f;
             localMat.mf[3][1] = 0.0f;
             localMat.mf[3][2] = 0.0f;
         }
-        if (limbIdx == 2) {
+        if (neutralizeRootMotion && limbIdx == 2) {
             localMat.mf[3][0] = 0.0f; // No forward/back root motion
             localMat.mf[3][2] = 0.0f; // No left/right root motion
             // Keep Y (ty) for height — walk bobbing is ok
@@ -142,10 +166,12 @@ static void SSBBSkin_ComputeBoneMatricesFromAnim(void** skeleton, const struct S
     SkinMatrix_MtxFMtxFMult(parentWorld, &localMat, &sBoneWorldMatrices[limbIdx]);
 
     // Children inherit this bone's world matrix
-    SSBBSkin_ComputeBoneMatricesFromAnim(skeleton, anim, frame, &sBoneWorldMatrices[limbIdx], limb->child, numLimbs);
+    SSBBSkin_ComputeBoneMatricesFromAnim(skeleton, anim, frame, nextFrame, blend, &sBoneWorldMatrices[limbIdx],
+                                         limb->child, numLimbs, neutralizeRootMotion);
 
     // Siblings inherit PARENT's world matrix
-    SSBBSkin_ComputeBoneMatricesFromAnim(skeleton, anim, frame, parentWorld, limb->sibling, numLimbs);
+    SSBBSkin_ComputeBoneMatricesFromAnim(skeleton, anim, frame, nextFrame, blend, parentWorld, limb->sibling, numLimbs,
+                                         neutralizeRootMotion);
 }
 
 // ── Blend Vertices ──────────────────────────────────────────────────────────
@@ -228,6 +254,19 @@ static void SSBBSkin_BlendVertices(SSBBSkinMesh* skin) {
     skin->bufIndex ^= 1;
 }
 
+// ── Bone query ──────────────────────────────────────────────────────────────
+// Model-space position of a bone as of the last SSBBSkin_Draw (before the
+// actor's pos/rot/scale).  Lets a form hang things off the rig — Wolf Link
+// puts a foot shadow under each paw.
+s32 SSBBSkin_GetBoneWorldPos(s32 boneIndex, Vec3f* out) {
+    if (boneIndex < 0 || boneIndex >= SSBB_MAX_SKIN_BONES || !out)
+        return 0;
+    out->x = sBoneWorldMatrices[boneIndex].xw;
+    out->y = sBoneWorldMatrices[boneIndex].yw;
+    out->z = sBoneWorldMatrices[boneIndex].zw;
+    return 1;
+}
+
 // ── Draw ────────────────────────────────────────────────────────────────────
 
 void SSBBSkin_Draw(SSBBCharacterInstance* inst, PlayState* play, Vec3f* pos, Vec3s* rot) {
@@ -264,11 +303,22 @@ void SSBBSkin_Draw(SSBBCharacterInstance* inst, PlayState* play, Vec3f* pos, Vec
         } else {
             // Normal: compute bone world matrices from SSBBAnim
             u16 frame = (u16)inst->curFrame;
+            u16 nextFrame;
+            f32 blend = 0.0f;
             if (frame >= inst->ssbbAnim->numFrames)
                 frame = inst->ssbbAnim->numFrames - 1;
+            nextFrame = frame;
+            if (skin->interpolateFrames && frame + 1 < inst->ssbbAnim->numFrames) {
+                nextFrame = frame + 1;
+                blend = inst->curFrame - (f32)frame;
+                if (blend < 0.0f)
+                    blend = 0.0f;
+                if (blend > 1.0f)
+                    blend = 1.0f;
+            }
 
-            SSBBSkin_ComputeBoneMatricesFromAnim(inst->skeleton, inst->ssbbAnim, frame, &skin->daeToF64, 0,
-                                                 inst->def->numLimbs);
+            SSBBSkin_ComputeBoneMatricesFromAnim(inst->skeleton, inst->ssbbAnim, frame, nextFrame, blend,
+                                                 &skin->daeToF64, 0, inst->def->numLimbs, skin->neutralizeRootMotion);
 
             for (b = 0; b < skin->boneCount; b++) {
                 SkinMatrix_MtxFMtxFMult(&sBoneWorldMatrices[b], &skin->invBindMatrices[b], &sCombinedMatrices[b]);
@@ -295,10 +345,7 @@ void SSBBSkin_Draw(SSBBCharacterInstance* inst, PlayState* play, Vec3f* pos, Vec
 
     // World matrix: pos/rot × renderScale (vertices already in polygon0 space)
     Matrix_SetTranslateRotateYXZ(pos->x, pos->y, pos->z, rot);
-    {
-        f32 skinScale = CVarGetFloat("gExpansions.SSBB.SkinScale", 0.0f);
-        s = (skinScale > 0.001f) ? skinScale : inst->def->scale;
-    }
+    s = inst->def->scale;
     Matrix_Scale(s, s, s, MTXMODE_APPLY);
 
     worldMtx = Graph_Alloc(play->state.gfxCtx, sizeof(Mtx));

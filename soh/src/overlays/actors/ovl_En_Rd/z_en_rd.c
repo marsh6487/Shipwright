@@ -148,12 +148,12 @@ static void EnRd_EnsureDanceAnims(void) {
         return;
     }
     sEnRdDanceAnimsChecked = 1;
-    sEnRdDanceAnims[0] = (AnimationHeader*)ResourceMgr_LoadAnimByName(
-        "__OTR__objects/object_rd/gGibdoRedeadSquattingDanceAnim");
-    sEnRdDanceAnims[1] = (AnimationHeader*)ResourceMgr_LoadAnimByName(
-        "__OTR__objects/object_rd/gGibdoRedeadClappingDanceAnim");
-    sEnRdDanceAnims[2] = (AnimationHeader*)ResourceMgr_LoadAnimByName(
-        "__OTR__objects/object_rd/gGibdoRedeadPirouetteAnim");
+    sEnRdDanceAnims[0] =
+        (AnimationHeader*)ResourceMgr_LoadAnimByName("__OTR__objects/object_rd/gGibdoRedeadSquattingDanceAnim");
+    sEnRdDanceAnims[1] =
+        (AnimationHeader*)ResourceMgr_LoadAnimByName("__OTR__objects/object_rd/gGibdoRedeadClappingDanceAnim");
+    sEnRdDanceAnims[2] =
+        (AnimationHeader*)ResourceMgr_LoadAnimByName("__OTR__objects/object_rd/gGibdoRedeadPirouetteAnim");
     // ResourceMgr returns the path string itself when the asset is missing —
     // a real Anim header never starts with '_', so a leading '_' means
     // "asset not in mm.o2r". Trim those slots to NULL so we fall back.
@@ -679,8 +679,7 @@ void EnRd_AttemptPlayerFreeze(EnRd* this, PlayState* play) {
         this->actor.yawTowardsPlayer - this->actor.shape.rot.y - this->headYRotation - this->upperBodyYRotation;
 
     if (ABS(temp_v0) < 0x2008) {
-        if (!(this->rdFlags & 0x80) &&
-            GameInteractor_Should(VB_REDEAD_GIBDO_FREEZE_LINK, true, this)) {
+        if (!(this->rdFlags & 0x80) && GameInteractor_Should(VB_REDEAD_GIBDO_FREEZE_LINK, true, this)) {
             player->actor.freezeTimer = 60;
             Rumble_Request(this->actor.xzDistToPlayer, 0xFF, 0x14, 0x96);
             Player_SetAutoLockOnActor(play, &this->actor);

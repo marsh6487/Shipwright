@@ -10,7 +10,8 @@
 namespace HarpoonHud {
 
 void Window::DrawElement() {
-    if (Harpoon::Instance == nullptr || !Harpoon::Instance->isConnected) return;
+    if (Harpoon::Instance == nullptr || !Harpoon::Instance->isConnected)
+        return;
 
     switch (Harpoon::Instance->activeGameMode) {
         case HARPOON_MODE_PROP_HUNT:
@@ -21,8 +22,7 @@ void Window::DrawElement() {
         // mode that flips inMapSelect / inRound flags via its own events.
         default:
             if (HarpoonTriforceThief::IsLoaded() &&
-                (HarpoonTriforceThief::IsInMapSelect() ||
-                 HarpoonTriforceThief::IsInRound())) {
+                (HarpoonTriforceThief::IsInMapSelect() || HarpoonTriforceThief::IsInRound())) {
                 HarpoonTriforceThief::DrawHud();
             }
             break;
@@ -31,7 +31,8 @@ void Window::DrawElement() {
 
 void Register() {
     auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
-    if (gui == nullptr) return;
+    if (gui == nullptr)
+        return;
 
     static const char* kName = "HarpoonGamemodeHud";
     static const char* kCVar = "gOpenWindows.HarpoonGamemodeHud";
@@ -47,4 +48,4 @@ void Register() {
     SPDLOG_INFO("[Harpoon][HUD] gamemode HUD registered");
 }
 
-}  // namespace HarpoonHud
+} // namespace HarpoonHud

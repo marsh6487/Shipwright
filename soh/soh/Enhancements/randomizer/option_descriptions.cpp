@@ -866,11 +866,28 @@ void Settings::CreateOptionDescriptions() {
         "Cane of Somaria, Dominion Rod, and more. \n"
         "These items are not considered by logic. \n"
         "2/24 | Logic Supported for : Shovel, Demise Destruction";
-    mOptionDescriptions[RSK_MM_MASKS_ALL] =
-        "Adds all 24 MM masks to the randomizer item pool.\n"
-        "Masks can be found at random locations like custom items.\n"
-        "Removes OOT Goron/Zora masks from pool.\n\n"
-        "REQUIRES: 'Include MM Masks Inventory' enabled and mm.o2r loaded.";
+    mOptionDescriptions[RSK_SHUFFLE_BOMB_ARROWS] =
+        "How Bomb Arrows are obtained. They are no longer an inventory item — they are the\n"
+        "last entry of the bow's element wheel, next to the medallion arrows.\n\n"
+        "Off: never granted on their own (the Twilight Upgrade still unlocks them).\n"
+        "Bomb Bag: granted the moment you own any bomb bag.\n"
+        "Shuffled: a real randomizer item, placed like any other.";
+    mOptionDescriptions[RSK_ELEMENTAL_WAND_SHUFFLE] =
+        "How the Elemental Wand is obtained. Six rods — Sand, Tornado, Water, Meteor,\n"
+        "Storm and the Shadow Scepter — share one inventory cell and one wheel.\n\n"
+        "Medallions: one wand in the pool; each rod works once you own its medallion.\n"
+        "Single item: one wand in the pool; finding it unlocks all six rods.\n"
+        "Elemental shuffle: the six rods are separate items; the first one found also\n"
+        "grants the wand itself.";
+    mOptionDescriptions[RSK_MM_SONGS] = "Adds Majora's Mask's songs to a solo-OoT item pool: Sonata of Awakening,\n"
+                                        "Goron Lullaby, New Wave Bossa Nova, Elegy of Emptiness, Oath to Order,\n"
+                                        "the Song of Healing and the Song of Soaring.\n\n"
+                                        "They land as collectibles (the MM quest page shows them); no OoT location\n"
+                                        "requires them, so seeds stay beatable. In combo they cross on their own.";
+    mOptionDescriptions[RSK_MM_MASKS_ALL] = "Adds all 24 MM masks to the randomizer item pool.\n"
+                                            "Masks can be found at random locations like custom items.\n"
+                                            "Removes OOT Goron/Zora masks from pool.\n\n"
+                                            "REQUIRES: 'Include MM Masks Inventory' enabled and mm.o2r loaded.";
     mOptionDescriptions[RSK_MM_MASKS_TRANSFORM] =
         "Adds only the 4 transformation masks (Deku, Goron, Zora, Fierce Deity) to the randomizer item pool.\n"
         "Removes OOT Goron/Zora masks from pool.\n\n"

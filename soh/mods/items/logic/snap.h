@@ -53,9 +53,8 @@ typedef enum {
 // Custom message id for the "Keep this picture?" 2-choice prompt (MM's 0xF8). Registered by the
 // OnOpenText hook in picto_message.cpp; opened from picto_box.c via Message_StartTextbox.
 #define PICTO_KEEP_TEXTID 0x6F08
-// "You already have a pictograph. Replace it?" 2-choice warn shown before overwriting an existing
-// photo (it syncs OoT<->MM, so we don't silently clobber it). Registered in picto_message.cpp.
-#define PICTO_REPLACE_TEXTID 0x6F09
+// (0x6F09 was a SOH-only "you already have a pictograph, replace it?" warn. MM overwrites the stored
+// photo without asking, so the prompt is gone and the id stays free.)
 // Gag message shown when an MM trade-quest item is USED (trade_items.c present flow). Registered in
 // picto_message.cpp. "Oak's words echoed... There's a time and place for everything, but not now."
 #define MM_TRADE_USE_TEXTID 0x6F0A
@@ -92,12 +91,17 @@ void Picto_EmitCapture(PlayState* play, Gfx** gfxp);
 // DRAW hook (OVERLAY): shows the captured photo for a few seconds after the shutter (color preview).
 void Picto_DrawPhoto(PlayState* play, Gfx** gfxp);
 // UPDATE hook: one frame later, converts+compresses the readback into Nei_Save()->pictoPhotoI5.
+// Called from z_play.c, NOT from the player actor: the shutter sets play->haltAllActors like MM does,
+// which stops every actor (Link included), and this state machine has to keep running behind the photo.
 void Picto_Update(PlayState* play);
 
 // Item ownership (granted via menu / save editor) + a menu-driven debug shutter.
 u8 Picto_IsOwned(void);
 void Picto_SetOwned(u8 on);
 void Picto_TakePhotoNow(void);
+// Throw the stored picture away (menu). With a picture stored, the pictograph button shows THAT
+// picture + the keep/discard prompt instead of opening the lens — MM's own behaviour.
+void Picto_ClearPhoto(void);
 
 // "Pictobox mode" on the Lens-of-Truth slot, toggled by the kaleido wheel (z_kaleido_item.c).
 u8 Picto_IsOnLensActive(void);

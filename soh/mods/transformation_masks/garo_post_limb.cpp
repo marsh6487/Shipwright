@@ -27,17 +27,6 @@ extern "C" {
 #include "variables.h"
 }
 
-// Sword trail state exposed by garo_form.cpp. The trail is spawned by
-// GaroAttack_SpawnTrail() at SWING_1 entry; we feed vertex pairs each frame
-// at the L_HAND limb where the live bone matrix is in scope.
-extern "C" u8 GaroAttack_IsTrailActive(void);
-extern "C" s32 GaroAttack_GetTrailEffectIndex(void);
-
-// Approx Garo blade length in bone-local game units. Master Sword in MM
-// uses 4000 (via D_80126080 globals); 3200 keeps Garo's shorter blade from
-// clipping the body during the tight slash arcs of last_hit_motion1.
-#define GARO_POST_LIMB_TRAIL_LENGTH 3200.0f
-
 // Limb→bodypart mapping is shared with mm_player_form.cpp via
 // gPlayerLimbToBodyPart (declared in transformation_masks.h) — Garo uses
 // Link's rig, so the same table applies. (Was a byte-for-byte local copy.)
@@ -72,23 +61,11 @@ static void GaroForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, V
     if (limbIndex == PLAYER_LIMB_L_HAND) {
         Matrix_MultVec3f(&zeroVec, &player->leftHandPos);
 
-        // ── Sword trail vertex feed ──────────────────────────────────────
-        // When Garo is mid-slash and the trail is active, compute the sword
-        // tip (along local +Y from the hand by GARO_POST_LIMB_TRAIL_LENGTH)
-        // and the hand position itself as the base. Both are transformed
-        // through the live L_HAND bone matrix so they track the slash arc.
-        // Same pattern as mm_player_form.cpp:13312-13329 (Zora fin trail).
-        if (GaroAttack_IsTrailActive()) {
-            EffectBlure* trail = (EffectBlure*)Effect_GetByIndex(GaroAttack_GetTrailEffectIndex());
-            if (trail != NULL) {
-                Vec3f tipLocal = { 0.0f, GARO_POST_LIMB_TRAIL_LENGTH, 0.0f };
-                Vec3f baseLocal = { 0.0f, 0.0f, 0.0f };
-                Vec3f tipWorld, baseWorld;
-                Matrix_MultVec3f(&tipLocal, &tipWorld);
-                Matrix_MultVec3f(&baseLocal, &baseWorld);
-                EffectBlure_AddVertex(trail, &tipWorld, &baseWorld);
-            }
-        }
+        // NOTE: the sword trail is NOT fed from here any more. This skeleton
+        // is Link's hidden rig — it has different proportions and a different
+        // scale from the Garo body the player actually sees, so a streak built
+        // off this hand floated away from the blades. Both trails are now fed
+        // in garo_hybrid_render.cpp at the real L_SWORD / R_SWORD bones.
 
         if (player->actor.scale.y >= 0.0f) {
             Actor* heldActor = player->heldActor;
@@ -104,8 +81,7 @@ static void GaroForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, V
                     if (heldActor->flags & ACTOR_FLAG_CARRY_X_ROT_INFLUENCE) {
                         heldActor->world.rot.x = heldActor->shape.rot.x = carryRot.x - player->unk_3BC.x;
                     } else {
-                        heldActor->world.rot.y = heldActor->shape.rot.y =
-                            player->actor.shape.rot.y + player->unk_3BC.y;
+                        heldActor->world.rot.y = heldActor->shape.rot.y = player->actor.shape.rot.y + player->unk_3BC.y;
                     }
                 }
             } else {
@@ -142,7 +118,6 @@ extern "C" void GaroForm_DrawNullBody(PlayState* play, Player* player, s32 lod) 
     if (player->skelAnime.skeleton == NULL || player->skelAnime.jointTable == NULL) {
         return;
     }
-    SkelAnime_DrawFlexLod(play, player->skelAnime.skeleton, player->skelAnime.jointTable,
-                          player->skelAnime.dListCount, GaroForm_OverrideLimbDraw,
-                          GaroForm_PostLimbDraw, player, lod);
+    SkelAnime_DrawFlexLod(play, player->skelAnime.skeleton, player->skelAnime.jointTable, player->skelAnime.dListCount,
+                          GaroForm_OverrideLimbDraw, GaroForm_PostLimbDraw, player, lod);
 }

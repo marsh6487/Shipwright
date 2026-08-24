@@ -4,7 +4,7 @@
  * Architecture mirrors soh/mods/voice_pack/voice_pack.cpp (4 atomic-published
  * slots, 32 kHz mix rate, lazy decode-on-init). Differences:
  *   * Source archive is the standard SoH resource manager (so it pulls from
- *     gerudo.o2r without us touching the .pak path manually).
+ *     soh.o2r without us touching the .pak path manually).
  *   * Single implicit "pack" — no menu, no random selection across packs.
  *   * Trigger is gated externally by the Player_PlayVoiceSfx caller checking
  *     GerudoForm_IsActive(), so PlayIfMatch can stay assumption-free.
@@ -62,30 +62,44 @@ static int VorbisSeekCallback(void* src, ogg_int64_t pos, int whence) {
     OggFileData* d = static_cast<OggFileData*>(src);
     size_t newPos;
     switch (whence) {
-        case SEEK_SET: newPos = (size_t)pos; break;
-        case SEEK_CUR: newPos = d->pos + (size_t)pos; break;
-        case SEEK_END: newPos = d->size + (size_t)pos; break;
-        default: return -1;
+        case SEEK_SET:
+            newPos = (size_t)pos;
+            break;
+        case SEEK_CUR:
+            newPos = d->pos + (size_t)pos;
+            break;
+        case SEEK_END:
+            newPos = d->size + (size_t)pos;
+            break;
+        default:
+            return -1;
     }
-    if (newPos > d->size) return -1;
+    if (newPos > d->size)
+        return -1;
     d->pos = newPos;
     return 0;
 }
 
-static int VorbisCloseCallback(void* /*src*/) { return 0; }
+static int VorbisCloseCallback(void* /*src*/) {
+    return 0;
+}
 static long VorbisTellCallback(void* src) {
     return (long)static_cast<OggFileData*>(src)->pos;
 }
 
 static const ov_callbacks vorbisCallbacks = {
-    VorbisReadCallback, VorbisSeekCallback, VorbisCloseCallback, VorbisTellCallback,
+    VorbisReadCallback,
+    VorbisSeekCallback,
+    VorbisCloseCallback,
+    VorbisTellCallback,
 };
 
-static bool DecodeOggToMonoPcm(const uint8_t* oggData, size_t oggSize,
-                               std::vector<int16_t>& outPcm, uint32_t& outRate) {
+static bool DecodeOggToMonoPcm(const uint8_t* oggData, size_t oggSize, std::vector<int16_t>& outPcm,
+                               uint32_t& outRate) {
     OggFileData d = { (void*)oggData, 0, oggSize };
     OggVorbis_File vf;
-    if (ov_open_callbacks(&d, &vf, nullptr, 0, vorbisCallbacks) < 0) return false;
+    if (ov_open_callbacks(&d, &vf, nullptr, 0, vorbisCallbacks) < 0)
+        return false;
     vorbis_info* vi = ov_info(&vf, -1);
     if (!vi) {
         ov_clear(&vf);
@@ -98,7 +112,8 @@ static bool DecodeOggToMonoPcm(const uint8_t* oggData, size_t oggSize,
     std::vector<int16_t> raw;
     for (;;) {
         long n = ov_read(&vf, buf, sizeof(buf), 0, 2, 1, &bs);
-        if (n == 0) break;
+        if (n == 0)
+            break;
         if (n < 0) {
             ov_clear(&vf);
             return false;
@@ -109,7 +124,8 @@ static bool DecodeOggToMonoPcm(const uint8_t* oggData, size_t oggSize,
         memcpy(raw.data() + base, buf, (size_t)n);
     }
     ov_clear(&vf);
-    if (raw.empty()) return false;
+    if (raw.empty())
+        return false;
 
     if (channels <= 1) {
         outPcm = std::move(raw);
@@ -118,7 +134,8 @@ static bool DecodeOggToMonoPcm(const uint8_t* oggData, size_t oggSize,
         outPcm.resize(frames);
         for (size_t i = 0; i < frames; i++) {
             int32_t acc = 0;
-            for (int c = 0; c < channels; c++) acc += (int32_t)raw[i * channels + c];
+            for (int c = 0; c < channels; c++)
+                acc += (int32_t)raw[i * channels + c];
             outPcm[i] = (int16_t)(acc / channels);
         }
     }
@@ -153,29 +170,38 @@ static GVoiceSlot sSlots[GV_SLOT_COUNT];
 static std::mt19937 sRng{ 0x47657275 /* 'Geru' */ };
 
 // ============================================================================
-// Hex parsing — extract sfx id from "voice/<HEX>/<file>.ogg"
+// Hex parsing — extract sfx id from "objects/forms/gerudo/voice/<HEX>/<file>.ogg"
 // ============================================================================
 
 static bool ParseSfxIdFromPath(const std::string& path, uint16_t* outId) {
-    // Expect: voice/<4-hex>/<file>.ogg
-    // We're permissive: any "voice/<X>/..." where <X> parses as hex works.
-    const std::string prefix = "voice/";
-    if (path.size() < prefix.size() + 5) return false;
-    if (path.compare(0, prefix.size(), prefix) != 0) return false;
+    // Expect: objects/forms/gerudo/voice/<4-hex>/<file>.ogg
+    // We're permissive: any "<prefix><X>/..." where <X> parses as hex works.
+    const std::string prefix = "objects/forms/gerudo/voice/";
+    if (path.size() < prefix.size() + 5)
+        return false;
+    if (path.compare(0, prefix.size(), prefix) != 0)
+        return false;
     size_t hexStart = prefix.size();
     size_t hexEnd = path.find('/', hexStart);
-    if (hexEnd == std::string::npos || hexEnd == hexStart) return false;
+    if (hexEnd == std::string::npos || hexEnd == hexStart)
+        return false;
     std::string hex = path.substr(hexStart, hexEnd - hexStart);
-    if (hex.size() > 4) return false;
+    if (hex.size() > 4)
+        return false;
     uint32_t v = 0;
     for (char c : hex) {
         v <<= 4;
-        if (c >= '0' && c <= '9') v |= (uint32_t)(c - '0');
-        else if (c >= 'a' && c <= 'f') v |= (uint32_t)(c - 'a' + 10);
-        else if (c >= 'A' && c <= 'F') v |= (uint32_t)(c - 'A' + 10);
-        else return false;
+        if (c >= '0' && c <= '9')
+            v |= (uint32_t)(c - '0');
+        else if (c >= 'a' && c <= 'f')
+            v |= (uint32_t)(c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F')
+            v |= (uint32_t)(c - 'A' + 10);
+        else
+            return false;
     }
-    if (v > 0xFFFF) return false;
+    if (v > 0xFFFF)
+        return false;
     *outId = (uint16_t)v;
     return true;
 }
@@ -186,16 +212,19 @@ static bool ParseSfxIdFromPath(const std::string& path, uint16_t* outId) {
 
 static void DoInit() {
     auto ctx = Ship::Context::GetRawInstance();
-    if (!ctx) return;
+    if (!ctx)
+        return;
     auto rm = ctx->GetResourceManager();
-    if (!rm) return;
+    if (!rm)
+        return;
     auto am = rm->GetArchiveManager();
-    if (!am) return;
+    if (!am)
+        return;
 
     int count = 0;
-    char** list = ResourceMgr_ListFiles("voice/*", &count);
+    char** list = ResourceMgr_ListFiles("objects/forms/gerudo/voice/*", &count);
     if (list == nullptr || count == 0) {
-        SPDLOG_INFO("[GerudoVoice] no voice/* entries in any archive");
+        SPDLOG_INFO("[GerudoVoice] no objects/forms/gerudo/voice/* entries in any archive");
         return;
     }
 
@@ -203,26 +232,29 @@ static void DoInit() {
     for (int i = 0; i < count; i++) {
         std::string path = list[i];
         uint16_t sfxId = 0;
-        if (!ParseSfxIdFromPath(path, &sfxId)) continue;
+        if (!ParseSfxIdFromPath(path, &sfxId))
+            continue;
         auto file = am->LoadFile(path);
-        if (!file || !file->Buffer || file->Buffer->empty()) continue;
+        if (!file || !file->Buffer || file->Buffer->empty())
+            continue;
         GerudoSample s{};
-        if (!DecodeOggToMonoPcm((const uint8_t*)file->Buffer->data(), file->Buffer->size(),
-                                s.pcm, s.rate)) {
+        if (!DecodeOggToMonoPcm((const uint8_t*)file->Buffer->data(), file->Buffer->size(), s.pcm, s.rate)) {
             continue;
         }
         sSamples[sfxId].push_back(std::move(s));
         decoded++;
     }
     // Free the list (allocated by ResourceMgr_ListFiles)
-    for (int i = 0; i < count; i++) free(list[i]);
+    for (int i = 0; i < count; i++)
+        free(list[i]);
     free(list);
 
     SPDLOG_INFO("[GerudoVoice] decoded {} samples across {} sfx slots", decoded, (int)sSamples.size());
 }
 
 extern "C" void GerudoVoice_Init(void) {
-    if (sInitialized.load(std::memory_order_acquire)) return;
+    if (sInitialized.load(std::memory_order_acquire))
+        return;
     for (int i = 0; i < GV_SLOT_COUNT; i++) {
         sSlots[i].playing.store(0);
         sSlots[i].data = nullptr;
@@ -244,12 +276,23 @@ extern "C" void GerudoVoice_Shutdown(void) {
 // PlayIfMatch — game thread
 // ============================================================================
 
+// gerudo_form.cpp. Declared here rather than including the header so this file
+// stays free of the form's z64 dependencies (it is built around libvorbis).
+extern "C" u8 GerudoForm_IsActive(void);
+
 extern "C" u8 GerudoVoice_PlayIfMatch(u16 sfxId, Vec3f* /*pos*/) {
     if (!sInitialized.load(std::memory_order_acquire)) {
         GerudoVoice_Init();
     }
     auto it = sSamples.find(sfxId);
-    if (it == sSamples.end() || it->second.empty()) return 0;
+    if (it == sSamples.end() || it->second.empty()) {
+        // No gerudo sample for this id. Returning 0 would let Link's own voice
+        // through, which is how a male grunt kept slipping into the sword-dance
+        // cycle — the child ids (0x6821 and friends) have no entry in the pack.
+        // While the form is active the answer is "handled", i.e. silence: only
+        // clips from the gerudo pack are ever heard as Gerudo.
+        return GerudoForm_IsActive() ? 1 : 0;
+    }
 
     // Pick a random variant
     auto& variants = it->second;
@@ -279,7 +322,7 @@ extern "C" u8 GerudoVoice_PlayIfMatch(u16 sfxId, Vec3f* /*pos*/) {
     // Mix rate is 32 kHz; step = source_rate / 32000 keeps playback at real speed.
     s.step = (float)chosen.rate / 32000.0f;
     s.vol = 1.0f;
-    s.playing.store(1, std::memory_order_release);  // publish last
+    s.playing.store(1, std::memory_order_release); // publish last
     return 1;
 }
 
@@ -288,7 +331,8 @@ extern "C" u8 GerudoVoice_PlayIfMatch(u16 sfxId, Vec3f* /*pos*/) {
 // ============================================================================
 
 extern "C" void GerudoVoice_MixInto(s16* outBuf, u32 numSamples) {
-    if (!sInitialized.load(std::memory_order_acquire) || !outBuf) return;
+    if (!sInitialized.load(std::memory_order_acquire) || !outBuf)
+        return;
 
     float masterVol = (float)CVarGetInteger("gSettings.Volume.Master", 40) / 100.0f;
     float voiceVol = CVarGetFloat("gSettings.Volume.SFX", 1.0f);
@@ -296,7 +340,8 @@ extern "C" void GerudoVoice_MixInto(s16* outBuf, u32 numSamples) {
 
     for (int sl = 0; sl < GV_SLOT_COUNT; sl++) {
         GVoiceSlot& slot = sSlots[sl];
-        if (slot.playing.load(std::memory_order_acquire) == 0) continue;
+        if (slot.playing.load(std::memory_order_acquire) == 0)
+            continue;
         if (!slot.data || slot.len == 0) {
             slot.playing.store(0, std::memory_order_release);
             continue;
@@ -309,9 +354,9 @@ extern "C" void GerudoVoice_MixInto(s16* outBuf, u32 numSamples) {
                 break;
             }
             int32_t sample = (int32_t)((float)slot.data[idx] * gain);
-            int32_t mL = (int32_t)outBuf[i * 2]     + sample;
+            int32_t mL = (int32_t)outBuf[i * 2] + sample;
             int32_t mR = (int32_t)outBuf[i * 2 + 1] + sample;
-            outBuf[i * 2]     = (mL > 32767) ? 32767 : (mL < -32768) ? -32768 : (s16)mL;
+            outBuf[i * 2] = (mL > 32767) ? 32767 : (mL < -32768) ? -32768 : (s16)mL;
             outBuf[i * 2 + 1] = (mR > 32767) ? 32767 : (mR < -32768) ? -32768 : (s16)mR;
             slot.fracPos += slot.step;
         }

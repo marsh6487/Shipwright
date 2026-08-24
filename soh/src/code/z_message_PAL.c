@@ -867,12 +867,13 @@ u16 Message_DrawItemIcon(PlayState* play, u16 itemId, Gfx** p, u16 i) {
         // and carve out only the NEI custom-item range [ITEM_ROCS_FEATHER_SKIJER..ITEM_EXT_BOOTS_3]
         // into the 32x32 branch. Items beyond ITEM_EXT_BOOTS_3 (e.g. ITEM_LAST_USED, ITEM_NONE)
         // stay on the 24x24 path matching mainline so vanilla quest icons don't glitch.
-        if (itemId >= ITEM_MEDALLION_FOREST &&
-            !(itemId >= ITEM_ROCS_FEATHER_SKIJER && itemId <= ITEM_EXT_BOOTS_3) &&
+        if (itemId >= ITEM_MEDALLION_FOREST && !(itemId >= ITEM_ROCS_FEATHER_SKIJER && itemId <= ITEM_EXT_BOOTS_3) &&
             // Bottle Randomizer extras (0xF4/0xF5) sit past ITEM_EXT_BOOTS_3 but are NEI custom
             // items with 32x32 icons (Message_LoadItemIcon's >= ITEM_ROCS_FEATHER_SKIJER branch),
             // so they must draw on the 32x32 path too. Skijer's NEI
-            !(itemId == ITEM_NET || itemId == ITEM_BOTTOMLESS_BOTTLE)) {
+            !(itemId == ITEM_NET || itemId == ITEM_BOTTOMLESS_BOTTLE) &&
+            // La pluma SHIP-VANILLA (0x9D): 32x32 en gItemIcons, un id por debajo del rango custom.
+            itemId != ITEM_ROCS_FEATHER) {
             gDPLoadTextureBlock(gfx++, (uintptr_t)msgCtx->textboxSegment + MESSAGE_STATIC_TEX_SIZE, G_IM_FMT_RGBA,
                                 G_IM_SIZ_32b, 24, 24, 0, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP,
                                 G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
@@ -1638,7 +1639,10 @@ void Message_LoadItemIcon(PlayState* play, u16 itemId, s16 y) {
     }
     // Main's structure: < ITEM_MEDALLION_FOREST = 32x32, else = 24x24.
     // SoH addition: custom items (>= ITEM_ROCS_FEATHER_SKIJER) also use 32x32.
-    if (itemId < ITEM_MEDALLION_FOREST) {
+    // ITEM_ROCS_FEATHER (0x9D, la pluma SHIP-VANILLA) queda UN id por debajo del rango custom: su
+    // textura gRocsFeatherTex es 32x32 y en la rama 24x24 salia corrupta — mismo bug historico que
+    // bomb bags/boots/tunics. Va por la rama vanilla de 32x32 (gItemIcons la tiene). Skijer's NEI
+    if (itemId < ITEM_MEDALLION_FOREST || itemId == ITEM_ROCS_FEATHER) {
         R_TEXTBOX_ICON_XPOS = R_TEXT_INIT_XPOS - sIconItem32XOffsets[language];
         R_TEXTBOX_ICON_YPOS = y + 6;
         R_TEXTBOX_ICON_SIZE = 32;
@@ -1652,13 +1656,26 @@ void Message_LoadItemIcon(PlayState* play, u16 itemId, s16 y) {
         R_TEXTBOX_ICON_YPOS = y + 6;
         R_TEXTBOX_ICON_SIZE = 32;
         void* iconPtr = ExtInv_GetItemIcon(itemId);
+        // A rando row that passes its RG as the itemId (every MM port does) lands here with a value
+        // no icon table knows, and ExtInv_GetItemIcon answers NULL — strlen(NULL) would crash, and
+        // an unresolved buffer renders as a glitched texture. Placeholder instead. Skijer's NEI
+        if (iconPtr == NULL || ((const char*)iconPtr)[0] == '\0') {
+            iconPtr = (void*)"__OTR__textures/icon_item_custom/gItemIconReservedSlotTex";
+        }
         memcpy((uintptr_t)msgCtx->textboxSegment + MESSAGE_STATIC_TEX_SIZE, iconPtr, strlen((const char*)iconPtr) + 1);
     } else {
         R_TEXTBOX_ICON_XPOS = R_TEXT_INIT_XPOS - sIconItem24XOffsets[language];
         R_TEXTBOX_ICON_YPOS = y + 10;
         R_TEXTBOX_ICON_SIZE = 24;
-        memcpy((uintptr_t)msgCtx->textboxSegment + MESSAGE_STATIC_TEX_SIZE, gItemIcons[itemId],
-               strlen(gItemIcons[itemId]) + 1);
+        // Same protection for the 24x24 half: gItemIcons only reaches ITEM_ROCS_FEATHER and carries
+        // empty strings in the 0x82..0x9B gap, so an id past the end (or in the gap) used to read
+        // out of bounds / copy "" and paint garbage. Falls back to a REAL 24x24 entry so the size
+        // the draw side picks by id still matches the texture. Skijer's NEI
+        const char* icon24 = (itemId < ARRAY_COUNT(gItemIcons)) ? gItemIcons[itemId] : NULL;
+        if (icon24 == NULL || icon24[0] == '\0') {
+            icon24 = gItemIcons[ITEM_HEART_PIECE];
+        }
+        memcpy((uintptr_t)msgCtx->textboxSegment + MESSAGE_STATIC_TEX_SIZE, icon24, strlen(icon24) + 1);
         // "Item 24"
         osSyncPrintf("アイテム24＝%d (%d) {%d}\n", itemId, itemId - ITEM_KOKIRI_EMERALD, 84);
     }
@@ -3758,7 +3775,7 @@ void Message_DrawMain(PlayState* play, Gfx** p) {
                            (msgCtx->lastPlayedSong <= OCARINA_SONG_MM_LAST)) {
                     static const char* sNeiMmSongFanfareNames[7] = {
                         "SonataOfAwakening(Ocarina)_4B", "GoronLullaby(Ocarina)_4C", "NewWaveBossaNova(Ocarina)_5D",
-                        "ElegyOfEmptiness(Ocarina)_5E",  "OathToOrder(Ocarina)_5F", "SongOfSoaring(Ocarina)_47",
+                        "ElegyOfEmptiness(Ocarina)_5E",  "OathToOrder(Ocarina)_5F",  "SongOfSoaring(Ocarina)_47",
                         "SongOfHealing(Ocarina)_48",
                     };
                     extern void MmBgm_PlayFanfare(const char* mmBgmName); // mods/sound_translator

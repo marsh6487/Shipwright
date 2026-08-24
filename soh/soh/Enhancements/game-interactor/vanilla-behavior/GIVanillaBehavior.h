@@ -3673,10 +3673,81 @@ typedef enum {
     // ```c
     // false
     // ```
-    // Allows an aimable item to enter its aiming state while the player is airborne.
+    // Allows an aimable item to enter and remain in its aiming state while the player is airborne.
     // #### `args`
     // - `*Player`
     VB_PLAYER_ALLOW_MIDAIR_AIM,
+
+    // Skijer's NEI: `Player_SetupRoll`, the choke point every roll entry passes through. A
+    // subscriber wanting a different move starts it itself, then returns false.
+    // #### `result`
+    // ```c
+    // true   // run the vanilla roll
+    // ```
+    // #### `args`
+    // - `*Player`    (this)
+    // - `*PlayState` (play)
+    VB_PLAYER_ROLL,
+
+    // Skijer's NEI: environmental heat — hot rooms, hot floors, lava floors. Asked through
+    // `Player_SuffersHeat`, which supplies the Goron Tunic / SuperTunic default.
+    // #### `result`
+    // ```c
+    // this->currentTunic != PLAYER_TUNIC_GORON && !SuperTunic
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_SUFFER_HEAT,
+
+    // Skijer's NEI: `func_8083821C`, the body catching fire. Distinct from VB_PLAYER_SUFFER_HEAT —
+    // a Fire Keese still ignites a heat-immune player.
+    // #### `result`
+    // ```c
+    // true   // catch fire
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_CATCH_FIRE,
+
+    // Skijer's NEI: child Link's two-handed Hylian stance — own model group, own defense anim, no
+    // shield in the right hand. Anything merely borrowing the Hylian slot must answer false.
+    // #### `result`
+    // ```c
+    // LINK_IS_CHILD && this->currentShield == PLAYER_SHIELD_HYLIAN
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_USE_CHILD_HYLIAN_STANCE,
+
+    // Skijer's NEI: does an elemental status stick — frozen solid, shocked. The damage itself
+    // lands either way.
+    // #### `result`
+    // ```c
+    // true   // the status applies
+    // ```
+    // #### `args`
+    // - `s32`     PLAYER_HIT_RESPONSE_FROZEN or PLAYER_HIT_RESPONSE_ELECTRIFIED
+    // - `*Player` (this)
+    VB_PLAYER_SUFFER_STATUS,
+
+    // Skijer's NEI: standing A with a weapon out — sheathe it.
+    // #### `result`
+    // ```c
+    // putAwayCooldownTimer == 0 && heldItemAction >= PLAYER_IA_SWORD_MASTER
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_PUTAWAY_HELD_ITEM,
+
+    // Skijer's NEI: standing A with nothing to sheathe. Asked only after
+    // VB_PLAYER_PUTAWAY_HELD_ITEM declines, so a mod owning the A press must refuse both.
+    // #### `result`
+    // ```c
+    // true   // toggle Navi
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_TOGGLE_NAVI,
 } GIVanillaBehavior;
 
 #endif

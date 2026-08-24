@@ -407,9 +407,9 @@ void EnButte_TransformIntoFairy(EnButte* this, PlayState* play) {
     if (this->timer == 5) {
         SoundSource_PlaySfxAtFixedWorldPos(play, &this->actor.world.pos, 60, NA_SE_EV_BUTTERFRY_TO_FAIRY);
     } else if (GameInteractor_Should(VB_SPAWN_BUTTERFLY_FAIRY, this->timer == 4, this)) {
-        Actor* fairy = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ELF, this->actor.focus.pos.x,
-                                   this->actor.focus.pos.y, this->actor.focus.pos.z, 0, this->actor.shape.rot.y, 0,
-                                   FAIRY_HEAL_TIMED);
+        Actor* fairy =
+            Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ELF, this->actor.focus.pos.x, this->actor.focus.pos.y,
+                        this->actor.focus.pos.z, 0, this->actor.shape.rot.y, 0, FAIRY_HEAL_TIMED);
         // Net-forced: also GRANT it — bottle the fairy, or heal Link if no bottle is free.
         if (this->netForced && (fairy != NULL)) {
             EnButte_NetGrantFairy(play, fairy, true);

@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 /**
- * Hybrid Garo render — uses garo_hybrid.o2r (19-bone skeleton combining
+ * Hybrid Garo render — uses soh.o2r (19-bone skeleton combining
  * MM Garo upper body + OOT Link adult lower body) with its own SkelAnime.
  *
  * Per-bone source split — always parallel, no mode CVar:
@@ -26,10 +26,10 @@ extern "C" {
  *   GaroHybrid_SetAnim(play, "__OTR__objects/object_jso/gGaroSlashLoopAnim");
  * (Use NULL or the idle path to reset.)
  */
-s32  GaroHybrid_Setup(PlayState* play);
+s32 GaroHybrid_Setup(PlayState* play);
 void GaroHybrid_Teardown(void);
 void GaroHybrid_Update(PlayState* play, Player* player);
-void GaroHybrid_Draw  (PlayState* play, Player* player);
+void GaroHybrid_Draw(PlayState* play, Player* player);
 
 /** Select a specific Garo animation by OTR path. NULL = restore idle. */
 void GaroHybrid_SetAnim(PlayState* play, const char* otrPath);

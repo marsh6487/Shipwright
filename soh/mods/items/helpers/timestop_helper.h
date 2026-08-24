@@ -98,6 +98,20 @@ s32 TimeCtl_IsActorExempt(struct Actor* actor);
 void TimeCtl_NoteAcCollider(Collider* collider);
 
 /**
+ * Strip an actor's post-hit invulnerability so the next swing lands.
+ *
+ * Enemies implement "you already hit me, wait your turn" in two ways and both are undone
+ * here: some drop AC_ON on their collider while flinching — which makes them unhittable
+ * AND makes the re-registration passes skip them — and others gate on the damage-flash
+ * timer. AC_HIT is deliberately left alone: the freeze/stutter passes read it to decide
+ * when to give a frozen actor a live frame to actually process the damage.
+ *
+ * Only affects colliders already seen via TimeCtl_NoteAcCollider, so an actor that has
+ * never registered an AC collider is simply left alone.
+ */
+void TimeCtl_ClearIframes(struct Actor* actor);
+
+/**
  * Per-frame apply. Call unconditionally from CustomItems_Update — it is a cheap
  * no-op when nobody is claiming, and it self-resets across scene changes.
  */

@@ -31,7 +31,7 @@
 #include "soh/GameVersions.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/resource/type/Text.h"
-#include "functions.h" // For Audio_SetFontInstrument, AudioLoad_IsFontLoadComplete
+#include "functions.h"           // For Audio_SetFontInstrument, AudioLoad_IsFontLoadComplete
 #include "message_data_static.h" // MessageTableEntry struct
 
 // SoH globals that hold pointers into Text-resource std::string buffers. After
@@ -208,15 +208,13 @@ static bool LoadMmO2r() {
             if (archive->HasGameVersion()) {
                 uint32_t mmVer = archive->GetGameVersion();
                 if (mmVer != MM_NTSC_US_10) {
-                    SDL_ShowSimpleMessageBox(
-                        SDL_MESSAGEBOX_ERROR, "Incompatible mm.o2r",
-                        "Your mm.o2r file is not compatible.\n"
-                        "Required: MM 1.0 USA (NTSC).\n\n"
-                        "Please re-extract using 2Ship2Harkinian (Keiichi Alfa 4.0.0+) "
-                        "with an MM 1.0 USA (NTSC) ROM.",
-                        nullptr);
-                    MMASSETS_LOG("[MM Assets] Incompatible mm.o2r (got 0x%08X, required 0x%08X)",
-                                 mmVer, MM_NTSC_US_10);
+                    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Incompatible mm.o2r",
+                                             "Your mm.o2r file is not compatible.\n"
+                                             "Required: MM 1.0 USA (NTSC).\n\n"
+                                             "Please re-extract using 2Ship2Harkinian (Keiichi Alfa 4.0.0+) "
+                                             "with an MM 1.0 USA (NTSC) ROM.",
+                                             nullptr);
+                    MMASSETS_LOG("[MM Assets] Incompatible mm.o2r (got 0x%08X, required 0x%08X)", mmVer, MM_NTSC_US_10);
                     // Don't kill the whole app (was exit(1), which also skipped SDL/graphics
                     // teardown). Remove the incompatible archive so it can't shadow OOT
                     // resources and assertion-crash, then decline MM features and let the
@@ -400,6 +398,23 @@ static std::shared_ptr<Ship::Archive> MmAssets_FindModOverride(const char* path)
         if (sModO2rLoaded && !sModO2rPath.empty() && archive->GetPath() == sModO2rPath)
             continue;
 
+        // Skip the GAME archives. They are not mods, and many MM paths exist verbatim in OoT
+        // (objects/object_gi_hookshot/..., object_gi_zoramask/..., object_gi_golonmask/...), so
+        // treating oot.o2r as an override made every MM asset on a shared path silently come back
+        // as OoT's — the Clawshot drew OoT's hookshot and the MM masks lost their textures, and the
+        // log said "Mod override found: ... in ./oot.o2r". A real mod lives in mods/ or mm-mod.o2r.
+        // Skijer's NEI
+        {
+            const std::string& ap = archive->GetPath();
+            auto endsWith = [&ap](const char* suffix) {
+                size_t n = strlen(suffix);
+                return ap.size() >= n && ap.compare(ap.size() - n, n, suffix) == 0;
+            };
+            if (endsWith("oot.o2r") || endsWith("oot-mq.o2r") || endsWith("soh.o2r")) {
+                continue;
+            }
+        }
+
         if (archive->HasFile(cleanPath)) {
             MMASSETS_LOG("[MM Assets] Mod override found: %s in %s", path, archive->GetPath().c_str());
             return archive;
@@ -465,6 +480,84 @@ void* MmAssets_LoadResource(const char* path) {
     } catch (const std::exception& e) {
         MMASSETS_LOG("[MM Assets] Exception loading resource '%s': %s", path, e.what());
     } catch (...) { MMASSETS_LOG("[MM Assets] Unknown exception loading resource '%s'", path); }
+    return nullptr;
+}
+
+/**
+ * Load a resource that MUST come from mm.o2r — no mod overrides, no fallbacks, no archive priority.
+ *
+ * Use this whenever MM and OoT own the same path. Dozens do: objects/object_gi_hookshot/*,
+ * object_gi_zoramask/*, object_gi_golonmask/*, object_gi_ki_tan_mask/*, object_gi_rabit_mask/*,
+ * object_gi_truth_mask/*… For those, "load MM's" and "load by path" are different requests, and
+ * every generic loader answers the second one: the plain resolver picks by archive priority, and
+ * MmAssets_LoadResource used to accept oot.o2r as a "mod override" and hand back OoT's copy. The
+ * Clawshot rendering OoT's hookshot and the MM masks losing their textures were both that.
+ *
+ * This is the unambiguous accessor: it can only ever return MM's version, or NULL. Prefer it at any
+ * call site whose whole point is "this is the MM asset". Skijer's NEI
+ *
+ * @param path Resource path within mm.o2r ("objects/object_gi_hookshot/gGiHookshotDL")
+ * @return Pointer to MM's resource, or NULL if mm.o2r is absent or lacks it
+ */
+void* MmAssets_LoadResourceStrict(const char* path) {
+    if (!sMmO2rLoaded || path == nullptr || !sMmArchive) {
+        return nullptr;
+    }
+    // Accept the __OTR__ prefix for convenience — archives index files without it.
+    if (strncmp(path, "__OTR__", 7) == 0) {
+        path += 7;
+    }
+
+    // Own cache: we deliberately bypass ResourceManager::LoadResourceProcess, so its cache never
+    // sees these.
+    static std::unordered_map<std::string, void*> sStrictCache;
+    {
+        auto it = sStrictCache.find(path);
+        if (it != sStrictCache.end()) {
+            return it->second;
+        }
+    }
+
+    try {
+        auto resourceManager = OTRGlobals::Instance->context->GetResourceManager();
+        if (!resourceManager) {
+            return nullptr;
+        }
+
+        // Pull the FILE straight out of mm.o2r, then build the resource from it.
+        //
+        // Why not LoadResourceProcess({path, 0, sMmArchive}): that function honours the Parent
+        // archive for its CACHE KEY only — when it actually fetches the bytes it calls
+        // `LoadFileProcess(identifier.Path)`, i.e. the std::string overload, which drops Parent and
+        // resolves by archive priority. mm.o2r is deliberately mounted at the LOWEST priority, so
+        // every shared path came back as OoT's. Measured: the runtime DL had 106 instructions and 7
+        // vertex ops, which is exactly OoT's gGiHookshotDL (MM's has 150 and 8). That is why the
+        // Clawshot kept rendering OoT's hookshot no matter which loader it went through.
+        // Archive::LoadFile + ResourceLoader::LoadResource are both public, so this stays out of
+        // libultraship (never edit the submodule). Skijer's NEI
+        auto file = sMmArchive->LoadFile(path);
+        if (file == nullptr) {
+            MMASSETS_LOG("[MM Assets] STRICT miss (not in mm.o2r): %s", path);
+            sStrictCache[path] = nullptr;
+            return nullptr;
+        }
+        auto resource = resourceManager->GetResourceLoader()->LoadResource(path, file, nullptr);
+        if (resource == nullptr) {
+            MMASSETS_LOG("[MM Assets] STRICT: file found but resource build failed: %s", path);
+            sStrictCache[path] = nullptr;
+            return nullptr;
+        }
+        // The resource must outlive this call — the caller hands the pointer to the interpreter.
+        static std::vector<std::shared_ptr<Ship::IResource>> sStrictKeepAlive;
+        sStrictKeepAlive.push_back(resource);
+
+        void* ptr = resource->GetRawPointer();
+        MMASSETS_LOG("[MM Assets] STRICT loaded from mm.o2r: %s -> %p", path, ptr);
+        sStrictCache[path] = ptr;
+        return ptr;
+    } catch (const std::exception& e) {
+        MMASSETS_LOG("[MM Assets] STRICT exception '%s': %s", path, e.what());
+    } catch (...) { MMASSETS_LOG("[MM Assets] STRICT unknown exception '%s'", path); }
     return nullptr;
 }
 
@@ -714,7 +807,8 @@ char** MmAssets_ListFiles(const char* searchMask, int* resultSize) {
  * Same return convention as MmAssets_ListFiles: caller must free each entry + the array.
  */
 char** MmAssets_ListMmArchiveFiles(const char* searchMask, int* resultSize) {
-    if (resultSize) *resultSize = 0;
+    if (resultSize)
+        *resultSize = 0;
     if (!sMmO2rLoaded || !sMmArchive || searchMask == nullptr || resultSize == nullptr) {
         return nullptr;
     }
@@ -1114,7 +1208,8 @@ static MmSfxCacheEntry sSfxCache[MM_SFX_MAX_FONTS];
 static s32 sSfxCacheCount = 0;
 static s32 sSfxInitialized = 0;
 static f32 sTempFreqScale = 1.0f;
-static f32 sTempVol = 1.0f; // scratch buffer for MmSfx_PlayEx vol param (lives at file scope so the address stays valid until the audio engine reads it)
+static f32 sTempVol = 1.0f; // scratch buffer for MmSfx_PlayEx vol param (lives at file scope so the address stays valid
+                            // until the audio engine reads it)
 
 static void MmSfxCache_Init(void) {
     if (sSfxInitialized)
@@ -1443,7 +1538,10 @@ SoundFont* MmSfx_LoadFont(s32 fontId) {
         // The user reports "el rolling con pinchos no es ese sonido" — exactly this.
         // Patch the affected instruments to the MM-spec ranges so the right sample plays.
         if (fontId == 0 && font->instruments && font->numInstruments > 100) {
-            struct RangeOverride { u8 idx; u8 newRangeHi; };
+            struct RangeOverride {
+                u8 idx;
+                u8 newRangeHi;
+            };
             static const RangeOverride sRangeFixes[] = {
                 { 33, 83 }, // INST_33 BowstringTwang split — MM RangeHi="B5"
                 { 35, 83 }, // INST_35 BombchuMotor split   — MM RangeHi="B5"
@@ -1636,10 +1734,10 @@ typedef struct {
     f32 vibratoRate;    // Vibrato LFO rate (Hz), 0 = no vibrato
     f32 vibratoDepth;   // Vibrato pitch modulation depth [0..1]
     // Portamento (pitch sweep from startAdvance to target advance over portaDuration samples)
-    f32 portaStartAdv;     // Starting advance rate (0 = no portamento)
-    f32 portaEndAdv;       // Target advance rate
-    f32 portaProgress;     // Current progress [0..1], 1 = reached target
-    f32 portaRate;         // Progress increment per sample (1/portaDurationSamples)
+    f32 portaStartAdv;       // Starting advance rate (0 = no portamento)
+    f32 portaEndAdv;         // Target advance rate
+    f32 portaProgress;       // Current progress [0..1], 1 = reached target
+    f32 portaRate;           // Progress increment per sample (1/portaDurationSamples)
     u32 portaPreHoldSamples; // Hold portaStartAdv for this many samples BEFORE starting porta glide.
                              // Matches MM seq pattern: notedv portaNote (held) → portamento → notedv mainNote.
                              // 0 = no pre-hold (porta starts immediately, legacy behavior).
@@ -1647,10 +1745,10 @@ typedef struct {
                              // While >0, the per-sample loop emits silence and decrements.
     // (NEW) Vibrato gradient state — lerp vibratoRate/vibratoDepth from start to end values
     // over vibGradSamplesTotal output samples. Matches MM's `vibfreqgrad/vibdepthgrad` opcodes.
-    f32 vibratoRateEnd;       // target rate at end of gradient (0 = no rate gradient)
-    f32 vibratoDepthEnd;      // target depth at end of gradient
-    u32 vibGradSamplesElapsed;// progress counter
-    u32 vibGradSamplesTotal;  // total ramp duration in samples (0 = no gradient)
+    f32 vibratoRateEnd;        // target rate at end of gradient (0 = no rate gradient)
+    f32 vibratoDepthEnd;       // target depth at end of gradient
+    u32 vibGradSamplesElapsed; // progress counter
+    u32 vibGradSamplesTotal;   // total ramp duration in samples (0 = no gradient)
     // ADSR envelope (replicates N64 sequencer envelope shaping)
     f32 envVolume;        // Current envelope amplitude [0..1]
     f32 envAttackRate;    // Per-sample attack increment (0→1)
@@ -1659,6 +1757,7 @@ typedef struct {
     f32 envReleaseRate;   // Per-sample release decrement (sustain→0)
     u32 envReleaseAt;     // Output sample count at which release begins (0 = at end of PCM)
     u8 envPhase;          // Current ADSR phase
+    f32 reverb;           // Reverb send level [0..1] (0 = dry). MM's gSfxDefaultReverb is 0x30/127.
     u16 mmSfxId;          // MM SFX ID for stop/identify
     u8 active;            // 1=playing, 0=free
     u8 ownsPcm;           // 1=owns pcmData (must free on reuse), 0=cached WAV (don't free)
@@ -1668,6 +1767,18 @@ typedef struct {
 
 static u32 sMmAudioFrame = 0; // Incremented each mixer call (~every 50ms)
 
+// ── Reverb delay line ────────────────────────────────────────────────────────────────
+// The N64 engine sends every voice through a delay-line reverb; the depth per sound comes
+// from the SFX request (gSfxDefaultReverb for the ocarina and most player SFX). Our mixer
+// used to sum everything dry, which is a big part of why ported sounds read as "not 1:1"
+// against MM even when pitch and envelope line up.
+// Power-of-two length so the wrap is a mask. ~85 ms at 32 kHz.
+#define MM_REVERB_LEN 4096
+#define MM_REVERB_FEEDBACK 0.35f
+static f32 sMmReverbBufL[MM_REVERB_LEN];
+static f32 sMmReverbBufR[MM_REVERB_LEN];
+static u32 sMmReverbBase = 0; // advances by numSamples once per mixer callback
+
 static MmPlayingSound sPlayingSounds[MM_DIRECT_MAX_SOUNDS];
 
 // SFX IDs that are truly continuous — they loop until explicitly stopped via MmSfx_Stop.
@@ -1675,12 +1786,20 @@ static MmPlayingSound sPlayingSounds[MM_DIRECT_MAX_SOUNDS];
 // In N64, sustain loops (count=-1) are held by ADSR envelopes until note-off from the sequencer.
 // We don't have ADSR or note-off, so we must whitelist the few sounds that genuinely loop.
 static const u16 sContinuousSfxIds[] = {
-    0x0990, // GORON_ROLL (rolling sound, stopped when ball ends)
+    // NOTE: GORON_ROLL (0x0990) and GORON_ROLL_ICE (0x099F) are deliberately NOT here.
+    // MM does not loop them: z_player.c:21186-21196 accumulates a roll angle
+    // (unk_B86[0] += speed * 800) and fires the SFX ONCE PER TUMBLE, only on the
+    // zero-crossing `((prev + delta) * prev) <= 0`. It is a discrete impact whose
+    // cadence tracks speed — not a drone. Marking them continuous forced
+    // maxLifeSamples = 0 (see PlaySingle), which cancels the per-layer note caps and
+    // holds layer L0 (INST_0 footstep, the one layer with no cap) indefinitely; the
+    // 3-frame refresh timeout then made it a sustained buzz at speed and a stutter
+    // when rolling slowly. As one-shots each tumble re-attacks with its own envelope,
+    // which is what MM's seq_0 CHAN_PL_GORON_ROLL does.
     0x0980, // GORON_CHG_ROLL (spike-mode rolling — LAYER_3AB7 has rjump loop in MM seq_0;
             // without continuous handling, each tumble cycle re-attacks the sample causing
             // stutter when the user holds A at max charge. Refresh keeps the drone smooth.)
     0x098F, // GORON_CHG_ROLL_ICE (same loop semantics on ice surfaces)
-    0x099F, // GORON_ROLL_ICE (mirror of GORON_ROLL for ice variant)
     0x08EB, // GORON_BALL_CHARGE (charging up, stopped when released)
     0x09A1, // DEKUNUTS_BUBLE_BREATH (bubble charging, stopped when fired)
     0x09AD, // GORON_SLIP (slipping sound, stopped when grounded)
@@ -1723,46 +1842,46 @@ static bool MmDirectAudio_IsContinuous(u16 mmSfxId) {
 //   4 = sustain_loop  (ENVELOPE_C0B4: instant attack + indefinite sustain — held sounds)
 static void MmDirectAudio_ApplyEnvPreset(MmPlayingSound* snd, u8 envPreset) {
     switch (envPreset) {
-        case 1: // swell
-            snd->envAttackRate = 1.0f / 1536.0f;  // ~48ms slow swell-in
+        case 1:                                  // swell
+            snd->envAttackRate = 1.0f / 1536.0f; // ~48ms slow swell-in
             snd->envDecayRate = 0.0f;
             snd->envSustainLevel = 1.0f;
-            snd->envReleaseRate = 1.0f / 960.0f;  // 30ms gentle release
+            snd->envReleaseRate = 1.0f / 960.0f; // 30ms gentle release
             break;
-        case 2: // blip — short percussive
-            snd->envAttackRate = 1.0f / 32.0f;    // 1ms super-fast attack
-            snd->envDecayRate = 1.0f / 320.0f;    // 10ms decay
-            snd->envSustainLevel = 0.0f;          // decays fully (no sustain)
-            snd->envReleaseRate = 1.0f / 160.0f;  // 5ms release
+        case 2:                                  // blip — short percussive
+            snd->envAttackRate = 1.0f / 32.0f;   // 1ms super-fast attack
+            snd->envDecayRate = 1.0f / 320.0f;   // 10ms decay
+            snd->envSustainLevel = 0.0f;         // decays fully (no sustain)
+            snd->envReleaseRate = 1.0f / 160.0f; // 5ms release
             break;
-        case 3: // slow_decay — magic/voice tail
+        case 3:                                   // slow_decay — magic/voice tail
             snd->envAttackRate = 1.0f / 256.0f;   // 8ms attack
             snd->envDecayRate = 1.0f / 4800.0f;   // 150ms long decay
             snd->envSustainLevel = 0.5f;          // half-volume sustain
             snd->envReleaseRate = 1.0f / 1600.0f; // 50ms release
             break;
-        case 4: // sustain_loop — for held tones (charge, barrier)
-            snd->envAttackRate = 1.0f / 64.0f;    // 2ms attack
+        case 4:                                // sustain_loop — for held tones (charge, barrier)
+            snd->envAttackRate = 1.0f / 64.0f; // 2ms attack
             snd->envDecayRate = 0.0f;
             snd->envSustainLevel = 1.0f;
-            snd->envReleaseRate = 1.0f / 960.0f;  // 30ms release
+            snd->envReleaseRate = 1.0f / 960.0f; // 30ms release
             break;
         case 5: // instant_then_decay — MM envelopes BFAC/BF98/C03C: 1,32700 → decay to 0.
                 // Used by FLOWER_OPEN L1 (78 B3), DEKUNUTS_ATTACK L0 (46 F5 t48),
                 // DEKUNUTS_OUT_GRD L0 (47 B3), BUBLE_BROKEN (41 C4). Instant attack so
                 // the percussive transient comes through, then long natural decay to silence.
-            snd->envAttackRate = 1.0f / 32.0f;    // 1ms instant attack
-            snd->envDecayRate = 1.0f / 6400.0f;   // 200ms long decay
-            snd->envSustainLevel = 0.0f;          // full decay to silence (no sustain plateau)
-            snd->envReleaseRate = 1.0f / 480.0f;  // 15ms release
+            snd->envAttackRate = 1.0f / 32.0f;   // 1ms instant attack
+            snd->envDecayRate = 1.0f / 6400.0f;  // 200ms long decay
+            snd->envSustainLevel = 0.0f;         // full decay to silence (no sustain plateau)
+            snd->envReleaseRate = 1.0f / 480.0f; // 15ms release
             break;
         case 6: // instant_then_sustain_low — MM envelopes BF20/BF44/BF64/BF74: instant + decay to ~5000 (~15% max).
                 // Used by DEKUNUTS_OUT_GRD L2 (33 E5 t48), BALL_CHARGE_DASH L0/L1, FACE_CHANGE,
                 // SWIM_DASH L0, LIGHTNING_HARD. Instant attack + decay to a softer sustain plateau.
-            snd->envAttackRate = 1.0f / 32.0f;    // 1ms instant attack
-            snd->envDecayRate = 1.0f / 6400.0f;   // 200ms decay
-            snd->envSustainLevel = 0.15f;         // ~15% sustain (matches BF20 5000/32700)
-            snd->envReleaseRate = 1.0f / 800.0f;  // 25ms release
+            snd->envAttackRate = 1.0f / 32.0f;   // 1ms instant attack
+            snd->envDecayRate = 1.0f / 6400.0f;  // 200ms decay
+            snd->envSustainLevel = 0.15f;        // ~15% sustain (matches BF20 5000/32700)
+            snd->envReleaseRate = 1.0f / 800.0f; // 25ms release
             break;
         case 0:
         default: // legacy flat blip
@@ -1772,6 +1891,110 @@ static void MmDirectAudio_ApplyEnvPreset(MmPlayingSound* snd, u8 envPreset) {
             snd->envReleaseRate = 1.0f / 320.0f;
             break;
     }
+}
+
+// ── Real instrument ADSR, straight from the soundfont ────────────────────────────────
+// The hand-written presets above exist because of a comment claiming mm.o2r envelope data
+// was "byte-swap corrupted". That is wrong: reading the raw resource bytes shows both
+// mm.o2r and oot.o2r store the SAME, perfectly valid points — e.g. the stock OoT envelope
+//     (delay 2, arg 32700) (298, 32700) (32700, 29430) (-1, 0)
+// and the resource header is little-endian ("OSFT" + 0xDEADBEEF read LE). What corrupts
+// them is the unconditional BE16SWAP in AudioSoundFontFactory (it turns 32700 into a
+// NEGATIVE level, hence the "sus=0.28" that was blamed on the data).
+//
+// We cannot drop that swap: the factory is shared with OoT's own audio. Since a byte swap
+// is involutive, applying it a second time here recovers the original value — a local,
+// zero-risk undo that leaves OoT untouched.
+//
+// Point format (z64audio.h AdsrEnvelope), levels in 0..32700:
+//   delay >  0 : ramp to `arg` over `delay` ticks
+//   delay == ADSR_DISABLE(0)/ADSR_HANG(-1)/ADSR_GOTO(-2)/ADSR_RESTART(-3): control opcodes
+// One MM/OoT audio tick is 1/60 s; at 32 kHz that is ~533 samples.
+#define MM_ADSR_TICK_SAMPLES 533.0f
+#define MM_ADSR_MAX_LEVEL 32700.0f
+
+static s16 MmDirectAudio_UnswapEnv(s16 v) {
+    u16 u = (u16)v;
+    return (s16)(u16)(((u & 0xFF) << 8) | ((u >> 8) & 0xFF));
+}
+
+// Translate an instrument's envelope point list into our per-sample ADSR rates.
+// Returns false when the instrument has no usable envelope (caller keeps the preset).
+static bool MmDirectAudio_ApplyInstrumentEnvelope(MmPlayingSound* snd, Instrument* inst) {
+    if (inst == NULL || inst->envelope == NULL) {
+        return false;
+    }
+
+    // Runtime switch so this can be A/B'd against the hand-written presets WITHOUT a
+    // rebuild. The reasoning behind reading the real envelope is solid (the raw resource
+    // bytes are valid ADSR points and the header is little-endian), but "the data is
+    // readable" and "it sounds right through OUR synth" are different claims, and only
+    // the second one can be settled by ear. Default OFF = the previously shipped
+    // behaviour; set gMmAudio.RealEnvelopes=1 to hear the instrument's own envelope.
+    if (CVarGetInteger("gMmAudio.RealEnvelopes", 0) == 0) {
+        return false;
+    }
+
+    f32 attackTicks = 0.0f;
+    f32 attackLevel = 0.0f;
+    f32 decayTicks = 0.0f;
+    f32 sustainLevel = -1.0f;
+    s32 points = 0;
+
+    for (s32 i = 0; i < 16; i++) { // 16 is a safety bound; real lists end well before it
+        s16 delay = MmDirectAudio_UnswapEnv(inst->envelope[i].delay);
+        s16 arg = MmDirectAudio_UnswapEnv(inst->envelope[i].arg);
+
+        if (delay <= 0) { // ADSR_DISABLE / HANG / GOTO / RESTART — end of the ramp list
+            if (points > 0 && sustainLevel < 0.0f) {
+                sustainLevel = attackLevel; // hold whatever the last ramp reached
+            }
+            break;
+        }
+
+        f32 level = (f32)arg / MM_ADSR_MAX_LEVEL;
+        if (level < 0.0f) {
+            return false; // still nonsensical — bail out to the preset
+        }
+        if (level > 1.0f) {
+            level = 1.0f;
+        }
+
+        if (points == 0) {
+            attackTicks = (f32)delay;
+            attackLevel = level;
+        } else if (points == 1) {
+            decayTicks = (f32)delay;
+            sustainLevel = level;
+        }
+        points++;
+    }
+
+    if (points == 0) {
+        return false;
+    }
+    if (sustainLevel < 0.0f) {
+        sustainLevel = attackLevel;
+    }
+
+    snd->envAttackRate = (attackTicks > 0.0f) ? (attackLevel / (attackTicks * MM_ADSR_TICK_SAMPLES)) : 1.0f;
+    snd->envDecayRate = (decayTicks > 0.0f && attackLevel > sustainLevel)
+                            ? ((attackLevel - sustainLevel) / (decayTicks * MM_ADSR_TICK_SAMPLES))
+                            : 0.0f;
+    snd->envSustainLevel = sustainLevel;
+
+    // releaseRate is a 0..255 decay constant in MM; larger = faster. Map it onto our
+    // per-sample decrement, clamped so a note never hangs forever nor clicks.
+    f32 rr = (f32)inst->releaseRate;
+    if (rr < 1.0f) {
+        rr = 1.0f;
+    }
+    snd->envReleaseRate = rr / (255.0f * 800.0f); // rr=255 → ~25ms, rr=10 → ~640ms
+
+    if (snd->envAttackRate <= 0.0f) {
+        snd->envAttackRate = 1.0f / 64.0f;
+    }
+    return true;
 }
 
 static void MmDirectAudio_SetEnvelope(MmPlayingSound* snd, bool isContinuous) {
@@ -1878,12 +2101,12 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     { 0x0811, 26, 65 }, // JUMP L1b: INST_26, F4(65) — metallic ring
     { 0x0811, 23, 53 }, // JUMP L1c: INST_23, F3(53) — whoosh tail
     // CHAN_PL_JUMP_CONCRETE: L0=INST_2 G#3+B3, L1=same LAYER_05DF chain
-    { 0x0812, 2, 54 },              // LAND L0: INST_2, GF3(54) — seq_0: PITCH_GF3
-    { 0x0812, 32, 72 },             // LAND L1a: INST_32, C5(72)
-    { 0x0812, 26, 65 },             // LAND L1b: INST_26, F4(65)
-    { 0x0812, 23, 53 },             // LAND L1c: INST_23, F3(53)
+    { 0x0812, 2, 54 },  // LAND L0: INST_2, GF3(54) — seq_0: PITCH_GF3
+    { 0x0812, 32, 72 }, // LAND L1a: INST_32, C5(72)
+    { 0x0812, 26, 65 }, // LAND L1b: INST_26, F4(65)
+    { 0x0812, 23, 53 }, // LAND L1c: INST_23, F3(53)
     // CHAN_PL_CLIMB_CLIFF (seq_0:903-911, sound.txt). env C018 (48-tick slow attack swell to max).
-    { 0x0814, 9, 69, 0, 0, 0, 0, 0, 0, 127, 0, 0, 0, 0, 0, 1, 0 }, // INST_9 A4 env C018 → preset 1
+    { 0x0814, 9, 69, 0, 0, 0, 0, 0, 0, 127, 0, 0, 0, 0, 0, 0, 1 }, // INST_9 A4 env C018 → preset 1
     { 0x0839, 20, 48, 0, 57, 200 }, // SWIM: INST_20, target C3(48), porta from A3(57) — seq_0: porta 0x81
     // CHAN_PL_FREEZE (seq_0): gain=30
     // CHAN_EV_FREEZE_S: gain=30 (seq_0). Boosts the icy crackle.
@@ -1892,17 +2115,17 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     // CHAN_PL_PUT_OUT_ITEM (seq_0:1546-1556, sound.txt). LAYER_0C4E:
     //   INST_9 env C070 rr251 → notedv F3(5t,v75) → BF2(10t,v75) → BF2(17t,v75)
     //   C070 = 40-tick slow attack → sustain max → preset 1 (swell).
-    { 0x0877, 9, 53, 0, 0, 0, 0, 0, 0, 75, 0, 0, 0, 0, 0, 1, 0 }, // env C070 → preset 1
+    { 0x0877, 9, 53, 0, 0, 0, 0, 0, 0, 75, 0, 0, 0, 0, 0, 0, 1 }, // env C070 → preset 1
     // CHAN_PL_SLIP_LEVEL (seq_0:2254-2265, sound.txt). LAYER_10A6 loop:
     //   INST_12 env C088 rr251 legato → notedv C4(127t,v88) LOOP
     //   C088 = 225-tick VERY slow attack → sustain at 30000 → preset 1 (swell, sustained)
-    { 0x08D0, 12, 60, 0, 0, 0, 0, 0, 0, 88, 0, 0, 0, 0, 0, 1, 0 }, // env C088+loop → preset 1
+    { 0x08D0, 12, 60, 0, 0, 0, 0, 0, 0, 88, 0, 0, 0, 0, 0, 0, 1 }, // env C088+loop → preset 1
     // CHAN_PL_FACE_UP (seq_0:1297-1310, sound.txt). Used by Zora surfacing from water.
     // Single layer with 2 sequential notes via instrument change:
     //   INST_62 env C070 (40-tick slow attack) → porta C4→C5 → INST_19 env C134 (complex) → porta F3→C4
     //   C070 → preset 1 (swell). C134 has slow attack + decay → preset 1 closest.
-    { 0x0863, 62, 72, 0, 60, 255, 0, 0, 0, 100, 0, 0, 0, 0, 0, 1, 0 }, // L0a env C070 → preset 1
-    { 0x0863, 19, 60, 0, 53, 200, 0, 0, 0, 100, 0, 0, 0, 0, 0, 1, 0 }, // L0b env C134 → preset 1
+    { 0x0863, 62, 72, 0, 60, 255, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 1 }, // L0a env C070 → preset 1
+    { 0x0863, 19, 60, 0, 53, 200, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 1 }, // L0b env C134 → preset 1
 
     // === Player Bank: Deku SFX ===
     // CHAN_PL_DEKUNUTS_FIRE (seq_0.prg.seq:2344-2350):
@@ -1938,9 +2161,9 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     //     the swoop without the metallic shimmer ("falta un sonido").
     //   gain=128 on L2 is critical — MM uses gain UQ4.4 where 128=8.0x (the shimmer
     //   needs the boost to cut through L0+L1 at vel=45).
-    { 0x08E2, 47, 57, 0, 43, 255, 0, 0, 0, 110, 0,  0, 1, 0, 0, 0, 5 }, // L0 sweep preset 5
-    { 0x08E2, 35, 59, 48, 40, 127, 0, 0, 0, 62, 0,  0, 0, 0, 0, 0, 5 }, // L1 motor preset 5
-    { 0x08E2, 32, 58, 0,  0,   0,  0, 0, 0, 90, 16, 0, 0, 0, 0, 0, 4 }, // L2 shimmer gain16(unity) sustain_loop vel=90
+    { 0x08E2, 47, 57, 0, 43, 255, 0, 0, 0, 110, 0, 0, 1, 0, 0, 0, 5 }, // L0 sweep preset 5
+    { 0x08E2, 35, 59, 48, 40, 127, 0, 0, 0, 62, 0, 0, 0, 0, 0, 0, 5 }, // L1 motor preset 5
+    { 0x08E2, 32, 58, 0, 0, 0, 0, 0, 0, 90, 16, 0, 0, 0, 0, 0, 4 },    // L2 shimmer gain16(unity) sustain_loop vel=90
     // CHAN_PL_DEKUNUTS_OUT_GRD (seq_0:2390-2415) VERBATIM:
     //   L0 LAYER_117F: INST_47 env ENVELOPE_BFAC rr251 portamento 0x81 PITCH_A3 192 notedv B3 100t v100
     //     ENVELOPE_BFAC = instant attack + ~200ms decay-to-0 → envPreset=5.
@@ -1949,20 +2172,20 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     //   L2 LAYER_116D: ldelay 6 + INST_33 t48 env ENVELOPE_BF20 rr251 portamento 0x81 PITCH_E4 127
     //                  notedv E5 48t v95. BF20 = instant + decay-to-15% sustain → envPreset=6.
     { 0x08E3, 47, 59, 0, 57, 192, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 5 }, // L0 vel=100 envPreset 5
-    { 0x08E3, 106, 64, 0, 0,   0, 0, 0, 0, 100, 0, 0 },                  // L1 vel=100
+    { 0x08E3, 106, 64, 0, 0, 0, 0, 0, 0, 100, 0, 0 },                  // L1 vel=100
     { 0x08E3, 33, 76, 48, 64, 127, 0, 0, 0, 95, 0, 6, 0, 0, 0, 0, 6 }, // L2 vel=95 ldelay=6 envPreset 6
 
     // === Player Bank: Goron SFX ===
     // CHAN_PL_GORON_BALLJUMP (seq_0:2352-2362, sound.txt). INST_102, porta G2→G3, vel=74,
     // vibfreq=128, vibdepthgrad 52→0 dur=10. Velocity 74 (was 110) — MM is softer than we had.
-    { 0x08E1, 102, 55, 0, 43, 255, 0, 128, 52, 74, 0, 0,  0, 0, 0, 10, 0,  0, 0, 0, 0 },
+    { 0x08E1, 102, 55, 0, 43, 255, 0, 128, 52, 74, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0 },
     // CHAN_PL_TRANSFORM (seq_0): INST_68 at channel, 3 layers sharing porta F5→GF5→A5
     // L0+L1: INST_68, t=0/t=5, legato, porta from F5(77), note GF5(78)
     // CHAN_PL_TRANSFORM: 3 layers + vibfreqgrad 0→255 dur=24, vibdepth=5, ENV swell (ENVELOPE_C018).
     // envPreset=1 (swell): ~48ms slow attack — the transformation "ascending shimmer" feel.
-    { 0x08E4, 68, 78,   0, 77, 127, 0,   0, 5, 100, 0, 0,  0, 255, 5, 24, 1,  0, 0, 0, 0 }, // L0
-    { 0x08E4, 68, 78,   5, 77, 127, 0,   0, 5, 100, 0, 0,  0, 255, 5, 24, 1,  0, 0, 0, 0 }, // L1
-    { 0x08E4, 64, 78, -43, 77, 127, 0,   0, 5, 100, 0, 0,  0, 255, 5, 24, 1,  0, 0, 0, 0 }, // L2
+    { 0x08E4, 68, 78, 0, 77, 127, 0, 0, 5, 100, 0, 0, 0, 255, 5, 24, 1, 0, 0, 0, 0 },   // L0
+    { 0x08E4, 68, 78, 5, 77, 127, 0, 0, 5, 100, 0, 0, 0, 255, 5, 24, 1, 0, 0, 0, 0 },   // L1
+    { 0x08E4, 64, 78, -43, 77, 127, 0, 0, 5, 100, 0, 0, 0, 255, 5, 24, 1, 0, 0, 0, 0 }, // L2
     // CHAN_PL_TRANSFORM_DEMO (seq_0:2443-2453, sound.txt). gain=20, INST_47, LAYER_11C3:
     //   notedvg G3(20t,v60,gain180) [first burst with gain boost] → porta 0x81 G3 127 → B1(35t,v100)
     // The first G3 burst is collapsed; we keep the dominant porta→B1 tail.
@@ -1975,13 +2198,13 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     // CHAN_PL_GORON_PUNCH (seq_0:2467-2482, sound.txt). gain=20, 2 layers, vel=113 each:
     //   L0 (LAYER_11EC): INST_65 notedv F3 0t vel113 (settled-stone-block impact)
     //   L1 (LAYER_11F2): INST_77 rr232 notedv C4 100t vel113 (mechanical-ramp-up tail)
-    { 0x08E8, 65, 53, 0, 0, 0, 0, 0, 0, 113, 20, 0 },  // L0 vel=113
-    { 0x08E8, 77, 60, 0, 0, 0, 0, 0, 0, 113, 20, 0 },  // L1 vel=113
+    { 0x08E8, 65, 53, 0, 0, 0, 0, 0, 0, 113, 20, 0 }, // L0 vel=113
+    { 0x08E8, 77, 60, 0, 0, 0, 0, 0, 0, 113, 20, 0 }, // L1 vel=113
     // CHAN_PL_GORON_BALL_CHARGE (seq_0:2512-2535, sound.txt). 2 looping layers + vibfreq=160 vibdepth=60.
     //   L0 (LAYER_1240): INST_35 t48 legato porta 0x81 C2 127 → notedv F4(65) 200t vel75 (loop)
     //   L1 (LAYER_1231): INST_75 t2 legato porta 0x81 C2 127 → notedv E4(64) 200t vel44 (loop, softer)
     { 0x08EB, 35, 65, 48, 36, 127, 0, 160, 60, 75, 0, 0 }, // L0 vel=75
-    { 0x08EB, 75, 64,  2, 36, 127, 0, 160, 60, 44, 0, 0 }, // L1 vel=44 (background)
+    { 0x08EB, 75, 64, 2, 36, 127, 0, 160, 60, 44, 0, 0 },  // L1 vel=44 (background)
 
     // === Player Bank: Zora SFX ===
     // CHAN_PL_ZORA_SWIM_DASH (seq_0:2537-2554, sound.txt). 3 layers (L1 broken ref):
@@ -1989,12 +2212,12 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     //                    BF64 = instant → decay to 5000 → preset 6
     //   L1 (LAYER_1C67): NOT FOUND in seq_0 (broken reference in MM source). Skipped.
     //   L2 (LAYER_1259): INST_20 porta 0x81 C3 200 → notedv DF5(140t,v105) (no env)
-    { 0x08EC, 72, 53, 0, 36, 255, 0, 0, 0, 100, 0, 0, 0, 0, 0, 6, 0 }, // L0 env BF64 → preset 6
-    { 0x08EC, 20, 73, 0, 48, 200, 0, 0, 0, 105, 0, 0 }, // L2 (no env)
+    { 0x08EC, 72, 53, 0, 36, 255, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 6 }, // L0 env BF64 → preset 6
+    { 0x08EC, 20, 73, 0, 48, 200, 0, 0, 0, 105, 0, 0 },                // L2 (no env)
     // CHAN_PL_ZORA_SWIM_LV (seq_0:2556-2578, sound.txt). 2 looping layers:
     //   L0 (LAYER_127C): INST_72 env C080 rr231 porta 0x83 C2 64 → F2(140t,v85) → D2(180t,v85) LOOP
     //                    C080 = slow attack → sustain max. With rjump loop → preset 4 (sustain_loop).
-    { 0x08ED, 72, 41, 0, 36, 64, 0, 0, 0, 85, 0, 0, 0, 0, 0, 4, 0 }, // L0 env C080 + loop → preset 4
+    { 0x08ED, 72, 41, 0, 36, 64, 0, 0, 0, 85, 0, 0, 0, 0, 0, 0, 4 }, // L0 env C080 + loop → preset 4
     // CHAN_PL_ZORA_SWIM_ROLL (seq_0:2580-2589, sound.txt). LAYER_12A5:
     //   INST_105 rr245 porta 0x81 E1 160 → notedv E2(40t,v65) (no env)
     { 0x08EE, 105, 40, 0, 28, 160, 0, 0, 0, 65, 0, 0 }, // vel=65 (no env)
@@ -2019,16 +2242,16 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     //   L1 (LAYER_13BC): INST_35 t48 notedv G4(40t,v48) — bombchu motor (no env)
     //   L2 (LAYER_3AB7→3AC5): legato rr235 porta 0x81 G2 175 → notedv C3(96t,v95) LOOP
     //                          → preset 4 (sustain loop for the spike-mode drone)
-    { 0x0980, 0,  52, 0,  0,   0, 0, 112, 60, 56, 0, 0 }, // L0 footstep (no env)
-    { 0x0980, 35, 67, 48, 0,   0, 0, 112, 60, 48, 0, 0 }, // L1 motor (no env)
-    { 0x0980, 77, 48, 22, 43, 175, 0, 112, 60, 95, 0, 0, 0, 0, 0, 4, 0 }, // L2 LOOP → preset 4
+    { 0x0980, 0, 52, 0, 0, 0, 0, 112, 60, 56, 0, 0 },                     // L0 footstep (no env)
+    { 0x0980, 35, 67, 48, 0, 0, 0, 112, 60, 48, 0, 0 },                   // L1 motor (no env)
+    { 0x0980, 77, 48, 22, 43, 175, 0, 112, 60, 95, 0, 0, 0, 0, 0, 0, 4 }, // L2 LOOP → preset 4
     // CHAN_PL_GORON_ROLL (seq_0:2751-2771, sound.txt). gain=15, 3 layers.
     //   L0 (LAYER_04D4): INST_0 footstep (no env)
     //   L1 (LAYER_13DB): INST_77 notedv BF3(40t,v120) (no env)
     //   L2 (LAYER_13E1): INST_47 env C00C (20-tick slow attack + 10-tick swell) → preset 1
-    { 0x0990, 0,  52, 0, 0, 0, 0, 0, 0, 56,  15, 0 }, // L0 footstep
-    { 0x0990, 77, 58, 0, 0, 0, 0, 0, 0, 120, 15, 0 }, // L1 BF3 (was missing vel)
-    { 0x0990, 47, 41, 0, 0, 0, 0, 0, 0, 90, 15, 0, 0, 0, 0, 1, 0 }, // L2 env C00C → preset 1
+    { 0x0990, 0, 52, 0, 0, 0, 0, 0, 0, 56, 15, 0 },                 // L0 footstep
+    { 0x0990, 77, 58, 0, 0, 0, 0, 0, 0, 120, 15, 0 },               // L1 BF3 (was missing vel)
+    { 0x0990, 47, 41, 0, 0, 0, 0, 0, 0, 90, 15, 0, 0, 0, 0, 0, 1 }, // L2 env C00C → preset 1
 
     // === Player Bank: Deku SFX (0x9A0 range) ===
     // CHAN_PL_DEKUNUTS_BUD (seq_0:2773-2791) VERBATIM:
@@ -2051,15 +2274,15 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     // Prior preset 4 (sustain_loop) let all 8 notes ring simultaneously for 375ms (cap)
     // = wall of cacophony. Preset 2 (10ms decay) was too short — each note inaudible.
     // Layer 0 (base octave):
-    { 0x09A0, 52, 27, 0, 40, 255, 0, 0, 0, 65, 0, 0,  0, 0, 0, 0, 5 }, // L0 N1 EF1
-    { 0x09A0, 52, 51, 0,  0,   0, 0, 0, 0, 65, 0, 8,  0, 0, 0, 0, 5 }, // L0 N2 EF3 ldelay=8
+    { 0x09A0, 52, 27, 0, 40, 255, 0, 0, 0, 65, 0, 0, 0, 0, 0, 0, 5 },  // L0 N1 EF1
+    { 0x09A0, 52, 51, 0, 0, 0, 0, 0, 0, 65, 0, 8, 0, 0, 0, 0, 5 },     // L0 N2 EF3 ldelay=8
     { 0x09A0, 52, 39, 0, 52, 255, 0, 0, 0, 65, 0, 74, 0, 0, 0, 0, 5 }, // L0 N3 EF2 ldelay=74
-    { 0x09A0, 52, 63, 0,  0,   0, 0, 0, 0, 65, 0, 82, 0, 0, 0, 0, 5 }, // L0 N4 EF4 ldelay=82
+    { 0x09A0, 52, 63, 0, 0, 0, 0, 0, 0, 65, 0, 82, 0, 0, 0, 0, 5 },    // L0 N4 EF4 ldelay=82
     // Layer 1 (transpose +7):
-    { 0x09A0, 52, 27, 7, 40, 255, 0, 0, 0, 65, 0, 0,  0, 0, 0, 0, 5 }, // L1 N1
-    { 0x09A0, 52, 51, 7,  0,   0, 0, 0, 0, 65, 0, 8,  0, 0, 0, 0, 5 }, // L1 N2
+    { 0x09A0, 52, 27, 7, 40, 255, 0, 0, 0, 65, 0, 0, 0, 0, 0, 0, 5 },  // L1 N1
+    { 0x09A0, 52, 51, 7, 0, 0, 0, 0, 0, 65, 0, 8, 0, 0, 0, 0, 5 },     // L1 N2
     { 0x09A0, 52, 39, 7, 52, 255, 0, 0, 0, 65, 0, 74, 0, 0, 0, 0, 5 }, // L1 N3
-    { 0x09A0, 52, 63, 7,  0,   0, 0, 0, 0, 65, 0, 82, 0, 0, 0, 0, 5 }, // L1 N4
+    { 0x09A0, 52, 63, 7, 0, 0, 0, 0, 0, 65, 0, 82, 0, 0, 0, 0, 5 },    // L1 N4
     // CHAN_PL_DEKUNUTS_BUBLE_BREATH (seq_0:2793-2818, sound.txt). 2 looping layers + vibfreq=45 vibdepth=24:
     //   L0 (LAYER_1436): INST_74 env C018 rr240 legato porta 0x81 AF2 255 → notedv A3(104t,v65) LOOP
     //                    C018 = 48-tick slow attack → swell to max → sustain. With loop → preset 1 (swell).
@@ -2067,35 +2290,35 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     // BUG FIX: prior rows had `1` in vibGradTicks (col 15) but envPreset (col 16) was 0.
     // Intent was envPreset=1 (swell — MM ENVELOPE_C018, 48-tick attack). Without it the
     // breath punched in flat instead of inflating.
-    { 0x09A1, 74,  57, 0, 44, 255, 0, 45, 24, 65, 0, 0, 0, 0, 0, 0, 1 }, // L0 env C018 → preset 1
+    { 0x09A1, 74, 57, 0, 44, 255, 0, 45, 24, 65, 0, 0, 0, 0, 0, 0, 1 },  // L0 env C018 → preset 1
     { 0x09A1, 129, 62, 0, 53, 255, 0, 45, 24, 48, 0, 0, 0, 0, 0, 0, 1 }, // L1 env C018 → preset 1
     // CHAN_PL_GORON_BALL_CHARGE_FAILED (seq_0:2820-2839, sound.txt). 2 layers + vibfreq=112 vibdepth=60.
     // NOTE: in MM channel, ldlayer 0=LAYER_145D (INST_35) and ldlayer 1=LAYER_1451 (INST_75).
     //   L0 (LAYER_145D): INST_35 t48 porta 0x81 G4 255 → notedv C2 64t vel75
     //   L1 (LAYER_1451): INST_75 t2  porta 0x81 E4 255 → notedv C2 64t vel44
     { 0x09A2, 35, 36, 48, 67, 255, 0, 112, 60, 75, 0, 0 }, // L0 vel=75
-    { 0x09A2, 75, 36, 2,  64, 255, 0, 112, 60, 44, 0, 0 }, // L1 vel=44
+    { 0x09A2, 75, 36, 2, 64, 255, 0, 112, 60, 44, 0, 0 },  // L1 vel=44
     // CHAN_PL_GORON_BALL_CHARGE_DASH (seq_0:2841-2872, sound.txt). 3 layers + vibfreq=160 vibdepth=60.
     //   L0 (LAYER_148B): INST_35 t48 env BF20 rr251 legato porta 0x85 A4 255 → C5(12t,v75) → C3(80t,v75) → preset 6
     //   L1 (LAYER_1477): INST_75 t2  env BF20 rr251 legato porta 0x85 G4 255 → B4(12t,v55) → C3(80t,v55) → preset 6
     //   L2 (LAYER_149F): INST_47 notedv G4 96t vel110 (explosion punch, no env)
-    { 0x09A3, 35, 48, 48, 69, 255, 0, 160, 60, 75,  0, 0, 0, 0, 0, 6, 0 }, // L0 env BF20 → preset 6
-    { 0x09A3, 75, 48,  2, 67, 255, 0, 160, 60, 55,  0, 0, 0, 0, 0, 6, 0 }, // L1 env BF20 → preset 6
-    { 0x09A3, 47, 67,  0,  0,   0, 0, 160, 60, 110, 0, 0 }, // L2 (no env)
+    { 0x09A3, 35, 48, 48, 69, 255, 0, 160, 60, 75, 0, 0, 0, 0, 0, 0, 6 }, // L0 env BF20 → preset 6
+    { 0x09A3, 75, 48, 2, 67, 255, 0, 160, 60, 55, 0, 0, 0, 0, 0, 0, 6 },  // L1 env BF20 → preset 6
+    { 0x09A3, 47, 67, 0, 0, 0, 0, 160, 60, 110, 0, 0 },                   // L2 (no env)
     // CHAN_PL_FACE_CHANGE (seq_0:2874-2896, sound.txt). vibfreq=60, vibdepth=40, env BF74 rr251.
     // BF74 = instant attack → decay to 5000 over 700 ticks → preset 6 (instant + low sustain).
     // LAYER_14B4: INST_69 → LAYER_14B6 (transpose 3, legato, porta 0x85 G2 255)
     //   notedv F3(56t,v72) → notedv C2(68t,v72) → notedv B3(56t,v72) → notedv C3(68t,v72)
     // LAYER_14B0: INST_119 (Flute) → same body
     // 4 notes per layer with cumulative ldelay: 0 / 56 / 124 / 180. envPreset 6 on every row.
-    { 0x09A4,  69, 53, 3, 43, 255, 0, 60, 40, 72, 0, 0,   0, 0, 0, 6, 0 }, // L0a F3 t=0
-    { 0x09A4,  69, 36, 3, 0,   0,  0, 60, 40, 72, 0, 56,  0, 0, 0, 6, 0 }, // L0b C2 t=56
-    { 0x09A4,  69, 59, 3, 0,   0,  0, 60, 40, 72, 0, 124, 0, 0, 0, 6, 0 }, // L0c B3 t=124
-    { 0x09A4,  69, 48, 3, 0,   0,  0, 60, 40, 72, 0, 180, 0, 0, 0, 6, 0 }, // L0d C3 t=180
-    { 0x09A4, 119, 53, 3, 43, 255, 0, 60, 40, 72, 0, 0,   0, 0, 0, 6, 0 }, // L1a F3 t=0
-    { 0x09A4, 119, 36, 3, 0,   0,  0, 60, 40, 72, 0, 56,  0, 0, 0, 6, 0 }, // L1b C2 t=56
-    { 0x09A4, 119, 59, 3, 0,   0,  0, 60, 40, 72, 0, 124, 0, 0, 0, 6, 0 }, // L1c B3 t=124
-    { 0x09A4, 119, 48, 3, 0,   0,  0, 60, 40, 72, 0, 180, 0, 0, 0, 6, 0 }, // L1d C3 t=180
+    { 0x09A4, 69, 53, 3, 43, 255, 0, 60, 40, 72, 0, 0, 0, 0, 0, 6, 0 },  // L0a F3 t=0
+    { 0x09A4, 69, 36, 3, 0, 0, 0, 60, 40, 72, 0, 56, 0, 0, 0, 6, 0 },    // L0b C2 t=56
+    { 0x09A4, 69, 59, 3, 0, 0, 0, 60, 40, 72, 0, 124, 0, 0, 0, 6, 0 },   // L0c B3 t=124
+    { 0x09A4, 69, 48, 3, 0, 0, 0, 60, 40, 72, 0, 180, 0, 0, 0, 6, 0 },   // L0d C3 t=180
+    { 0x09A4, 119, 53, 3, 43, 255, 0, 60, 40, 72, 0, 0, 0, 0, 0, 6, 0 }, // L1a F3 t=0
+    { 0x09A4, 119, 36, 3, 0, 0, 0, 60, 40, 72, 0, 56, 0, 0, 0, 6, 0 },   // L1b C2 t=56
+    { 0x09A4, 119, 59, 3, 0, 0, 0, 60, 40, 72, 0, 124, 0, 0, 0, 6, 0 },  // L1c B3 t=124
+    { 0x09A4, 119, 48, 3, 0, 0, 0, 60, 40, 72, 0, 180, 0, 0, 0, 6, 0 },  // L1d C3 t=180
     // CHAN_PL_DEKUNUTS_ATTACK (seq_0:154B-156B + LAYER_1552/155C) VERBATIM:
     //   L0 LAYER_155C: INST_46 env ENVELOPE_BFAC rr251 transpose 48 portamento 0x81 PITCH_A0 255
     //                  notedv PITCH_F5 112t v80
@@ -2104,19 +2327,19 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     //   whole spin. envPreset=4 (sustain_loop): 2ms attack + FULL sustain — no decay.
     //   Prior preset 5 (200ms decay-to-0) made the shimmer effectively silent after 200ms,
     //   so user heard only the brief percussive portion = "voice no suena, corto y agudo".
-    { 0x09A9, 46, 77, 48, 21, 255, 0, 0, 0, 80,  0, 0, 0, 0, 0, 0, 4 }, // L0 shimmer v80 sustain_loop
-    { 0x09A9, 27, 24, 0,  33, 200, 0, 0, 0, 110, 0, 0, 0, 0, 0, 0, 4 }, // L1 bass v110 sustain_loop
-    { 0x09AA, 127, 4 }, // TRANSFORM_VOICE: DRUM[4]
+    { 0x09A9, 46, 77, 48, 21, 255, 0, 0, 0, 80, 0, 0, 0, 0, 0, 0, 4 }, // L0 shimmer v80 sustain_loop
+    { 0x09A9, 27, 24, 0, 33, 200, 0, 0, 0, 110, 0, 0, 0, 0, 0, 0, 4 }, // L1 bass v110 sustain_loop
+    { 0x09AA, 127, 4 },                                                // TRANSFORM_VOICE: DRUM[4]
     // CHAN_PL_GORON_SLIP (seq_0:3030-3041, sound.txt). LAYER_15B9:
     //   INST_111 env C080 legato porta 0x01 A3 100 → notedv C4(32000t,v80) LOOP
     //   C080 + rjump loop → preset 4 (sustain_loop).
-    { 0x09AD, 111, 60, 0, 57, 100, 0, 0, 0, 80, 0, 0, 0, 0, 0, 4, 0 }, // env C080 + loop → preset 4
+    { 0x09AD, 111, 60, 0, 57, 100, 0, 0, 0, 80, 0, 0, 0, 0, 0, 0, 4 }, // env C080 + loop → preset 4
     // CHAN_PL_ZORA_SPARK_BARRIER (seq_0:3052-3071, sound.txt). 2 looping layers:
     //   L0 (LAYER_15DC): INST_46 env C1A0 rr251 t48 legato → notedv E4(32000t,v90) LOOP
     //                    C1A0 = pulse (200,32700/200,20000/goto 0) → infinite repeat → preset 4
     //   L1 (LAYER_15EB): INST_46 legato → notedv G3(32000t,v100) LOOP (no env, just sustain)
-    { 0x09AF, 46, 64, 48, 0, 0, 0, 0, 0, 90,  0, 0, 0, 0, 0, 4, 0 }, // L0 env C1A0 + loop → preset 4
-    { 0x09AF, 46, 55, 0,  0, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 4, 0 }, // L1 loop → preset 4
+    { 0x09AF, 46, 64, 48, 0, 0, 0, 0, 0, 90, 0, 0, 0, 0, 0, 0, 4 }, // L0 env C1A0 + loop → preset 4
+    { 0x09AF, 46, 55, 0, 0, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 4 }, // L1 loop → preset 4
     // CHAN_PL_GORON_STOMACH_EXPLOSION: INST_77, 2 notes F5→A4
     { 0x09B8, 77, 77 }, // INST_77, F5 (first note)
     // CHAN_PL_GORON_DRINK_BOMB: INST_106, t48, porta C2→B2
@@ -2141,8 +2364,8 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     //   L1 LAYER_2197: INST_78 env BF98 rr251, notedv B3 24t v108. envPreset=5 (instant+decay).
     //   L0 LAYER_2193: ldelay 10 + transpose 1 → falls through to LAYER_2197 → C4 with delay.
     { 0x1850, 27, 43, 0, 31, 240, 0, 0, 0, 68, 0, 0, 1, 0, 0, 0, 5, 10, 27, 44, 70 }, // L2 INVERT + AF2 sub envPreset 5
-    { 0x1850, 78, 59, 0, 0,  0,  0, 0, 0, 108, 0, 0, 0, 0, 0, 0, 5 }, // L1 B3 vel=108 preset 5
-    { 0x1850, 78, 59, 1, 0,  0,  0, 0, 0, 108, 0, 10, 0, 0, 0, 0, 5 }, // L0 B3+t1=C4 ldelay=10 preset 5
+    { 0x1850, 78, 59, 0, 0, 0, 0, 0, 0, 108, 0, 0, 0, 0, 0, 0, 5 },                   // L1 B3 vel=108 preset 5
+    { 0x1850, 78, 59, 1, 0, 0, 0, 0, 0, 108, 0, 10, 0, 0, 0, 0, 5 },                  // L0 B3+t1=C4 ldelay=10 preset 5
     // CHAN_IT_DEKUNUTS_FLOWER_ROLL (seq_0:4710): INST_27, porta D3→D2 — propeller hum during Deku flight.
     // LAYER_21A5 notedv PITCH_D2 5t v100 — velocity 100/127 ≈ 0.787 squared ≈ 0.62.
     // Prior 6-field entry left velocity=0 (treated as unity = 100% loud), drowning out wind.
@@ -2161,14 +2384,14 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     // CHAN_IT_SET_TRANSFORM_MASK (seq_0:4759-4761, sound.txt). Shares LAYER_08CB with CHANGE_ARMS:
     //   INST_9 env C064 (swell 14+13 ticks) → notedv G3(6t,v115) → C3(12t,v115)
     //   INST_28 → notedv D4(15t,v90). C064 → preset 1 (swell).
-    { 0x1856, 9,  55, 0, 0, 0, 0, 0, 0, 115, 0, 0, 0, 0, 0, 1, 0 }, // L0a INST_9 G3 env C064 → preset 1
-    { 0x1856, 28, 62, 0, 0, 0, 0, 0, 0, 90,  0, 0, 0, 0, 0, 1, 0 }, // L0b INST_28 D4 → preset 1
+    { 0x1856, 9, 55, 0, 0, 0, 0, 0, 0, 115, 0, 0, 0, 0, 0, 0, 1 }, // L0a INST_9 G3 env C064 → preset 1
+    { 0x1856, 28, 62, 0, 0, 0, 0, 0, 0, 90, 0, 0, 0, 0, 0, 0, 1 }, // L0b INST_28 D4 → preset 1
     // CHAN_IT_SHIELD_SWING (seq_0:3961-3978, sound.txt). 2 layers:
     //   L0 (LAYER_1CE6): INST_28 notedv F3(18t,v110) — no env
     //   L1 (LAYER_1CEC): INST_26 t48 env C0B4 → C3(10t,v75) → notedvg E3(4t,v75,gain127) → E3(4t,v75)
     //                    C0B4 = instant + decay to 5000 → preset 6
-    { 0x181F, 28, 53, 0, 0, 0, 0, 0, 0, 110, 0, 0 }, // L0 F3 vel=110 (no env)
-    { 0x181F, 26, 52, 48, 0, 0, 0, 0, 0, 75, 0, 0, 0, 0, 0, 6, 0 }, // L1 t48 E3 env C0B4 → preset 6
+    { 0x181F, 28, 53, 0, 0, 0, 0, 0, 0, 110, 0, 0 },                // L0 F3 vel=110 (no env)
+    { 0x181F, 26, 52, 48, 0, 0, 0, 0, 0, 75, 0, 0, 0, 0, 0, 0, 6 }, // L1 t48 E3 env C0B4 → preset 6
     // CHAN_IT_GORON_PUNCH_SWING: 2 layers both INST_27, porta A1→C1
     { 0x1857, 27, 24, 0, 33, 200 }, // L0: INST_27, C1(24) porta from A1(33)
     { 0x1857, 27, 24, 4, 33, 200 }, // L1: INST_27, C1(24) t4, porta from A1(33)
@@ -2185,8 +2408,8 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     { 0x185A, 34, 57, 48, 60, 255 }, // IT_DEKUNUTS_BUBLE_SHOT_LEVEL: INST_34, A3(57) t48, porta from C4(60)
     // CHAN_IT_GORON_ROLLING_REFLECTION: vibfreq=128, vibdepthgrad 52→0 dur=10 (seq_0:4889)
     // Use REAL gradient: start depth=52, ramps to 0 over 10 ticks (matches MM bounce decay).
-    { 0x185E, 102, 65, 0, 32, 255, 0, 128, 52, 110, 0, 0,  0, 0, 0, 10, 0,  0, 0, 0, 0 }, // L0
-    { 0x185E,  21, 47, 0, 66, 255, 0, 128, 52, 110, 0, 0,  0, 0, 0, 10, 0,  0, 0, 0, 0 }, // L1
+    { 0x185E, 102, 65, 0, 32, 255, 0, 128, 52, 110, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0 }, // L0
+    { 0x185E, 21, 47, 0, 66, 255, 0, 128, 52, 110, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0 },  // L1
 
     // === Player Bank: Deku form-specific ===
     // DEKUNUTS_STRUGGLE (seq_0:2913-2925). VERBATIM MM:
@@ -2195,8 +2418,8 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     // Mode 0x83 = MODE_3 = FORWARD (E2→G2 ascending) per seqplayer.c:923-927.
     // Both layers played concurrently — audit confirmed C3 layer entirely unmapped before.
     { 0x09A6, 27, 43, 0, 40, 255, 0, 0, 0, 95, 0, 0 }, // L0: INST_27 G2 porta E2, vel=95
-    { 0x09A6, 27, 48, 0, 0,  0,   0, 0, 0, 95, 0, 0 }, // L1: INST_27 C3 (second concurrent layer), vel=95
-    { 0x09BF, 74, 71 },             // DEKUNUTS_MISS_FIRE: INST_74, B4
+    { 0x09A6, 27, 48, 0, 0, 0, 0, 0, 0, 95, 0, 0 },    // L1: INST_27 C3 (second concurrent layer), vel=95
+    { 0x09BF, 74, 71 },                                // DEKUNUTS_MISS_FIRE: INST_74, B4
     // === Player Bank: Deku hop SFX (0x09B0-0x09B4) ===
     // CHAN_PL_DEKUNUTS_JUMP (seq_0:3073-3087, sound.txt). Single dispatcher channel for
     // JUMP/JUMP2..JUMP8. vibfreq=240, vibdepthgrad 0→16 dur=4.
@@ -2218,46 +2441,46 @@ static const MmSfxInstrMapEntry sMmSfxInstrMap[] = {
     // Fields (17): sfxId, instr, midiNote, transpose, portaNote, portaSpeed, preHold, vibFreq,
     //              vibDepth, vel, gain, ldelay, portaInv, vibFreqEnd, vibDepthEnd, vibGradTicks, envPreset.
     { 0x09B0, 129, 60, 0, 36, 255, 0, 240, 0, 75, 0, 0, 0, 240, 16, 4, 6 }, // JUMP  L0 porta C2→C4 vibgrad 0→16
-    { 0x09B0, 4,   57, 0, 0,  0,   0, 0,   0, 63, 0, 0, 0, 0,   0,  0, 0, 10, 4, 65, 63 }, // JUMP  L1 A3 grace → F4 sub
-    { 0x09B1, 129, 60, 0, 38, 255, 0, 240, 0, 75, 0, 0, 0, 240, 16, 4, 6 }, // JUMP2 L0 porta D2→C4
-    { 0x09B1, 4,   57, 0, 0,  0,   0, 0,   0, 63, 0, 0, 0, 0,   0,  0, 0, 10, 4, 65, 63 }, // JUMP2 L1
-    { 0x09B2, 129, 60, 0, 40, 255, 0, 240, 0, 75, 0, 0, 0, 240, 16, 4, 6 }, // JUMP3 L0 porta E2→C4
-    { 0x09B2, 4,   57, 0, 0,  0,   0, 0,   0, 63, 0, 0, 0, 0,   0,  0, 0, 10, 4, 65, 63 }, // JUMP3 L1
-    { 0x09B3, 129, 60, 0, 41, 255, 0, 240, 0, 75, 0, 0, 0, 240, 16, 4, 6 }, // JUMP4 L0 porta F2→C4
-    { 0x09B3, 4,   57, 0, 0,  0,   0, 0,   0, 63, 0, 0, 0, 0,   0,  0, 0, 10, 4, 65, 63 }, // JUMP4 L1
-    { 0x09B4, 129, 60, 0, 43, 255, 0, 240, 0, 75, 0, 0, 0, 240, 16, 4, 6 }, // JUMP5 L0 porta G2→C4
-    { 0x09B4, 4,   57, 0, 0,  0,   0, 0,   0, 63, 0, 0, 0, 0,   0,  0, 0, 10, 4, 65, 63 }, // JUMP5 L1
+    { 0x09B0, 4, 57, 0, 0, 0, 0, 0, 0, 63, 0, 0, 0, 0, 0, 0, 0, 10, 4, 65, 63 }, // JUMP  L1 A3 grace → F4 sub
+    { 0x09B1, 129, 60, 0, 38, 255, 0, 240, 0, 75, 0, 0, 0, 240, 16, 4, 6 },      // JUMP2 L0 porta D2→C4
+    { 0x09B1, 4, 57, 0, 0, 0, 0, 0, 0, 63, 0, 0, 0, 0, 0, 0, 0, 10, 4, 65, 63 }, // JUMP2 L1
+    { 0x09B2, 129, 60, 0, 40, 255, 0, 240, 0, 75, 0, 0, 0, 240, 16, 4, 6 },      // JUMP3 L0 porta E2→C4
+    { 0x09B2, 4, 57, 0, 0, 0, 0, 0, 0, 63, 0, 0, 0, 0, 0, 0, 0, 10, 4, 65, 63 }, // JUMP3 L1
+    { 0x09B3, 129, 60, 0, 41, 255, 0, 240, 0, 75, 0, 0, 0, 240, 16, 4, 6 },      // JUMP4 L0 porta F2→C4
+    { 0x09B3, 4, 57, 0, 0, 0, 0, 0, 0, 63, 0, 0, 0, 0, 0, 0, 0, 10, 4, 65, 63 }, // JUMP4 L1
+    { 0x09B4, 129, 60, 0, 43, 255, 0, 240, 0, 75, 0, 0, 0, 240, 16, 4, 6 },      // JUMP5 L0 porta G2→C4
+    { 0x09B4, 4, 57, 0, 0, 0, 0, 0, 0, 63, 0, 0, 0, 0, 0, 0, 0, 10, 4, 65, 63 }, // JUMP5 L1
 
     // CHAN_PL_DEKUNUTS_DROP_BOMB (seq_0:7771, routed via HONEYCOMB_FALL):
     // transpose 12, FONTANY_SINE, porta F5→F3, vibfreq=58, vibdepth=4. Was MISSING.
-    { 0x09AC, 130, 53, 12, 77, 255, 0, 58, 4 },  // INST_130 (sine), F3(53) t+12, porta from F5(77)
+    { 0x09AC, 130, 53, 12, 77, 255, 0, 58, 4 }, // INST_130 (sine), F3(53) t+12, porta from F5(77)
 
     // CHAN_PL_TRANSFORM_GIANT (seq_0:3401): 3 layers, vibfreq=88, vibdepth=80.
     // Was MISSING ENTIRELY — needed by Giant's Mask transform cutscene.
     { 0x09C5, 74, 65, -12, 33, 255, 0, 88, 80 }, // L0: INST_74 t-12, F4(65), porta from F1(33)
-    { 0x09C5, 17, 65,  -2, 33, 255, 0, 88, 80 }, // L1: INST_17 t-2
+    { 0x09C5, 17, 65, -2, 33, 255, 0, 88, 80 },  // L1: INST_17 t-2
     { 0x09C5, 46, 65, -16, 33, 255, 0, 88, 80 }, // L2: INST_46 t-16
 
     // CHAN_PL_TRANSFORM_NORMAL (seq_0:3435): same body as GIANT, different porta mode.
     // Was MISSING ENTIRELY — needed by Giant→Normal revert.
     { 0x09C6, 74, 65, -12, 33, 255, 0, 88, 80 },
-    { 0x09C6, 17, 65,  -2, 33, 255, 0, 88, 80 },
+    { 0x09C6, 17, 65, -2, 33, 255, 0, 88, 80 },
     { 0x09C6, 46, 65, -16, 33, 255, 0, 88, 80 },
 
     // === Environment Bank ===
     // CHAN_EV_LIGHTNING_HARD (seq_0:9217-9240, sound.txt). 3 layers, gain=15.
     //   L0/L1 share env BF44 (instant attack + decay to 5000 → preset 6).
     //   L2 = INST_74 porta C4→C2 (no env on the layer body).
-    { 0x2912, 74, 72, 42, 0, 0, 0, 0, 0, 96, 15, 0, 0, 0, 0, 6, 0 }, // L0 env BF44 → preset 6, gain=15
-    { 0x2912, 47, 72, 0,  0, 0, 0, 0, 0, 96, 15, 0, 0, 0, 0, 6, 0 }, // L1 env BF44 → preset 6, gain=15
-    { 0x2912, 74, 36, 0, 60, 255, 0, 0, 0, 96, 15, 0 }, // L2 (no env), gain=15
+    { 0x2912, 74, 72, 42, 0, 0, 0, 0, 0, 96, 15, 0, 0, 0, 0, 0, 6 }, // L0 env BF44 → preset 6, gain=15
+    { 0x2912, 47, 72, 0, 0, 0, 0, 0, 0, 96, 15, 0, 0, 0, 0, 0, 6 },  // L1 env BF44 → preset 6, gain=15
+    { 0x2912, 74, 36, 0, 60, 255, 0, 0, 0, 96, 15, 0 },              // L2 (no env), gain=15
     // === System Bank: Transform flash ===
     // CHAN_SY_TRANSFORM_MASK_FLASH (seq_0:24844-24862, sound.txt). gain=15, 2 layers.
     //   L0: INST_64 env C09C (800-tick VERY slow attack → sustain) → preset 1 (swell)
     //   L1: INST_68 env C094 (200-tick slow attack → sustain) → preset 1 (swell)
-    { 0x484F, 64, 60, 24, 0, 0, 0, 0, 0, 75,  15, 0, 0, 0, 0, 1, 0 }, // L0 env C09C → preset 1
-    { 0x484F, 68, 60, 36, 0, 0, 0, 0, 0, 100, 15, 0, 0, 0, 0, 1, 0 }, // L1 env C094 → preset 1
-    { 0x4835, 64, 60, 24, 0, 0, 0, 0, 0, 75,  15, 0, 0, 0, 0, 1, 0 }, // (legacy ID)
+    { 0x484F, 64, 60, 24, 0, 0, 0, 0, 0, 75, 15, 0, 0, 0, 0, 0, 1 },  // L0 env C09C → preset 1
+    { 0x484F, 68, 60, 36, 0, 0, 0, 0, 0, 100, 15, 0, 0, 0, 0, 0, 1 }, // L1 env C094 → preset 1
+    { 0x4835, 64, 60, 24, 0, 0, 0, 0, 0, 75, 15, 0, 0, 0, 0, 1, 0 },  // (legacy ID)
 };
 static const s32 sMmSfxInstrMapSize = sizeof(sMmSfxInstrMap) / sizeof(sMmSfxInstrMap[0]);
 
@@ -2640,26 +2863,26 @@ static SoundFontSound* MmDirectAudio_GetSound(u16 mmSfxId) {
             // Zora (0xA0-0xBF) → CHAN_BCF3 trans=3 / CHAN_BCF9 vibrato 240/32.
             u8 action = sfxIndex - 0xA0;
             static const u16 sZoraActionToSfxId[] = {
-                192, // 0x68A0 BCF3→B690 [0..]   (3<<6)+0
-                196, // 0x68A1 BCF3→B6AB [4,5]   (3<<6)+4
-                202, // 0x68A2 BCF3→B6D4 [10,11] (3<<6)+10
-                198, // 0x68A3 BCF3→B6FD [6,25]  (3<<6)+6
-                199, // 0x68A4 BCF3→B715 [7,8]   (3<<6)+7
-                201, // 0x68A5 BCF3→B72D [9..]   (3<<6)+9
-                204, // 0x68A6 BCF3→B747 [12..]  (3<<6)+12
-                209, // 0x68A7 BCF3→B761 [17,18] (3<<6)+17
-                207, // 0x68A8 BCF3→B779 [15,16] (3<<6)+15
-                211, // 0x68A9 BCF3→B791 [19,23] (3<<6)+19
-                192, // 0x68AA DUMMY_170 BCF9 (vibrato 240/32)
-                192, // 0x68AB
-                207, // 0x68AC BCF3→B7C2 [15,16] (3<<6)+15
-                201, // 0x68AD BCF3→B72D
-                192, 192, 192, 192, 192, 192,                    // 0x68AE..68B3
-                192, 192, 192, 192,                              // 0x68B4..68B7 (DUMMY_180 BCF9 vibrato)
-                199, // 0x68B8 BCF3→B846 [7] (3<<6)+7
+                192,                          // 0x68A0 BCF3→B690 [0..]   (3<<6)+0
+                196,                          // 0x68A1 BCF3→B6AB [4,5]   (3<<6)+4
+                202,                          // 0x68A2 BCF3→B6D4 [10,11] (3<<6)+10
+                198,                          // 0x68A3 BCF3→B6FD [6,25]  (3<<6)+6
+                199,                          // 0x68A4 BCF3→B715 [7,8]   (3<<6)+7
+                201,                          // 0x68A5 BCF3→B72D [9..]   (3<<6)+9
+                204,                          // 0x68A6 BCF3→B747 [12..]  (3<<6)+12
+                209,                          // 0x68A7 BCF3→B761 [17,18] (3<<6)+17
+                207,                          // 0x68A8 BCF3→B779 [15,16] (3<<6)+15
+                211,                          // 0x68A9 BCF3→B791 [19,23] (3<<6)+19
+                192,                          // 0x68AA DUMMY_170 BCF9 (vibrato 240/32)
+                192,                          // 0x68AB
+                207,                          // 0x68AC BCF3→B7C2 [15,16] (3<<6)+15
+                201,                          // 0x68AD BCF3→B72D
+                192, 192, 192, 192, 192, 192, // 0x68AE..68B3
+                192, 192, 192, 192,           // 0x68B4..68B7 (DUMMY_180 BCF9 vibrato)
+                199,                          // 0x68B8 BCF3→B846 [7] (3<<6)+7
                 192,
-                204, // 0x68BA BCF3→B85C [12] (3<<6)+12
-                192, 192, 192, 192, 192,                         // 0x68BB..68BF
+                204,                     // 0x68BA BCF3→B85C [12] (3<<6)+12
+                192, 192, 192, 192, 192, // 0x68BB..68BF
             };
             effectIdx = (action < 32) ? sZoraActionToSfxId[action] : 192;
         } else if (sfxIndex < 0xE0) {
@@ -2698,8 +2921,12 @@ static SoundFontSound* MmDirectAudio_GetSound(u16 mmSfxId) {
             // Mask of Scents range (0x68E0-0x68FF). POO_WAIT verified to work at
             // (1<<6)+35 = 99 — confirming the (transpose<<6)+effect formula.
             switch (mmSfxId) {
-                case 0x68E0: effectIdx = 99; break; // POO_WAIT (verified working)
-                default:     effectIdx = 99; break;
+                case 0x68E0:
+                    effectIdx = 99;
+                    break; // POO_WAIT (verified working)
+                default:
+                    effectIdx = 99;
+                    break;
             }
         }
 
@@ -2925,6 +3152,11 @@ static s32 MmDirectAudio_PlaySinglePCM(s16* pcm, u32 pcmLength, f32 advance, u16
     snd->volume = volume;
     snd->pan = pan;
     snd->mmSfxId = mmSfxId;
+    // MM issues nearly every player/item SFX — and the ocarina notes — with
+    // gSfxDefaultReverb (0x30 of 127 ≈ 0.38), so that is our default send. Tunable at
+    // runtime (0 = fully dry, the pre-existing behaviour) so it can be judged by ear
+    // instead of by argument: gMmAudio.ReverbSend, 0-100.
+    snd->reverb = (f32)CVarGetInteger("gMmAudio.ReverbSend", 38) / 100.0f;
     snd->loopStart = 0;
     snd->loopEnd = 0;
     snd->lifeSamples = 0;
@@ -3032,6 +3264,11 @@ static s32 MmDirectAudio_PlaySingle(SoundFontSound* sfxSound, f32 pitchScale, f3
     snd->volume = volume;
     snd->pan = pan;
     snd->mmSfxId = mmSfxId;
+    // MM issues nearly every player/item SFX — and the ocarina notes — with
+    // gSfxDefaultReverb (0x30 of 127 ≈ 0.38), so that is our default send. Tunable at
+    // runtime (0 = fully dry, the pre-existing behaviour) so it can be judged by ear
+    // instead of by argument: gMmAudio.ReverbSend, 0-100.
+    snd->reverb = (f32)CVarGetInteger("gMmAudio.ReverbSend", 38) / 100.0f;
 
     // Loop handling: respect the sample's sustain loop ALWAYS so high-pitched
     // short samples (e.g. ShimmeringTreasure pitched +5oct for DEKUNUTS_ATTACK)
@@ -3058,20 +3295,40 @@ static s32 MmDirectAudio_PlaySingle(SoundFontSound* sfxSound, f32 pitchScale, f3
             switch (mmSfxId) {
                 // Goron BALL_CHARGE_DASH layers cap: dash impact ~300ms, NOT a sustained loop.
                 // Prevents the dash sound from being mistaken for a "charging continued" loop.
-                case 0x09A3: cap = 9600; break;
+                case 0x09A3:
+                    cap = 9600;
+                    break;
                 // Deku spin attack: notedv 112 ticks ≈ 900ms (the iconic "wsshhh")
-                case 0x09A9: cap = 28800; break;
+                case 0x09A9:
+                    cap = 28800;
+                    break;
                 // Deku flower SFX — short notedv 24-30 ticks
-                case 0x1850: cap = 8000; break;  // FLOWER_OPEN notedv 10+10 + 24 ≈ 250ms
-                case 0x1852: cap = 8000; break;  // FLOWER_CLOSE notedv 4+24 ≈ 220ms
-                case 0x09A0: cap = 30000; break; // BUD: 4-note chain with ldelay=82 ticks ≈ 656ms + 200ms decay ≈ 900ms
-                case 0x09A6: cap = 5000; break;  // STRUGGLE notedv 7+9 ticks ≈ 130ms (very short flap)
+                case 0x1850:
+                    cap = 8000;
+                    break; // FLOWER_OPEN notedv 10+10 + 24 ≈ 250ms
+                case 0x1852:
+                    cap = 8000;
+                    break; // FLOWER_CLOSE notedv 4+24 ≈ 220ms
+                case 0x09A0:
+                    cap = 30000;
+                    break; // BUD: 4-note chain with ldelay=82 ticks ≈ 656ms + 200ms decay ≈ 900ms
+                case 0x09A6:
+                    cap = 5000;
+                    break; // STRUGGLE notedv 7+9 ticks ≈ 130ms (very short flap)
                 // Deku flower dive/launch: notedv 100 ticks ≈ 800ms
-                case 0x08E2: cap = 25600; break; // IN_GRD ≈ 800ms
-                case 0x08E3: cap = 25600; break; // OUT_GRD ≈ 800ms
+                case 0x08E2:
+                    cap = 25600;
+                    break; // IN_GRD ≈ 800ms
+                case 0x08E3:
+                    cap = 25600;
+                    break; // OUT_GRD ≈ 800ms
                 // Bubble breath / spark barrier are short impacts when not continuous
-                case 0x1853: cap = 8000; break;  // BUBLE_BROKEN notedv 24 ticks
-                case 0x1854: cap = 8000; break;  // BUBLE_VANISH
+                case 0x1853:
+                    cap = 8000;
+                    break; // BUBLE_BROKEN notedv 24 ticks
+                case 0x1854:
+                    cap = 8000;
+                    break; // BUBLE_VANISH
             }
             snd->maxLifeSamples = cap;
             MMSFX_LOG("[MmDirectAudio] Loop 0x%04X: %u -> %u (one-shot, cap=%u samples ≈ %ums)", mmSfxId,
@@ -3198,13 +3455,13 @@ static s32 MmDirectAudio_Play(u16 mmSfxId, f32 freqScale, Vec3f* pos) {
         if (mmSfxId >= 0x6880 && mmSfxId <= 0x689F) {
             // Deku block: all voices call CHAN_BC5E which falls through to CHAN_BC64.
             // vibdepth=88, vibfreq=128 (MM seq_0:26726-26727).
-            vibRate = 128.0f * (1.0f / 16.0f);     // ~8 Hz wobble
-            vibDepth = 88.0f / 512.0f;              // ~17% pitch modulation
+            vibRate = 128.0f * (1.0f / 16.0f); // ~8 Hz wobble
+            vibDepth = 88.0f / 512.0f;         // ~17% pitch modulation
         } else if (mmSfxId >= 0x68A0 && mmSfxId <= 0x68BF) {
             // Zora block: all voices call CHAN_BCF3 which falls through to CHAN_BCF9.
             // vibdepth=32, vibfreq=240 (MM seq_0:26828-26829). Lighter & faster than Deku.
-            vibRate = 240.0f * (1.0f / 16.0f);     // 15 Hz fast wobble
-            vibDepth = 32.0f / 512.0f;              // ~6% pitch modulation
+            vibRate = 240.0f * (1.0f / 16.0f); // 15 Hz fast wobble
+            vibDepth = 32.0f / 512.0f;         // ~6% pitch modulation
         }
         // Goron (0x68C0-0x68DF), FD (0x6800-0x681F), Human (0x6820-0x683F):
         // no vibrato in MM seq_0 channel entry points → stay at 0.0f.
@@ -3310,9 +3567,9 @@ static s32 MmDirectAudio_Play(u16 mmSfxId, f32 freqScale, Vec3f* pos) {
             MmWav_GenerateTriangle();
             f32 targetAdvance = ((f32)TRIANGLE_SAMPLE_RATE / 32000.0f) *
                                 powf(2.0f, ((f32)note - (f32)TRIANGLE_BASE_NOTE) / 12.0f) * freqScale;
-            s32 triSlotPlus1 = MmDirectAudio_PlaySinglePCM(sTriangleWave, TRIANGLE_TOTAL_SAMPLES, targetAdvance, mmSfxId,
-                                                            vol * 0.6f * entryVolScale, pan, instVibRateOut,
-                                                            instVibDepthOut);
+            s32 triSlotPlus1 =
+                MmDirectAudio_PlaySinglePCM(sTriangleWave, TRIANGLE_TOTAL_SAMPLES, targetAdvance, mmSfxId,
+                                            vol * 0.6f * entryVolScale, pan, instVibRateOut, instVibDepthOut);
             s32 triSlot = triSlotPlus1 - 1;
             // Apply envPreset, portamento (incl. portaModeInv), vibrato gradient, ldelay
             // directly on the just-allocated slot. Was previously search-by-sfxId which
@@ -3352,8 +3609,10 @@ static s32 MmDirectAudio_Play(u16 mmSfxId, f32 freqScale, Vec3f* pos) {
             // Sub-note (e.g. JUMP L1 grace→sustain on triangle): play sub-note on its own slot.
             if (triSlotPlus1 > 0 && entrySubNoteNote != 0) {
                 s32 subEffNote = (s32)entrySubNoteNote + (s32)transpose;
-                if (subEffNote < 0) subEffNote = 0;
-                if (subEffNote > 127) subEffNote = 127;
+                if (subEffNote < 0)
+                    subEffNote = 0;
+                if (subEffNote > 127)
+                    subEffNote = 127;
                 f32 subAdvance = ((f32)TRIANGLE_SAMPLE_RATE / 32000.0f) *
                                  powf(2.0f, ((f32)subEffNote - (f32)TRIANGLE_BASE_NOTE) / 12.0f) * freqScale;
                 f32 subVolScale = entryVolScale;
@@ -3362,12 +3621,13 @@ static s32 MmDirectAudio_Play(u16 mmSfxId, f32 freqScale, Vec3f* pos) {
                     f32 mainVelSq = (entryVelocity != 0 && entryVelocity != 127)
                                         ? ((f32)entryVelocity / 127.0f) * ((f32)entryVelocity / 127.0f)
                                         : 1.0f;
-                    if (mainVelSq > 0.0001f) subVolScale = (subVolScale / mainVelSq) * (v * v);
+                    if (mainVelSq > 0.0001f)
+                        subVolScale = (subVolScale / mainVelSq) * (v * v);
                 }
                 u32 subDelay = (u32)entrySubNoteDelay * 256u;
-                s32 subSlotPlus1 = MmDirectAudio_PlaySinglePCM(sTriangleWave, TRIANGLE_TOTAL_SAMPLES, subAdvance,
-                                                                mmSfxId, vol * 0.6f * subVolScale, pan, instVibRateOut,
-                                                                instVibDepthOut);
+                s32 subSlotPlus1 =
+                    MmDirectAudio_PlaySinglePCM(sTriangleWave, TRIANGLE_TOTAL_SAMPLES, subAdvance, mmSfxId,
+                                                vol * 0.6f * subVolScale, pan, instVibRateOut, instVibDepthOut);
                 if (subSlotPlus1 > 0 && subDelay > 0) {
                     sPlayingSounds[subSlotPlus1 - 1].startDelaySamples = subDelay;
                 }
@@ -3377,11 +3637,11 @@ static s32 MmDirectAudio_Play(u16 mmSfxId, f32 freqScale, Vec3f* pos) {
         } else if (instIdx == FONTANY_INSTR_SINE) {
             // Built-in sine wave (130) — used by DEKUNUTS_DROP_BOMB.
             MmWav_GenerateSine();
-            f32 targetAdvance = ((f32)SINE_SAMPLE_RATE / 32000.0f) *
-                                powf(2.0f, ((f32)note - (f32)SINE_BASE_NOTE) / 12.0f) * freqScale;
-            s32 sinSlotPlus1 = MmDirectAudio_PlaySinglePCM(sSineWave, SINE_TOTAL_SAMPLES, targetAdvance, mmSfxId,
-                                                            vol * 0.6f * entryVolScale, pan, instVibRateOut,
-                                                            instVibDepthOut);
+            f32 targetAdvance =
+                ((f32)SINE_SAMPLE_RATE / 32000.0f) * powf(2.0f, ((f32)note - (f32)SINE_BASE_NOTE) / 12.0f) * freqScale;
+            s32 sinSlotPlus1 =
+                MmDirectAudio_PlaySinglePCM(sSineWave, SINE_TOTAL_SAMPLES, targetAdvance, mmSfxId,
+                                            vol * 0.6f * entryVolScale, pan, instVibRateOut, instVibDepthOut);
             s32 sinSlot = sinSlotPlus1 - 1;
             if (sinSlotPlus1 > 0) {
                 if (entryEnvPreset != 0) {
@@ -3448,8 +3708,8 @@ static s32 MmDirectAudio_Play(u16 mmSfxId, f32 freqScale, Vec3f* pos) {
 
                     // Apply per-entry velocity²+gain to the spatial volume.
                     f32 entryAdjustedVol = vol * entryVolScale;
-                    s32 slotPlus1 = MmDirectAudio_PlaySingle(sound, pitchScale, freqScale, mmSfxId, entryAdjustedVol, pan,
-                                                              instVibRate, instVibDepth);
+                    s32 slotPlus1 = MmDirectAudio_PlaySingle(sound, pitchScale, freqScale, mmSfxId, entryAdjustedVol,
+                                                             pan, instVibRate, instVibDepth);
                     s32 slot = slotPlus1 - 1; // -1 means failure/skip; >=0 is the array index we just wrote.
 
                     // Apply per-entry features to the EXACT slot PlaySingle populated.
@@ -3533,7 +3793,7 @@ static s32 MmDirectAudio_Play(u16 mmSfxId, f32 freqScale, Vec3f* pos) {
                         if (mmSfxId == 0x0990 || mmSfxId == 0x0980)
                             maxLife = 12800; // ROLL / CHG_ROLL: 400ms (one impact per tumble)
                         if (mmSfxId == 0x09A3)
-                            maxLife = 9600;  // BALL_CHARGE_DASH: 300ms — dash impact must be brief
+                            maxLife = 9600; // BALL_CHARGE_DASH: 300ms — dash impact must be brief
                         // 0x08E2 / 0x08E3: don't override — PlaySingle's per-sfx cap (25600)
                         // already matches MM's notedv 100t. INST_47 cap here applies only when
                         // PlaySingle's switch doesn't catch it (other INST_47 SFX).
@@ -3558,6 +3818,15 @@ static s32 MmDirectAudio_Play(u16 mmSfxId, f32 freqScale, Vec3f* pos) {
                         u32 maxLife = 10240; // 40 ticks ≈ 320ms — matches MM notedv
                         sPlayingSounds[slot].maxLifeSamples = maxLife;
                     }
+                    // GORON_ROLL L0 = LAYER_04D4, INST_0 notedv E3 for 21 ticks (≈168ms at the
+                    // 256 samples/tick this engine uses for the other roll caps). INST_0 is the
+                    // generic footstep instrument: MM only lets it sound for those 21 ticks, as
+                    // the percussive head of each tumble. Uncapped it falls back to the one-shot
+                    // default (600ms, or the entire PCM when the sample has no loop), so every
+                    // tumble plays a full footstep and the roll reads as "the Goron is walking".
+                    if (slotPlus1 > 0 && instIdx == 0 && (mmSfxId == 0x0990 || mmSfxId == 0x099F)) {
+                        sPlayingSounds[slot].maxLifeSamples = 5376; // 21 ticks
+                    }
 
                     // (NEW) Sub-note: an additional note that fires AFTER the main note with
                     // a tick-based delay. Implements MM's multi-note layer sequences like
@@ -3567,10 +3836,12 @@ static s32 MmDirectAudio_Play(u16 mmSfxId, f32 freqScale, Vec3f* pos) {
                     if (slotPlus1 > 0 && entrySubNoteNote != 0) {
                         u8 subInstIdx = (entrySubNoteInstr != 0) ? entrySubNoteInstr : instIdx;
                         s32 subEffNote = (s32)entrySubNoteNote + (s32)transpose;
-                        if (subEffNote < 0) subEffNote = 0;
-                        if (subEffNote > 127) subEffNote = 127;
-                        SoundFontSound* subSound = MmDirectAudio_GetInstrumentSoundDirect(
-                            font0, subInstIdx, (u8)subEffNote);
+                        if (subEffNote < 0)
+                            subEffNote = 0;
+                        if (subEffNote > 127)
+                            subEffNote = 127;
+                        SoundFontSound* subSound =
+                            MmDirectAudio_GetInstrumentSoundDirect(font0, subInstIdx, (u8)subEffNote);
                         if (subSound && subSound->sample) {
                             f32 subPitchScale = powf(2.0f, ((f32)subEffNote - 60.0f) / 12.0f);
                             f32 subVolScale = entryVolScale;
@@ -3579,7 +3850,8 @@ static s32 MmDirectAudio_Play(u16 mmSfxId, f32 freqScale, Vec3f* pos) {
                                 f32 mainVelSq = (entryVelocity != 0 && entryVelocity != 127)
                                                     ? ((f32)entryVelocity / 127.0f) * ((f32)entryVelocity / 127.0f)
                                                     : 1.0f;
-                                if (mainVelSq > 0.0001f) subVolScale = (subVolScale / mainVelSq) * (v * v);
+                                if (mainVelSq > 0.0001f)
+                                    subVolScale = (subVolScale / mainVelSq) * (v * v);
                             }
                             f32 subVol = vol * subVolScale;
                             u32 subDelay = (u32)entrySubNoteDelay * 256u;
@@ -3629,41 +3901,196 @@ static s32 MmDirectAudio_Play(u16 mmSfxId, f32 freqScale, Vec3f* pos) {
 //   Deku Pipes  → Soundfont_0 instruments[94]
 // Goron Drums uses dedicated Soundfont_38 (SampleBank_2: GoronDrum, BassSlap, TomDrum, etc.)
 //   because Soundfont_0's inst[107] doesn't have real drum samples.
+// Per-form instrument table — the equivalent of MM's sPlayerFormOcarinaInstruments
+// (z_message.c:4560), which maps each transformation to its own instrument:
+//   Human/Fierce Deity -> OCARINA_INSTRUMENT_DEFAULT (the plain ocarina)
+//   Goron              -> OCARINA_INSTRUMENT_GORON_DRUMS
+//   Zora               -> OCARINA_INSTRUMENT_ZORA_GUITAR
+//   Deku               -> OCARINA_INSTRUMENT_DEKU_PIPES
+//
+// MM selects an instrument inside its own ocarina bank; we have no such bank in OoT, so
+// each form instead names a real MM soundfont + instrument slot out of mm.o2r and the
+// note is synthesized by MmDirectAudio.
+//
+// Two ways a form can be voiced, mirroring what is actually available:
+//
+//   GAKKI_VOICE_NATIVE  — an instrument OoT's own seq 0 already has on its ocarina channel
+//                         (OCARINA_INSTRUMENT_*). Selected with AudioOcarina_SetInstrument,
+//                         which is EXACTLY MM's mechanism (sPlayerFormOcarinaInstruments →
+//                         AudioOcarina_SetInstrument, z_message.c:4719). The engine voices
+//                         the notes: pitch bends, Z/R semitone modifiers, vibrato and
+//                         note-off all come for free and are 1:1 by construction.
+//                         NA_SE_OC_OCARINA must NOT be suppressed — it IS the voice.
+//
+//   GAKKI_VOICE_MM_FONT — an MM-only instrument (Goron drums, Zora guitar, Deku pipes,
+//                         Ikana King voice...) that OoT's audiobank lacks. Voiced by the
+//                         MmDirectAudio synth from mm.o2r soundfonts; the native ocarina
+//                         sfx is silenced and notes are driven from the OnOcarinaNote hook
+//                         so pitch/articulation match the ocarina input exactly.
+//
+//   fontId/instIdx (MM_FONT): MM soundfont index in mm.o2r + instrument slot within it.
+//   nativeId (NATIVE): OCARINA_INSTRUMENT_* value for AudioOcarina_SetInstrument.
+//
+// To give a future form its own voice, add/edit its row. Rows beyond the current form
+// count are harmless — lookup is bounds-checked.
+typedef struct {
+    u8 voiceType;          // MmGakkiVoiceType
+    u8 nativeId;           // OCARINA_INSTRUMENT_* when NATIVE
+    u8 fontId;             // when MM_FONT
+    u8 instIdx;            // when MM_FONT
+    const char* startAnim; // custom draw-instrument clip (NULL = use the MM clip / none)
+    const char* playAnim;  // custom play clip (NULL = use the MM clip / none)
+    // Display list of the instrument itself, drawn on the hand limb while gakki is up.
+    // MM's own forms carry their instrument inside the form model (Goron drums / Deku
+    // pipes are drawn by the hardcoded paths in MmForm_Draw), so they leave this NULL.
+    // Custom forms name a DL from oot.o2r instead — e.g. Skull Kid's flute, which lives
+    // in the same DL as his left hand (gSkullKidLeftHandAndFluteDL), the hand that the
+    // retargeted gSkullKidPlayFluteAnim animates.
+    const char* instrumentDL;
+    u8 instrumentLimb; // PLAYER_LIMB_* to attach it to (0 = left hand default)
+} MmGakkiInstrument;
+
+// MM Soundfont_0 ocarina-instrument block: the port's verified Zora guitar (93) and Deku
+// pipes (94) sit exactly enumId+85 from MM's OcarinaInstrumentId (ZORA_GUITAR=8→93,
+// DEKU_PIPES=9→94), i.e. MM lays its ocarina instruments contiguously at font0[86..96]:
+// 86=DEFAULT 87=FEMALE_VOICE 88=WHISTLING_FLUTE 89=HARP 90=IKANA_KING 91=TATL
+// 92=GORON_DRUMS 93=ZORA_GUITAR 94=DEKU_PIPES 95=MONKEY 96=DEKU_TRUMPET.
+// 90 (IKANA_KING) is Igos du Ikana's sung voice — the En_Osk actor's NA_SE_EN_BOSU_TALK
+// timbre — which is what the Garo form uses. NOTE: 90 is inferred from that offset
+// pattern, not yet heard in-game; if it sounds wrong the candidates are its neighbors.
+#define GAKKI_ANIM(name) "__OTR__misc/link_animetion/gPlayerAnim_mhr_npc_" name
+
+#define SKJ_FLUTE_DL "__OTR__objects/object_skj/gSkullKidLeftHandAndFluteDL"
+
+// GAKKI_DL_HIDE ("no instrument model — draw the limb empty so the ocarina disappears")
+// is declared in mm_asset_loader.h alongside MmGakki_GetInstrumentDL.
+
+static const MmGakkiInstrument sFormGakkiInstruments[] = {
+    /* 0 FIERCE_DEITY */ { GAKKI_VOICE_NONE, 0, 0, 0, NULL, NULL, NULL, 0 },
+    // Goron drums live in Soundfont_0's ocarina-instrument block like the other two, NOT in
+    // Soundfont_38. The verified Zora(93)/Deku(94) entries sit at MM's OcarinaInstrumentId
+    // + 85, so GORON_DRUMS(7) is inst[92]. The old SF38 inst[0] was an unrelated sample
+    // (tuning 0.5 in a 5-instrument font with no drums), which is why the Goron read as
+    // wrong and far too high-pitched.
+    /* 1 GORON        */ { GAKKI_VOICE_MM_FONT, 0, 0, 92, NULL, NULL, NULL, 0 }, // SF0[92] drums
+    /* 2 ZORA         */ { GAKKI_VOICE_MM_FONT, 0, 0, 93, NULL, NULL, NULL, 0 }, // SF0[93] guitar
+    /* 3 DEKU         */ { GAKKI_VOICE_MM_FONT, 0, 0, 94, NULL, NULL, NULL, 0 }, // SF0[94] pipes
+    /* 4 HUMAN        */ { GAKKI_VOICE_NONE, 0, 0, 0, NULL, NULL, NULL, 0 },
+    /* 5 PIKACHU      */ { GAKKI_VOICE_NONE, 0, 0, 0, NULL, NULL, NULL, 0 },
+    // GARO: Igos du Ikana's sung voice — Soundfont_0 inst[120].
+    //
+    // Sourced, not deduced. MM maps OcarinaInstrumentId to a soundfont instrument through a
+    // LOOKUP TABLE in the sequence itself, not by arithmetic: seq_0.prg.seq CHAN_B183 reads
+    // io port 7 (= instrumentId - 1), masks it with 15 and indexes ARRAY_B1CE:
+    //
+    //   idx  0     1     2     3     4     5     6     7     8     9    10    11   12   13   14   15
+    //   val 0x34  0x55  0x52  0x59  0x78  0x56  0x5C  0x5D  0x5E  0x6B  0x5E  0x71 0x73 0x74 0x60 0x5D
+    //
+    // The table validates itself against the three instruments we have heard in-game:
+    // GORON_DRUMS(7) → idx 6 → 0x5C = 92, ZORA_GUITAR(8) → idx 7 → 0x5D = 93,
+    // DEKU_PIPES(9) → idx 8 → 0x5E = 94. All three match exactly.
+    //
+    // It also kills the "enum + 85" rule this file twice relied on: that only holds for
+    // 7/8/9 by coincidence. IKANA_KING(5) → idx 4 → 0x78 = 120, nowhere near the 90 that
+    // rule predicted — and 90 is what made the Garo keep sounding like the wrong sample even
+    // though the logs showed the MM_FONT path resolving and playing correctly.
+    // MM selects this instrument in z_message.c:4154 for OCARINA_ACTION_DEMONSTRATE_ELEGY,
+    // which is where Igos sings the Elegy of Emptiness.
+    /* 6 GARO         */ { GAKKI_VOICE_MM_FONT, 0, 0, 120, NULL, NULL, NULL, 0 },
+    // Gerudo: Malon, complete — her MALON instrument for the voice AND her own
+    // gMalonAdultSingAnim (object_ma2, 58 frames) retargeted onto Link for the pose, baked
+    // by tools/bake_oot_npc_link_anims.py. She sings with empty hands, so the model is
+    // GAKKI_DL_HIDE: the ocarina disappears instead of being held through a singing pose.
+    // The Skull Kid flute (anim + gSkullKidLeftHandAndFluteDL) moved off this row with the
+    // instrument; it is still baked and one line away if it is ever wanted back.
+    //
+    // NOTE on "un poco más aguda": the pitch of a GAKKI_VOICE_NATIVE row is NOT ours to
+    // change. AudioOcarina_SetInstrument only selects which sequence-0 instrument the
+    // ocarina engine uses; the engine then plays every note itself, and the OnOcarinaNote
+    // hook fires AFTER that, read-only. Only the GAKKI_VOICE_MM_FONT path computes its own
+    // pitchScale (MmGakki_PlayPitch), so transposing this would mean moving the Gerudo to
+    // that path — which needs the instrument located inside a soundfont we can address,
+    // the same identification problem that blocked Igos.
+    /* 7 GERUDO       */
+    { GAKKI_VOICE_NATIVE, 2 /* OCARINA_INSTRUMENT_MALON */, 0, 0, NULL, GAKKI_ANIM("malon_sing"), GAKKI_DL_HIDE,
+      PLAYER_LIMB_L_HAND },
+    // KAFEI — ready to enable: he WHISTLES, so the voice is OoT's own WHISTLE instrument
+    // (the same one Impa uses in Demo_Im) and the pose is her gImpaStartWhistlingAnim /
+    // gImpaWhistlingAnim retargeted onto Link. There is no instrument to hold, so the model
+    // is GAKKI_DL_HIDE: the hand draws empty and OoT's ocarina turns invisible.
+    // Uncomment the row once MM_PLAYER_FORM_KAFEI exists in MmPlayerTransformation (the
+    // enum currently ends at GERUDO = 7); the animations are already baked into
+    // oot_npc_link_anims.o2r, so nothing else is needed.
+    // /* 8 KAFEI */ { GAKKI_VOICE_NATIVE, 3 /* OCARINA_INSTRUMENT_WHISTLE */, 0, 0,
+    //                 GAKKI_ANIM("impa_start_whistling"), GAKKI_ANIM("impa_whistling"),
+    //                 GAKKI_DL_HIDE, PLAYER_LIMB_L_HAND },
+};
+static const s32 sFormGakkiInstrumentsSize = sizeof(sFormGakkiInstruments) / sizeof(sFormGakkiInstruments[0]);
+
+static const MmGakkiInstrument* MmGakki_GetFormEntry(s32 form) {
+    if (form < 0 || form >= sFormGakkiInstrumentsSize)
+        return NULL;
+    return &sFormGakkiInstruments[form];
+}
+
+extern "C" s32 MmGakki_GetVoiceType(s32 form) {
+    const MmGakkiInstrument* entry = MmGakki_GetFormEntry(form);
+    return entry ? entry->voiceType : GAKKI_VOICE_NONE;
+}
+
+extern "C" const char* MmGakki_GetStartAnimPath(s32 form) {
+    const MmGakkiInstrument* entry = MmGakki_GetFormEntry(form);
+    return entry ? entry->startAnim : NULL;
+}
+
+extern "C" const char* MmGakki_GetPlayAnimPath(s32 form) {
+    const MmGakkiInstrument* entry = MmGakki_GetFormEntry(form);
+    return entry ? entry->playAnim : NULL;
+}
+
+extern "C" const char* MmGakki_GetInstrumentDL(s32 form) {
+    const MmGakkiInstrument* entry = MmGakki_GetFormEntry(form);
+    return entry ? entry->instrumentDL : NULL;
+}
+
+extern "C" s32 MmGakki_GetInstrumentLimb(s32 form) {
+    const MmGakkiInstrument* entry = MmGakki_GetFormEntry(form);
+    return entry ? entry->instrumentLimb : 0;
+}
+
+extern "C" s32 MmGakki_GetNativeInstrument(s32 form) {
+    const MmGakkiInstrument* entry = MmGakki_GetFormEntry(form);
+    return (entry && entry->voiceType == GAKKI_VOICE_NATIVE) ? entry->nativeId : 0;
+}
+
+extern "C" s32 MmGakki_FormHasOwnInstrument(s32 form) {
+    return MmGakki_GetVoiceType(form) != GAKKI_VOICE_NONE;
+}
+
+// Kept for the MM_FONT synth path.
+static const MmGakkiInstrument* MmGakki_GetFormInstrument(s32 form) {
+    const MmGakkiInstrument* entry = MmGakki_GetFormEntry(form);
+    return (entry && entry->voiceType == GAKKI_VOICE_MM_FONT) ? entry : NULL;
+}
+
 static SoundFont* MmGakki_LoadFormFont(s32 form, u8* outInstIdx) {
-    if (form == 1) {
-        // Goron Drums → Soundfont_38 (dedicated, has real GoronDrum samples)
-        SoundFont* font = MmSfx_LoadFont(38);
-        if (!font || !font->instruments || font->numInstruments == 0)
-            return NULL;
-        // SF38 inst[0] = GoronDrum (main drum sound)
-        *outInstIdx = 0;
-        MMSFX_LOG("[MmGakki] form=1 (Goron) → Soundfont_38 inst[0]");
-        return font;
-    }
+    const MmGakkiInstrument* entry = MmGakki_GetFormInstrument(form);
+    if (entry == NULL)
+        return NULL; // form uses OoT's ocarina — nothing to synthesize here
 
-    // Zora Guitar and Deku Pipes use Soundfont_0
-    switch (form) {
-        case 2:
-            *outInstIdx = 93;
-            break; // Zora Guitar (verified working)
-        case 3:
-            *outInstIdx = 94;
-            break; // Deku Pipes  (verified working)
-        default:
-            return NULL;
-    }
-
-    SoundFont* font = MmSfx_LoadFont(0);
-    if (!font || !font->instruments || *outInstIdx >= font->numInstruments)
-        return NULL;
-
-    Instrument* inst = font->instruments[*outInstIdx];
-    if (!inst) {
-        MMSFX_LOG("[MmGakki] Soundfont_0 instruments[%d] is NULL", *outInstIdx);
+    SoundFont* font = MmSfx_LoadFont(entry->fontId);
+    if (!font || !font->instruments || entry->instIdx >= font->numInstruments) {
+        MMSFX_LOG("[MmGakki] form=%d → Soundfont_%d unavailable (inst %d)", form, entry->fontId, entry->instIdx);
         return NULL;
     }
 
-    MMSFX_LOG("[MmGakki] form=%d → Soundfont_0 inst[%d]", form, *outInstIdx);
+    if (!font->instruments[entry->instIdx]) {
+        MMSFX_LOG("[MmGakki] Soundfont_%d instruments[%d] is NULL", entry->fontId, entry->instIdx);
+        return NULL;
+    }
+
+    *outInstIdx = entry->instIdx;
+    MMSFX_LOG("[MmGakki] form=%d → Soundfont_%d inst[%d]", form, entry->fontId, entry->instIdx);
     return font;
 }
 
@@ -3739,6 +4166,78 @@ void MmGakki_PlayNote(s32 form, u8 buttonIndex, Vec3f* pos) {
     MmDirectAudio_PlaySingle(sound, pitchScale, 1.0f, MM_GAKKI_SFXID, vol, pan, 0.0f, 0.0f);
 }
 
+// Pitch-accurate note trigger, driven from OoT's OnOcarinaNote hook.
+// `pitch` is OoT's OcarinaPitch (semitones from C4, C4=0 → MIDI 60+pitch): it already
+// carries the Z/R sharp/flat modifiers the old buttonIndex→fixed-note map dropped.
+// `bendFreq` is sCurOcarinaBendFreq — the control-stick pitch bend the engine applies to
+// the native ocarina; passing it through keeps our synth bending in lockstep.
+void MmGakki_PlayPitch(s32 form, u8 pitch, f32 bendFreq, Vec3f* pos) {
+    MmAudioScopedLock audioLock;
+
+    MmDirectAudio_StopById(MM_GAKKI_SFXID);
+
+    u8 instIdx = 0;
+    SoundFont* font = MmGakki_LoadFormFont(form, &instIdx);
+    if (!font) {
+        return;
+    }
+
+    s32 midiNote = 60 + (s32)pitch; // OCARINA_PITCH_C4 == 0
+    if (midiNote > 127) {
+        midiNote = 127;
+    }
+
+    SoundFontSound* sound = MmDirectAudio_GetInstrumentSoundDirect(font, instIdx, (u8)midiNote);
+    if (!sound || !sound->sample) {
+        MMSFX_LOG("[MmGakki] PlayPitch: no sound for form=%d midi=%d", form, midiNote);
+        return;
+    }
+
+    f32 pitchScale = powf(2.0f, ((f32)midiNote - 60.0f) / 12.0f);
+    if (bendFreq > 0.0f) {
+        pitchScale *= bendFreq;
+    }
+
+    f32 vol, pan;
+    MmDirectAudio_ComputeSpatial(pos, &vol, &pan);
+
+    MMSFX_LOG("[MmGakki] PlayPitch: form=%d inst[%d] pitch=%d midi=%d bend=%.3f vol=%.2f", form, instIdx, pitch,
+              midiNote, bendFreq, vol);
+    if (!MmDirectAudio_PlaySingle(sound, pitchScale, 1.0f, MM_GAKKI_SFXID, vol, pan, 0.0f, 0.0f)) {
+        return;
+    }
+
+    // Shape the note with the instrument's OWN envelope instead of the generic preset:
+    // this is what makes a drum hit decay like a drum and the guitar/pipes sustain the way
+    // MM does. Applied after PlaySingle because that is what claims the slot.
+    Instrument* inst = font->instruments[instIdx];
+    for (s32 i = 0; i < MM_DIRECT_MAX_SOUNDS; i++) {
+        if (sPlayingSounds[i].active && sPlayingSounds[i].mmSfxId == MM_GAKKI_SFXID) {
+            MmDirectAudio_ApplyInstrumentEnvelope(&sPlayingSounds[i], inst);
+        }
+    }
+}
+
+// Keep a held gakki note alive. MM_GAKKI_SFXID (0x5800) is in sContinuousSfxIds, and the
+// mixer auto-releases continuous slots not refreshed within ~3 mixer frames — the old
+// staff-polling code only (re)triggered on note CHANGE, so long held notes faded out
+// early (part of the "no suena 1:1" report). The OnOcarinaNote hook fires every frame
+// while a note is held; it calls this to bump the refresh stamp.
+void MmGakki_RefreshNote(void) {
+    MmAudioScopedLock audioLock;
+    for (s32 i = 0; i < MM_DIRECT_MAX_SOUNDS; i++) {
+        if (sPlayingSounds[i].active && sPlayingSounds[i].mmSfxId == MM_GAKKI_SFXID) {
+            sPlayingSounds[i].lastRefreshFrame = sMmAudioFrame;
+        }
+    }
+}
+
+// Release the current gakki note (note-off).
+void MmGakki_StopNote(void) {
+    MmAudioScopedLock audioLock;
+    MmDirectAudio_StopById(MM_GAKKI_SFXID);
+}
+
 // MM SFX engine tick (mirrors 2Ship code_8019AF00.c:3680-3682).
 // Implemented in soh/mods/sound_translator/mm_audio_sfx.cpp.
 extern "C" void AudioMmSfx_ProcessRequests(void);
@@ -3807,7 +4306,7 @@ void MmDirectAudio_MixInto(s16* outBuf, u32 numSamples) {
             // (thud → ring → tail with ldelay 7 etc.) instead of slamming all layers
             // simultaneously which produces flam/comb artifacts.
             if (snd->startDelaySamples > 0) {
-                outBuf[i * 2]     += 0; // silence
+                outBuf[i * 2] += 0; // silence
                 outBuf[i * 2 + 1] += 0;
                 snd->startDelaySamples--;
                 continue;
@@ -3880,8 +4379,29 @@ void MmDirectAudio_MixInto(s16* outBuf, u32 numSamples) {
             f32 frac = snd->pcmPosition - (f32)pos;
             f32 sample = snd->pcmData[pos] * (1.0f - frac) + snd->pcmData[pos + 1] * frac;
 
-            s32 outL = outBuf[i * 2] + (s32)(sample * volL);
-            s32 outR = outBuf[i * 2 + 1] + (s32)(sample * volR);
+            f32 dryL = sample * volL;
+            f32 dryR = sample * volR;
+
+            // Reverb send. The N64 audio engine runs every voice through a delay-line
+            // reverb whose depth comes from the SFX request (gSfxDefaultReverb for the
+            // ocarina and for most of MM's player SFX). This mixer summed voices bone
+            // dry, which is a large part of why the ported sounds read as "not 1:1" next
+            // to MM even when pitch and envelope match — MM's are wet.
+            f32 wetL = 0.0f;
+            f32 wetR = 0.0f;
+            if (snd->reverb > 0.0f) {
+                // Index by (base + i): the delay line advances once per OUTPUT sample, not
+                // once per voice, so every voice in this callback shares the same tap.
+                u32 rp = (sMmReverbBase + i) & (MM_REVERB_LEN - 1);
+                wetL = sMmReverbBufL[rp];
+                wetR = sMmReverbBufR[rp];
+                // Feed dry + decayed tail back into the line (classic comb filter).
+                sMmReverbBufL[rp] = dryL * snd->reverb + wetL * MM_REVERB_FEEDBACK;
+                sMmReverbBufR[rp] = dryR * snd->reverb + wetR * MM_REVERB_FEEDBACK;
+            }
+
+            s32 outL = outBuf[i * 2] + (s32)(dryL + wetL);
+            s32 outR = outBuf[i * 2 + 1] + (s32)(dryR + wetR);
 
             if (outL > 32767)
                 outL = 32767;
@@ -3924,7 +4444,8 @@ void MmDirectAudio_MixInto(s16* outBuf, u32 numSamples) {
             f32 curVibDepth = snd->vibratoDepth;
             if (snd->vibGradSamplesTotal > 0) {
                 f32 t = (f32)snd->vibGradSamplesElapsed / (f32)snd->vibGradSamplesTotal;
-                if (t > 1.0f) t = 1.0f;
+                if (t > 1.0f)
+                    t = 1.0f;
                 curVibRate = snd->vibratoRate + (snd->vibratoRateEnd - snd->vibratoRate) * t;
                 curVibDepth = snd->vibratoDepth + (snd->vibratoDepthEnd - snd->vibratoDepth) * t;
                 if (snd->vibGradSamplesElapsed < snd->vibGradSamplesTotal) {
@@ -3952,6 +4473,10 @@ void MmDirectAudio_MixInto(s16* outBuf, u32 numSamples) {
             snd->envReleaseRate = 1.0f / 640.0f; // ~20ms fade-out
         }
     }
+
+    // Advance the reverb delay line exactly once per callback (all voices above indexed it
+    // as base+i, so it must move by the number of output samples, not per voice).
+    sMmReverbBase = (sMmReverbBase + numSamples) & (MM_REVERB_LEN - 1);
 }
 
 // Stop a specific MM sound (triggers release phase for smooth fade-out)
@@ -4286,9 +4811,11 @@ void MmSfxBridge_RefreshProperties(u16 mmSfxId, Vec3f* pos, f32 freqScale) {
 static void MmSfx_ComputeSyncedFreqVol(f32 param, f32* outFreq, f32* outVol) {
     f32 t = (param >= 6.0f) ? 0.0f : (6.0f - param);
     *outFreq = 1.1f - t * 0.0333f;
-    *outVol  = 1.0f - t * 0.0375f;
-    if (*outFreq < 0.5f) *outFreq = 0.5f;
-    if (*outVol  < 0.1f) *outVol  = 0.1f;
+    *outVol = 1.0f - t * 0.0375f;
+    if (*outFreq < 0.5f)
+        *outFreq = 0.5f;
+    if (*outVol < 0.1f)
+        *outVol = 0.1f;
 }
 
 // Apply MM's `Player_GetFloorSfx` offset: ice floor adds 0xF to the base ID,
@@ -4298,7 +4825,8 @@ static void MmSfx_ComputeSyncedFreqVol(f32 param, f32* outFreq, f32* outVol) {
 static u16 MmSfx_ApplyFloorOffset(u16 baseId, u16 floorSfxOffset) {
     // Only ice swap is meaningful for Goron rolling SFX — other floor offsets
     // don't have corresponding GORON_ROLL_* variants in MM's playerbank.
-    if (floorSfxOffset == 0xF) return baseId + 0xF;
+    if (floorSfxOffset == 0xF)
+        return baseId + 0xF;
     return baseId;
 }
 
@@ -4555,8 +5083,7 @@ void* MmAssets_LoadHookshotBodyDL(void) {
     // hand and changes Link's visible hand style). z_player_lib.c builds a
     // compound DL that prepends OOT's hand DL before this one, so Link
     // keeps his OOT hand silhouette and only the hookshot model is MM.
-    sCachedMmHookshotBodyDL =
-        MmAssets_LoadResource("__OTR__objects/object_link_child/gLinkHumanHookshotDL");
+    sCachedMmHookshotBodyDL = MmAssets_LoadResource("__OTR__objects/object_link_child/gLinkHumanHookshotDL");
     if (sCachedMmHookshotBodyDL) {
         MMASSETS_LOG("[MM Assets] Loaded MM hookshot body DL (no hand)");
     }
@@ -4582,8 +5109,7 @@ void* MmAssets_LoadHookshotTipDL(void) {
     // body's nose) AND while flying (chain extended). The previous path
     // `object_lbfshot/object_lbfshot_DL_000228` was actually MM's wall
     // anchor/target geometry (the Bg_Lbfshot actor), not the held tip.
-    sCachedMmHookshotTipDL =
-        MmAssets_LoadResource("__OTR__objects/object_link_child/object_link_child_DL_01D960");
+    sCachedMmHookshotTipDL = MmAssets_LoadResource("__OTR__objects/object_link_child/object_link_child_DL_01D960");
     if (sCachedMmHookshotTipDL) {
         MMASSETS_LOG("[MM Assets] Loaded MM hookshot tip DL");
     }

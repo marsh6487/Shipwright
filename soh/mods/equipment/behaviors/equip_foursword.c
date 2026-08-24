@@ -17,7 +17,11 @@
  * Included by ext_equip_behavior.c (unity build).
  */
 
-#define FOURSWORD_PAK_PATH "nei/Equip_Four_Sword.pak"
+// The blade/hilt used to come from a loose ModLoader64 pak through pak_loader. They are now
+// ordinary soh.o2r resources (converted by apps/zobj_dl_to_xml.py), drawn by the same held-sword
+// DL injection the NEI weapon upgrades use — one asset pipeline for every NEI model.
+#define FOURSWORD_BLADE_DL "__OTR__objects/object_nei_four_sword/gNeiFourSwordBladeDL"
+#define FOURSWORD_HILT_DL "__OTR__objects/object_nei_four_sword/gNeiFourSwordHiltDL"
 
 #define FS_CHARGE_HOLD 15 // frames R+B held to arm charge
 #define FS_CLONE_MAX 3
@@ -317,12 +321,45 @@ update_prev:
 
 // ─── Main behavior ────────────────────────────────────────────────────────────
 
+// Held-sword model: queried by WeaponUpgrade_ApplyHeldSwordDL (the single L_HAND injection point
+// in z_player_lib.c) before it considers the MM upgrade blades. Returns 1 and fills blade/handle
+// when the Four Sword is equipped and its resources resolved; 0 leaves the vanilla sword alone.
+u8 FourSword_HeldSwordDL(void** blade, void** handle) {
+    extern Gfx* ResourceMgr_LoadGfxByName(const char* path);
+    static void* sBlade = NULL;
+    static void* sHilt = NULL;
+    static u8 sTried = 0;
+
+    if (!gExtEquipBehavior.fourSwordActive) {
+        return 0;
+    }
+    if (!sTried) {
+        sTried = 1;
+        sBlade = ResourceMgr_LoadGfxByName(FOURSWORD_BLADE_DL);
+        sHilt = ResourceMgr_LoadGfxByName(FOURSWORD_HILT_DL);
+        // A resource that fails to load comes back as the UNRESOLVED PATH STRING, not NULL. Feeding
+        // that to gSPDisplayList makes the interpreter execute "__OTR__objects/..." as F3DEX2
+        // opcodes and crash in GfxSpTri1 (0xc0000005) — exactly what a stale soh.o2r produced here.
+        if (sBlade != NULL && ((const char*)sBlade)[0] == '_') {
+            sBlade = NULL;
+        }
+        if (sHilt != NULL && ((const char*)sHilt)[0] == '_') {
+            sHilt = NULL;
+        }
+    }
+    if (sBlade == NULL) {
+        return 0; // asset missing (stale soh.o2r) → keep the vanilla sword instead of nothing
+    }
+    *blade = sBlade;
+    *handle = sHilt;
+    return 1;
+}
+
 static void FourSword_Behavior(Player* player, PlayState* play) {
     if (!gExtEquipBehavior.fourSwordActive) {
         gExtEquipBehavior.fourSwordSavedSwordEquip =
             (gSaveContext.equips.equipment >> gEquipShifts[EQUIP_TYPE_SWORD]) & 0xF;
         gExtEquipBehavior.fourSwordSavedButtonItem = gSaveContext.equips.buttonItems[0];
-        PakLoader_ForceEquipment(FOURSWORD_PAK_PATH);
         gExtEquipBehavior.fourSwordActive = 1;
     }
 
@@ -332,7 +369,7 @@ static void FourSword_Behavior(Player* player, PlayState* play) {
     }
 
     // Force Kokiri Sword as the base so the sword action system works
-    // (PakLoader only overrides visuals, not the equipment/action state)
+    // (the held-sword DL override is visual only, not equipment/action state)
     Inventory_ChangeEquipment(EQUIP_TYPE_SWORD, EQUIP_VALUE_SWORD_KOKIRI);
     gSaveContext.equips.buttonItems[0] = ITEM_SWORD_KOKIRI;
 
@@ -379,7 +416,6 @@ static void FourSword_Behavior(Player* player, PlayState* play) {
 
 static void FourSword_Cleanup(void) {
     if (gExtEquipBehavior.fourSwordActive) {
-        PakLoader_ClearForcedEquipment();
         Inventory_ChangeEquipment(EQUIP_TYPE_SWORD, gExtEquipBehavior.fourSwordSavedSwordEquip);
         gSaveContext.equips.buttonItems[0] = gExtEquipBehavior.fourSwordSavedButtonItem;
         gExtEquipBehavior.fourSwordActive = 0;

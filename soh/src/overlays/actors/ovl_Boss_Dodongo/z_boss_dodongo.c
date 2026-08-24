@@ -1512,8 +1512,7 @@ void BossDodongo_UpdateDamage(BossDodongo* this, PlayState* play) {
                 }
             }
             if (sdHit) {
-                u8 isDown =
-                    (this->actionFunc == BossDodongo_Vulnerable) || (this->actionFunc == BossDodongo_LayDown);
+                u8 isDown = (this->actionFunc == BossDodongo_Vulnerable) || (this->actionFunc == BossDodongo_LayDown);
                 BossSuperDamage_StartElectricSparks(&this->actor, 90);
                 this->unk_1C0 = 5;
                 if (isDown) {

@@ -1,4 +1,4 @@
-/**  * pikachu_form.cpp — Pikachu Transformation (Keaton Mask) — SSBB Rewrite
+/**  * pikachu_form.cpp — Pikachu Transformation (Pokeball) — SSBB Rewrite
  *
  * Full SSBB moveset with 322 Brawl animations (SSBBAnim T+R+S format).
  * CPU weighted skinning via SSBBSkin_Draw.
@@ -104,7 +104,7 @@ extern "C" u8 gPikaInWater = 0; // HUD swaps the A icon fighting→water (fast s
 // Move handlers defined later in this file (dispatched directly by the bind table).
 extern "C" u8 PikaItem_RocsCape(PlayState* play, Player* player, s32 item);
 extern "C" u8 PikaItem_QuickAtk(PlayState* play, Player* player, s32 item);
-extern "C" u8 MmForm_IsPikachuActive(void);          // mm_player_form.cpp
+extern "C" u8 MmForm_IsPikachuActive(void);                     // mm_player_form.cpp
 extern "C" uint8_t ResourceMgr_FileExists(const char* resName); // soh/ResourceManagerHelpers.cpp
 
 // ── TWO Pikachu systems ──────────────────────────────────────────────────────
@@ -512,7 +512,7 @@ static u8 PikaAnims_EnsureLoaded(void) {
         return 1;
     }
 
-    // Same convention as the other NEI assets (nei/sm64.z64, nei/garo.o2r, …):
+    // Same convention as the other loose NEI assets (nei/sm64.z64, …):
     // a "nei/" folder next to soh.exe. Lower-case for Linux/macOS case-sensitivity.
     std::string path = Ship::Context::LocateFileAcrossAppDirs("nei/pikachu_anims.bin");
     if (path.empty()) {
@@ -566,16 +566,16 @@ static u8 PikaAnims_EnsureLoaded(void) {
     // Entry table must lie fully inside the file: entriesOff + count*stride <= fileSz.
     if (entriesOff > fileSz || (size_t)count * kEntryStride > fileSz - entriesOff) {
         lusprintf(__FILE__, __LINE__, 2,
-                  "PikaAnims: corrupt .bin (entry table OOB): entriesOff=%u count=%u fileSize=%zu\n",
-                  entriesOff, count, fileSz);
+                  "PikaAnims: corrupt .bin (entry table OOB): entriesOff=%u count=%u fileSize=%zu\n", entriesOff, count,
+                  fileSz);
         sPikaAnimBlob.clear();
         return 0;
     }
     // Table base offsets for names/frames must themselves be inside the file.
     if (namesOff > fileSz || framesOff > fileSz) {
         lusprintf(__FILE__, __LINE__, 2,
-                  "PikaAnims: corrupt .bin (table base OOB): namesOff=%u framesOff=%u fileSize=%zu\n",
-                  namesOff, framesOff, fileSz);
+                  "PikaAnims: corrupt .bin (table base OOB): namesOff=%u framesOff=%u fileSize=%zu\n", namesOff,
+                  framesOff, fileSz);
         sPikaAnimBlob.clear();
         return 0;
     }
@@ -594,17 +594,16 @@ static u8 PikaAnims_EnsureLoaded(void) {
         // a->name is a usable C string (no run-off-the-end strlen at playback).
         size_t nameStart = (size_t)namesOff + nameOff;
         if (nameStart >= fileSz) {
-            lusprintf(__FILE__, __LINE__, 2,
-                      "PikaAnims: corrupt .bin (name OOB) entry=%u nameOff=%u fileSize=%zu\n",
-                      i, nameOff, fileSz);
+            lusprintf(__FILE__, __LINE__, 2, "PikaAnims: corrupt .bin (name OOB) entry=%u nameOff=%u fileSize=%zu\n", i,
+                      nameOff, fileSz);
             PikaAnims_ResetMasterTable(i);
             sPikaAnimHeaders.clear();
             sPikaAnimBlob.clear();
             return 0;
         }
         if (memchr(b + nameStart, '\0', fileSz - nameStart) == NULL) {
-            lusprintf(__FILE__, __LINE__, 2,
-                      "PikaAnims: corrupt .bin (name not NUL-terminated) entry=%u nameOff=%u\n", i, nameOff);
+            lusprintf(__FILE__, __LINE__, 2, "PikaAnims: corrupt .bin (name not NUL-terminated) entry=%u nameOff=%u\n",
+                      i, nameOff);
             PikaAnims_ResetMasterTable(i);
             sPikaAnimHeaders.clear();
             sPikaAnimBlob.clear();
@@ -617,8 +616,8 @@ static u8 PikaAnims_EnsureLoaded(void) {
         size_t framesStart = (size_t)framesOff + framesByte;
         if (framesStart > fileSz || frameSpan > fileSz - framesStart) {
             lusprintf(__FILE__, __LINE__, 2,
-                      "PikaAnims: corrupt .bin (frames OOB) entry=%u framesByte=%u span=%zu fileSize=%zu\n",
-                      i, framesByte, frameSpan, fileSz);
+                      "PikaAnims: corrupt .bin (frames OOB) entry=%u framesByte=%u span=%zu fileSize=%zu\n", i,
+                      framesByte, frameSpan, fileSz);
             PikaAnims_ResetMasterTable(i);
             sPikaAnimHeaders.clear();
             sPikaAnimBlob.clear();
@@ -833,6 +832,12 @@ extern "C" void PikachuForm_Update(Player* player, PlayState* play) {
     if (Pika_IsBrokenMode()) {
         u16 movePressed = play->state.input[0].press.button;
         if (player->stateFlags1 & blockMask) {
+            movePressed = 0;
+        }
+        // Raw input bypasses TransformMasks_FilterB's message/ocarina gate, and these binds
+        // sit on the C buttons — the very ones a textbox or the ocarina owns. Without this
+        // the moves fire while the player is playing notes.
+        if (MmForm_InputOwnedByMessage()) {
             movePressed = 0;
         }
         u16 bindJump = (u16)CVarGetInteger("gPikaBind.Jump", BTN_CLEFT);
@@ -1131,10 +1136,12 @@ extern "C" void PikachuForm_Update(Player* player, PlayState* play) {
             } else if (sPika.currentAction == SSBB_ACT_GUARD_ON && Pika_ActionFinished()) {
                 Pika_SetAction(SSBB_ACT_GUARD);
             }
-            // While shield active: act as Mirror Shield for Twinrova beam absorption
+            // Bubble shield. currentShield is NOT written any more (Skijer 2026-07-28):
+            // no form touches the player's shield equipment, and the bubble blocks the
+            // same way with any shield or with none. Losing the MIRROR stamp also means
+            // the bubble no longer reflects light beams — intended, forms never reflect.
             if (sPika.shieldActive) {
                 player->stateFlags1 |= PLAYER_STATE1_SHIELDING;
-                player->currentShield = PLAYER_SHIELD_MIRROR;
 
                 // Stamp player->shieldQuad each frame so OOT's damage handler
                 // (z_player.c:5233 checks shieldQuad.AC_BOUNCED) blocks attacks
@@ -1162,7 +1169,6 @@ extern "C" void PikachuForm_Update(Player* player, PlayState* play) {
     if (sPika.shieldActive && !rHold) {
         sPika.shieldActive = 0;
         player->stateFlags1 &= ~PLAYER_STATE1_SHIELDING;
-        player->currentShield = PLAYER_SHIELD_NONE;
         Pika_SetAction(SSBB_ACT_GUARD_OFF);
     }
     // Always clear shielding flag when shield not active
@@ -3321,8 +3327,8 @@ extern "C" char sWindEffTexture[]; // I8 64x64 wind texture (z_magic_wind.inc.c)
 
 static Vtx sPikaGrassConeVtx[] = {
     VTX(0, 0, 0, 512, 2048, 0xFF, 0xFF, 0xFF, 0xFF), // 0: tip (front)
-    VTX(4000, 8000, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0x00),    VTX(2828, 8000, 2828, 256, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(0, 8000, 4000, 512, 0, 0xFF, 0xFF, 0xFF, 0x00),  VTX(-2828, 8000, 2828, 768, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(4000, 8000, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0x00),     VTX(2828, 8000, 2828, 256, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(0, 8000, 4000, 512, 0, 0xFF, 0xFF, 0xFF, 0x00),   VTX(-2828, 8000, 2828, 768, 0, 0xFF, 0xFF, 0xFF, 0x00),
     VTX(-4000, 8000, 0, 1024, 0, 0xFF, 0xFF, 0xFF, 0x00), VTX(-2828, 8000, -2828, 1280, 0, 0xFF, 0xFF, 0xFF, 0x00),
     VTX(0, 8000, -4000, 1536, 0, 0xFF, 0xFF, 0xFF, 0x00), VTX(2828, 8000, -2828, 1792, 0, 0xFF, 0xFF, 0xFF, 0x00),
 };
@@ -3362,15 +3368,15 @@ static void Pika_DrawGrassCone(PlayState* play, Player* p) {
     gDPPipeSync(POLY_XLU_DISP++);
     gDPSetTextureLUT(POLY_XLU_DISP++, G_TT_NONE);
     gSPTexture(POLY_XLU_DISP++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON);
-    gDPLoadTextureBlock(POLY_XLU_DISP++, sWindEffTexture, G_IM_FMT_I, G_IM_SIZ_8b, 64, 64, 0,
-                        G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, 6, 6, G_TX_NOLOD, G_TX_NOLOD);
+    gDPLoadTextureBlock(POLY_XLU_DISP++, sWindEffTexture, G_IM_FMT_I, G_IM_SIZ_8b, 64, 64, 0, G_TX_NOMIRROR | G_TX_WRAP,
+                        G_TX_NOMIRROR | G_TX_WRAP, 6, 6, G_TX_NOLOD, G_TX_NOLOD);
     gDPLoadMultiBlock(POLY_XLU_DISP++, sWindEffTexture, 0x0100, 1, G_IM_FMT_I, G_IM_SIZ_8b, 64, 64, 0,
                       G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, 6, 6, 14, 14);
 
     u32 frames = play->gameplayFrames;
     gSPSegment(POLY_XLU_DISP++, 0x08,
-               (uintptr_t)Gfx_TwoTexScroll(play->state.gfxCtx, 0, -(s32)(frames * 1), (s32)(frames * 20), 0x40, 0x40,
-                                           1, -(s32)(frames * 2), (s32)(frames * 10), 0x40, 0x40));
+               (uintptr_t)Gfx_TwoTexScroll(play->state.gfxCtx, 0, -(s32)(frames * 1), (s32)(frames * 20), 0x40, 0x40, 1,
+                                           -(s32)(frames * 2), (s32)(frames * 10), 0x40, 0x40));
 
     gSPDisplayList(POLY_XLU_DISP++, sPikaGrassConeGeo);
 

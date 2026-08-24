@@ -40,7 +40,7 @@ extern Gfx** sPlayerDListGroups[];
 void GustJar_SpawnSuckVFX(PlayState* play, Vec3f* nozzle, s16 aimYaw);
 void GustJar_SpawnBlowVFX(PlayState* play, Vec3f* nozzle, s16 aimYaw, u8 element);
 #define HARPOON_GUST_MODE_ABSORB 2
-#define HARPOON_GUST_MODE_BLOW   3
+#define HARPOON_GUST_MODE_BLOW 3
 }
 
 // =============================================================================
@@ -261,7 +261,7 @@ static void HarpoonDummyPlayer_DrawMmForm(Actor* actor, PlayState* play, Harpoon
 // up its damage automatically. Slots that previously had damage=0 are now
 // non-zero so a hit with that bit set actually deals damage in PvP.
 static DamageTable HarpoonDummyPlayerDamageTable = {
-    /* Deku nut      */ DMG_ENTRY(0, HARPOON_HIT_RESPONSE_STUN),     // stun only
+    /* Deku nut      */ DMG_ENTRY(0, HARPOON_HIT_RESPONSE_STUN), // stun only
     /* Deku stick    */ DMG_ENTRY(1, HARPOON_HIT_RESPONSE_NORMAL),
     /* Slingshot     */ DMG_ENTRY(1, HARPOON_HIT_RESPONSE_NORMAL),
     /* Explosive     */ DMG_ENTRY(2, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE), // vanilla bomb
@@ -272,15 +272,15 @@ static DamageTable HarpoonDummyPlayerDamageTable = {
     /* Kokiri sword  */ DMG_ENTRY(1, HARPOON_HIT_RESPONSE_NORMAL),
     /* Master sword  */ DMG_ENTRY(2, HARPOON_HIT_RESPONSE_NORMAL),
     /* Giant's Knife */ DMG_ENTRY(4, HARPOON_HIT_RESPONSE_NORMAL),
-    /* Fire arrow    */ DMG_ENTRY(2, HARPOON_HIT_RESPONSE_FIRE),     // + burn DOT via status
-    /* Ice arrow     */ DMG_ENTRY(0, PLAYER_HIT_RESPONSE_FROZEN),  // freeze only, no damage
-    /* Light arrow   */ DMG_ENTRY(4, HARPOON_HIT_RESPONSE_LIGHT),    // dedicated LIGHT type
-    /* Unk arrow 1   */ DMG_ENTRY(3, HARPOON_HIT_RESPONSE_DARK),     // sw97 dark arrow + blindness
+    /* Fire arrow    */ DMG_ENTRY(2, HARPOON_HIT_RESPONSE_FIRE),       // + burn DOT via status
+    /* Ice arrow     */ DMG_ENTRY(0, PLAYER_HIT_RESPONSE_FROZEN),      // freeze only, no damage
+    /* Light arrow   */ DMG_ENTRY(4, HARPOON_HIT_RESPONSE_LIGHT),      // dedicated LIGHT type
+    /* Unk arrow 1   */ DMG_ENTRY(3, HARPOON_HIT_RESPONSE_DARK),       // sw97 dark arrow + blindness
     /* Unk arrow 2   */ DMG_ENTRY(1, HARPOON_HIT_RESPONSE_SOUL_DRAIN), // sw97 soul arrow
     /* Unk arrow 3   */ DMG_ENTRY(0, HARPOON_HIT_RESPONSE_WIND_PUSH),  // sw97 wind arrow
-    /* Fire magic    */ DMG_ENTRY(3, HARPOON_HIT_RESPONSE_FIRE),     // SW97 magic fire
-    /* Ice magic     */ DMG_ENTRY(0, PLAYER_HIT_RESPONSE_FROZEN),  // freeze 5s
-    /* Light magic   */ DMG_ENTRY(0, HARPOON_HIT_RESPONSE_LIGHT),    // heals friendlies via status
+    /* Fire magic    */ DMG_ENTRY(3, HARPOON_HIT_RESPONSE_FIRE),       // SW97 magic fire
+    /* Ice magic     */ DMG_ENTRY(0, PLAYER_HIT_RESPONSE_FROZEN),      // freeze 5s
+    /* Light magic   */ DMG_ENTRY(0, HARPOON_HIT_RESPONSE_LIGHT),      // heals friendlies via status
     /* Shield        */ DMG_ENTRY(0, PLAYER_HIT_RESPONSE_NONE),
     /* Mirror Ray    */ DMG_ENTRY(0, PLAYER_HIT_RESPONSE_NONE),
     /* Kokiri spin   */ DMG_ENTRY(1, HARPOON_HIT_RESPONSE_NORMAL),
@@ -289,8 +289,9 @@ static DamageTable HarpoonDummyPlayerDamageTable = {
     /* Kokiri jump   */ DMG_ENTRY(2, HARPOON_HIT_RESPONSE_NORMAL),
     /* Giant jump    */ DMG_ENTRY(8, HARPOON_HIT_RESPONSE_NORMAL),
     /* Master jump   */ DMG_ENTRY(4, HARPOON_HIT_RESPONSE_NORMAL),
-    /* Unknown 1     */ DMG_ENTRY(0, HARPOON_HIT_RESPONSE_WIND_BLOW), // Deku Leaf gust / Gust Jar — zero dmg, big horizontal launch
-    /* Unblockable   */ DMG_ENTRY(4, HARPOON_HIT_RESPONSE_NORMAL), // FD beam, custom heavy
+    /* Unknown 1     */ DMG_ENTRY(0, HARPOON_HIT_RESPONSE_WIND_BLOW), // Deku Leaf gust / Gust Jar — zero dmg, big
+                                                                      // horizontal launch
+    /* Unblockable   */ DMG_ENTRY(4, HARPOON_HIT_RESPONSE_NORMAL),    // FD beam, custom heavy
     /* Hammer jump   */ DMG_ENTRY(6, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE),
     /* Unknown 2     */ DMG_ENTRY(2, HARPOON_HIT_RESPONSE_NORMAL),
 };
@@ -400,8 +401,8 @@ void HarpoonDummyPlayer_Init(Actor* actor, PlayState* play) {
     // empty. Multiplying by ~5-8x keeps dummies on-screen across most overworld
     // distances without disturbing local-player behaviour (these fields are
     // per-actor; only this dummy's culling envelope grows).
-    player->actor.uncullZoneForward  = 8000.0f;
-    player->actor.uncullZoneScale    = 2000.0f;
+    player->actor.uncullZoneForward = 8000.0f;
+    player->actor.uncullZoneScale = 2000.0f;
     player->actor.uncullZoneDownward = 2000.0f;
 
     gSaveContext.linkAge = originalAge;
@@ -410,8 +411,7 @@ void HarpoonDummyPlayer_Init(Actor* actor, PlayState* play) {
     // who is who by reading nametags. Triforce Thief (and everything else):
     // names are visible above remote dummies so players can identify each
     // other and the carrier.
-    bool hideNames = (Harpoon::Instance != nullptr &&
-                      Harpoon::Instance->currentRoomGameMode == "prop_hunt");
+    bool hideNames = (Harpoon::Instance != nullptr && Harpoon::Instance->currentRoomGameMode == "prop_hunt");
     if (!hideNames) {
         // Triforce Thief: tint nametag by team. We do NOT read
         // client.color because ROOM.UPDATE rewrites it from the
@@ -419,11 +419,9 @@ void HarpoonDummyPlayer_Init(Actor* actor, PlayState* play) {
         // tint we'd previously stashed there. Computing TeamRGB at
         // register time keeps the tint stable across room updates.
         NameTagOptions opts{};
-        if (Harpoon::Instance != nullptr &&
-            Harpoon::Instance->currentRoomGameMode == "triforce_thief" &&
+        if (Harpoon::Instance != nullptr && Harpoon::Instance->currentRoomGameMode == "triforce_thief" &&
             !client.team.empty()) {
-            HarpoonTriforceThief::TeamColor tc =
-                HarpoonTriforceThief::TeamRGB(client.team);
+            HarpoonTriforceThief::TeamColor tc = HarpoonTriforceThief::TeamRGB(client.team);
             opts.textColor.r = tc.r;
             opts.textColor.g = tc.g;
             opts.textColor.b = tc.b;
@@ -450,19 +448,14 @@ void HarpoonDummyPlayer_Update(Actor* actor, PlayState* play) {
     // spamming every frame the dummy is hidden. When the dummy goes back to
     // visible we erase the entry so the NEXT exile re-logs.
     if (client.sceneNum != gPlayState->sceneNum || !client.online || !client.isSaveLoaded) {
-        const char* reason =
-            !client.isSaveLoaded ? "saveNotLoaded" :
-            !client.online       ? "offline" :
-                                   "sceneMismatch";
+        const char* reason = !client.isSaveLoaded ? "saveNotLoaded" : !client.online ? "offline" : "sceneMismatch";
         char buf[128];
-        snprintf(buf, sizeof(buf), "%s(their=%d mine=%d)",
-                 reason, client.sceneNum, gPlayState->sceneNum);
+        snprintf(buf, sizeof(buf), "%s(their=%d mine=%d)", reason, client.sceneNum, gPlayState->sceneNum);
         std::string r = buf;
         auto it = sLastExileReason.find(clientId);
         if (it == sLastExileReason.end() || it->second != r) {
             sLastExileReason[clientId] = r;
-            SPDLOG_INFO("[Harpoon] dummy EXILE cid={} '{}' reason={}",
-                        clientId, client.name, r);
+            SPDLOG_INFO("[Harpoon] dummy EXILE cid={} '{}' reason={}", clientId, client.name, r);
         }
         actor->world.pos.x = -9999.0f;
         actor->world.pos.y = -9999.0f;
@@ -561,16 +554,18 @@ void HarpoonDummyPlayer_Update(Actor* actor, PlayState* play) {
     // Link-sized; smaller props shrink the cylinder proportionally,
     // bigger props expand it. yShift=0 keeps the cylinder anchored to
     // the floor where the prop visual sits.
-    if (Harpoon::Instance != nullptr && Harpoon::Instance->isPropHuntMode &&
-        client.propIndex >= 0) {
+    if (Harpoon::Instance != nullptr && Harpoon::Instance->isPropHuntMode && client.propIndex >= 0) {
         s32 mapIdx = Harpoon::Instance->confirmedMapIndex;
-        if (mapIdx < 0) mapIdx = 0;
-        f32 propScale = HarpoonPropHunt::GetPropVisualScale(
-            client.propCategory, client.propIndex, client.propState, mapIdx);
+        if (mapIdx < 0)
+            mapIdx = 0;
+        f32 propScale =
+            HarpoonPropHunt::GetPropVisualScale(client.propCategory, client.propIndex, client.propState, mapIdx);
         // Clamp to a sane band: too small and seekers can't ever hit;
         // too big and a chest hider becomes a wall.
-        if (propScale < 0.3f) propScale = 0.3f;
-        if (propScale > 2.5f) propScale = 2.5f;
+        if (propScale < 0.3f)
+            propScale = 0.3f;
+        if (propScale > 2.5f)
+            propScale = 2.5f;
         player->cylinder.dim.radius = (s16)(30.0f * propScale);
         player->cylinder.dim.height = (s16)(60.0f * propScale);
         player->cylinder.dim.yShift = 0;
@@ -724,8 +719,7 @@ void HarpoonDummyPlayer_Draw(Actor* actor, PlayState* play) {
     // as regular Link — defeats the disguise. If DrawHiderAsProp fails
     // (ghost not spawned, object not loaded), fall through to vanilla
     // skeleton draw — better to see Link than nothing.
-    if (Harpoon::Instance && Harpoon::Instance->isPropHuntMode &&
-        client.propIndex >= 0 &&
+    if (Harpoon::Instance && Harpoon::Instance->isPropHuntMode && client.propIndex >= 0 &&
         HarpoonPropHunt::AreGhostsReady()) {
         // Gate on propIndex>=0 alone — the role string may not have
         // arrived yet (ROLE_ASSIGN packet timing) but if the remote
@@ -734,13 +728,12 @@ void HarpoonDummyPlayer_Draw(Actor* actor, PlayState* play) {
         // Link until ROLE_ASSIGN arrives (which only fires when the host
         // clicks Start Game).
         s32 mapIdx = Harpoon::Instance->confirmedMapIndex;
-        if (mapIdx < 0) mapIdx = 0;
-        bool drew = HarpoonPropHunt::DrawHiderAsProp(actor, play,
-                                         client.propCategory,
-                                         client.propIndex,
-                                         client.propState,
-                                         mapIdx);
-        if (drew) return;  // prop rendered, skip vanilla skel
+        if (mapIdx < 0)
+            mapIdx = 0;
+        bool drew = HarpoonPropHunt::DrawHiderAsProp(actor, play, client.propCategory, client.propIndex,
+                                                     client.propState, mapIdx);
+        if (drew)
+            return; // prop rendered, skip vanilla skel
     }
 
     // SM64 Mario (transformation == HARPOON_MODELTYPE_MARIO): if THIS client has
@@ -755,12 +748,11 @@ void HarpoonDummyPlayer_Draw(Actor* actor, PlayState* play) {
     // instance is used (not the local Mario singleton), so this works whether or
     // not the local player is themselves Mario.
     if (client.transformation == HARPOON_MODELTYPE_MARIO && Sm64Remote_CanRender()) {
-        bool drew = Sm64Remote_DrawPuppet(play, actor->world.pos.x, actor->world.pos.y,
-                                          actor->world.pos.z, actor->shape.rot.y,
-                                          client.marioAnimId, client.marioAnimFrame,
-                                          client.marioFlags, client.color.r, client.color.g,
-                                          client.color.b);
-        if (drew) return;  // remote rendered as Mario, skip the Link draw
+        bool drew = Sm64Remote_DrawPuppet(play, actor->world.pos.x, actor->world.pos.y, actor->world.pos.z,
+                                          actor->shape.rot.y, client.marioAnimId, client.marioAnimFrame,
+                                          client.marioFlags, client.color.r, client.color.g, client.color.b);
+        if (drew)
+            return; // remote rendered as Mario, skip the Link draw
     }
 
     // MM transformations 1=Goron, 2=Zora, 3=Deku, 4=FierceDeity → custom MM
@@ -849,30 +841,30 @@ void HarpoonDummyPlayer_Draw(Actor* actor, PlayState* play) {
         remoteCustomItems.timeGatePortalAlpha = client.ciTimeGatePortalAlpha;
         remoteCustomItems.timeGatePortalScale = client.ciTimeGatePortalScale;
         // ── Phase 1 sync apply ───────────────────────────────────────────
-        remoteCustomItems.rocsFeatherJumpActive  = client.ciRocsFeatherJumpActive;
-        remoteCustomItems.rocsJumpCount          = client.ciRocsJumpCount;
-        remoteCustomItems.rocsMmAnimTimer        = client.ciRocsMmAnimTimer;
-        remoteCustomItems.bombArrowState         = client.ciBombArrowState;
-        remoteCustomItems.hyliasGraceState       = client.ciHyliasGraceState;
-        remoteCustomItems.hyliasGraceSubPhase    = client.ciHyliasGraceSubPhase;
-        remoteCustomItems.hyliasGraceTimer       = client.ciHyliasGraceTimer;
+        remoteCustomItems.rocsFeatherJumpActive = client.ciRocsFeatherJumpActive;
+        remoteCustomItems.rocsJumpCount = client.ciRocsJumpCount;
+        remoteCustomItems.rocsMmAnimTimer = client.ciRocsMmAnimTimer;
+        remoteCustomItems.bombArrowState = client.ciBombArrowState;
+        remoteCustomItems.hyliasGraceState = client.ciHyliasGraceState;
+        remoteCustomItems.hyliasGraceSubPhase = client.ciHyliasGraceSubPhase;
+        remoteCustomItems.hyliasGraceTimer = client.ciHyliasGraceTimer;
         remoteCustomItems.hyliasGraceForcedBySpell = client.ciHyliasGraceForcedBySpell;
-        remoteCustomItems.zonaiPermafrostState   = client.ciZonaiPermafrostState;
-        remoteCustomItems.zonaiPermafrostSubPhase= client.ciZonaiPermafrostSubPhase;
-        remoteCustomItems.zonaiPermafrostTimer   = client.ciZonaiPermafrostTimer;
-        remoteCustomItems.lanternFireType        = client.ciLanternFireType;
-        remoteCustomItems.lanternSwinging        = client.ciLanternSwinging;
-        remoteCustomItems.lanternEquipped        = client.ciLanternEquipped;
-        remoteCustomItems.lanternSwingFrame      = client.ciLanternSwingFrame;
-        remoteCustomItems.minishCapWarpMode      = client.ciMinishCapWarpMode;
-        remoteCustomItems.minishCapShrinking     = client.ciMinishCapShrinking;
-        remoteCustomItems.minishCapGrowing       = client.ciMinishCapGrowing;
-        remoteCustomItems.postmanHatDashing      = client.ciPostmanHatDashing;
-        remoteCustomItems.postmanHatArriving     = client.ciPostmanHatArriving;
+        remoteCustomItems.zonaiPermafrostState = client.ciZonaiPermafrostState;
+        remoteCustomItems.zonaiPermafrostSubPhase = client.ciZonaiPermafrostSubPhase;
+        remoteCustomItems.zonaiPermafrostTimer = client.ciZonaiPermafrostTimer;
+        remoteCustomItems.lanternFireType = client.ciLanternFireType;
+        remoteCustomItems.lanternSwinging = client.ciLanternSwinging;
+        remoteCustomItems.lanternEquipped = client.ciLanternEquipped;
+        remoteCustomItems.lanternSwingFrame = client.ciLanternSwingFrame;
+        remoteCustomItems.minishCapWarpMode = client.ciMinishCapWarpMode;
+        remoteCustomItems.minishCapShrinking = client.ciMinishCapShrinking;
+        remoteCustomItems.minishCapGrowing = client.ciMinishCapGrowing;
+        remoteCustomItems.postmanHatDashing = client.ciPostmanHatDashing;
+        remoteCustomItems.postmanHatArriving = client.ciPostmanHatArriving;
         remoteCustomItems.postmanHatTransitionTimer = client.ciPostmanHatTransitionTimer;
-        remoteCustomItems.desireSensorState      = client.ciDesireSensorState;
-        remoteCustomItems.desireSensorTimer      = client.ciDesireSensorTimer;
-        remoteCustomItems.desireSensorResult     = client.ciDesireSensorResult;
+        remoteCustomItems.desireSensorState = client.ciDesireSensorState;
+        remoteCustomItems.desireSensorTimer = client.ciDesireSensorTimer;
+        remoteCustomItems.desireSensorResult = client.ciDesireSensorResult;
 
         CustomItems_ApplyVisualSync(&remoteCustomItems);
     }
@@ -897,7 +889,7 @@ void HarpoonDummyPlayer_Draw(Actor* actor, PlayState* play) {
     // Forced model override (Kafei, Champion's Tunic, etc.) takes priority over
     // the user-selected adult/child slots when active on the remote. Resolves
     // against the same harpoon/skins/ sync registry — if the remote has Kafei
-    // mask transform on but the local user lacks N64_Kafei.pak, fall back to
+    // mask transform on but the local user lacks that skin, fall back to
     // their normal selection and surface a missing-pak notice.
     if (!client.forcedSkinName.empty()) {
         s32 syncForced = PakLoader_FindSyncIndexByName(client.forcedSkinName.c_str());
@@ -964,8 +956,7 @@ void HarpoonDummyPlayer_Draw(Actor* actor, PlayState* play) {
         auto it = sLastDecision.find(clientId);
         if (it == sLastDecision.end() || it->second != decision) {
             sLastDecision[clientId] = decision;
-            SPDLOG_INFO("[HarpoonSkinSync] dummy '{}' (clientId={}) skel = {}",
-                        client.name, clientId, decision);
+            SPDLOG_INFO("[HarpoonSkinSync] dummy '{}' (clientId={}) skel = {}", client.name, clientId, decision);
         }
     }
 

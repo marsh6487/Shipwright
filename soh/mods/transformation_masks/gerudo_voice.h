@@ -1,5 +1,5 @@
 /**
- * gerudo_voice.h - Auto-loaded Gerudo voice samples bundled inside gerudo.o2r.
+ * gerudo_voice.h - Auto-loaded Gerudo voice samples bundled inside soh.o2r.
  *
  * On first use, scans the resource archive for `voice/<HEX>/*.ogg` entries
  * (placed there by tools/add_gerudo_voice_to_o2r.py), decodes each OGG to

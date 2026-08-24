@@ -184,6 +184,10 @@ std::map<uint32_t, ItemMapEntry> customItemMapping = {
       { ITEM_CHATEAU_ROMANI, "ITEM_CHATEAU_ROMANI", "ITEM_CHATEAU_ROMANI_Faded",
         (char*)"__OTR__icon_item_static_yar/gItemIconChateauRomaniTex" } }, // Skijer's NEI — use mm.o2r icon
     { ITEM_POKEBALL, { ITEM_POKEBALL, "ITEM_POKEBALL", "ITEM_POKEBALL_Faded", (char*)gItemIconPokeballTex } },
+    // Rito Mask (Skijer's NEI): not a page-2 item — it shares the Farore's Wind cell,
+    // so it turns up in the PAGE-1 grid of the save editor. Without a row here that
+    // cell would find no texture and draw no button at all (dead cell).
+    { ITEM_RITO_MASK, { ITEM_RITO_MASK, "ITEM_RITO_MASK", "ITEM_RITO_MASK_Faded", (char*)gItemIconRitoMaskTex } },
     // Bottle Randomizer custom items (Skijer's NEI). MM bottle contents use their REAL mm.o2r icons
     // (icon_item_static_yar). Net + Bottomless are new items with pending placeholders (TODO: real
     // textures in icon_item_custom).

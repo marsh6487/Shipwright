@@ -41,8 +41,8 @@ static const ALIGN_ASSET(2) char gOwlStatueOpenedDL_path[] = dgOwlStatueOpenedDL
 // get-item draws use, so each spiritual stone floating above its owl statue
 // matches the look of receiving it.
 typedef struct {
-    const char* gemDL;       // XLU pass (the gem itself, scintillating)
-    const char* settingDL;   // OPA pass (the gold setting around the gem)
+    const char* gemDL;     // XLU pass (the gem itself, scintillating)
+    const char* settingDL; // OPA pass (the gold setting around the gem)
     u8 primXlu[3];
     u8 envXlu[3];
     u8 primOpa[3];
@@ -53,18 +53,30 @@ typedef struct {
 static const StoneJewel sStoneJewels[3] = {
     // Kokiri Emerald — green
     {
-        gGiKokiriEmeraldGemDL, gGiKokiriEmeraldSettingDL,
-        { 255, 255, 160 }, { 0, 255, 0 }, { 255, 255, 170 }, { 150, 120, 0 },
+        gGiKokiriEmeraldGemDL,
+        gGiKokiriEmeraldSettingDL,
+        { 255, 255, 160 },
+        { 0, 255, 0 },
+        { 255, 255, 170 },
+        { 150, 120, 0 },
     },
     // Goron Ruby — red
     {
-        gGiGoronRubyGemDL, gGiGoronRubySettingDL,
-        { 255, 170, 255 }, { 255, 0, 100 }, { 255, 255, 170 }, { 150, 120, 0 },
+        gGiGoronRubyGemDL,
+        gGiGoronRubySettingDL,
+        { 255, 170, 255 },
+        { 255, 0, 100 },
+        { 255, 255, 170 },
+        { 150, 120, 0 },
     },
     // Zora Sapphire — blue
     {
-        gGiZoraSapphireGemDL, gGiZoraSapphireSettingDL,
-        { 50, 255, 255 }, { 50, 0, 150 }, { 255, 255, 170 }, { 150, 120, 0 },
+        gGiZoraSapphireGemDL,
+        gGiZoraSapphireSettingDL,
+        { 50, 255, 255 },
+        { 50, 0, 150 },
+        { 255, 255, 170 },
+        { 150, 120, 0 },
     },
 };
 
@@ -133,11 +145,11 @@ static void Statue_Update(Actor* thisx, PlayState* play) {
 // statue itself is tiny (STATUE_VISUAL_SCALE 0.005f) so we keep the jewel
 // just slightly above ground and lean on the larger jewel scale to read
 // against the small statue.
-#define JEWEL_HOVER_Y_BASE    35.0f // height above the statue's anchor
-#define JEWEL_HOVER_AMPLITUDE  2.0f // how much it bobs up/down
-#define JEWEL_HOVER_PERIOD_F  80.0f // ~80 frames for a full bob
-#define JEWEL_SPIN_DEG_PER_F   5.0f // ~72 frames for a full spin
-#define JEWEL_SCALE          0.12f  // markedly larger than the statue so it reads
+#define JEWEL_HOVER_Y_BASE 35.0f   // height above the statue's anchor
+#define JEWEL_HOVER_AMPLITUDE 2.0f // how much it bobs up/down
+#define JEWEL_HOVER_PERIOD_F 80.0f // ~80 frames for a full bob
+#define JEWEL_SPIN_DEG_PER_F 5.0f  // ~72 frames for a full spin
+#define JEWEL_SCALE 0.12f          // markedly larger than the statue so it reads
 
 static void Statue_Draw(Actor* thisx, PlayState* play) {
     s16 stone = STATUE_GET_STONE(thisx);
@@ -186,27 +198,23 @@ static void Statue_Draw(Actor* thisx, PlayState* play) {
         // not.
         gSPSegment(POLY_XLU_DISP++, 9,
                    (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 255, 64, 64, 1, 0, 255, 16, 16, 0, 0, 0, 0));
-        gSPSegment(POLY_OPA_DISP++, 8,
-                   (uintptr_t)Gfx_TexScrollEx(play->state.gfxCtx, 0, 0, 16, 16, 0, 0));
+        gSPSegment(POLY_OPA_DISP++, 8, (uintptr_t)Gfx_TexScrollEx(play->state.gfxCtx, 0, 0, 16, 16, 0, 0));
 
-        Matrix_Translate(thisx->world.pos.x,
-                         thisx->world.pos.y + JEWEL_HOVER_Y_BASE + bob,
-                         thisx->world.pos.z, MTXMODE_NEW);
+        Matrix_Translate(thisx->world.pos.x, thisx->world.pos.y + JEWEL_HOVER_Y_BASE + bob, thisx->world.pos.z,
+                         MTXMODE_NEW);
         Matrix_RotateY(BINANG_TO_RAD((f32)spin), MTXMODE_APPLY);
         Matrix_Scale(JEWEL_SCALE, JEWEL_SCALE, JEWEL_SCALE, MTXMODE_APPLY);
 
         // Gem (XLU): cast const char[] → Gfx* for the C++ translation unit.
         Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-        gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx),
-                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
         gDPSetPrimColor(POLY_XLU_DISP++, 0, 128, j->primXlu[0], j->primXlu[1], j->primXlu[2], 255);
         gDPSetEnvColor(POLY_XLU_DISP++, j->envXlu[0], j->envXlu[1], j->envXlu[2], 255);
         gSPDisplayList(POLY_XLU_DISP++, (Gfx*)j->gemDL);
 
         // Setting (OPA): same matrix, different color pair.
         Gfx_SetupDL_25Opa(play->state.gfxCtx);
-        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx),
-                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
         gDPSetPrimColor(POLY_OPA_DISP++, 0, 128, j->primOpa[0], j->primOpa[1], j->primOpa[2], 255);
         gDPSetEnvColor(POLY_OPA_DISP++, j->envOpa[0], j->envOpa[1], j->envOpa[2], 255);
         gSPDisplayList(POLY_OPA_DISP++, (Gfx*)j->settingDL);
@@ -224,8 +232,7 @@ Actor* SpiritualStoneStatue_Spawn(PlayState* play, Vec3f* pos, s16 rotY, int sto
         return NULL;
     }
 
-    Actor* a = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_LIGHTBOX,
-                           pos->x, pos->y, pos->z, 0, rotY, 0, 0);
+    Actor* a = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_LIGHTBOX, pos->x, pos->y, pos->z, 0, rotY, 0, 0);
     if (a == NULL) {
         return NULL;
     }

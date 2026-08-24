@@ -9,11 +9,69 @@
 #include "z64.h"
 #include "../custom_items.h"
 
-// Range
-#define GUST_RANGE_MAX 220.0f
-#define GUST_RANGE_BLOW 200.0f
-#define GUST_BLOW_CONE_HALF_ANGLE 0x2000 // ~45 degrees in s16
+// Reach. The same numbers drive both the collider volume and the tornado that gets drawn, so the
+// visual can never drift away from the hitbox. Kept identical to 2ship's item_gustjar.h so the
+// item behaves the same in both games.
+//
+// The two modes use DIFFERENT shapes on purpose:
+//   SUCK — a CYLINDER along the aim. A cone would taper to nothing at the nozzle, which is
+//          exactly where you want the pull to be strongest, so suction keeps full width the
+//          whole way out.
+//   BLOW — a CONE, which is what the tornado mesh actually is: narrow at the jar, wide at the far
+//          end. Its half-angle is derived from the length/radius below, not hardcoded.
+// Both use the same reach so the two modes cover the same ground.
+#define GUST_CYL_SUCK_LENGTH 200.0f
+#define GUST_CYL_SUCK_RADIUS 100.0f
+#define GUST_CONE_BLOW_LENGTH 200.0f
+#define GUST_CONE_BLOW_RADIUS 100.0f
+
+#define GUST_RANGE_MAX GUST_CYL_SUCK_LENGTH
+#define GUST_RANGE_BLOW GUST_CONE_BLOW_LENGTH
 #define LINK_HEIGHT_HITBOX 80.0f
+
+// AT damage. In both engines the damage-table row is a MULTIPLIER, so this is the base value.
+#define GUST_DAMAGE_SUCK 1 // continuous grind, lands every frame of absorb
+#define GUST_DAMAGE_BLOW 4 // one heavy blast
+
+// AT collider dimensions. This is the cylinder that actually registers hits; the reach values
+// above only govern the pull/push volume tests.
+//
+// SUCTION is a small nub parked at the jar's mouth: things are dragged in by the reach cylinder
+// and only get hurt once they arrive, so a big collider here would damage at a distance and make
+// the pull pointless.
+#define GUST_COL_SUCK_RADIUS 8
+#define GUST_COL_SUCK_HEIGHT 8
+
+// BLOW is NOT a fixed size — it is derived per sweep sample so the collider actually covers the
+// cone that gets drawn (see GustJar_Blow). The maths:
+//
+//   the drawn cone runs GUST_CONE_BLOW_LENGTH along the aim and flares to
+//   GUST_CONE_BLOW_RADIUS at its mouth, so its radius at distance d is
+//       r(d) = GUST_CONE_BLOW_RADIUS * d / GUST_CONE_BLOW_LENGTH   ( = d/2 at the defaults)
+//
+// A ColliderCylinder is WORLD-VERTICAL (radius in XZ, height along +Y) and does not rotate with
+// the aim, so to swallow the cone's circular cross-section at that distance it needs radius r(d)
+// horizontally and 2*r(d) vertically. And because dim.yShift is the cylinder's BOTTOM
+// (bottom = pos.y + yShift, centre = + height/2), it must be shifted down by one radius or the
+// whole cylinder sits above the aim line — which is exactly why a fixed 45x90 looked tall and
+// narrow and missed the cone.
+//
+// At the default 200/100 cone that gives 20/40, 50/100 and 80/160 at the three samples.
+#define GUST_COL_BLOW_RADIUS_AT(frac) ((s16)(GUST_CONE_BLOW_RADIUS * (frac)))
+
+// Where along the blow cone the AT collider is sampled, as fractions of its length. At the
+// default 200-unit cone these land on 40 / 100 / 160, which is what they were hardcoded to
+// before — but now they follow the cone's length instead of staying behind it.
+#define GUST_BLOW_SWEEP_NEAR 0.2f
+#define GUST_BLOW_SWEEP_MID 0.5f
+#define GUST_BLOW_SWEEP_FAR 0.8f
+
+// Supporting smoke. The tornado mesh IS the effect now, so this is deliberately sparse: the
+// count that matters is how many are ALIVE, not how many spawn. One particle every 3 frames
+// with the existing ~12 frame lifetime keeps 3-6 on screen. (Was 6 per frame = ~70 alive,
+// which buried the cone in fog.)
+#define GUST_VFX_PARTICLES 1
+#define GUST_VFX_SPAWN_EVERY 3
 
 // Timers
 #define GUST_HEAT_MAX 300      // 10 seconds to overheat (absorb → blow)
@@ -74,12 +132,12 @@ typedef enum {
 static ColliderCylinderInit sGustJarColliderInit = { { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE,
                                                        OC2_TYPE_PLAYER, COLSHAPE_CYLINDER },
                                                      { ELEMTYPE_UNK0,
-                                                       { 0x00000048, 0x00, 0x08 },
+                                                       { 0x00000048, 0x00, GUST_DAMAGE_SUCK },
                                                        { 0x00000000, 0x00, 0x00 },
                                                        TOUCH_ON | TOUCH_SFX_NONE,
                                                        BUMP_NONE,
                                                        OCELEM_NONE },
-                                                     { 30, 30, 0, { 0, 0, 0 } } };
+                                                     { GUST_COL_SUCK_RADIUS, GUST_COL_SUCK_HEIGHT, 0, { 0, 0, 0 } } };
 
 // Suckable prop actor IDs (for attraction loop)
 static const s16 sGustSuckableProps[] = {
@@ -122,7 +180,9 @@ typedef struct {
 } GustElementColor;
 
 static const GustElementColor sGustElementColors[GUST_ELEMENT_COUNT] = {
-    [GUST_ELEMENT_WIND] = { { 200, 200, 200, 255 }, { 255, 255, 255, 200 } },
+    // WIND is the bare gust jar's own element and reads GREEN, so a plain blow is visibly
+    // "just wind" and not mistaken for an uncoloured/elementless one.
+    [GUST_ELEMENT_WIND] = { { 60, 220, 90, 255 }, { 20, 140, 50, 200 } },
     [GUST_ELEMENT_FIRE] = { { 255, 80, 0, 255 }, { 255, 200, 0, 200 } },
     [GUST_ELEMENT_ICE] = { { 80, 180, 255, 255 }, { 150, 220, 255, 200 } },
     [GUST_ELEMENT_SHADOW] = { { 130, 50, 180, 255 }, { 80, 0, 130, 200 } },

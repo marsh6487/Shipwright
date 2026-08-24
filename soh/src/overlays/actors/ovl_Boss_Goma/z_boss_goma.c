@@ -1853,8 +1853,7 @@ void BossGoma_UpdateHit(BossGoma* this, PlayState* play) {
                     Enemy_StartFinishingBlow(play, &this->actor);
                     GameInteractor_ExecuteOnBossDefeat(&this->actor);
                 }
-            } else if (this->actionFunc == BossGoma_CeilingMoveToCenter ||
-                       this->actionFunc == BossGoma_CeilingIdle ||
+            } else if (this->actionFunc == BossGoma_CeilingMoveToCenter || this->actionFunc == BossGoma_CeilingIdle ||
                        this->actionFunc == BossGoma_CeilingPrepareSpawnGohmas ||
                        this->actionFunc == BossGoma_CeilingSpawnGohmas) {
                 // On ceiling → knock her down. FallStruckDown → FloorLandStruckDown
@@ -2137,15 +2136,12 @@ s32 BossGoma_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f
 // just feed the populated subset into BossSuperDamage_DrawElectricSparks.
 #define BSG_SPARK_LIMB_COUNT 16
 static const s32 sBossGomaSparkLimbIds[BSG_SPARK_LIMB_COUNT] = {
-    BOSSGOMA_LIMB_BODY,           BOSSGOMA_LIMB_BODY_SHELL,
-    BOSSGOMA_LIMB_EYE,            BOSSGOMA_LIMB_MANDIBLES_BODY,
-    BOSSGOMA_LIMB_TAIL1,          BOSSGOMA_LIMB_TAIL2,
-    BOSSGOMA_LIMB_TAIL3,          BOSSGOMA_LIMB_TAIL4,
-    BOSSGOMA_LIMB_R_THIGH,        BOSSGOMA_LIMB_R_KNEE,
-    BOSSGOMA_LIMB_R_FEET,
-    BOSSGOMA_LIMB_L_THIGH,        BOSSGOMA_LIMB_L_KNEE,
-    BOSSGOMA_LIMB_L_FEET,
-    BOSSGOMA_LIMB_L_ANTENNA_BODY, BOSSGOMA_LIMB_R_ANTENNA_BODY,
+    BOSSGOMA_LIMB_BODY,           BOSSGOMA_LIMB_BODY_SHELL, BOSSGOMA_LIMB_EYE,
+    BOSSGOMA_LIMB_MANDIBLES_BODY, BOSSGOMA_LIMB_TAIL1,      BOSSGOMA_LIMB_TAIL2,
+    BOSSGOMA_LIMB_TAIL3,          BOSSGOMA_LIMB_TAIL4,      BOSSGOMA_LIMB_R_THIGH,
+    BOSSGOMA_LIMB_R_KNEE,         BOSSGOMA_LIMB_R_FEET,     BOSSGOMA_LIMB_L_THIGH,
+    BOSSGOMA_LIMB_L_KNEE,         BOSSGOMA_LIMB_L_FEET,     BOSSGOMA_LIMB_L_ANTENNA_BODY,
+    BOSSGOMA_LIMB_R_ANTENNA_BODY,
 };
 static Vec3f sBossGomaSparkPos[BSG_SPARK_LIMB_COUNT];
 

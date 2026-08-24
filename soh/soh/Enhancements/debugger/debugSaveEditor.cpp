@@ -28,13 +28,37 @@ extern PlayState* gPlayState;
 #include "textures/icon_item_24_static/icon_item_24_static.h"
 #include "textures/parameter_static/parameter_static.h"
 #include "mods/extended_inventory.h"
-#include "mods/nei_save.h"             // Skijer's NEI — bottle flags (Nei_Save)
+#include "mods/transformation_masks/custom_forms.h" // RitoItem_NoteCellItem (shared Farore's Wind cell)
+#include "mods/nei_save.h"                          // Skijer's NEI — bottle flags (Nei_Save)
+// Dual Cane (Somaria / Pacci) — mods/items/logic/item_cane_of_somaria.c. Lights one of the six
+// skill bits and, on the first one obtained, also drops the cane into SLOT_CANE_OF_SOMARIA.
+extern "C" u8 Cane_GiveSkill(u8 skill);
 #include "mods/items/custom_bottles.h" // Skijer's NEI — BottleContent + Bottle_ContentItemId
 #include "mods/extended_equipment.h"
 #include "mods/items/logic/weapon_upgrades.h"
 // Skijer's NEI — mods/items/logic/trade_items.c (no header)
 unsigned char TradeAdult_IsOwnedIndex(int index);
 void TradeAdult_SetOwnedIndex(int index, unsigned char on);
+int TradeAdult_Count(void);
+void TradeAdult_GiveIndex(int index);
+// Skijer's NEI — mods/items/logic/twilight_upgrade.c
+unsigned char TwilightUpgrade_HasClawshot(void);
+unsigned char TwilightUpgrade_HasBombArrows(void);
+unsigned char TwilightUpgrade_HasGaleBoomerang(void);
+void TwilightUpgrade_SetClawshot(unsigned char on);
+void TwilightUpgrade_SetBombArrows(unsigned char on);
+void TwilightUpgrade_SetGaleBoomerang(unsigned char on);
+void TwilightUpgrade_Grant(void);
+// Skijer's NEI — mods/items/logic/power_keg.c
+unsigned char PowerKeg_IsOwned(void);
+void PowerKeg_SetOwned(unsigned char on);
+unsigned char PowerKeg_GetCount(void);
+void PowerKeg_SetCount(unsigned char n);
+// Skijer's NEI — mods/items/logic/picto_box.c
+unsigned char Picto_IsOwned(void);
+void Picto_SetOwned(unsigned char on);
+void Picto_TakePhotoNow(void);
+void Picto_ClearPhoto(void);
 }
 
 #include "message_data_static.h"
@@ -538,20 +562,22 @@ void DrawBGSItemFlag(uint8_t itemID) {
 // 4x2 grid: Bottle A = slots 0-3, Bottle B = slots 4-7). Each cell edits NeiSaveData.bottleSlots[i]
 // via a content picker (Empty / Empty Bottle / any content). The kaleido Wheel A/B cycle their half.
 static const char* sBottleContentNames[BOTTLE_C_COUNT] = {
-    "Ruto's Letter", "Big Poe", "Blue Fire", "Blue Potion", "Red Potion", "Green Potion",
-    "Fairy", "Fish", "Bug", "Poe", "Milk",
-    "Gold Dust", "Hot Spring Water", "Deku Princess", "Seahorse", "Spring Water",
-    "Zora Egg", "Hylian Loach", "Obaba's Drink", "Chateau Romani", "Magic Mushroom",
+    "Ruto's Letter", "Big Poe",      "Blue Fire", "Blue Potion",  "Red Potion",    "Green Potion",     "Fairy",
+    "Fish",          "Bug",          "Poe",       "Milk",         "Gold Dust",     "Hot Spring Water", "Deku Princess",
+    "Seahorse",      "Spring Water", "Zora Egg",  "Hylian Loach", "Obaba's Drink", "Chateau Romani",   "Magic Mushroom",
 };
 
 // Resolve an item's registered ImGui texture name (vanilla itemMapping or customItemMapping). Empty
 // string if none — the caller then draws a plain button. Skijer's NEI
 static std::string BottleEditor_ItemTexName(uint8_t item) {
-    if (item == ITEM_NONE) return "";
+    if (item == ITEM_NONE)
+        return "";
     auto it = itemMapping.find(item);
-    if (it != itemMapping.end()) return it->second.name;
+    if (it != itemMapping.end())
+        return it->second.name;
     auto cit = customItemMapping.find(item);
-    if (cit != customItemMapping.end()) return cit->second.name;
+    if (cit != customItemMapping.end())
+        return cit->second.name;
     return "";
 }
 
@@ -802,9 +828,9 @@ void DrawInventoryTab() {
                 PushStyleButton(Colors::DarkGray);
                 if (nbIt != customItemMapping.end() && nbGui->HasTextureByName(nbIt->second.name)) {
                     ImVec4 nbTint = nbOwned ? ImVec4(1, 1, 1, 1) : ImVec4(0.3f, 0.3f, 0.3f, 1.0f);
-                    nbClicked = ImGui::ImageButton(nbIt->second.name.c_str(), nbGui->GetTextureByName(nbIt->second.name),
-                                                   ImVec2(48.0f, 48.0f), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0),
-                                                   nbTint);
+                    nbClicked = ImGui::ImageButton(nbIt->second.name.c_str(),
+                                                   nbGui->GetTextureByName(nbIt->second.name), ImVec2(48.0f, 48.0f),
+                                                   ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), nbTint);
                 } else {
                     nbClicked = ImGui::Button((index == SLOT_BOTTLE_3) ? "Net" : "B.less",
                                               ImVec2(IMAGE_SIZE, IMAGE_SIZE) + ImGui::GetStyle().FramePadding * 2);
@@ -847,11 +873,11 @@ void DrawInventoryTab() {
                 }
                 if (slotEntryPtr) {
                     const ItemMapEntry& slotEntry = *slotEntryPtr;
-                    auto ret = ImGui::ImageButton(
-                        slotEntry.name.c_str(),
-                        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
-                            ->GetTextureByName(slotEntry.name),
-                        ImVec2(48.0f, 48.0f), ImVec2(0, 0), ImVec2(1, 1));
+                    auto ret = ImGui::ImageButton(slotEntry.name.c_str(),
+                                                  std::dynamic_pointer_cast<Fast::Fast3dGui>(
+                                                      Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                                                      ->GetTextureByName(slotEntry.name),
+                                                  ImVec2(48.0f, 48.0f), ImVec2(0, 0), ImVec2(1, 1));
                     if (ret) {
                         selectedIndex = index;
                         ImGui::OpenPopup(itemPopupPicker);
@@ -899,6 +925,17 @@ void DrawInventoryTab() {
                     }
                 }
 
+                // Rito Mask (Skijer's NEI): it shares the Farore's Wind cell instead of
+                // owning one, so the gItemSlots scan above can never find it — offer it
+                // explicitly on that cell. Picking it here IS how you grant yourself the
+                // mask; the kaleido records ownership the next time the menu opens.
+                if (selectedIndex == SLOT_FARORES_WIND) {
+                    auto ritoIt = customItemMapping.find((uint32_t)ITEM_RITO_MASK);
+                    if (ritoIt != customItemMapping.end()) {
+                        possibleItems.push_back(ritoIt->second);
+                    }
+                }
+
                 for (size_t pickerIndex = 0; pickerIndex < possibleItems.size(); pickerIndex++) {
                     if (((pickerIndex + 1) % 8) != 0) {
                         ImGui::SameLine();
@@ -912,6 +949,13 @@ void DrawInventoryTab() {
                                                   ImVec2(IMAGE_SIZE, IMAGE_SIZE), ImVec2(0, 0), ImVec2(1, 1));
                     PopStyleButton();
                     if (ret) {
+                        // Remember what the shared Farore's Wind cell held before it is
+                        // overwritten — that cell is the only record of owning either the
+                        // spell or the Rito Mask. Skijer's NEI
+                        if (selectedIndex == SLOT_FARORES_WIND) {
+                            RitoItem_NoteCellItem(gSaveContext.inventory.items[selectedIndex]);
+                            RitoItem_NoteCellItem(slotEntry.id);
+                        }
                         gSaveContext.inventory.items[selectedIndex] = slotEntry.id;
                         ImGui::CloseCurrentPopup();
                     }
@@ -982,6 +1026,116 @@ void DrawInventoryTab() {
     // ============================================================================
     // CUSTOM ITEMS INVENTORY (Page 2 - Slots 24-47)
     // ============================================================================
+    // Dual Cane (Somaria / Pacci): six SEPARATE obtainable skills sharing ONE inventory slot,
+    // so this is the place to hand yourself any subset of them. Ticking the first one also puts
+    // the cane in SLOT_CANE_OF_SOMARIA; unticking the last one takes it back out.
+    if (ImGui::CollapsingHeader("Dual Cane (Cane of Somaria / Cane of Pacci)")) {
+        static const char* kCaneSkillNames[6] = {
+            "Somaria: Statues", "Somaria: Blocks", "Somaria: Trirod", "Pacci: Flip", "Pacci: Lift", "Pacci: Ultrahand",
+        };
+        NeiSaveData* nei = Nei_Save();
+
+        if (ImGui::Button("Give All 6 Cane Skills")) {
+            for (uint8_t i = 0; i < 6; i++) {
+                Cane_GiveSkill(i);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear Cane")) {
+            nei->caneSkills = 0;
+            nei->caneType = 0;
+            nei->caneSkillSel[0] = nei->caneSkillSel[1] = 0;
+            Nei_SetOwnedItem(SLOT_CANE_OF_SOMARIA, ITEM_NONE);
+        }
+
+        // Per-chain grants. The two progressions are independent — neither ever grants the
+        // other — so being able to hand yourself ONE of them is the only way to test that:
+        // the kaleido cane toggle is supposed to stay hidden until you own both.
+        if (ImGui::Button("Give Somaria chain only")) {
+            for (uint8_t i = 0; i < 3; i++) {
+                Cane_GiveSkill(i);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Give Pacci chain only")) {
+            for (uint8_t i = 3; i < 6; i++) {
+                Cane_GiveSkill(i);
+            }
+        }
+
+        // Which cane is in hand. In game this is A on the cane's kaleido cell, but that
+        // toggle only appears when both chains are owned, so this is how you force it.
+        // FOUR types since the wheel rework: 0 Somaria / 1 Trirod / 2 Pacci / 3 Ultrahand.
+        // (The old two-radio block wrote caneType 1 for "Pacci", which now selects the
+        // TRIROD — that is why forcing Pacci here looked broken.)
+        {
+            int type = (nei->caneType <= 3) ? nei->caneType : 0;
+            ImGui::Text("Active cane:");
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Somaria", &type, 0)) {
+                nei->caneType = 0;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Trirod", &type, 1)) {
+                nei->caneType = 1;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Pacci", &type, 2)) {
+                nei->caneType = 2;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Ultrahand", &type, 3)) {
+                nei->caneType = 3;
+            }
+        }
+
+        ImGui::Spacing();
+
+        for (uint8_t i = 0; i < 6; i++) {
+            bool has = (nei->caneSkills & (1u << i)) != 0;
+            if (ImGui::Checkbox(kCaneSkillNames[i], &has)) {
+                if (has) {
+                    Cane_GiveSkill(i); // also fills the slot when it is the first skill owned
+                } else {
+                    nei->caneSkills &= (uint8_t) ~(1u << i);
+                    if (nei->caneSkills == 0) {
+                        Nei_SetOwnedItem(SLOT_CANE_OF_SOMARIA, ITEM_NONE);
+                    }
+                }
+            }
+            if (i == 2) {
+                ImGui::Spacing(); // visually split the red cane from the yellow one
+            }
+        }
+
+        ImGui::TextDisabled("A on the cane cell (pause) switches entry. L/R pick the summon. C casts.");
+
+        // Trirod echoes: the EoW-style learned list. Individual rows are learned in
+        // game by scanning; here you only need the bulk switches.
+        // Plain Separator+Text rather than SeparatorText — the bundled ImGui may
+        // predate 1.89 and this block is not worth a version dependency.
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Text("Trirod echoes");
+        if (ImGui::Button("Learn All Echoes")) {
+            Nei_TrirodGiveAll();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear Echoes")) {
+            Nei_TrirodClear();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("%d learned", (int)Nei_TrirodLearnedCount());
+        {
+            bool full = Nei_TrirodFullList() != 0;
+            if (ImGui::Checkbox("Full echo list (flavour duplicates)", &full)) {
+                Nei_TrirodSetFullList(full ? 1 : 0);
+            }
+        }
+        ImGui::TextDisabled("Props: aim + C scans. Creatures: kill them with the rod drawn.");
+        ImGui::TextDisabled("Hold L for the echo wheel; R steps; C summons at the ghost.");
+    }
+
     if (ImGui::CollapsingHeader("Custom Items Inventory (Page 2)", ImGuiTreeNodeFlags_DefaultOpen)) {
         // Quick action buttons
         if (ImGui::Button("Give All Custom Items (Max)")) {
@@ -1018,15 +1172,16 @@ void DrawInventoryTab() {
                     ImGui::SameLine();
                 }
 
-                uint8_t item = ExtInv_GetSlotItem(slotIndex); // Skijer's NEI
+                uint16_t item = ExtInv_GetSlotItem(slotIndex); // Skijer's NEI
 
                 bool clicked = false;
                 if (item != ITEM_NONE) {
                     auto it = customItemMapping.find(item);
                     if (it != customItemMapping.end()) {
                         const ItemMapEntry& slotEntry = it->second;
-                        auto tex =
-                            std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())->GetTextureByName(slotEntry.name);
+                        auto tex = std::dynamic_pointer_cast<Fast::Fast3dGui>(
+                                       Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                                       ->GetTextureByName(slotEntry.name);
                         if (tex) {
                             clicked = ImGui::ImageButton(slotEntry.name.c_str(), tex, ImVec2(IMAGE_SIZE, IMAGE_SIZE),
                                                          ImVec2(0, 0), ImVec2(1, 1));
@@ -1090,8 +1245,9 @@ void DrawInventoryTab() {
                         bool ret = false;
                         if (it != customItemMapping.end()) {
                             const ItemMapEntry& entry = it->second;
-                            auto tex =
-                                std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())->GetTextureByName(entry.name);
+                            auto tex = std::dynamic_pointer_cast<Fast::Fast3dGui>(
+                                           Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                                           ->GetTextureByName(entry.name);
                             if (tex) {
                                 ret = ImGui::ImageButton(entry.name.c_str(), tex, ImVec2(IMAGE_SIZE, IMAGE_SIZE),
                                                          ImVec2(0, 0), ImVec2(1, 1));
@@ -1124,8 +1280,9 @@ void DrawInventoryTab() {
                         bool ret = false;
                         if (it != customItemMapping.end()) {
                             const ItemMapEntry& entry = it->second;
-                            auto tex =
-                                std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())->GetTextureByName(entry.name);
+                            auto tex = std::dynamic_pointer_cast<Fast::Fast3dGui>(
+                                           Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                                           ->GetTextureByName(entry.name);
                             if (tex) {
                                 ret = ImGui::ImageButton(entry.name.c_str(), tex, ImVec2(IMAGE_SIZE, IMAGE_SIZE),
                                                          ImVec2(0, 0), ImVec2(1, 1));
@@ -1205,7 +1362,8 @@ void DrawInventoryTab() {
         static bool sMmIconsRegistered = false;
         if (!sMmIconsRegistered) {
             sMmIconsRegistered = true;
-            auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
+            auto gui =
+                std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
             for (int i = 0; i < 24; i++) {
                 gui->LoadGuiTexture(sMmMaskNames[i], sMmMaskIconOtrPaths[i], "", ImVec4(1, 1, 1, 1));
             }
@@ -1251,12 +1409,13 @@ void DrawInventoryTab() {
                     ImGui::SameLine();
                 }
 
-                uint8_t item = ExtInv_GetSlotItem(slotIndex); // Skijer's NEI
+                uint16_t item = ExtInv_GetSlotItem(slotIndex); // Skijer's NEI
                 const char* maskName = sMmMaskNames[visualIndex];
                 bool hasItem = (item != ITEM_NONE);
 
                 // Try to get the registered icon texture
-                auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
+                auto gui =
+                    std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
                 auto tex = gui->GetTextureByName(maskName);
 
                 if (tex) {
@@ -1768,22 +1927,52 @@ void DrawFlagsTab() {
     // Skijer's NEI — MM adult trade-quest items "obtained" flags: a labeled checkbox per item, like the
     // other Inf-flag editors. Toggling sets tradeAdultOwned (shown in the SLOT_TRADE_ADULT 2D-grid wheel
     // + synced to MM for the Anju exchange). The Pendant of Memories also (un)locks its Ext Boots 2 moveset.
-    if (ImGui::TreeNode("MM Trade Items")) {
-        static const char* mmTradeNames[] = {
-            "Moon's Tear",        "Land Title Deed", "Swamp Title Deed",         "Mountain Title Deed",
-            "Ocean Title Deed",   "Room Key",        "Letter to Kafei",          "Special Delivery to Mama",
-            "Pendant of Memories",
+    // ALL 23 entries of the unified wheel, in trade-index order — this used to list only the 9 MM ones
+    // (indices 11-19), so the 11 OoT adult and 3 OoT child entries had no way to be inspected or set,
+    // which made the shared slot untestable. Index == the tradeAdultOwned bit == the array order in
+    // trade_items.c; keep the three in step. Mirrored in 2ship's SaveEditor. Skijer 2026-07-30
+    if (ImGui::TreeNode("Trade Items (shared slot)")) {
+        static const char* tradeNames[] = {
+            "Pocket Egg",
+            "Pocket Cucco",
+            "Cojiro",
+            "Odd Mushroom",
+            "Odd Potion",
+            "Poacher's Saw",
+            "Broken Goron's Sword",
+            "Prescription",
+            "Eyeball Frog",
+            "Eye Drops",
+            "Claim Check", // 0-10  OoT adult
+            "Moon's Tear",
+            "Land Title Deed",
+            "Swamp Title Deed",
+            "Mountain Title Deed",
+            "Ocean Title Deed",
+            "Room Key",
+            "Letter to Kafei",
+            "Special Delivery to Mama",
+            "Pendant of Memories", // 11-19 MM + NEI
+            "Weird Egg",
+            "Cucco",
+            "Zelda's Letter", // 20-22 OoT child
         };
-        static const int mmTradeIndices[] = { 11, 12, 13, 14, 15, 16, 17, 18, 19 };
-        for (int i = 0; i < (int)(sizeof(mmTradeNames) / sizeof(mmTradeNames[0])); i++) {
-            bool obtained = TradeAdult_IsOwnedIndex(mmTradeIndices[i]) != 0;
+        for (int i = 0; i < (int)(sizeof(tradeNames) / sizeof(tradeNames[0])); i++) {
+            bool obtained = TradeAdult_IsOwnedIndex(i) != 0;
             ImGui::PushID(i);
             PushStyleCheckbox(THEME_COLOR);
-            if (ImGui::Checkbox(mmTradeNames[i], &obtained)) {
-                TradeAdult_SetOwnedIndex(mmTradeIndices[i], obtained ? 1 : 0);
+            if (ImGui::Checkbox(tradeNames[i], &obtained)) {
+                TradeAdult_SetOwnedIndex(i, obtained ? 1 : 0);
             }
             PopStyleCheckbox();
             ImGui::PopID();
+        }
+        // TradeAdult_GiveIndex, not SetOwnedIndex: the Pendant also unlocks its Ext Boots 2 moveset.
+        if (ImGui::Button("Grant All Trade Items")) {
+            int n = TradeAdult_Count();
+            for (int i = 0; i < n; i++) {
+                TradeAdult_GiveIndex(i);
+            }
         }
         ImGui::TreePop();
     }
@@ -2072,6 +2261,71 @@ void DrawEquipmentTab() {
     };
     DrawUpgrade("Deku Nut Capacity", UPG_NUTS, nutNames);
 
+    if (ImGui::CollapsingHeader("NEI Twilight Upgrade Bits")) {
+        bool twClawshot = TwilightUpgrade_HasClawshot() != 0;
+        if (ImGui::Checkbox("Clawshot", &twClawshot)) {
+            TwilightUpgrade_SetClawshot(twClawshot ? 1 : 0);
+        }
+        bool twBombArrows = TwilightUpgrade_HasBombArrows() != 0;
+        if (ImGui::Checkbox("Bomb Arrows", &twBombArrows)) {
+            TwilightUpgrade_SetBombArrows(twBombArrows ? 1 : 0);
+        }
+        bool twGale = TwilightUpgrade_HasGaleBoomerang() != 0;
+        if (ImGui::Checkbox("Gale Boomerang", &twGale)) {
+            TwilightUpgrade_SetGaleBoomerang(twGale ? 1 : 0);
+        }
+        if (ImGui::Button("Grant All Twilight Bits")) {
+            TwilightUpgrade_Grant();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear All Twilight Bits")) {
+            TwilightUpgrade_SetClawshot(0);
+            TwilightUpgrade_SetBombArrows(0);
+            TwilightUpgrade_SetGaleBoomerang(0);
+        }
+    }
+
+    if (ImGui::CollapsingHeader("NEI Hookshot / Pictograph / Power Keg")) {
+        bool ultrashot = Nei_Save()->ultrashotOwned != 0;
+        if (ImGui::Checkbox("Ultrashot owned", &ultrashot)) {
+            Nei_Save()->ultrashotOwned = ultrashot ? 1 : 0;
+        }
+
+        ImGui::Separator();
+        bool pictoOwned = Picto_IsOwned() != 0;
+        if (ImGui::Checkbox("Pictograph Box owned", &pictoOwned)) {
+            Picto_SetOwned(pictoOwned ? 1 : 0);
+        }
+        if (ImGui::Button("Take Pictograph Now")) {
+            Picto_TakePhotoNow();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Discard Stored Pictograph")) {
+            Picto_ClearPhoto();
+        }
+
+        ImGui::Separator();
+        bool kegOwned = PowerKeg_IsOwned() != 0;
+        if (ImGui::Checkbox("Power Keg owned", &kegOwned)) {
+            PowerKeg_SetOwned(kegOwned ? 1 : 0);
+        }
+        int kegCount = PowerKeg_GetCount();
+        if (ImGui::SliderInt("Power Kegs", &kegCount, 0, 20)) {
+            PowerKeg_SetCount((unsigned char)kegCount);
+        }
+    }
+
+    if (ImGui::CollapsingHeader("NEI MM Quest Page")) {
+        // FC_MMQ_* bits: remains 0-3; songs Sonata 6 .. Storms-row 16.
+        if (ImGui::Button("Grant MM Songs + Boss Remains")) {
+            Nei_Save()->mmQuestItems |= 0x0001FFCF;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear MM Songs + Boss Remains")) {
+            Nei_Save()->mmQuestItems &= ~0x0001FFCFu;
+        }
+    }
+
     // ============================================================================
     // EXTENDED EQUIPMENT (Page 2)
     // ============================================================================
@@ -2113,14 +2367,14 @@ void DrawEquipmentTab() {
     }
 
     if (ImGui::CollapsingHeader("Extended Equipment (Page 2)")) {
-        // Skijer 2026-07-15: Cape/Pendant stay here for OWNERSHIP (their bits feed the new
-        // upgrade-column passives); "Free Slot" cells are the retired grid slots (Gravity Boots TBD;
-        // Water Dragon Scale deleted — Zora swim is the Zora Tunic's permanent effect now).
+        // Skijer 2026-07-29 re-layout: all 12 grid slots are LIVE. The Magic Cape and the Pendant of
+        // Memories live on the equipment page's LEFT COLUMN with their own ownership stores (capeOwned
+        // / the adult trade wheel), which freed BOOTS 2 and 3 for the Climb and Roc Boots.
         static const char* extEquipNames[4][3] = {
-            { "Cane of Byrna", "Four Sword", "Drillshaft" },
-            { "Divine Shield", "Gerudo Scimitar", "Shield of Ikana" },
-            { "Champion's Tunic", "Spirit Tunic", "Snowquill Tunic" }, // recolor tunics (2026-07-16)
-            { "Pegasus Anklet", "Pendant of Memories", "Free Slot (was Dragon Scale)" },
+            { "Cane of Byrna", "Four Sword", "Trident" },
+            { "Goddess Shield", "Kite Shield", "Shield of Ikana" },
+            { "Champion's Tunic", "Magic Tunic", "Sage's Tunic" },
+            { "Pegasus Boots", "Climb Boots", "Roc Boots" },
         };
         // Icons come from the CANONICAL table (ExtEquip_GetIcon, extended_equipment.c) — the same one
         // the game uses — so Shield of Ikana (MM mirror shield) and Pendant of Memories (mm.o2r) show
@@ -2158,7 +2412,8 @@ void DrawEquipmentTab() {
             ImGui::Spacing();
 
             // Draw equipment grid: 4 rows x 3 columns (like vanilla equipment)
-            auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
+            auto gui =
+                std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
             for (int row = 0; row < 4; row++) {
                 for (int col = 0; col < 3; col++) {
                     if (col != 0) {
@@ -2167,8 +2422,7 @@ void DrawEquipmentTab() {
 
                     ImGui::PushID(2000 + row * 3 + col);
 
-                    // Boots slot 3 is gone for good (Water Dragon Scale deleted) — dead cell.
-                    bool deadCell = (row == EQUIP_TYPE_BOOTS && col + 1 == 3);
+                    bool deadCell = false; // no dead cells left after the 2026-07-29 re-layout
                     ImGui::BeginDisabled(deadCell);
 
                     bool owned = ExtEquip_HasItem(row, col + 1) != 0;
@@ -2192,8 +2446,8 @@ void DrawEquipmentTab() {
                         } else {
                             // Lazy ImGui registration (mm.o2r icons mount after startup registration).
                             // LoadResource pre-check: LoadGuiTexture on a missing path can crash.
-                            auto res = Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(iconPath,
-                                                                                                           true);
+                            auto res =
+                                Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(iconPath, true);
                             if (res) {
                                 gui->LoadGuiTexture(iconPath, iconPath, "", ImVec4(1, 1, 1, 1));
                                 texReady = gui->HasTextureByName(iconPath);
@@ -2258,8 +2512,7 @@ void DrawEquipmentTab() {
 
             ImGui::BeginDisabled(!ExtEquip_CapeOwned());
             bool capeVisible = Nei_Save()->capeHidden == 0;
-            if (ImGui::Checkbox("Magic Cape visible on Link (refund is always active when owned)",
-                                &capeVisible)) {
+            if (ImGui::Checkbox("Magic Cape visible on Link (refund is always active when owned)", &capeVisible)) {
                 Nei_Save()->capeHidden = capeVisible ? 0 : 1;
             }
             ImGui::EndDisabled();
@@ -2376,6 +2629,22 @@ void DrawQuestStatusTab() {
 
     ImGui::SameLine();
     DrawQuestItemButton(QUEST_GERUDO_CARD);
+
+    // Quartz of Motion = level 2 of the progressive Stone of Agony. It lives in
+    // the NEI save blob (not a quest bit), so it gets a plain checkbox rather
+    // than a quest-item button. Level 1 is the Stone of Agony button above.
+    {
+        bool hasQuartz = Nei_Save()->quartzOwned != 0;
+        if (ImGui::Checkbox("Quartz of Motion (Agony L2)", &hasQuartz)) {
+            Nei_Save()->quartzOwned = hasQuartz ? 1 : 0;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Tracking sensor. In the kaleido quest page, press A on the Stone of\n"
+                              "Agony slot to pick a category (costs 1 heart container, runs 5\n"
+                              "minutes). Requires the Stone of Agony itself as well.");
+        }
+    }
+
     for (const auto& [quest, entry] : songMapping) {
         if ((entry.id != QUEST_SONG_MINUET) && (entry.id != QUEST_SONG_LULLABY)) {
             ImGui::SameLine();

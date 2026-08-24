@@ -43,19 +43,19 @@ struct PropEntry {
     std::vector<PropVariant> states;
 };
 
-constexpr s32 kCategoryCount = 3;     // Environment / Enemies / NPCs
+constexpr s32 kCategoryCount = 3; // Environment / Enemies / NPCs
 constexpr s32 kPropsPerCategory = 10;
 constexpr s32 kMapCount = 9;
 
 enum Category : s32 {
     CAT_ENVIRONMENT = 0,
-    CAT_ENEMIES     = 1,
-    CAT_NPCS        = 2,
+    CAT_ENEMIES = 1,
+    CAT_NPCS = 2,
 };
 
 // Single global per-pack data block. Filled by Init() once at startup.
 struct PropTables {
-    std::array<PropEntry, kPropsPerCategory>  environment;
+    std::array<PropEntry, kPropsPerCategory> environment;
     std::array<std::array<PropEntry, kPropsPerCategory>, kMapCount> enemiesByMap;
     std::array<std::array<PropEntry, kPropsPerCategory>, kMapCount> npcsByMap;
     bool loaded = false;
@@ -79,37 +79,37 @@ struct MapDef {
 enum class Role : u8 { Unassigned = 0, Hider = 1, Seeker = 2, Eliminated = 3 };
 
 struct LocalState {
-    Role     role          = Role::Unassigned;
-    s32      propCategory  = CAT_ENVIRONMENT;
+    Role role = Role::Unassigned;
+    s32 propCategory = CAT_ENVIRONMENT;
     // -1 means "no prop picked yet — render as Link". IsLocalHiderWithProp
     // checks `propIndex >= 0`, so a value of 0 would always suppress the
     // vanilla Link draw, leaving the hider invisible until they enter prop
     // mode. Scooter starts at -1 and only flips to 0..9 when the hider
     // picks something inside prop mode.
-    s32      propIndex     = -1;
-    s32      propState     = 0;
-    s32      confirmedMap  = -1;        // index into MapDef list
-    bool     inHidePhase   = false;
-    s32      hidePhaseFramesRemaining = 0;
+    s32 propIndex = -1;
+    s32 propState = 0;
+    s32 confirmedMap = -1; // index into MapDef list
+    bool inHidePhase = false;
+    s32 hidePhaseFramesRemaining = 0;
 
     // Damage cooldown — when the hider takes a hit they auto-detransform
     // (propIndex = -1) and we lock them out of prop mode for ~10 sec so
     // they can't immediately re-disguise mid-fight. Decrements each frame
     // in PropHunt::TickFrame; while > 0 the R-toggle and prop-cycle inputs
     // refuse to re-enter prop mode.
-    s32      propModeLockoutTimer = 0;
+    s32 propModeLockoutTimer = 0;
 };
 
 // ---------------------------------------------------------------------------
 // Inner event tags for ROOM.BROADCAST_EVENT.event
 // ---------------------------------------------------------------------------
 
-constexpr const char* kEvtRoleAssign      = "PROP_HUNT.ROLE_ASSIGN";
-constexpr const char* kEvtSetDisguise     = "PROP_HUNT.SET_DISGUISE";
-constexpr const char* kEvtHidePhaseBegin  = "PROP_HUNT.HIDE_PHASE_BEGIN";
-constexpr const char* kEvtHidePhaseEnd    = "PROP_HUNT.HIDE_PHASE_END";
-constexpr const char* kEvtEliminated      = "PROP_HUNT.ELIMINATED";
-constexpr const char* kEvtRoundResult     = "PROP_HUNT.ROUND_RESULT";
+constexpr const char* kEvtRoleAssign = "PROP_HUNT.ROLE_ASSIGN";
+constexpr const char* kEvtSetDisguise = "PROP_HUNT.SET_DISGUISE";
+constexpr const char* kEvtHidePhaseBegin = "PROP_HUNT.HIDE_PHASE_BEGIN";
+constexpr const char* kEvtHidePhaseEnd = "PROP_HUNT.HIDE_PHASE_END";
+constexpr const char* kEvtEliminated = "PROP_HUNT.ELIMINATED";
+constexpr const char* kEvtRoundResult = "PROP_HUNT.ROUND_RESULT";
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -227,8 +227,7 @@ Actor* GetGhostActor(s32 category, s32 propIndex, s32 propState = 0);
 // the prop was actually drawn — callers should fall back to vanilla draw
 // when this returns false (avoids the "invisible" failure mode where
 // suppressing vanilla without rendering anything leaves the player blank).
-bool DrawHiderAsProp(Actor* playerActor, PlayState* play,
-                     s32 category, s32 propIndex, s32 propState, s32 mapIdx);
+bool DrawHiderAsProp(Actor* playerActor, PlayState* play, s32 category, s32 propIndex, s32 propState, s32 mapIdx);
 
 // Per-frame tick — call from OnGameFrameUpdate to decrement countdown timers.
 void TickFrame();
@@ -267,10 +266,10 @@ namespace Host {
 
 // Host-configurable settings (admin only). Bound to the UI in HarpoonMenu.
 struct Settings {
-    s32 seekerCount  = 1;            // 1-3
-    s32 hideSeconds  = 30;           // hide-phase length
-    s32 mapSelectMode = 0;           // 0=host_chooses 1=everyone_votes 2=random
-    s32 selectedMap   = 0;           // host's pick when mode=host_chooses
+    s32 seekerCount = 1;   // 1-3
+    s32 hideSeconds = 30;  // hide-phase length
+    s32 mapSelectMode = 0; // 0=host_chooses 1=everyone_votes 2=random
+    s32 selectedMap = 0;   // host's pick when mode=host_chooses
 };
 Settings& GetSettings();
 
@@ -278,8 +277,7 @@ Settings& GetSettings();
 // hasn't been seeker yet this rotation is eligible. When the pool empties
 // (everyone has been seeker), the history resets and the rotation starts
 // over. Returns the chosen seeker client ids.
-std::vector<u32> PickNextSeekers(const std::vector<u32>& candidateClientIds,
-                                  s32 seekerCount);
+std::vector<u32> PickNextSeekers(const std::vector<u32>& candidateClientIds, s32 seekerCount);
 
 // Reset the rotation history (called when host changes / game restarts).
 void ResetSeekerHistory();
@@ -294,7 +292,7 @@ u32 GetClientTimer(u32 clientId);
 void AddClientTimerSeconds(u32 clientId, u32 seconds);
 void ResetClientTimer(u32 clientId);
 
-}  // namespace Host
+} // namespace Host
 
 // Trigger a scene transition to `entranceIndex` (e.g. ENTR_HYRULE_FIELD_*).
 // Re-applies linkAgeOnLoad so the age swap that the save preset performs
@@ -328,7 +326,7 @@ void BigStartGameAs(Role role);
 // load (mirrors Scooter's PropHunt_ProcessPendingInit). Engine-level
 // Inventory_ChangeUpgrade calls only stick if invoked after the scene's
 // actors spawn; setting them mid-transition gets clobbered.
-void SetPendingInit(s32 type);   // 1=hider, 2=seeker, 3=converted seeker, 4=reset to hider
+void SetPendingInit(s32 type); // 1=hider, 2=seeker, 3=converted seeker, 4=reset to hider
 void ProcessPendingInit();
 
 // In-place scene reload — mirrors the Instant Age Change cheat (mods.cpp's
@@ -412,29 +410,29 @@ void ChangeRoleAndReload(Role role);
 // 1.0 if the lookup misses (unknown cat/idx/state/map).
 f32 GetPropVisualScale(s32 category, s32 propIndex, s32 propState, s32 mapIdx);
 
-}  // namespace HarpoonPropHunt
+} // namespace HarpoonPropHunt
 
 // C bridge for code that needs to query state without pulling in the namespace.
 extern "C" {
-    // True whenever the local client is currently in a Prop Hunt room (regardless
-    // of round phase or local role). Used by C-only custom item mods to suppress
-    // gameplay behaviors that don't belong in PropHunt (e.g. Cane of Somaria
-    // summoning Elegy shell statues that look like child-Link dummies and
-    // confuse the disguise system).
-    s32 HarpoonPropHunt_IsActive(void);
-    s32 HarpoonPropHunt_IsHider(void);
-    s32 HarpoonPropHunt_IsSeeker(void);
-    s32 HarpoonPropHunt_IsEliminated(void);
-    s32 HarpoonPropHunt_GetLocalPropCategory(void);
-    s32 HarpoonPropHunt_GetLocalPropIndex(void);
-    s32 HarpoonPropHunt_GetLocalPropState(void);
-    s32 HarpoonPropHunt_GetConfirmedMapIndex(void);
-    // Direct prop-draw intercept for z_player.c Player_Draw. Returns 1 if a
-    // prop was drawn at the player's transform (caller should `return` to
-    // skip vanilla Link draw entirely), 0 to fall through to vanilla. Mirrors
-    // Scooter's HarpoonPropHunt_DrawProp early-return pattern.
-    s32 HarpoonPropHunt_TryDrawLocalProp(Actor* thisx, PlayState* play);
+// True whenever the local client is currently in a Prop Hunt room (regardless
+// of round phase or local role). Used by C-only custom item mods to suppress
+// gameplay behaviors that don't belong in PropHunt (e.g. Cane of Somaria
+// summoning Elegy shell statues that look like child-Link dummies and
+// confuse the disguise system).
+s32 HarpoonPropHunt_IsActive(void);
+s32 HarpoonPropHunt_IsHider(void);
+s32 HarpoonPropHunt_IsSeeker(void);
+s32 HarpoonPropHunt_IsEliminated(void);
+s32 HarpoonPropHunt_GetLocalPropCategory(void);
+s32 HarpoonPropHunt_GetLocalPropIndex(void);
+s32 HarpoonPropHunt_GetLocalPropState(void);
+s32 HarpoonPropHunt_GetConfirmedMapIndex(void);
+// Direct prop-draw intercept for z_player.c Player_Draw. Returns 1 if a
+// prop was drawn at the player's transform (caller should `return` to
+// skip vanilla Link draw entirely), 0 to fall through to vanilla. Mirrors
+// Scooter's HarpoonPropHunt_DrawProp early-return pattern.
+s32 HarpoonPropHunt_TryDrawLocalProp(Actor* thisx, PlayState* play);
 }
 
-#endif  // __cplusplus
-#endif  // SOH_NETWORK_HARPOON_PROP_HUNT_H
+#endif // __cplusplus
+#endif // SOH_NETWORK_HARPOON_PROP_HUNT_H

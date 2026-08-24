@@ -114,7 +114,10 @@ const SharedVar kNeiVars[] = {
     { "Custom Items (kaleido page 2)", "gMods.CustomItems.Enabled", 1, "The 24 NEI custom items on the second page" },
     { "Extended Equipment", "gCheats.ExtEquip.Enabled", 0, "Extended equipment (ext swords/shields/tunics/boots)" },
     { "Timeless Equipment", "gCheats.TimelessEquipment", 0, "Equip items regardless of age/form" },
-    { "Bomb Arrows when holding Bomb Bag", "gMods.BombArrows.AutoGrantOnBag", 0, nullptr },
+    // Bomb Arrows stopped being an inventory item — it is the last entry of the bow's element
+    // wheel. The old AutoGrantOnBag checkbox became value 1 of this mode (0 Off / 1 Bomb Bag /
+    // 2 Shuffled), mirrored from the seed-locked rando setting. Skijer's NEI
+    { "Bomb Arrows mode (0 Off / 1 Bomb Bag / 2 Shuffled)", "gMods.BombArrows.Mode", 0, nullptr },
     { "Aim Cycle (R/L cycles projectiles)", "gEnhancements.NeiAimCycle", 0, nullptr },
     { "Gilded look on Kokiri lvl 2", "gEnhancements.SkijerNEI.GildedUsesGildedLook", 1, nullptr },
     { "GFS look on Biggoron lvl 2", "gEnhancements.SkijerNEI.BgsUsesGfsLook", 1, nullptr },
@@ -154,193 +157,18 @@ const SharedVar kCheatVars[] = {
 };
 // clang-format on
 
-// ---------------- Rando MM: prettify + agrupación + widget (contenido dinámico) ----------------
-
-enum class MmWidget { Checkbox, Number, Combo };
-
-struct MmOptionRow {
-    std::string enumName;
-    std::string cvar;
-    int value;
-    std::string friendlyName;
-    const char* group;
-    MmWidget widget;
-    const char* const* comboLabels;
-    int comboCount;
-};
-
-const char* const kLogicLabels[] = { "Glitchless", "No Logic", "Nearly No Logic", "Vanilla" };
-const char* const kAccessDungeonLabels[] = { "Form + Song", "Form or Song", "Form Only", "Song Only", "Open" };
-const char* const kClockModeLabels[] = { "Random", "Ascending", "Descending" };
-const char* const kMmGroups[] = { "General", "Shuffles", "Access", "Pool & Counts", "Starting", "Hints" };
-
-std::string PrettyOptionName(const std::string& enumName) {
-    std::string s = enumName;
-    if (s.rfind("RO_", 0) == 0) {
-        s = s.substr(3);
-    }
-    std::string out;
-    bool newWord = true;
-    for (char c : s) {
-        if (c == '_') {
-            out += ' ';
-            newWord = true;
-            continue;
-        }
-        out += newWord ? (char)std::toupper((unsigned char)c) : (char)std::tolower((unsigned char)c);
-        newWord = false;
-    }
-    return out;
-}
-
-bool NameContainsAny(const std::string& name, std::initializer_list<const char*> parts) {
-    for (const char* part : parts) {
-        if (name.find(part) != std::string::npos) {
-            return true;
-        }
-    }
-    return false;
-}
-
-MmOptionRow ClassifyMmOption(const std::string& enumName, const std::string& cvar, int value) {
-    MmOptionRow row;
-    row.enumName = enumName;
-    row.cvar = cvar;
-    row.value = value;
-    row.friendlyName = PrettyOptionName(enumName);
-    row.comboLabels = nullptr;
-    row.comboCount = 0;
-
-    if (enumName.rfind("RO_SHUFFLE_", 0) == 0) {
-        row.group = "Shuffles";
-    } else if (enumName.rfind("RO_ACCESS_", 0) == 0) {
-        row.group = "Access";
-    } else if (enumName.rfind("RO_HINTS_", 0) == 0) {
-        row.group = "Hints";
-    } else if (enumName.rfind("RO_STARTING_", 0) == 0) {
-        row.group = "Starting";
-    } else if (NameContainsAny(enumName,
-                               { "RO_CLOCK", "RO_TRIFORCE", "RO_SKULLTULA", "RO_STRAY", "RO_TRAP", "RO_PLENTIFUL" })) {
-        row.group = "Pool & Counts";
-    } else {
-        row.group = "General";
-    }
-
-    if (enumName == "RO_LOGIC") {
-        row.widget = MmWidget::Combo;
-        row.comboLabels = kLogicLabels;
-        row.comboCount = 4;
-    } else if (enumName == "RO_ACCESS_DUNGEONS") {
-        row.widget = MmWidget::Combo;
-        row.comboLabels = kAccessDungeonLabels;
-        row.comboCount = 5;
-    } else if (enumName == "RO_CLOCK_SHUFFLE_PROGRESSIVE") {
-        row.widget = MmWidget::Combo;
-        row.comboLabels = kClockModeLabels;
-        row.comboCount = 3;
-    } else if (NameContainsAny(enumName,
-                               { "COUNT", "MAX", "REQUIRED", "AMOUNT", "HEALTH", "RUPEES", "PIECES", "CONSUMABLE" })) {
-        row.widget = MmWidget::Number;
-    } else {
-        row.widget = value > 1 ? MmWidget::Number : MmWidget::Checkbox;
-    }
-    return row;
-}
-
-unsigned long long sOptionsSeq = 0;
-unsigned long long sApplySeq = 0;
-std::vector<MmOptionRow> sRows;
-std::string sMmStatus;
-
 // ---------------- widgets custom (dibujan DENTRO del SohMenu real) ----------------
 
 // ---- General: the ONLY combo rando section — generate/load seed, saves, pool/logic, get-items.
 // Todo lo demás del randomizer se edita EN CADA JUEGO (menú propio de OoT / BenGui de MM).
 // Regla combo: si un item está shuffled y su política lo permite "anywhere", puede salir en
 // CUALQUIER juego (limitado hoy a los items expresables en ambos — tabla FC).
-// "Compatibility" panel: options one game can do and the other cannot. The table comes from
-// FleetComboRando (the SAME one that applies the forcing at generation), so this panel cannot
-// promise one thing while generation does another.
-void DrawCompatWidget(WidgetInfo& info) {
-    (void)info;
-    int count = 0;
-    const FleetIncompat* table = FleetCombo_GetIncompatTable(&count);
-    const int conflicts = FleetCombo_CountActiveConflicts();
-
-    ImGui::TextWrapped("These options are not compatible with the combo yet. Generation forces them to a "
-                       "safe value automatically, so you do not have to change anything by hand. This list "
-                       "is here so you know WHAT will change and why.");
-    ImGui::Separator();
-
-    if (conflicts > 0) {
-        ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f),
-                           "%d OoT option(s) are currently set to a value that generation will change.", conflicts);
-        if (ImGui::Button("Fix all now")) {
-            FleetCombo_ResolveAllConflicts();
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Applies the same values generation would apply, but right now, so OoT's "
-                              "Randomizer menu reflects what you are actually going to play.");
-        }
-    } else {
-        ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "No OoT option is currently in conflict.");
-    }
-    ImGui::Separator();
-
-    if (ImGui::BeginTable("##FleetIncompat", 3,
-                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Option", ImGuiTableColumnFlags_WidthStretch, 0.30f);
-        ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 0.18f);
-        ImGui::TableSetupColumn("Forced to", ImGuiTableColumnFlags_WidthStretch, 0.52f);
-        ImGui::TableHeadersRow();
-
-        for (int i = 0; i < count; ++i) {
-            const FleetIncompat& e = table[i];
-            bool conflicting = false;
-            if (e.cvars) {
-                for (const char* const* cv = e.cvars; *cv; ++cv) {
-                    if (CVarGetInteger(*cv, 0) != e.safeValue) {
-                        conflicting = true;
-                        break;
-                    }
-                }
-            }
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted(e.label);
-            if (ImGui::IsItemHovered()) {
-                ImGui::BeginTooltip();
-                ImGui::PushTextWrapPos(460.0f);
-                ImGui::TextUnformatted(e.why);
-                ImGui::PopTextWrapPos();
-                ImGui::EndTooltip();
-            }
-
-            ImGui::TableNextColumn();
-            if (!e.cvars) {
-                // No menu CVar: forced straight onto the Context at generation, nothing live to read.
-                ImGui::TextDisabled("applied on generate");
-            } else if (conflicting) {
-                ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f), "will change");
-            } else {
-                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "already correct");
-            }
-
-            ImGui::TableNextColumn();
-            ImGui::TextWrapped("%s", e.forcedTo);
-        }
-        ImGui::EndTable();
-    }
-    ImGui::Separator();
-    ImGui::TextDisabled("Hover an option's name to see why it is incompatible.");
-}
-
 void DrawRandoGeneralWidget(WidgetInfo& info) {
     (void)info;
     ImGui::TextWrapped("Combo Randomizer. Configure each game's shuffles in its OWN Randomizer menu (use the top "
-                       "tabs); this section only holds the combo-wide knobs and seed generation. Some options "
-                       "are not compatible with the combo yet and are forced at generation — see the "
-                       "\"Compatibility\" tab for the full list and why.");
+                       "tabs); this section only holds the combo-wide knobs and seed generation. Your options "
+                       "are NOT overridden — each game fills itself with its own logic. The only thing the "
+                       "combo takes over is the goal; see the \"Compatibility\" tab.");
     ImGui::Separator();
 
     // combo-wide: pool size + logic (applied to BOTH generators at generate time)
@@ -396,14 +224,21 @@ void DrawRandoGeneralWidget(WidgetInfo& info) {
         }
     }
 
-    // Start-in choice for combo files created from OoT's file select. Baked PER SLOT at creation
-    // (FleetComboFS_OnCreateSave reads this), so each combo file remembers which game it boots into.
+    // Start-in choice, recorded per slot at creation. It no longer changes the boot game: the combo
+    // always comes up in OoT (see FleetShipCombo_HostBootstrap). Kept visible — and honest about it
+    // — rather than silently doing nothing behind the player's back.
     bool startInMm = CVarGetInteger("gFleetCombo.StartInMM", 0);
+    ImGui::BeginDisabled();
     if (ImGui::Checkbox("New combo files start in Majora's Mask", &startInMm)) {
         CVarSetInteger("gFleetCombo.StartInMM", startInMm ? 1 : 0);
     }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("ON: a combo file created from the file select boots into MM.\nOFF: it boots into OoT.");
+    ImGui::EndDisabled();
+    // AllowWhenDisabled: a greyed-out control that also swallows its own explanation is worse than
+    // no control at all — the tooltip IS the point here.
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("Currently disabled: the combo always starts in Ocarina of Time.\n"
+                          "Booting straight into MM left OoT sitting on its file select with no file\n"
+                          "loaded, which crashed both games. Use the portal to go to MM.");
     }
 
     // ---- Load a saved combo seed (.fleet) into a slot in BOTH games (replay / share a seed) ----
@@ -457,144 +292,74 @@ void DrawRandoGeneralWidget(WidgetInfo& info) {
     if (!loadStatus.empty()) {
         ImGui::TextWrapped("%s", loadStatus.c_str());
     }
-    ImGui::TextDisabled("Drop a .fleet into <ShipDir>/fleet/ and Refresh. Loading BAKES it into that slot in both games.");
+    ImGui::TextDisabled(
+        "Drop a .fleet into <ShipDir>/fleet/ and Refresh. Loading BAKES it into that slot in both games.");
 
     ImGui::Separator();
     ImGui::TextWrapped("Seed GENERATION + new-file creation live in OoT's FILE SELECT: pick the \"COMBO\" quest "
                        "there, then Generate / Start. This panel holds the combo-wide knobs above + the .fleet "
                        "loader (replay a shared seed).");
-    ImGui::TextDisabled("V1: OoT entrance shuffle forced OFF and OoT songs set to Anywhere.");
-}
-
-void DrawRandoMMWidget(WidgetInfo& info) {
-    (void)info;
-    ImGui::TextWrapped("MM randomizer options (they live in 2ship). Load -> edit -> Apply to MM. Generate the "
-                       "combo seed AFTER applying.");
-    if (ImGui::Button("Load MM options")) {
-        sOptionsSeq = FleetOracle_SendManifestRequest();
-        sMmStatus = sOptionsSeq ? "Loading options..." : "No active combo (no oracle)";
-    }
-    if (!sRows.empty()) {
-        ImGui::SameLine();
-        if (ImGui::Button("Apply to MM")) {
-            std::vector<std::pair<std::string, int>> cvars;
-            cvars.reserve(sRows.size());
-            for (auto& row : sRows) {
-                cvars.push_back({ row.cvar, row.value });
-            }
-            sApplySeq = FleetOracle_SendSetOptionsRequest(cvars);
-            sMmStatus = sApplySeq ? "Applying..." : "No active combo";
-        }
-    }
-
-    if (sOptionsSeq != 0) {
-        nlohmann::json resp;
-        if (FleetOracle_TryGetResponse(sOptionsSeq, resp)) {
-            sOptionsSeq = 0;
-            sRows.clear();
-            if (resp.contains("options") && resp["options"].is_array()) {
-                for (auto& row : resp["options"]) {
-                    if (row.is_array() && row.size() >= 3) {
-                        sRows.push_back(ClassifyMmOption(row[0].get<std::string>(), row[1].get<std::string>(),
-                                                         (int)row[2].get<int64_t>()));
-                    }
-                }
-                sMmStatus = "Options loaded: " + std::to_string(sRows.size());
-            } else if (resp.contains("error")) {
-                sMmStatus = "Oracle error: " + resp["error"].get<std::string>();
-            } else {
-                sMmStatus = "Response had no options";
-            }
-        }
-    }
-    if (sApplySeq != 0) {
-        nlohmann::json resp;
-        if (FleetOracle_TryGetResponse(sApplySeq, resp)) {
-            sApplySeq = 0;
-            sMmStatus = resp.contains("applied")
-                            ? ("Applied in MM: " + std::to_string(resp["applied"].get<int>()) + " options")
-                            : "Error applying options";
-        }
-    }
-    if (!sMmStatus.empty()) {
-        ImGui::TextWrapped("%s", sMmStatus.c_str());
-    }
-    if (sRows.empty()) {
-        return;
-    }
-
-    for (const char* group : kMmGroups) {
-        bool hasAny = std::any_of(sRows.begin(), sRows.end(),
-                                  [&](const MmOptionRow& row) { return std::string(row.group) == group; });
-        if (!hasAny) {
-            continue;
-        }
-        bool defaultOpen = std::string(group) == "Shuffles" || std::string(group) == "General";
-        if (!ImGui::CollapsingHeader(group, defaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : 0)) {
-            continue;
-        }
-        for (size_t i = 0; i < sRows.size(); i++) {
-            MmOptionRow& row = sRows[i];
-            if (std::string(row.group) != group) {
-                continue;
-            }
-            ImGui::PushID((int)i);
-            switch (row.widget) {
-                case MmWidget::Checkbox: {
-                    bool value = row.value != 0;
-                    if (ImGui::Checkbox(row.friendlyName.c_str(), &value)) {
-                        row.value = value ? 1 : 0;
-                    }
-                    break;
-                }
-                case MmWidget::Number: {
-                    ImGui::SetNextItemWidth(90.0f);
-                    if (ImGui::InputInt(row.friendlyName.c_str(), &row.value)) {
-                        row.value = std::max(0, row.value);
-                    }
-                    break;
-                }
-                case MmWidget::Combo: {
-                    int idx = std::clamp(row.value, 0, row.comboCount - 1);
-                    ImGui::SetNextItemWidth(160.0f);
-                    if (ImGui::Combo(row.friendlyName.c_str(), &idx, row.comboLabels, row.comboCount)) {
-                        row.value = idx;
-                    }
-                    break;
-                }
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("%s\n%s", row.enumName.c_str(), row.cvar.c_str());
-            }
-            ImGui::PopID();
-        }
-    }
-}
-
-void DrawTestsWidget(WidgetInfo& info) {
-    (void)info;
-    ImGui::Text("oracleAck=%llu  activeGame=%d  uiFocus=%d", FleetShipCombo_GetOracleResponseAck(),
-                FleetShipCombo_GetActiveGame(), FleetShipCombo_GetUiFocus());
+    // Status of the shared-option push to 2ship. It used to live on the Tests sub-tab; it belongs
+    // here, where the settings that trigger it are edited. Skijer's NEI
     if (!sPushStatus.empty()) {
         ImGui::TextDisabled("Shared push: %s", sPushStatus.c_str());
     }
+}
+
+// ---- Shared Rules: one row per RESTRICTED CATEGORY, on its own sub-tab ----
+//
+// A shared category outranks each game's own setting inside its domain and delegates everything else.
+// The three modes are the same for every category, and the middle one hands placement to the combo's
+// restricted stage: the items are dealt across BOTH games' spots, before anything else runs, and are
+// immovable afterwards (out of the shared pool AND out of the available spots).
+//
+// It lives apart from "Generate / Load" on purpose: these are the rules the seed is BUILT with, not
+// actions, and they will keep growing as categories are added.
+//
+// Keep this table in step with gFcCategories in FleetComboRando.cpp: same order, same count. Adding a
+// category is a row there, a row here, and a predicate on the oracle side. Skijer's NEI
+void DrawSharedRulesWidget(WidgetInfo& info) {
+    struct SharedCategoryRow {
+        const char* label;
+        const char* cvar;
+        const char* spotsMode; // name of mode 1 for this category
+        const char* tooltip;
+    };
+    static const SharedCategoryRow kSharedCategories[] = {
+        { "Songs", "gFleetCombo.SharedSongs", "Song Spots",
+          "Own Game Logic: OoT and MM each apply their own song shuffle.\n"
+          "Song Spots: the 23 song spots (12 OoT + 11 MM) become one shared pool and\n"
+          "  the songs mix across games - an OoT song can land on an MM song spot.\n"
+          "Anywhere: songs are ordinary shared items and go wherever the fill puts them.\n\n"
+          "Song of Double Time and the Inverted Song of Time are never part of the 23;\n"
+          "if MM shuffles them they go to its general pool." },
+        { "Dungeon Rewards", "gFleetCombo.SharedDungeonRewards", "Reward Spots",
+          "Own Game Logic: OoT and MM each apply their own dungeon reward setting.\n"
+          "Reward Spots: the 13 boss spots (OoT's 9 + MM's 4) become one shared pool and\n"
+          "  the rewards mix across games - beating the Fire Temple can hand you Odolwa's\n"
+          "  Remains, and a Woodfall boss can hand you the Fire Medallion.\n"
+          "Anywhere: rewards are ordinary shared items and go wherever the fill puts them.\n\n"
+          "On Reward Spots, OoT's own reward stages stand down, so Link's Pocket takes an\n"
+          "ordinary item like any other location." },
+    };
+
+    ImGui::TextUnformatted("How each shared category is placed across the two worlds:");
     ImGui::Separator();
-    ImGui::TextUnformatted("Oracle smoke tests:");
-    if (ImGui::Button("Manifest")) {
-        CVarSetInteger("gFleetOracle.Test", 1);
+    for (auto& row : kSharedCategories) {
+        const char* modes[] = { "Own Game Logic", row.spotsMode, "Anywhere" };
+        int mode = CVarGetInteger(row.cvar, 0);
+        ImGui::SetNextItemWidth(220.0f);
+        if (ImGui::Combo(row.label, &mode, modes, IM_ARRAYSIZE(modes))) {
+            CVarSetInteger(row.cvar, std::max(0, std::min(mode, 2)));
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("%s", row.tooltip);
+        }
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Reachable: sphere 0")) {
-        CVarSetInteger("gFleetOracle.Test", 2);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Reachable: full FC")) {
-        CVarSetInteger("gFleetOracle.Test", 3);
-    }
-    std::string summary = FleetOracle_GetLastTestSummary();
-    if (!summary.empty()) {
-        ImGui::TextWrapped("%s", summary.c_str());
-    }
+    ImGui::Separator();
+    ImGui::TextWrapped("A category on its spots mode is placed FIRST and never moved. If its items "
+                       "outnumber its spots the generation stops and says so - no restriction is ever "
+                       "quietly lifted.");
 }
 
 } // namespace
@@ -635,7 +400,7 @@ struct SharedOpt {
     const char* shipCvar;
     const char* mmCvar; // == shipCvar (auto-link) or different (rename)
     SOpt kind;
-    float minV, maxV, defV; // defV also = default-bool for Check (0/1)
+    float minV, maxV, defV;                      // defV also = default-bool for Check (0/1)
     const std::map<int32_t, const char*>* combo; // Combo only
     const char* tooltip;
 };
@@ -812,19 +577,11 @@ void RegisterFleetSharedMenu() {
     WidgetPath rp = { "Randomizer##FleetShared", "General", SECTION_COLUMN_1 };
     mSohMenu->AddMenuEntry("Randomizer##FleetShared", "gFleetShared.RandoSection");
     mSohMenu->AddSidebarEntry("Randomizer##FleetShared", "General", 1);
-    mSohMenu->AddSidebarEntry("Randomizer##FleetShared", "MM Options", 1);
-    mSohMenu->AddSidebarEntry("Randomizer##FleetShared", "Compatibility", 1);
-    mSohMenu->AddSidebarEntry("Randomizer##FleetShared", "Tests", 1);
+    mSohMenu->AddSidebarEntry("Randomizer##FleetShared", "Shuffles", 1);
     rp.sidebarName = "General";
     mSohMenu->AddWidget(rp, "Generate / Load", WIDGET_CUSTOM).CustomFunction(DrawRandoGeneralWidget).HideInSearch(true);
-    // MM Options se mantiene SOLO porque el menú de MM vive detrás del flip de ventana; es el
-    // "menú propio de MM" accesible sin flip. Las opciones de OoT: su menú Randomizer normal.
-    rp.sidebarName = "MM Options";
-    mSohMenu->AddWidget(rp, "MM Randomizer", WIDGET_CUSTOM).CustomFunction(DrawRandoMMWidget).HideInSearch(true);
-    rp.sidebarName = "Compatibility";
-    mSohMenu->AddWidget(rp, "Incompatible Options", WIDGET_CUSTOM).CustomFunction(DrawCompatWidget).HideInSearch(true);
-    rp.sidebarName = "Tests";
-    mSohMenu->AddWidget(rp, "Oracle Tests", WIDGET_CUSTOM).CustomFunction(DrawTestsWidget).HideInSearch(true);
+    rp.sidebarName = "Shuffles";
+    mSohMenu->AddWidget(rp, "Shared Shuffles", WIDGET_CUSTOM).CustomFunction(DrawSharedRulesWidget).HideInSearch(true);
 
     // NOTE: Enhancements/Cheats are intentionally NOT shared — they behave per-game (same cvar,
     // different effect in OoT vs MM), so they stay in each game's own menu.

@@ -53,7 +53,8 @@ void Harpoon::Enable() {
         Anchor::Instance->Disable();
     }
 
-    if (isEnabled) return;
+    if (isEnabled)
+        return;
 
     // Harpoon talks WebSocket (RFC 6455 plain ws://) — see HarpoonWebSocket.
     // We do NOT call Network::Enable() because that opens raw TCP+\0 which is
@@ -68,7 +69,8 @@ void Harpoon::Enable() {
         ws->SetOnDisconnected([this]() {
             bool wasConnected = isConnected;
             isConnected = false;
-            if (wasConnected) OnDisconnected();
+            if (wasConnected)
+                OnDisconnected();
         });
         ws->SetOnText([this](const std::string& text) {
             try {
@@ -163,7 +165,7 @@ void Harpoon::SendJsonToRemote(nlohmann::json payload) {
     // envelope. Any other fields go into the inner `payload`.
     std::string type = payload.value("type", std::string(""));
     payload.erase("type");
-    payload["clientId"] = ownClientId;  // kept inside payload as a convenience
+    payload["clientId"] = ownClientId; // kept inside payload as a convenience
 
     nlohmann::json envelope;
     envelope["type"] = type;
@@ -215,48 +217,78 @@ void Harpoon::ProcessIncomingPacketQueue() {
             // ================================================================
             // HARPOON.* — connection lifecycle
             // ================================================================
-            if (packetType == HPN_SERVER_INFO)               HandlePacket_ServerInfo(payload);
-            else if (packetType == HPN_HANDSHAKE_ACK)        HandlePacket_HandshakeAck(payload);
-            else if (packetType == HPN_ERROR)                HandlePacket_Error(payload);
+            if (packetType == HPN_SERVER_INFO)
+                HandlePacket_ServerInfo(payload);
+            else if (packetType == HPN_HANDSHAKE_ACK)
+                HandlePacket_HandshakeAck(payload);
+            else if (packetType == HPN_ERROR)
+                HandlePacket_Error(payload);
 
             // ================================================================
             // ROOM.*
             // ================================================================
-            else if (packetType == HPN_ROOM_JOINED)          HandlePacket_RoomJoined(payload);
-            else if (packetType == HPN_ROOM_LEFT)            HandlePacket_RoomLeft(payload);
-            else if (packetType == HPN_ROOM_LIST_RESPONSE)   HandlePacket_RoomList(payload);
-            else if (packetType == HPN_ROOM_MEMBERS)         HandlePacket_AllClients(payload);
-            else if (packetType == HPN_ROOM_MANIFEST)        HandlePacket_GamemodeManifest(payload);
-            else if (packetType == HPN_ROOM_PHASE_CHANGED)   HandlePacket_PhaseChanged(payload);
-            else if (packetType == HPN_ROOM_EVENT)           HandlePacket_RoomEvent(payload);
+            else if (packetType == HPN_ROOM_JOINED)
+                HandlePacket_RoomJoined(payload);
+            else if (packetType == HPN_ROOM_LEFT)
+                HandlePacket_RoomLeft(payload);
+            else if (packetType == HPN_ROOM_LIST_RESPONSE)
+                HandlePacket_RoomList(payload);
+            else if (packetType == HPN_ROOM_MEMBERS)
+                HandlePacket_AllClients(payload);
+            else if (packetType == HPN_ROOM_MANIFEST)
+                HandlePacket_GamemodeManifest(payload);
+            else if (packetType == HPN_ROOM_PHASE_CHANGED)
+                HandlePacket_PhaseChanged(payload);
+            else if (packetType == HPN_ROOM_EVENT)
+                HandlePacket_RoomEvent(payload);
 
             // ================================================================
             // PLAYER.* — granular per-frame
             // ================================================================
-            else if (packetType == HPN_PLAYER_TRANSFORM)         HandlePacket_PlayerTransform(payload);
-            else if (packetType == HPN_PLAYER_SKELETON)          HandlePacket_PlayerSkeleton(payload);
-            else if (packetType == HPN_PLAYER_LIMB_ROT)          HandlePacket_PlayerLimbRotations(payload);
-            else if (packetType == HPN_PLAYER_ANIM_FLAGS)        HandlePacket_PlayerAnimationFlags(payload);
-            else if (packetType == HPN_PLAYER_MOTION_VARS)       HandlePacket_PlayerMotionVars(payload);
-            else if (packetType == HPN_PLAYER_BOW_STATE)         HandlePacket_PlayerBowState(payload);
-            else if (packetType == HPN_PLAYER_HAND_TYPES)        HandlePacket_PlayerHandTypes(payload);
-            else if (packetType == HPN_PLAYER_VISUAL_STATE)      HandlePacket_PlayerVisualState(payload);
-            else if (packetType == HPN_PLAYER_EQUIP_VISIBLE)     HandlePacket_PlayerEquipVisible(payload);
-            else if (packetType == HPN_PLAYER_FACE)              HandlePacket_PlayerFace(payload);
-            else if (packetType == HPN_PLAYER_SCALE)             HandlePacket_PlayerScale(payload);
-            else if (packetType == HPN_PLAYER_TRANSFORMATION)    HandlePacket_PlayerTransformation(payload);
-            else if (packetType == HPN_PLAYER_GORON_STATE)       HandlePacket_PlayerGoronState(payload);
-            else if (packetType == HPN_PLAYER_INVINCIBILITY)     HandlePacket_PlayerInvincibility(payload);
-            else if (packetType == HPN_PLAYER_CUSTOM_ITEM)       HandlePacket_PlayerCustomItemState(payload);
-            else if (packetType == HPN_PLAYER_FULL_STATE)        HandlePacket_PlayerFullState(payload);
-            else if (packetType == HPN_PLAYER_KILL)              HandlePacket_PlayerDied(payload);
+            else if (packetType == HPN_PLAYER_TRANSFORM)
+                HandlePacket_PlayerTransform(payload);
+            else if (packetType == HPN_PLAYER_SKELETON)
+                HandlePacket_PlayerSkeleton(payload);
+            else if (packetType == HPN_PLAYER_LIMB_ROT)
+                HandlePacket_PlayerLimbRotations(payload);
+            else if (packetType == HPN_PLAYER_ANIM_FLAGS)
+                HandlePacket_PlayerAnimationFlags(payload);
+            else if (packetType == HPN_PLAYER_MOTION_VARS)
+                HandlePacket_PlayerMotionVars(payload);
+            else if (packetType == HPN_PLAYER_BOW_STATE)
+                HandlePacket_PlayerBowState(payload);
+            else if (packetType == HPN_PLAYER_HAND_TYPES)
+                HandlePacket_PlayerHandTypes(payload);
+            else if (packetType == HPN_PLAYER_VISUAL_STATE)
+                HandlePacket_PlayerVisualState(payload);
+            else if (packetType == HPN_PLAYER_EQUIP_VISIBLE)
+                HandlePacket_PlayerEquipVisible(payload);
+            else if (packetType == HPN_PLAYER_FACE)
+                HandlePacket_PlayerFace(payload);
+            else if (packetType == HPN_PLAYER_SCALE)
+                HandlePacket_PlayerScale(payload);
+            else if (packetType == HPN_PLAYER_TRANSFORMATION)
+                HandlePacket_PlayerTransformation(payload);
+            else if (packetType == HPN_PLAYER_GORON_STATE)
+                HandlePacket_PlayerGoronState(payload);
+            else if (packetType == HPN_PLAYER_INVINCIBILITY)
+                HandlePacket_PlayerInvincibility(payload);
+            else if (packetType == HPN_PLAYER_CUSTOM_ITEM)
+                HandlePacket_PlayerCustomItemState(payload);
+            else if (packetType == HPN_PLAYER_FULL_STATE)
+                HandlePacket_PlayerFullState(payload);
+            else if (packetType == HPN_PLAYER_KILL)
+                HandlePacket_PlayerDied(payload);
 
             // ================================================================
             // COMBAT.*
             // ================================================================
-            else if (packetType == HPN_COMBAT_DAMAGE)         HandlePacket_Damage(payload);
-            else if (packetType == HPN_COMBAT_DECOY_HIT)      HandlePacket_DecoyHit(payload);
-            else if (packetType == HPN_COMBAT_CUSTOM_EFFECT)  HandlePacket_CustomEffect(payload);
+            else if (packetType == HPN_COMBAT_DAMAGE)
+                HandlePacket_Damage(payload);
+            else if (packetType == HPN_COMBAT_DECOY_HIT)
+                HandlePacket_DecoyHit(payload);
+            else if (packetType == HPN_COMBAT_CUSTOM_EFFECT)
+                HandlePacket_CustomEffect(payload);
             else if (packetType == HPN_COMBAT_SPAWN_DECOY) {
                 // Mirror Scooter's decoy ring on the source client's
                 // HarpoonClient. We store {pos, rotY, propCat/Idx/State} so
@@ -264,25 +296,23 @@ void Harpoon::ProcessIncomingPacketQueue() {
                 // render the ghost prop at the decoy's world position.
                 uint32_t src = payload.value("source", 0u);
                 nlohmann::json inner = payload.contains("payload") ? payload["payload"]
-                                       : payload.contains("data")    ? payload["data"]
-                                                                     : payload;
+                                       : payload.contains("data")  ? payload["data"]
+                                                                   : payload;
                 u8 slot = (u8)inner.value("slot", 0);
                 if (slot < 3 && clients.find(src) != clients.end()) {
                     auto& c = clients[src];
                     c.somariaDecoyPos[slot].x = inner.value("x", 0.0f);
                     c.somariaDecoyPos[slot].y = inner.value("y", 0.0f);
                     c.somariaDecoyPos[slot].z = inner.value("z", 0.0f);
-                    c.somariaDecoyRotY[slot]      = (s16)inner.value("rotY", 0);
-                    c.somariaDecoyPropCat[slot]   = inner.value("propCat", 0);
-                    c.somariaDecoyPropIdx[slot]   = inner.value("propIndex", 0);
+                    c.somariaDecoyRotY[slot] = (s16)inner.value("rotY", 0);
+                    c.somariaDecoyPropCat[slot] = inner.value("propCat", 0);
+                    c.somariaDecoyPropIdx[slot] = inner.value("propIndex", 0);
                     c.somariaDecoyPropState[slot] = inner.value("propState", 0);
-                    c.somariaDecoyActive[slot]    = 1;
+                    c.somariaDecoyActive[slot] = 1;
                 }
-            }
-            else if (packetType == HPN_COMBAT_DESTROY_DECOY) {
+            } else if (packetType == HPN_COMBAT_DESTROY_DECOY) {
                 uint32_t src = payload.value("source", 0u);
-                nlohmann::json inner = payload.contains("payload") ? payload["payload"]
-                                                                    : payload;
+                nlohmann::json inner = payload.contains("payload") ? payload["payload"] : payload;
                 u8 slot = (u8)inner.value("slot", 0);
                 if (slot < 3 && clients.find(src) != clients.end()) {
                     clients[src].somariaDecoyActive[slot] = 0;
@@ -292,39 +322,59 @@ void Harpoon::ProcessIncomingPacketQueue() {
             // ================================================================
             // INVENTORY.* / SAVE.* (Anchor rando + general save sync)
             // ================================================================
-            else if (packetType == HPN_INV_GIVE_ITEM)         HandlePacket_GiveItem(payload);
-            else if (packetType == HPN_INV_DUNGEON_ITEMS)     HandlePacket_UpdateDungeonItems(payload);
-            else if (packetType == HPN_INV_AMMO)              HandlePacket_UpdateBeansCount(payload);
-            else if (packetType == HPN_SAVE_SET_FLAG)         HandlePacket_SetFlag(payload);
-            else if (packetType == HPN_SAVE_UNSET_FLAG)       HandlePacket_UnsetFlag(payload);
-            else if (packetType == HPN_SAVE_QUEST_STATE)      HandlePacket_SetCheckStatus(payload);
-            else if (packetType == HPN_SAVE_TEAM_STATE)       HandlePacket_UpdateTeamState(payload);
-            else if (packetType == HPN_SAVE_TEAM_REQUEST)     HandlePacket_RequestTeamState(payload);
-            else if (packetType == HPN_SAVE_CUTSCENE)         HandlePacket_CutsceneTrigger(payload);
-            else if (packetType == HPN_SAVE_GAME_COMPLETE)    HandlePacket_GameComplete(payload);
-            else if (packetType == HPN_AUDIO_OCARINA)         HandlePacket_OcarinaSfx(payload);
-            else if (packetType == HPN_APPEARANCE_SPAWN_VFX)  HandlePacket_SpawnVfxActor(payload);
+            else if (packetType == HPN_INV_GIVE_ITEM)
+                HandlePacket_GiveItem(payload);
+            else if (packetType == HPN_INV_DUNGEON_ITEMS)
+                HandlePacket_UpdateDungeonItems(payload);
+            else if (packetType == HPN_INV_AMMO)
+                HandlePacket_UpdateBeansCount(payload);
+            else if (packetType == HPN_SAVE_SET_FLAG)
+                HandlePacket_SetFlag(payload);
+            else if (packetType == HPN_SAVE_UNSET_FLAG)
+                HandlePacket_UnsetFlag(payload);
+            else if (packetType == HPN_SAVE_QUEST_STATE)
+                HandlePacket_SetCheckStatus(payload);
+            else if (packetType == HPN_SAVE_TEAM_STATE)
+                HandlePacket_UpdateTeamState(payload);
+            else if (packetType == HPN_SAVE_TEAM_REQUEST)
+                HandlePacket_RequestTeamState(payload);
+            else if (packetType == HPN_SAVE_CUTSCENE)
+                HandlePacket_CutsceneTrigger(payload);
+            else if (packetType == HPN_SAVE_GAME_COMPLETE)
+                HandlePacket_GameComplete(payload);
+            else if (packetType == HPN_AUDIO_OCARINA)
+                HandlePacket_OcarinaSfx(payload);
+            else if (packetType == HPN_APPEARANCE_SPAWN_VFX)
+                HandlePacket_SpawnVfxActor(payload);
 
             // ================================================================
             // WORLD.* / MAP.* / AUDIO.* / UI.*
             // ================================================================
-            else if (packetType == HPN_WORLD_TRANSPORT)       HandlePacket_TeleportTo(payload);
-            else if (packetType == HPN_MAP_ENTRANCE)          HandlePacket_EntranceDiscovered(payload);
-            else if (packetType == HPN_AUDIO_SFX)             HandlePacket_PlayerSfx(payload);
-            else if (packetType == HPN_UI_MESSAGE)            HandlePacket_ServerMsg(payload);
+            else if (packetType == HPN_WORLD_TRANSPORT)
+                HandlePacket_TeleportTo(payload);
+            else if (packetType == HPN_MAP_ENTRANCE)
+                HandlePacket_EntranceDiscovered(payload);
+            else if (packetType == HPN_AUDIO_SFX)
+                HandlePacket_PlayerSfx(payload);
+            else if (packetType == HPN_UI_MESSAGE)
+                HandlePacket_ServerMsg(payload);
 
             // ================================================================
             // APPEARANCE.SKIN_SYNC.*
             // ================================================================
-            else if (packetType == HPN_SKIN_ANNOUNCE)         HandlePacket_SkinSyncAnnounceCatalog(payload);
-            else if (packetType == HPN_SKIN_UPDATE_SLOTS)     HandlePacket_SkinSyncUpdateSlots(payload);
+            else if (packetType == HPN_SKIN_ANNOUNCE)
+                HandlePacket_SkinSyncAnnounceCatalog(payload);
+            else if (packetType == HPN_SKIN_UPDATE_SLOTS)
+                HandlePacket_SkinSyncUpdateSlots(payload);
 
             // No-op handlers for primitives the engine doesn't react to yet.
             // Keep them silent so we don't log "unknown" warnings for normal
             // server traffic.
-            else if (packetType == "ROOM.GAMEMODE_CHANGED")   { /* no-op */ }
-            else if (packetType == HPN_ROOM_GM_CONFIG)        { /* manifest already handled */ }
-            else { SPDLOG_DEBUG("[Harpoon] unhandled type: {}", packetType); }
+            else if (packetType == "ROOM.GAMEMODE_CHANGED") { /* no-op */
+            } else if (packetType == HPN_ROOM_GM_CONFIG) {    /* manifest already handled */
+            } else {
+                SPDLOG_DEBUG("[Harpoon] unhandled type: {}", packetType);
+            }
         } catch (const std::exception& e) { SPDLOG_ERROR("[Harpoon] Exception processing packet: {}", e.what()); }
     }
 }
@@ -383,8 +433,7 @@ void Harpoon::RefreshClientActors() {
         // outside the playable area — invisible even if all the EXILE checks
         // pass. HandlePacket_PlayerUpdate / Transform sets shouldRefreshActors
         // when the first real posRot arrives, which re-enters this loop.
-        bool noPos = (client.posRot.pos.x == 0.0f && client.posRot.pos.y == 0.0f &&
-                      client.posRot.pos.z == 0.0f);
+        bool noPos = (client.posRot.pos.x == 0.0f && client.posRot.pos.y == 0.0f && client.posRot.pos.z == 0.0f);
         if (noPos) {
             client.player = nullptr;
             deferred++;
@@ -400,13 +449,12 @@ void Harpoon::RefreshClientActors() {
         client.player = (Player*)dummy;
         spawned++;
         SPDLOG_INFO("[Harpoon] RefreshClientActors: cid={} '{}' SPAWN at ({:.0f},{:.0f},{:.0f}) scene={} saveLoaded={}",
-                    clientId, client.name,
-                    client.posRot.pos.x, client.posRot.pos.y, client.posRot.pos.z,
+                    clientId, client.name, client.posRot.pos.x, client.posRot.pos.y, client.posRot.pos.z,
                     client.sceneNum, client.isSaveLoaded);
     }
     spawningDummyPlayerForClientId = 0;
-    SPDLOG_INFO("[Harpoon] RefreshClientActors done: spawned={} deferred={} skipped={} (own={})",
-                spawned, deferred, skipped, ownClientId);
+    SPDLOG_INFO("[Harpoon] RefreshClientActors done: spawned={} deferred={} skipped={} (own={})", spawned, deferred,
+                skipped, ownClientId);
 }
 
 bool Harpoon::IsSaveLoaded() {
@@ -433,7 +481,8 @@ bool Harpoon::IsSaveLoaded() {
 // or PakLoader hasn't finished initializing.
 static std::string GetLocalSkinName(const char* cvarName) {
     s32 idx = CVarGetInteger(cvarName, -1);
-    if (idx < 0) return "";
+    if (idx < 0)
+        return "";
     const char* name = PakLoader_GetModelName(idx);
     return name ? std::string(name) : "";
 }
@@ -488,7 +537,7 @@ void Harpoon::SendPacket_Handshake() {
     // the server from being repurposed as a generic WS relay.
     payload["protocol"] = "harpoon";
     payload["name"] = clientState.value("name", std::string("Player"));
-    payload["color"] = clientState.value("color", nlohmann::json{ {"r", 100}, {"g", 255}, {"b", 100} });
+    payload["color"] = clientState.value("color", nlohmann::json{ { "r", 100 }, { "g", 255 }, { "b", 100 } });
     payload["clientVersion"] = clientState.value("clientVersion", std::string(""));
     nlohmann::json gms = nlohmann::json::array();
     for (const auto& gid : HarpoonSkinSync::GetInstalledGamemodes()) {
@@ -507,7 +556,8 @@ void Harpoon::SendPacket_O2rModList() {
     std::string modsStr;
     for (const auto& m : ModMenu_GetEnabledMods()) {
         mods.push_back(m);
-        if (!modsStr.empty()) modsStr += ", ";
+        if (!modsStr.empty())
+            modsStr += ", ";
         modsStr += m;
     }
     payload["mods"] = mods;
@@ -519,12 +569,12 @@ void Harpoon::SendPacket_O2rModList() {
     std::string syncStr;
     for (const auto& m : HarpoonSkinSync::GetOverrideNames()) {
         syncMods.push_back(m);
-        if (!syncStr.empty()) syncStr += ", ";
+        if (!syncStr.empty())
+            syncStr += ", ";
         syncStr += m;
     }
     payload["syncMods"] = syncMods;
-    SPDLOG_INFO("[Harpoon] SendPacket_O2rModList: {} mods=[{}] sync=[{}]",
-                (int)mods.size(), modsStr, syncStr);
+    SPDLOG_INFO("[Harpoon] SendPacket_O2rModList: {} mods=[{}] sync=[{}]", (int)mods.size(), modsStr, syncStr);
     SendJsonToRemote(payload);
 }
 
@@ -663,8 +713,8 @@ void Harpoon::SendPacket_PlayerUpdate() {
         static std::string sLastFingerprint;
         std::string fp = adultSkinName + "|" + childSkinName + "|" + equipSkinName + "|" + forcedSkinName;
         if (sLastFingerprint != fp) {
-            SPDLOG_INFO("[Harpoon] Broadcast skin: adult='{}' child='{}' equip='{}' forced='{}'",
-                        adultSkinName, childSkinName, equipSkinName, forcedSkinName);
+            SPDLOG_INFO("[Harpoon] Broadcast skin: adult='{}' child='{}' equip='{}' forced='{}'", adultSkinName,
+                        childSkinName, equipSkinName, forcedSkinName);
             sLastFingerprint = fp;
         }
     }
@@ -803,36 +853,36 @@ void Harpoon::SendPacket_PlayerUpdate() {
         }
         // CI_FLAG_DEMISE_DESTRUCTION carries no extra fields beyond the flag.
         if (ciFlags & CI_FLAG_HYLIAS_GRACE) {
-            payload["ciHyliasGraceState"]          = ci->hyliasGraceState;
-            payload["ciHyliasGraceSubPhase"]       = ci->hyliasGraceSubPhase;
-            payload["ciHyliasGraceTimer"]          = ci->hyliasGraceTimer;
-            payload["ciHyliasGraceForcedBySpell"]  = ci->hyliasGraceForcedBySpell;
+            payload["ciHyliasGraceState"] = ci->hyliasGraceState;
+            payload["ciHyliasGraceSubPhase"] = ci->hyliasGraceSubPhase;
+            payload["ciHyliasGraceTimer"] = ci->hyliasGraceTimer;
+            payload["ciHyliasGraceForcedBySpell"] = ci->hyliasGraceForcedBySpell;
         }
         if (ciFlags & CI_FLAG_ZONAI_PERMAFROST) {
-            payload["ciZonaiPermafrostState"]    = ci->zonaiPermafrostState;
+            payload["ciZonaiPermafrostState"] = ci->zonaiPermafrostState;
             payload["ciZonaiPermafrostSubPhase"] = ci->zonaiPermafrostSubPhase;
-            payload["ciZonaiPermafrostTimer"]    = ci->zonaiPermafrostTimer;
+            payload["ciZonaiPermafrostTimer"] = ci->zonaiPermafrostTimer;
         }
         if (ciFlags & CI_FLAG_LANTERN) {
-            payload["ciLanternFireType"]    = ci->lanternFireType;
-            payload["ciLanternSwinging"]    = ci->lanternSwinging;
-            payload["ciLanternEquipped"]    = ci->lanternEquipped;
-            payload["ciLanternSwingFrame"]  = ci->lanternSwingFrame;
+            payload["ciLanternFireType"] = ci->lanternFireType;
+            payload["ciLanternSwinging"] = ci->lanternSwinging;
+            payload["ciLanternEquipped"] = ci->lanternEquipped;
+            payload["ciLanternSwingFrame"] = ci->lanternSwingFrame;
         }
         if (ciFlags & CI_FLAG_MINISH_CAP) {
-            payload["ciMinishCapWarpMode"]  = ci->minishCapWarpMode;
+            payload["ciMinishCapWarpMode"] = ci->minishCapWarpMode;
             payload["ciMinishCapShrinking"] = ci->minishCapShrinking;
-            payload["ciMinishCapGrowing"]   = ci->minishCapGrowing;
+            payload["ciMinishCapGrowing"] = ci->minishCapGrowing;
         }
         if (ciFlags & CI_FLAG_POSTMAN_HAT) {
-            payload["ciPostmanHatDashing"]           = ci->postmanHatDashing;
-            payload["ciPostmanHatArriving"]          = ci->postmanHatArriving;
-            payload["ciPostmanHatTransitionTimer"]   = ci->postmanHatTransitionTimer;
+            payload["ciPostmanHatDashing"] = ci->postmanHatDashing;
+            payload["ciPostmanHatArriving"] = ci->postmanHatArriving;
+            payload["ciPostmanHatTransitionTimer"] = ci->postmanHatTransitionTimer;
         }
         if (ciFlags & CI_FLAG_DESIRE_SENSOR) {
-            payload["ciDesireSensorState"]   = ci->desireSensorState;
-            payload["ciDesireSensorTimer"]   = ci->desireSensorTimer;
-            payload["ciDesireSensorResult"]  = ci->desireSensorResult;
+            payload["ciDesireSensorState"] = ci->desireSensorState;
+            payload["ciDesireSensorTimer"] = ci->desireSensorTimer;
+            payload["ciDesireSensorResult"] = ci->desireSensorResult;
         }
     }
 
@@ -901,7 +951,8 @@ void Harpoon::HandlePacket_AllClients(nlohmann::json payload) {
     if (payload.contains("clients")) {
         size_t prevOnlineCount = 0;
         for (auto& [id, client] : clients) {
-            if (client.online) prevOnlineCount++;
+            if (client.online)
+                prevOnlineCount++;
             client.online = false;
         }
 
@@ -924,7 +975,8 @@ void Harpoon::HandlePacket_AllClients(nlohmann::json payload) {
 
         size_t newOnlineCount = 0;
         for (auto& [id, client] : clients) {
-            if (client.online) newOnlineCount++;
+            if (client.online)
+                newOnlineCount++;
         }
         roomMembershipChanged = (newOnlineCount != prevOnlineCount);
 
@@ -932,14 +984,12 @@ void Harpoon::HandlePacket_AllClients(nlohmann::json payload) {
         std::string members;
         for (auto& [id, c] : clients) {
             char buf[96];
-            snprintf(buf, sizeof(buf), "%u'%s'(scn=%d sl=%d on=%d%s)%s",
-                     id, c.name.c_str(), c.sceneNum, (int)c.isSaveLoaded,
-                     (int)c.online, c.self ? " SELF" : "",
-                     members.empty() ? "" : ", ");
+            snprintf(buf, sizeof(buf), "%u'%s'(scn=%d sl=%d on=%d%s)%s", id, c.name.c_str(), c.sceneNum,
+                     (int)c.isSaveLoaded, (int)c.online, c.self ? " SELF" : "", members.empty() ? "" : ", ");
             members = std::string(buf) + (members.empty() ? "" : (", " + members));
         }
-        SPDLOG_INFO("[Harpoon] ROOM.MEMBERS_UPDATED own={} count={} -> [{}]",
-                    ownClientId, (int)clients.size(), members);
+        SPDLOG_INFO("[Harpoon] ROOM.MEMBERS_UPDATED own={} count={} -> [{}]", ownClientId, (int)clients.size(),
+                    members);
 
         shouldRefreshActors = true;
     }
@@ -985,8 +1035,7 @@ void Harpoon::HandlePacket_PlayerUpdate(nlohmann::json payload) {
         }
         // If we deferred the spawn earlier (no posRot known), this is the
         // packet that lets us actually spawn — schedule a refresh.
-        bool hasPos = (client.posRot.pos.x != 0.0f || client.posRot.pos.y != 0.0f ||
-                       client.posRot.pos.z != 0.0f);
+        bool hasPos = (client.posRot.pos.x != 0.0f || client.posRot.pos.y != 0.0f || client.posRot.pos.z != 0.0f);
         if (client.player == nullptr && hasPos && client.online) {
             shouldRefreshActors = true;
         }
@@ -1172,49 +1221,49 @@ void Harpoon::HandlePacket_PlayerUpdate(nlohmann::json payload) {
         client.ciTimeGatePortalScale = payload.value("ciTimeGatePortalScale", 0.0f);
     }
     // ── Phase 1 sync receive ─────────────────────────────────────────────
-    client.ciRocsFeatherJumpActive    = (ciFlags & CI_FLAG_ROCS_FEATHER) ? 1 : 0;
-    client.ciBombArrowActive          = (ciFlags & CI_FLAG_BOMB_ARROW) ? 1 : 0;
-    client.ciDemiseDestructionActive  = (ciFlags & CI_FLAG_DEMISE_DESTRUCTION) ? 1 : 0;
-    client.ciHyliasGraceActive        = (ciFlags & CI_FLAG_HYLIAS_GRACE) ? 1 : 0;
-    client.ciZonaiPermafrostActive    = (ciFlags & CI_FLAG_ZONAI_PERMAFROST) ? 1 : 0;
-    client.ciDesireSensorActive       = (ciFlags & CI_FLAG_DESIRE_SENSOR) ? 1 : 0;
+    client.ciRocsFeatherJumpActive = (ciFlags & CI_FLAG_ROCS_FEATHER) ? 1 : 0;
+    client.ciBombArrowActive = (ciFlags & CI_FLAG_BOMB_ARROW) ? 1 : 0;
+    client.ciDemiseDestructionActive = (ciFlags & CI_FLAG_DEMISE_DESTRUCTION) ? 1 : 0;
+    client.ciHyliasGraceActive = (ciFlags & CI_FLAG_HYLIAS_GRACE) ? 1 : 0;
+    client.ciZonaiPermafrostActive = (ciFlags & CI_FLAG_ZONAI_PERMAFROST) ? 1 : 0;
+    client.ciDesireSensorActive = (ciFlags & CI_FLAG_DESIRE_SENSOR) ? 1 : 0;
     if (ciFlags & CI_FLAG_ROCS_FEATHER) {
-        client.ciRocsJumpCount    = payload.value("ciRocsJumpCount", (u8)0);
-        client.ciRocsMmAnimTimer  = payload.value("ciRocsMmAnimTimer", (s16)0);
+        client.ciRocsJumpCount = payload.value("ciRocsJumpCount", (u8)0);
+        client.ciRocsMmAnimTimer = payload.value("ciRocsMmAnimTimer", (s16)0);
     }
     if (ciFlags & CI_FLAG_BOMB_ARROW) {
         client.ciBombArrowState = payload.value("ciBombArrowState", (u8)0);
     }
     if (ciFlags & CI_FLAG_HYLIAS_GRACE) {
-        client.ciHyliasGraceState         = payload.value("ciHyliasGraceState", (u8)0);
-        client.ciHyliasGraceSubPhase      = payload.value("ciHyliasGraceSubPhase", (u8)0);
-        client.ciHyliasGraceTimer         = payload.value("ciHyliasGraceTimer", (s16)0);
+        client.ciHyliasGraceState = payload.value("ciHyliasGraceState", (u8)0);
+        client.ciHyliasGraceSubPhase = payload.value("ciHyliasGraceSubPhase", (u8)0);
+        client.ciHyliasGraceTimer = payload.value("ciHyliasGraceTimer", (s16)0);
         client.ciHyliasGraceForcedBySpell = payload.value("ciHyliasGraceForcedBySpell", (u8)0);
     }
     if (ciFlags & CI_FLAG_ZONAI_PERMAFROST) {
-        client.ciZonaiPermafrostState    = payload.value("ciZonaiPermafrostState", (u8)0);
+        client.ciZonaiPermafrostState = payload.value("ciZonaiPermafrostState", (u8)0);
         client.ciZonaiPermafrostSubPhase = payload.value("ciZonaiPermafrostSubPhase", (u8)0);
-        client.ciZonaiPermafrostTimer    = payload.value("ciZonaiPermafrostTimer", (s16)0);
+        client.ciZonaiPermafrostTimer = payload.value("ciZonaiPermafrostTimer", (s16)0);
     }
     if (ciFlags & CI_FLAG_LANTERN) {
-        client.ciLanternFireType   = payload.value("ciLanternFireType", (u8)0);
-        client.ciLanternSwinging   = payload.value("ciLanternSwinging", (u8)0);
-        client.ciLanternEquipped   = payload.value("ciLanternEquipped", (u8)0);
+        client.ciLanternFireType = payload.value("ciLanternFireType", (u8)0);
+        client.ciLanternSwinging = payload.value("ciLanternSwinging", (u8)0);
+        client.ciLanternEquipped = payload.value("ciLanternEquipped", (u8)0);
         client.ciLanternSwingFrame = payload.value("ciLanternSwingFrame", (s16)0);
     }
     if (ciFlags & CI_FLAG_MINISH_CAP) {
-        client.ciMinishCapWarpMode  = payload.value("ciMinishCapWarpMode", (u8)0);
+        client.ciMinishCapWarpMode = payload.value("ciMinishCapWarpMode", (u8)0);
         client.ciMinishCapShrinking = payload.value("ciMinishCapShrinking", (u8)0);
-        client.ciMinishCapGrowing   = payload.value("ciMinishCapGrowing", (u8)0);
+        client.ciMinishCapGrowing = payload.value("ciMinishCapGrowing", (u8)0);
     }
     if (ciFlags & CI_FLAG_POSTMAN_HAT) {
-        client.ciPostmanHatDashing         = payload.value("ciPostmanHatDashing", (u8)0);
-        client.ciPostmanHatArriving        = payload.value("ciPostmanHatArriving", (u8)0);
+        client.ciPostmanHatDashing = payload.value("ciPostmanHatDashing", (u8)0);
+        client.ciPostmanHatArriving = payload.value("ciPostmanHatArriving", (u8)0);
         client.ciPostmanHatTransitionTimer = payload.value("ciPostmanHatTransitionTimer", (s16)0);
     }
     if (ciFlags & CI_FLAG_DESIRE_SENSOR) {
-        client.ciDesireSensorState  = payload.value("ciDesireSensorState", (u8)0);
-        client.ciDesireSensorTimer  = payload.value("ciDesireSensorTimer", (s16)0);
+        client.ciDesireSensorState = payload.value("ciDesireSensorState", (u8)0);
+        client.ciDesireSensorTimer = payload.value("ciDesireSensorTimer", (s16)0);
         client.ciDesireSensorResult = payload.value("ciDesireSensorResult", (u8)0);
     }
 
@@ -1255,13 +1304,11 @@ void Harpoon::HandlePacket_Damage(nlohmann::json payload) {
     // never gated — they can both deal and take damage normally.
     if (currentRoomGameMode == "triforce_thief") {
         uint32_t atkId = payload.value("clientId", (uint32_t)0);
-        if (atkId == 0) atkId = payload.value("source", (uint32_t)0);
+        if (atkId == 0)
+            atkId = payload.value("source", (uint32_t)0);
         const std::string& myTeam = HarpoonTriforceThief::GetLocalState().team;
         auto atkIt = clients.find(atkId);
-        if (atkIt != clients.end() &&
-            !myTeam.empty() &&
-            !atkIt->second.team.empty() &&
-            atkIt->second.team == myTeam) {
+        if (atkIt != clients.end() && !myTeam.empty() && !atkIt->second.team.empty() && atkIt->second.team == myTeam) {
             return;
         }
     }
@@ -1279,64 +1326,83 @@ void Harpoon::HandlePacket_Damage(nlohmann::json payload) {
     // side already maps each weapon to one of these response codes; the
     // receiver branches on it to pick knockback speed/yVel/invincibility and
     // (for utility weapons like the wind blow) zero out damage.
-    f32 knockSpeed  = 4.0f;
-    f32 knockYVel   = 5.0f;
-    s32 invTimer    = 20;
+    f32 knockSpeed = 4.0f;
+    f32 knockYVel = 5.0f;
+    s32 invTimer = 20;
     s32 finalDamage = damage;
 
     switch (damageEffect) {
-    case PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE:  // Megaton Hammer, Ball & Chain
-        knockSpeed = 14.0f; knockYVel = 10.0f; invTimer = 25;
-        break;
-    case HARPOON_HIT_RESPONSE_WIND_BLOW:       // Deku Leaf gust / Gust Jar
-        knockSpeed = 18.0f; knockYVel = 4.0f;  invTimer = 15;
-        finalDamage = 0;                        // pure utility — strips carrier without HP loss
-        break;
-    case PLAYER_HIT_RESPONSE_FROZEN:         // Ice arrow / Ice rod
-        self->actor.freezeTimer = 60;
-        Actor_SetColorFilter(&self->actor, 0, 0xFF, 0, 60);
-        knockSpeed = 0.0f; knockYVel = 0.0f; invTimer = 60;
-        break;
-    case PLAYER_HIT_RESPONSE_ELECTRIFIED:   // Light arrow
-        self->actor.freezeTimer = 20;
-        Actor_SetColorFilter(&self->actor, 0, 0xFF, 0, 24);
-        knockSpeed = 2.0f; knockYVel = 3.0f; invTimer = 20;
-        break;
-    case HARPOON_HIT_RESPONSE_STUN:
-        self->actor.freezeTimer = 20;
-        Actor_SetColorFilter(&self->actor, 0, 0xFF, 0, 24);
-        knockSpeed = 0.0f; knockYVel = 0.0f;
-        break;
-    case HARPOON_HIT_RESPONSE_FIRE:            // Fire arrow / Fire rod / Din's Fire
-        knockSpeed = 5.0f; knockYVel = 6.0f; invTimer = 30;
-        // Burn DOT is layered on via COMBAT.APPLY_STATUS for SW97;
-        // here we just play the burning flash.
-        Actor_SetColorFilter(&self->actor, 0x4000, 0xFF, 0, 30);  // red flash
-        break;
-    case HARPOON_HIT_RESPONSE_LIGHT:           // Light arrow / Light rod / Magic Light
-        // Golden white flash, medium knockback, long invuln (heavier feel
-        // than electric). 0x8000 prim flag = white color filter.
-        Actor_SetColorFilter(&self->actor, 0x8000, 0xFF, 0, 40);
-        knockSpeed = 6.0f; knockYVel = 7.0f; invTimer = 35;
-        break;
-    case HARPOON_HIT_RESPONSE_DARK:            // Dark arrow / Magic Dark
-        // Purple/black flash + small kb. The blindness status is layered
-        // on via COMBAT.APPLY_STATUS by the SW97 hit path.
-        Actor_SetColorFilter(&self->actor, 0x4000, 0x80, 0, 30);  // darken
-        knockSpeed = 3.0f; knockYVel = 4.0f; invTimer = 20;
-        break;
-    case HARPOON_HIT_RESPONSE_SOUL_DRAIN:      // Soul arrow / Magic Soul / Ikana parry
-        // Yellow tint + drain to attacker. The "drain" amount is sent as
-        // a separate COMBAT.APPLY_STATUS so the attacker actually heals.
-        Actor_SetColorFilter(&self->actor, 0x2000, 0xC0, 0, 25);
-        knockSpeed = 1.0f; knockYVel = 2.0f; invTimer = 20;
-        break;
-    case HARPOON_HIT_RESPONSE_WIND_PUSH:       // Wind arrow / Magic Wind (smaller than WIND_BLOW)
-        knockSpeed = 10.0f; knockYVel = 3.0f; invTimer = 10;
-        finalDamage = 0;                        // pure pushback
-        break;
-    default:  // NORMAL + unknown — keep legacy feel
-        break;
+        case PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE: // Megaton Hammer, Ball & Chain
+            knockSpeed = 14.0f;
+            knockYVel = 10.0f;
+            invTimer = 25;
+            break;
+        case HARPOON_HIT_RESPONSE_WIND_BLOW: // Deku Leaf gust / Gust Jar
+            knockSpeed = 18.0f;
+            knockYVel = 4.0f;
+            invTimer = 15;
+            finalDamage = 0; // pure utility — strips carrier without HP loss
+            break;
+        case PLAYER_HIT_RESPONSE_FROZEN: // Ice arrow / Ice rod
+            self->actor.freezeTimer = 60;
+            Actor_SetColorFilter(&self->actor, 0, 0xFF, 0, 60);
+            knockSpeed = 0.0f;
+            knockYVel = 0.0f;
+            invTimer = 60;
+            break;
+        case PLAYER_HIT_RESPONSE_ELECTRIFIED: // Light arrow
+            self->actor.freezeTimer = 20;
+            Actor_SetColorFilter(&self->actor, 0, 0xFF, 0, 24);
+            knockSpeed = 2.0f;
+            knockYVel = 3.0f;
+            invTimer = 20;
+            break;
+        case HARPOON_HIT_RESPONSE_STUN:
+            self->actor.freezeTimer = 20;
+            Actor_SetColorFilter(&self->actor, 0, 0xFF, 0, 24);
+            knockSpeed = 0.0f;
+            knockYVel = 0.0f;
+            break;
+        case HARPOON_HIT_RESPONSE_FIRE: // Fire arrow / Fire rod / Din's Fire
+            knockSpeed = 5.0f;
+            knockYVel = 6.0f;
+            invTimer = 30;
+            // Burn DOT is layered on via COMBAT.APPLY_STATUS for SW97;
+            // here we just play the burning flash.
+            Actor_SetColorFilter(&self->actor, 0x4000, 0xFF, 0, 30); // red flash
+            break;
+        case HARPOON_HIT_RESPONSE_LIGHT: // Light arrow / Light rod / Magic Light
+            // Golden white flash, medium knockback, long invuln (heavier feel
+            // than electric). 0x8000 prim flag = white color filter.
+            Actor_SetColorFilter(&self->actor, 0x8000, 0xFF, 0, 40);
+            knockSpeed = 6.0f;
+            knockYVel = 7.0f;
+            invTimer = 35;
+            break;
+        case HARPOON_HIT_RESPONSE_DARK: // Dark arrow / Magic Dark
+            // Purple/black flash + small kb. The blindness status is layered
+            // on via COMBAT.APPLY_STATUS by the SW97 hit path.
+            Actor_SetColorFilter(&self->actor, 0x4000, 0x80, 0, 30); // darken
+            knockSpeed = 3.0f;
+            knockYVel = 4.0f;
+            invTimer = 20;
+            break;
+        case HARPOON_HIT_RESPONSE_SOUL_DRAIN: // Soul arrow / Magic Soul / Ikana parry
+            // Yellow tint + drain to attacker. The "drain" amount is sent as
+            // a separate COMBAT.APPLY_STATUS so the attacker actually heals.
+            Actor_SetColorFilter(&self->actor, 0x2000, 0xC0, 0, 25);
+            knockSpeed = 1.0f;
+            knockYVel = 2.0f;
+            invTimer = 20;
+            break;
+        case HARPOON_HIT_RESPONSE_WIND_PUSH: // Wind arrow / Magic Wind (smaller than WIND_BLOW)
+            knockSpeed = 10.0f;
+            knockYVel = 3.0f;
+            invTimer = 10;
+            finalDamage = 0; // pure pushback
+            break;
+        default: // NORMAL + unknown — keep legacy feel
+            break;
     }
 
     self->actor.colChkInfo.damage = finalDamage * 8;
@@ -1415,7 +1481,8 @@ void Harpoon::SendPacket_GiveItem(u16 modId, s16 getItemId) {
         if (!warned) {
             warned = true;
             SPDLOG_WARN("[Harpoon] item not broadcast — current room has sync_items=false "
-                        "(modId={} getItemId={})", modId, getItemId);
+                        "(modId={} getItemId={})",
+                        modId, getItemId);
         }
         return;
     }
@@ -1429,8 +1496,8 @@ void Harpoon::SendPacket_GiveItem(u16 modId, s16 getItemId) {
     // Don't broadcast a Master Sword pickup from inside the final Ganon fight —
     // the engine forces-equips it temporarily and it doesn't represent real
     // progression for the team.
-    if (modId == MOD_RANDOMIZER && getItemId == RG_MASTER_SWORD &&
-        gPlayState != nullptr && gPlayState->sceneNum == SCENE_GANON_BOSS) {
+    if (modId == MOD_RANDOMIZER && getItemId == RG_MASTER_SWORD && gPlayState != nullptr &&
+        gPlayState->sceneNum == SCENE_GANON_BOSS) {
         return;
     }
 
@@ -1485,7 +1552,7 @@ void Harpoon::HandlePacket_GiveItem(nlohmann::json payload) {
     } else if (getItemEntry.modIndex == MOD_RANDOMIZER) {
         if (getItemEntry.getItemId == RG_ICE_TRAP) {
             gSaveContext.ship.pendingIceTrapCount++;
-            sIncomingIceTrapsFromHarpoon++;  // loop guard, see SendPacket_GiveItem
+            sIncomingIceTrapsFromHarpoon++; // loop guard, see SendPacket_GiveItem
         } else {
             Randomizer_Item_Give(gPlayState, getItemEntry);
         }
@@ -1886,8 +1953,8 @@ void Harpoon::HandlePacket_ServerInfo(nlohmann::json payload) {
     } else if (payload.contains("sessionToken")) {
         sessionToken = payload["sessionToken"].get<std::string>();
     }
-    SPDLOG_INFO("[Harpoon] HARPOON.SERVER_INFO ownClientId={} token={}",
-                ownClientId, sessionToken.empty() ? std::string("<none>") : sessionToken.substr(0, 8) + "…");
+    SPDLOG_INFO("[Harpoon] HARPOON.SERVER_INFO ownClientId={} token={}", ownClientId,
+                sessionToken.empty() ? std::string("<none>") : sessionToken.substr(0, 8) + "…");
 }
 
 // Tiny line-based reader for a few specific keys inside a gamemode.yaml's
@@ -1896,15 +1963,14 @@ void Harpoon::HandlePacket_ServerInfo(nlohmann::json payload) {
 // be excessive. The parser scans for the `default_config:` line and then
 // reads indented `key: value` lines until indentation drops, so it correctly
 // ignores other `pvp_enabled` keys nested in unrelated sections.
-static void ApplyLocalGamemodeManifest(
-        const std::string& gid,
-        bool& pvpEnabled, bool& syncItems, bool& syncCutscenes,
-        bool& supportsVoting, bool& supportsMapSelect,
-        bool& supportsZTarget, bool& supportsRoundFlow) {
+static void ApplyLocalGamemodeManifest(const std::string& gid, bool& pvpEnabled, bool& syncItems, bool& syncCutscenes,
+                                       bool& supportsVoting, bool& supportsMapSelect, bool& supportsZTarget,
+                                       bool& supportsRoundFlow) {
     auto path = HarpoonSkinSync::GetGamemodeManifestPath(gid);
     if (path.empty()) {
         SPDLOG_INFO("[Harpoon] no local manifest for '{}' — keeping current defaults "
-                    "(pvp={} syncItems={} syncCutscenes={})", gid, pvpEnabled, syncItems, syncCutscenes);
+                    "(pvp={} syncItems={} syncCutscenes={})",
+                    gid, pvpEnabled, syncItems, syncCutscenes);
         return;
     }
     std::ifstream f(path);
@@ -1919,9 +1985,12 @@ static void ApplyLocalGamemodeManifest(
     };
     auto parseBool = [](std::string v) {
         std::string lo;
-        for (char c : v) lo.push_back((char)tolower((unsigned char)c));
-        if (lo == "true" || lo == "yes" || lo == "1") return std::optional<bool>{true};
-        if (lo == "false" || lo == "no" || lo == "0") return std::optional<bool>{false};
+        for (char c : v)
+            lo.push_back((char)tolower((unsigned char)c));
+        if (lo == "true" || lo == "yes" || lo == "1")
+            return std::optional<bool>{ true };
+        if (lo == "false" || lo == "no" || lo == "0")
+            return std::optional<bool>{ false };
         return std::optional<bool>{};
     };
     bool inDefaultConfig = false;
@@ -1929,15 +1998,18 @@ static void ApplyLocalGamemodeManifest(
     std::string line;
     while (std::getline(f, line)) {
         // Strip CR (Windows line endings).
-        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
         // Skip pure-comment / blank lines.
         std::string t = trim(line);
-        if (t.empty() || t[0] == '#') continue;
+        if (t.empty() || t[0] == '#')
+            continue;
 
         // Top-level `default_config:` switches us into the block. Anything
         // un-indented (`key:` at column 0) drops us back out.
         size_t indent = 0;
-        while (indent < line.size() && (line[indent] == ' ' || line[indent] == '\t')) indent++;
+        while (indent < line.size() && (line[indent] == ' ' || line[indent] == '\t'))
+            indent++;
 
         if (indent == 0) {
             // Starting a new top-level key. Are we entering or exiting default_config?
@@ -1949,63 +2021,71 @@ static void ApplyLocalGamemodeManifest(
             inDefaultConfig = false;
             continue;
         }
-        if (!inDefaultConfig) continue;
+        if (!inDefaultConfig)
+            continue;
 
-        if (defaultConfigIndent < 0) defaultConfigIndent = (int)indent;
+        if (defaultConfigIndent < 0)
+            defaultConfigIndent = (int)indent;
         if ((int)indent < defaultConfigIndent) {
             inDefaultConfig = false;
             continue;
         }
 
         size_t colon = t.find(':');
-        if (colon == std::string::npos) continue;
+        if (colon == std::string::npos)
+            continue;
         std::string key = trim(t.substr(0, colon));
         std::string val = trim(t.substr(colon + 1));
         // Strip inline comments.
         size_t hash = val.find('#');
-        if (hash != std::string::npos) val = trim(val.substr(0, hash));
+        if (hash != std::string::npos)
+            val = trim(val.substr(0, hash));
 
         if (key == "pvp_enabled") {
-            if (auto b = parseBool(val)) pvpEnabled = *b;
+            if (auto b = parseBool(val))
+                pvpEnabled = *b;
         } else if (key == "sync_items") {
-            if (auto b = parseBool(val)) syncItems = *b;
+            if (auto b = parseBool(val))
+                syncItems = *b;
         } else if (key == "sync_cutscenes") {
-            if (auto b = parseBool(val)) syncCutscenes = *b;
+            if (auto b = parseBool(val))
+                syncCutscenes = *b;
         } else if (key == "supports_voting") {
-            if (auto b = parseBool(val)) supportsVoting = *b;
+            if (auto b = parseBool(val))
+                supportsVoting = *b;
         } else if (key == "supports_map_select") {
-            if (auto b = parseBool(val)) supportsMapSelect = *b;
+            if (auto b = parseBool(val))
+                supportsMapSelect = *b;
         } else if (key == "supports_z_target") {
-            if (auto b = parseBool(val)) supportsZTarget = *b;
+            if (auto b = parseBool(val))
+                supportsZTarget = *b;
         } else if (key == "supports_round_flow") {
-            if (auto b = parseBool(val)) supportsRoundFlow = *b;
+            if (auto b = parseBool(val))
+                supportsRoundFlow = *b;
         }
     }
     SPDLOG_INFO("[Harpoon] applied local manifest '{}': "
                 "pvp_enabled={} sync_items={} sync_cutscenes={} "
                 "supports_voting={} supports_map_select={} "
                 "supports_z_target={} supports_round_flow={}",
-                gid, pvpEnabled, syncItems, syncCutscenes,
-                supportsVoting, supportsMapSelect, supportsZTarget, supportsRoundFlow);
+                gid, pvpEnabled, syncItems, syncCutscenes, supportsVoting, supportsMapSelect, supportsZTarget,
+                supportsRoundFlow);
 }
 
 void Harpoon::HandlePacket_RoomJoined(nlohmann::json payload) {
     // v2 uses snake_case (room_id / room_name / gamemode_id).
-    currentRoomId       = payload.value("room_id",
-                            payload.value("roomId", std::string("")));
-    currentRoomName     = payload.value("room_name",
-                            payload.value("roomName", std::string("")));
-    currentRoomGameMode = payload.value("gamemode_id",
-                            payload.value("gameMode", std::string("")));
+    currentRoomId = payload.value("room_id", payload.value("roomId", std::string("")));
+    currentRoomName = payload.value("room_name", payload.value("roomName", std::string("")));
+    currentRoomGameMode = payload.value("gamemode_id", payload.value("gameMode", std::string("")));
     gameState = HARPOON_STATE_LOBBY;
 
     // Seed capability defaults per known gamemode, then let the local yaml
     // manifest override below. If a manifest is missing (clean install,
     // gamemode pack not yet shipped), these built-in defaults keep the right
     // generic features active so the round flow works out of the box.
-    supportsVoting    = false;
+    supportsVoting = false;
     supportsMapSelect = false;
-    supportsZTarget   = false;
+    supportsZTarget = false;
     supportsRoundFlow = false;
     if (currentRoomGameMode == "randomizer") {
         activeGameMode = HARPOON_MODE_RANDOMIZER;
@@ -2016,9 +2096,9 @@ void Harpoon::HandlePacket_RoomJoined(nlohmann::json payload) {
         isPropHuntMode = true;
         // PH: voting + map-select + round-flow on, Z-target OFF
         // (disguised hiders shouldn't be auto-locked by seekers).
-        supportsVoting    = true;
+        supportsVoting = true;
         supportsMapSelect = true;
-        supportsZTarget   = false;
+        supportsZTarget = false;
         supportsRoundFlow = true;
         // Lobby auto-transport: as soon as we're in a prop_hunt room, kick
         // every client into Hyrule Field as child Link with the hider preset.
@@ -2029,9 +2109,9 @@ void Harpoon::HandlePacket_RoomJoined(nlohmann::json payload) {
     } else if (currentRoomGameMode == "triforce_thief") {
         // TT: voting + map-select + round-flow on, Z-target ON
         // (thieves can lock onto each other to land hits / steal).
-        supportsVoting    = true;
+        supportsVoting = true;
         supportsMapSelect = true;
-        supportsZTarget   = true;
+        supportsZTarget = true;
         supportsRoundFlow = true;
         // Adult Link, full inventory thief preset, drop into Hyrule Field
         // as the round lobby. Round actually starts when the host confirms
@@ -2044,9 +2124,9 @@ void Harpoon::HandlePacket_RoomJoined(nlohmann::json payload) {
         // teleports, and host transfer. Players drop items on death (or
         // voluntarily via C-Up in the pause menu); the distributed drop
         // ledger persists across scene loads.
-        supportsVoting    = false;
+        supportsVoting = false;
         supportsMapSelect = false;
-        supportsZTarget   = true;
+        supportsZTarget = true;
         supportsRoundFlow = false;
         // Vanilla item sync OFF — the GM controls inventory via templates
         // and vanilla diffs would clobber GM-applied loadouts.
@@ -2062,10 +2142,8 @@ void Harpoon::HandlePacket_RoomJoined(nlohmann::json payload) {
     // this every joined room would inherit pvpEnabled's process default
     // (true) — making PvP fire even in randomizer-no-pvp rooms, and damage
     // never get filtered for receivers in coop rooms.
-    ApplyLocalGamemodeManifest(currentRoomGameMode,
-                               pvpEnabled, syncItems, syncCutscenes,
-                               supportsVoting, supportsMapSelect,
-                               supportsZTarget, supportsRoundFlow);
+    ApplyLocalGamemodeManifest(currentRoomGameMode, pvpEnabled, syncItems, syncCutscenes, supportsVoting,
+                               supportsMapSelect, supportsZTarget, supportsRoundFlow);
 
     // Announce our .o2r mod list once we're actually in a room — the server
     // relays room-scoped events only to room members, so this must happen
@@ -2078,9 +2156,9 @@ void Harpoon::HandlePacket_RoomJoined(nlohmann::json payload) {
     HarpoonDroppedItems::ClearLedger();
     SendJsonToRemote(HarpoonDroppedItems::BuildLedgerRequestPayload());
 
-    SPDLOG_INFO("[Harpoon] Joined room '{}' ({}) mode={} pvp={} caps[v={} m={} z={} r={}]",
-                currentRoomName, currentRoomId, currentRoomGameMode, pvpEnabled,
-                supportsVoting, supportsMapSelect, supportsZTarget, supportsRoundFlow);
+    SPDLOG_INFO("[Harpoon] Joined room '{}' ({}) mode={} pvp={} caps[v={} m={} z={} r={}]", currentRoomName,
+                currentRoomId, currentRoomGameMode, pvpEnabled, supportsVoting, supportsMapSelect, supportsZTarget,
+                supportsRoundFlow);
 }
 
 void Harpoon::HandlePacket_RoomLeft(nlohmann::json payload) {
@@ -2111,19 +2189,13 @@ void Harpoon::HandlePacket_RoomList(nlohmann::json payload) {
         for (auto& roomJson : payload["rooms"]) {
             RoomInfo info;
             // v2 server emits camelCase aliases here too (Room.to_dict()).
-            info.roomId      = roomJson.value("roomId",
-                                   roomJson.value("room_id", std::string("")));
-            info.name        = roomJson.value("name", std::string(""));
-            info.gameMode    = roomJson.value("gameMode",
-                                   roomJson.value("gamemode_id", std::string("")));
-            info.hasPassword = roomJson.value("hasPassword",
-                                   roomJson.value("has_password", false));
-            info.playerCount = roomJson.value("playerCount",
-                                   roomJson.value("player_count", 0));
-            info.maxPlayers  = roomJson.value("maxPlayers",
-                                   roomJson.value("max_players", 16));
-            info.state       = roomJson.value("phase",
-                                   roomJson.value("state", std::string("lobby")));
+            info.roomId = roomJson.value("roomId", roomJson.value("room_id", std::string("")));
+            info.name = roomJson.value("name", std::string(""));
+            info.gameMode = roomJson.value("gameMode", roomJson.value("gamemode_id", std::string("")));
+            info.hasPassword = roomJson.value("hasPassword", roomJson.value("has_password", false));
+            info.playerCount = roomJson.value("playerCount", roomJson.value("player_count", 0));
+            info.maxPlayers = roomJson.value("maxPlayers", roomJson.value("max_players", 16));
+            info.state = roomJson.value("phase", roomJson.value("state", std::string("lobby")));
             roomList.push_back(info);
         }
     }
@@ -2199,8 +2271,8 @@ void Harpoon::SendPacket_StartGame(const char* gameMode) {
 }
 
 void Harpoon::SendPacket_RoomCreate(const char* name, const char* gameMode, const char* password) {
-    SPDLOG_INFO("[Harpoon] SendPacket_RoomCreate name='{}' gameMode='{}' connected={}",
-                name ? name : "(null)", gameMode ? gameMode : "(null)", isConnected);
+    SPDLOG_INFO("[Harpoon] SendPacket_RoomCreate name='{}' gameMode='{}' connected={}", name ? name : "(null)",
+                gameMode ? gameMode : "(null)", isConnected);
     if (!isConnected) {
         SPDLOG_WARN("[Harpoon] SendPacket_RoomCreate: not connected — packet dropped");
         return;
@@ -2226,7 +2298,7 @@ void Harpoon::SendPacket_RoomCreate(const char* name, const char* gameMode, cons
 void Harpoon::SendPacket_RoomJoin(const char* roomId, const char* password) {
     nlohmann::json payload;
     payload["type"] = HPN_ROOM_JOIN;
-    payload["roomId"] = roomId;       // server schema accepts both roomId and room_id
+    payload["roomId"] = roomId; // server schema accepts both roomId and room_id
     if (password && password[0] != '\0') {
         payload["password"] = password;
     }
@@ -2290,13 +2362,16 @@ void Harpoon::UpdateDecoys() {
     // an ice VFX bursts. Decoys are stored on each remote hider's
     // HarpoonClient::somariaDecoy* fields (synced via the existing
     // COMBAT.SPAWN_DECOY / COMBAT.DESTROY_DECOY messages).
-    if (!isPropHuntMode || gPlayState == nullptr) return;
+    if (!isPropHuntMode || gPlayState == nullptr)
+        return;
     // Only seekers can trigger a decoy hit. Hiders' own decoys are not
     // authoritative — they only broadcast position and render.
-    if (!HarpoonPropHunt::IsSeeker()) return;
+    if (!HarpoonPropHunt::IsSeeker())
+        return;
 
     Player* player = GET_PLAYER(gPlayState);
-    if (player == nullptr) return;
+    if (player == nullptr)
+        return;
 
     // Hit conditions — seeker triggers a decoy by ANY contact form:
     //   - swinging melee (sword/hammer/etc.) — meleeWeaponState != 0
@@ -2305,55 +2380,61 @@ void Harpoon::UpdateDecoys() {
     // The proximity radius is tighter than the swing radius (50u) so that
     // it's intentional contact, not passive flyby.
     Input* input = (gPlayState != nullptr) ? &gPlayState->state.input[0] : nullptr;
-    bool swinging      = (player->meleeWeaponState != 0);
-    bool pressedAttack = (input != nullptr) &&
-                         CHECK_BTN_ANY(input->press.button,
-                                       BTN_A | BTN_B | BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT);
-    bool wantSwingHit  = swinging || pressedAttack;
+    bool swinging = (player->meleeWeaponState != 0);
+    bool pressedAttack =
+        (input != nullptr) && CHECK_BTN_ANY(input->press.button, BTN_A | BTN_B | BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT);
+    bool wantSwingHit = swinging || pressedAttack;
 
     Vec3f sp = player->actor.world.pos;
     // Base radii (Link-sized prop = 1.0 scale). Per-decoy radii are these
     // values multiplied by the decoy's prop scale so a tiny rupee decoy
     // can only be triggered by close contact and a big chest decoy triggers
     // from farther — matches the visible prop size on screen.
-    constexpr f32 kBaseHitRadius     = 50.0f;
+    constexpr f32 kBaseHitRadius = 50.0f;
     constexpr f32 kBaseContactRadius = 35.0f;
 
     for (auto& [cid, cl] : clients) {
-        if (cl.self) continue;
-        if (cl.role != "hider") continue;
-        if (cl.sceneNum != gPlayState->sceneNum) continue;
+        if (cl.self)
+            continue;
+        if (cl.role != "hider")
+            continue;
+        if (cl.sceneNum != gPlayState->sceneNum)
+            continue;
         for (u8 i = 0; i < 3; i++) {
-            if (!cl.somariaDecoyActive[i]) continue;
-            if (cl.somariaDecoyPropIdx[i] < 0) continue;
+            if (!cl.somariaDecoyActive[i])
+                continue;
+            if (cl.somariaDecoyPropIdx[i] < 0)
+                continue;
             f32 dx = sp.x - cl.somariaDecoyPos[i].x;
             f32 dy = sp.y - cl.somariaDecoyPos[i].y;
             f32 dz = sp.z - cl.somariaDecoyPos[i].z;
             f32 d2 = dx * dx + dy * dy + dz * dz;
             // Scale by the decoy's prop visual scale, clamped to a sane
             // band. Same clamps as HarpoonDummyPlayer's cylinder sizing.
-            s32 dMap = confirmedMapIndex; if (dMap < 0) dMap = 0;
-            f32 ds = HarpoonPropHunt::GetPropVisualScale(
-                cl.somariaDecoyPropCat[i], cl.somariaDecoyPropIdx[i],
-                cl.somariaDecoyPropState[i], dMap);
-            if (ds < 0.3f) ds = 0.3f;
-            if (ds > 2.5f) ds = 2.5f;
-            f32 hitR     = kBaseHitRadius     * ds;
+            s32 dMap = confirmedMapIndex;
+            if (dMap < 0)
+                dMap = 0;
+            f32 ds = HarpoonPropHunt::GetPropVisualScale(cl.somariaDecoyPropCat[i], cl.somariaDecoyPropIdx[i],
+                                                         cl.somariaDecoyPropState[i], dMap);
+            if (ds < 0.3f)
+                ds = 0.3f;
+            if (ds > 2.5f)
+                ds = 2.5f;
+            f32 hitR = kBaseHitRadius * ds;
             f32 contactR = kBaseContactRadius * ds;
-            f32 hitR2     = hitR * hitR;
+            f32 hitR2 = hitR * hitR;
             f32 contactR2 = contactR * contactR;
             // Trigger when:
             //   (a) within attack radius AND swinging/pressing attack, OR
             //   (b) within contact radius (walked into it, any state).
-            bool hit = (d2 < contactR2) ||
-                       (wantSwingHit && d2 < hitR2);
-            if (!hit) continue;
+            bool hit = (d2 < contactR2) || (wantSwingHit && d2 < hitR2);
+            if (!hit)
+                continue;
 
             // Hit! Ice shatter at decoy position, freeze seeker, kill decoy.
             Vec3f hitPos = cl.somariaDecoyPos[i];
             Vec3f zv = { 0.0f, 0.0f, 0.0f };
-            EffectSsDeadDb_Spawn(gPlayState, &hitPos, &zv, &zv,
-                                 100, 10, 150, 200, 255, 200, 100, 150, 255, 0, 14, 1);
+            EffectSsDeadDb_Spawn(gPlayState, &hitPos, &zv, &zv, 100, 10, 150, 200, 255, 200, 100, 150, 255, 0, 14, 1);
             Color_RGBA8 icP = { 200, 230, 255, 220 };
             Color_RGBA8 icE = { 100, 150, 255, 160 };
             for (int j = 0; j < 8; j++) {
@@ -2361,19 +2442,16 @@ void Harpoon::UpdateDecoys() {
                 pp.x += Rand_CenteredFloat(30.0f);
                 pp.y += Rand_ZeroFloat(40.0f);
                 pp.z += Rand_CenteredFloat(30.0f);
-                Vec3f pv = { Rand_CenteredFloat(3.0f),
-                             Rand_ZeroFloat(4.0f) + 1.0f,
-                             Rand_CenteredFloat(3.0f) };
+                Vec3f pv = { Rand_CenteredFloat(3.0f), Rand_ZeroFloat(4.0f) + 1.0f, Rand_CenteredFloat(3.0f) };
                 EffectSsKiraKira_SpawnFocused(gPlayState, &pp, &pv, &zv, &icP, &icE, 800, 30);
             }
-            Audio_PlaySoundGeneral(NA_SE_IT_SHIELD_REFLECT_SW, &hitPos, 4,
-                                   &gSfxDefaultFreqAndVolScale,
-                                   &gSfxDefaultFreqAndVolScale,
-                                   &gSfxDefaultReverb);
+            Audio_PlaySoundGeneral(NA_SE_IT_SHIELD_REFLECT_SW, &hitPos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 
             // Local kill — peer will resync on next SPAWN_DECOY broadcast.
             cl.somariaDecoyActive[i] = 0;
-            if (cl.somariaDecoyCount > 0) cl.somariaDecoyCount--;
+            if (cl.somariaDecoyCount > 0)
+                cl.somariaDecoyCount--;
 
             // Freeze the seeker (us) as the penalty.
             player->actor.freezeTimer = 40;
@@ -2388,12 +2466,12 @@ void Harpoon::UpdateDecoys() {
             // Tell the hider their decoy got triggered (so they can VFX +
             // mark it dead in their local ring). v2 uses COMBAT.DECOY_HIT.
             nlohmann::json payload;
-            payload["type"]           = HPN_COMBAT_DECOY_HIT;
+            payload["type"] = HPN_COMBAT_DECOY_HIT;
             payload["targetClientId"] = cid;
-            payload["decoySlot"]      = (s32)i;
+            payload["decoySlot"] = (s32)i;
             SendJsonToRemote(payload);
 
-            return;  // one hit per frame is enough
+            return; // one hit per frame is enough
         }
     }
 }
@@ -2428,9 +2506,12 @@ s32 Harpoon_GetLocalPlayerColor(u8* r, u8* g, u8* b) {
     if (!Harpoon::Instance || !Harpoon::Instance->isConnected)
         return 0;
     Color_RGBA8 c = CVarGetColor(CVAR_HARPOON("Color.Value"), { 100, 255, 100 });
-    if (r) *r = c.r;
-    if (g) *g = c.g;
-    if (b) *b = c.b;
+    if (r)
+        *r = c.r;
+    if (g)
+        *g = c.g;
+    if (b)
+        *b = c.b;
     return 1;
 }
 
@@ -2460,9 +2541,7 @@ void Harpoon_SendCustomDamage(Actor* hitActor, s32 damageType, s32 damage) {
     if (Harpoon::Instance->currentRoomGameMode == "triforce_thief") {
         const std::string& myTeam = HarpoonTriforceThief::GetLocalState().team;
         auto it = Harpoon::Instance->clients.find(clientId);
-        if (it != Harpoon::Instance->clients.end() &&
-            !myTeam.empty() &&
-            !it->second.team.empty() &&
+        if (it != Harpoon::Instance->clients.end() && !myTeam.empty() && !it->second.team.empty() &&
             it->second.team == myTeam) {
             return;
         }
@@ -2471,7 +2550,7 @@ void Harpoon_SendCustomDamage(Actor* hitActor, s32 damageType, s32 damage) {
     Player* localPlayer = GET_PLAYER(gPlayState);
 
     nlohmann::json payload;
-    payload["type"] = Harpoon::HPN_COMBAT_DAMAGE;  // v2: COMBAT.DEAL_DAMAGE
+    payload["type"] = Harpoon::HPN_COMBAT_DAMAGE; // v2: COMBAT.DEAL_DAMAGE
     payload["targetClientId"] = clientId;
     payload["customDamageType"] = damageType;
     payload["damage"] = damage;
@@ -2506,16 +2585,14 @@ void Harpoon_SendCustomEffect(Actor* hitActor, s32 effectType, Vec3f* attackerPo
     if (Harpoon::Instance->currentRoomGameMode == "triforce_thief") {
         const std::string& myTeam = HarpoonTriforceThief::GetLocalState().team;
         auto it = Harpoon::Instance->clients.find(clientId);
-        if (it != Harpoon::Instance->clients.end() &&
-            !myTeam.empty() &&
-            !it->second.team.empty() &&
+        if (it != Harpoon::Instance->clients.end() && !myTeam.empty() && !it->second.team.empty() &&
             it->second.team == myTeam) {
             return;
         }
     }
 
     nlohmann::json payload;
-    payload["type"] = Harpoon::HPN_COMBAT_CUSTOM_EFFECT;  // v2: COMBAT.CUSTOM_EFFECT
+    payload["type"] = Harpoon::HPN_COMBAT_CUSTOM_EFFECT; // v2: COMBAT.CUSTOM_EFFECT
     payload["targetClientId"] = clientId;
     payload["effectType"] = effectType;
     payload["attackerX"] = attackerPos->x;
@@ -2544,40 +2621,74 @@ void Harpoon_NotifyVfxSpawn(Actor* spawned, s32 vfxKindCode, u8 attachedToOwner)
     if (Harpoon::Instance == nullptr || !Harpoon::Instance->isConnected) {
         return;
     }
-    if (spawned == nullptr) return;
+    if (spawned == nullptr)
+        return;
 
     // Map enum → string. Receiver doesn't need this for the spawn itself,
     // it's a tag for client-side filtering.
     const char* kind = "generic";
     switch (vfxKindCode) {
-        case HARPOON_VFX_KIND_SW97_ARROW_FIRE:  kind = "sw97_arrow_fire";  break;
-        case HARPOON_VFX_KIND_SW97_ARROW_ICE:   kind = "sw97_arrow_ice";   break;
-        case HARPOON_VFX_KIND_SW97_ARROW_LIGHT: kind = "sw97_arrow_light"; break;
-        case HARPOON_VFX_KIND_SW97_ARROW_DARK:  kind = "sw97_arrow_dark";  break;
-        case HARPOON_VFX_KIND_SW97_ARROW_SOUL:  kind = "sw97_arrow_soul";  break;
-        case HARPOON_VFX_KIND_SW97_ARROW_WIND:  kind = "sw97_arrow_wind";  break;
-        case HARPOON_VFX_KIND_SW97_MAGIC_FIRE:  kind = "sw97_magic_fire";  break;
-        case HARPOON_VFX_KIND_SW97_MAGIC_ICE:   kind = "sw97_magic_ice";   break;
-        case HARPOON_VFX_KIND_SW97_MAGIC_LIGHT: kind = "sw97_magic_light"; break;
-        case HARPOON_VFX_KIND_SW97_MAGIC_DARK:  kind = "sw97_magic_dark";  break;
-        case HARPOON_VFX_KIND_SW97_MAGIC_SOUL:  kind = "sw97_magic_soul";  break;
-        case HARPOON_VFX_KIND_SW97_MAGIC_WIND:  kind = "sw97_magic_wind";  break;
-        case HARPOON_VFX_KIND_FD_BEAM:          kind = "fd_beam";          break;
-        case HARPOON_VFX_KIND_ZORA_FIN:         kind = "zora_fin";         break;
-        case HARPOON_VFX_KIND_DEKU_BUBBLE:      kind = "deku_bubble";      break;
-        case HARPOON_VFX_KIND_GORON_ROCK:       kind = "goron_rock";       break;
-        case HARPOON_VFX_KIND_HYLIAS_FAIRY:     kind = "hylias_fairy";     break;
-        default: break;
+        case HARPOON_VFX_KIND_SW97_ARROW_FIRE:
+            kind = "sw97_arrow_fire";
+            break;
+        case HARPOON_VFX_KIND_SW97_ARROW_ICE:
+            kind = "sw97_arrow_ice";
+            break;
+        case HARPOON_VFX_KIND_SW97_ARROW_LIGHT:
+            kind = "sw97_arrow_light";
+            break;
+        case HARPOON_VFX_KIND_SW97_ARROW_DARK:
+            kind = "sw97_arrow_dark";
+            break;
+        case HARPOON_VFX_KIND_SW97_ARROW_SOUL:
+            kind = "sw97_arrow_soul";
+            break;
+        case HARPOON_VFX_KIND_SW97_ARROW_WIND:
+            kind = "sw97_arrow_wind";
+            break;
+        case HARPOON_VFX_KIND_SW97_MAGIC_FIRE:
+            kind = "sw97_magic_fire";
+            break;
+        case HARPOON_VFX_KIND_SW97_MAGIC_ICE:
+            kind = "sw97_magic_ice";
+            break;
+        case HARPOON_VFX_KIND_SW97_MAGIC_LIGHT:
+            kind = "sw97_magic_light";
+            break;
+        case HARPOON_VFX_KIND_SW97_MAGIC_DARK:
+            kind = "sw97_magic_dark";
+            break;
+        case HARPOON_VFX_KIND_SW97_MAGIC_SOUL:
+            kind = "sw97_magic_soul";
+            break;
+        case HARPOON_VFX_KIND_SW97_MAGIC_WIND:
+            kind = "sw97_magic_wind";
+            break;
+        case HARPOON_VFX_KIND_FD_BEAM:
+            kind = "fd_beam";
+            break;
+        case HARPOON_VFX_KIND_ZORA_FIN:
+            kind = "zora_fin";
+            break;
+        case HARPOON_VFX_KIND_DEKU_BUBBLE:
+            kind = "deku_bubble";
+            break;
+        case HARPOON_VFX_KIND_GORON_ROCK:
+            kind = "goron_rock";
+            break;
+        case HARPOON_VFX_KIND_HYLIAS_FAIRY:
+            kind = "hylias_fairy";
+            break;
+        default:
+            break;
     }
 
     // Tag the locally-spawned actor so its hits route through PvP.
     Harpoon::Instance->SetVfxActorOwner(spawned, Harpoon::Instance->ownClientId);
 
-    Harpoon::Instance->SendPacket_SpawnVfxActor(
-        spawned->id,
-        spawned->world.pos.x, spawned->world.pos.y, spawned->world.pos.z,
-        spawned->world.rot.x, spawned->world.rot.y, spawned->world.rot.z,
-        spawned->params, kind, attachedToOwner != 0);
+    Harpoon::Instance->SendPacket_SpawnVfxActor(spawned->id, spawned->world.pos.x, spawned->world.pos.y,
+                                                spawned->world.pos.z, spawned->world.rot.x, spawned->world.rot.y,
+                                                spawned->world.rot.z, spawned->params, kind, attachedToOwner != 0);
 }
 
 } // extern "C"
@@ -2602,7 +2713,8 @@ void Harpoon::HandlePacket_O2rModList(nlohmann::json payload) {
         for (const auto& m : payload["mods"]) {
             if (m.is_string()) {
                 client.enabledO2rMods.push_back(m.get<std::string>());
-                if (!modsStr.empty()) modsStr += ", ";
+                if (!modsStr.empty())
+                    modsStr += ", ";
                 modsStr += m.get<std::string>();
             }
         }
@@ -2614,17 +2726,17 @@ void Harpoon::HandlePacket_O2rModList(nlohmann::json payload) {
         for (const auto& m : payload["syncMods"]) {
             if (m.is_string()) {
                 client.harpoonSyncMods.push_back(m.get<std::string>());
-                if (!syncStr.empty()) syncStr += ", ";
+                if (!syncStr.empty())
+                    syncStr += ", ";
                 syncStr += m.get<std::string>();
             }
         }
     }
-    SPDLOG_INFO("[Harpoon] HandlePacket_O2rModList: client='{}' (id={}) {} mods=[{}] sync=[{}]",
-                client.name, clientId, (int)client.enabledO2rMods.size(), modsStr, syncStr);
+    SPDLOG_INFO("[Harpoon] HandlePacket_O2rModList: client='{}' (id={}) {} mods=[{}] sync=[{}]", client.name, clientId,
+                (int)client.enabledO2rMods.size(), modsStr, syncStr);
 
     // Divergence check (dedupe happens inside NotifyO2rDivergence via HarpoonSkinSync's set).
-    HarpoonSkinSync::NotifyO2rDivergence(clientId, client.name, client.enabledO2rMods,
-                                         client.harpoonSyncMods);
+    HarpoonSkinSync::NotifyO2rDivergence(clientId, client.name, client.enabledO2rMods, client.harpoonSyncMods);
 }
 
 // ============================================================================
@@ -2642,8 +2754,7 @@ void Harpoon::HandlePacket_HandshakeAck(nlohmann::json payload) {
     } else if (payload.contains("sessionToken")) {
         sessionToken = payload["sessionToken"].get<std::string>();
     }
-    SPDLOG_INFO("[Harpoon] HANDSHAKE_ACK ownClientId={} token={}",
-                ownClientId, sessionToken.substr(0, 8) + "…");
+    SPDLOG_INFO("[Harpoon] HANDSHAKE_ACK ownClientId={} token={}", ownClientId, sessionToken.substr(0, 8) + "…");
 }
 
 void Harpoon::HandlePacket_Error(nlohmann::json payload) {
@@ -2651,7 +2762,8 @@ void Harpoon::HandlePacket_Error(nlohmann::json payload) {
     std::string message = payload.value("message", std::string(""));
     SPDLOG_WARN("[Harpoon] server error: code={} message={}", code, message);
     killFeed.push_back("[server] " + code + ": " + message);
-    if (killFeed.size() > 5) killFeed.erase(killFeed.begin());
+    if (killFeed.size() > 5)
+        killFeed.erase(killFeed.begin());
     // Surface as a toast too so users see it outside the in-room view (e.g.
     // when ROOM.CREATE is rejected and the user is still on the lobby screen
     // — kill feed only renders inside a room).
@@ -2663,7 +2775,8 @@ void Harpoon::HandlePacket_Error(nlohmann::json payload) {
 }
 
 void Harpoon::HandlePacket_GamemodeManifest(nlohmann::json payload) {
-    if (!payload.contains("manifest") || !payload["manifest"].is_object()) return;
+    if (!payload.contains("manifest") || !payload["manifest"].is_object())
+        return;
     currentGamemodeManifest = payload["manifest"];
     std::string gid = currentGamemodeManifest.value("gamemode_id", std::string("?"));
     std::string name = currentGamemodeManifest.value("name", gid);
@@ -2675,7 +2788,10 @@ void Harpoon::HandlePacket_GamemodeManifest(nlohmann::json payload) {
     auto installed = HarpoonSkinSync::GetInstalledGamemodes();
     bool found = false;
     for (const auto& g : installed) {
-        if (g == gid) { found = true; break; }
+        if (g == gid) {
+            found = true;
+            break;
+        }
     }
     if (!found) {
         SPDLOG_WARN("[Harpoon] room uses gamemode '{}' which is not installed locally — leaving room", gid);
@@ -2686,7 +2802,8 @@ void Harpoon::HandlePacket_GamemodeManifest(nlohmann::json payload) {
         if (alreadyWarnedMissing.insert(gid).second) {
             std::string msg = "Gamemode '" + gid + "' not installed — drop the pack into harpoon/gamemodes/";
             killFeed.push_back(msg);
-            if (killFeed.size() > 5) killFeed.erase(killFeed.begin());
+            if (killFeed.size() > 5)
+                killFeed.erase(killFeed.begin());
             Notification::Emit({
                 .prefix = "Harpoon",
                 .message = msg,
@@ -2700,8 +2817,7 @@ void Harpoon::HandlePacket_GamemodeManifest(nlohmann::json payload) {
     // authoritative source for sync_items / pvp_enabled — they're a property
     // of the gamemode, not of the player. The user shouldn't be able to
     // disable PvP in a Hunger Games room or enable item sync in a Story room.
-    if (currentGamemodeManifest.contains("default_config") &&
-        currentGamemodeManifest["default_config"].is_object()) {
+    if (currentGamemodeManifest.contains("default_config") && currentGamemodeManifest["default_config"].is_object()) {
         const auto& cfg = currentGamemodeManifest["default_config"];
         if (cfg.contains("sync_items")) {
             syncItems = cfg["sync_items"].get<bool>();
@@ -2719,8 +2835,7 @@ void Harpoon::HandlePacket_GamemodeManifest(nlohmann::json payload) {
     // Cross-gamemode PvP combat damage table (see Combat/CombatSync.h).
     // Looked up at the top level of the manifest (not under default_config)
     // so the same key can live alongside permissions / rate-limits.
-    if (currentGamemodeManifest.contains("damage_table") &&
-        currentGamemodeManifest["damage_table"].is_object()) {
+    if (currentGamemodeManifest.contains("damage_table") && currentGamemodeManifest["damage_table"].is_object()) {
         HarpoonCombat::LoadDamageTable(currentGamemodeManifest["damage_table"]);
     } else {
         // No table in YAML — fall back to compile-time defaults.
@@ -2746,39 +2861,59 @@ void Harpoon::HandlePacket_RoomEvent(nlohmann::json payload) {
     }
     // Generic HARPOON.* sub-protocol — dropped-item ledger, GM controls.
     if (eventName.rfind("HARPOON.", 0) == 0) {
-        const nlohmann::json& data = payload.contains("data") && payload["data"].is_object()
-                                       ? payload["data"] : payload;
-        if      (eventName == "HARPOON.DEATH_DROP")            HarpoonDroppedItems::HandleDeathDrop(data);
-        else if (eventName == "HARPOON.DROP_CLAIM")            HarpoonDroppedItems::HandleDropClaim(data);
-        else if (eventName == "HARPOON.DROP_LEDGER_REQ")       HarpoonDroppedItems::HandleLedgerRequest(payload);
-        else if (eventName == "HARPOON.DROP_LEDGER_SNAPSHOT")  HarpoonDroppedItems::HandleLedgerSnapshot(data);
-        else if (eventName == "HARPOON.TEMPLATE_APPLY")        HarpoonTemplates::HandleTemplateApply(data);
-        else if (eventName == "HARPOON.SAVE_PEEK_REQUEST")     HarpoonRemoteSaveEditor::HandlePeekRequest(data);
-        else if (eventName == "HARPOON.SAVE_PEEK_RESPONSE")    HarpoonRemoteSaveEditor::HandlePeekResponse(data);
-        else if (eventName == "HARPOON.FLAG_OVERRIDE")         HandleHarpoonFlagOverride(data);
-        else if (eventName == "HARPOON.PEER_TELEPORT")         HandleHarpoonPeerTeleport(data);
-        else if (eventName == "HARPOON.HOST_TRANSFER")         HandleHarpoonHostTransfer(data);
-        else SPDLOG_DEBUG("[Harpoon] HARPOON.* unknown event {}", eventName);
+        const nlohmann::json& data =
+            payload.contains("data") && payload["data"].is_object() ? payload["data"] : payload;
+        if (eventName == "HARPOON.DEATH_DROP")
+            HarpoonDroppedItems::HandleDeathDrop(data);
+        else if (eventName == "HARPOON.DROP_CLAIM")
+            HarpoonDroppedItems::HandleDropClaim(data);
+        else if (eventName == "HARPOON.DROP_LEDGER_REQ")
+            HarpoonDroppedItems::HandleLedgerRequest(payload);
+        else if (eventName == "HARPOON.DROP_LEDGER_SNAPSHOT")
+            HarpoonDroppedItems::HandleLedgerSnapshot(data);
+        else if (eventName == "HARPOON.TEMPLATE_APPLY")
+            HarpoonTemplates::HandleTemplateApply(data);
+        else if (eventName == "HARPOON.SAVE_PEEK_REQUEST")
+            HarpoonRemoteSaveEditor::HandlePeekRequest(data);
+        else if (eventName == "HARPOON.SAVE_PEEK_RESPONSE")
+            HarpoonRemoteSaveEditor::HandlePeekResponse(data);
+        else if (eventName == "HARPOON.FLAG_OVERRIDE")
+            HandleHarpoonFlagOverride(data);
+        else if (eventName == "HARPOON.PEER_TELEPORT")
+            HandleHarpoonPeerTeleport(data);
+        else if (eventName == "HARPOON.HOST_TRANSFER")
+            HandleHarpoonHostTransfer(data);
+        else
+            SPDLOG_DEBUG("[Harpoon] HARPOON.* unknown event {}", eventName);
         return;
     }
     // Cross-gamemode PvP combat layer (see Combat/CombatSync.h).
     if (eventName.rfind("COMBAT.", 0) == 0) {
-        const nlohmann::json& data = payload.contains("data") && payload["data"].is_object()
-                                       ? payload["data"] : payload;
-        if      (eventName == "COMBAT.APPLY_STATUS")        HarpoonCombat::HandleApplyStatus(data);
-        else if (eventName == "COMBAT.SHIELD_PARRY")        HarpoonCombat::HandleShieldParry(data);
-        else if (eventName == "COMBAT.SHIELD_REVIVE")       HarpoonCombat::HandleShieldRevive(data);
-        else if (eventName == "COMBAT.AURA_TICK")           HarpoonCombat::HandleAuraTick(data);
-        else if (eventName == "COMBAT.UTILITY_HIT")         HarpoonCombat::HandleUtilityHit(data);
-        else if (eventName == "COMBAT.PROJECTILE_SPAWN")    HarpoonProjectileMirror::HandleSpawn(data);
-        else if (eventName == "COMBAT.PROJECTILE_HIT")      HarpoonProjectileMirror::HandleHit(data);
-        else if (eventName == "COMBAT.PROJECTILE_REFLECT")  HarpoonProjectileMirror::HandleReflect(data);
-        else SPDLOG_DEBUG("[Harpoon] COMBAT.* unknown event {}", eventName);
+        const nlohmann::json& data =
+            payload.contains("data") && payload["data"].is_object() ? payload["data"] : payload;
+        if (eventName == "COMBAT.APPLY_STATUS")
+            HarpoonCombat::HandleApplyStatus(data);
+        else if (eventName == "COMBAT.SHIELD_PARRY")
+            HarpoonCombat::HandleShieldParry(data);
+        else if (eventName == "COMBAT.SHIELD_REVIVE")
+            HarpoonCombat::HandleShieldRevive(data);
+        else if (eventName == "COMBAT.AURA_TICK")
+            HarpoonCombat::HandleAuraTick(data);
+        else if (eventName == "COMBAT.UTILITY_HIT")
+            HarpoonCombat::HandleUtilityHit(data);
+        else if (eventName == "COMBAT.PROJECTILE_SPAWN")
+            HarpoonProjectileMirror::HandleSpawn(data);
+        else if (eventName == "COMBAT.PROJECTILE_HIT")
+            HarpoonProjectileMirror::HandleHit(data);
+        else if (eventName == "COMBAT.PROJECTILE_REFLECT")
+            HarpoonProjectileMirror::HandleReflect(data);
+        else
+            SPDLOG_DEBUG("[Harpoon] COMBAT.* unknown event {}", eventName);
         return;
     }
     if (eventName == "PLAYER.MASK_EQUIP_START") {
-        const nlohmann::json& data = payload.contains("data") && payload["data"].is_object()
-                                       ? payload["data"] : payload;
+        const nlohmann::json& data =
+            payload.contains("data") && payload["data"].is_object() ? payload["data"] : payload;
         HarpoonCombat::HandleMaskEquipStart(data);
         return;
     }
@@ -2799,31 +2934,35 @@ void Harpoon::HandleHarpoonFlagOverride(const nlohmann::json& data) {
     // shows the same state. The TARGET client also applies them to the
     // engine each frame (see HookHandlers OnPlayerUpdate).
     uint32_t target = data.value("targetClientId", 0u);
-    if (target == 0) return;
+    if (target == 0)
+        return;
     auto it = clients.find(target);
-    if (it == clients.end()) return;
+    if (it == clients.end())
+        return;
     it->second.restrictNoClimb = data.value("noClimb", false);
-    it->second.restrictNoGrab  = data.value("noGrab",  false);
+    it->second.restrictNoGrab = data.value("noGrab", false);
     it->second.restrictNoCrawl = data.value("noCrawl", false);
-    it->second.restrictNoTalk  = data.value("noTalk",  false);
+    it->second.restrictNoTalk = data.value("noTalk", false);
 }
 
 void Harpoon::HandleHarpoonPeerTeleport(const nlohmann::json& data) {
     // Only the targeted peer reacts.
     uint32_t target = data.value("targetClientId", 0u);
-    if (target != ownClientId) return;
+    if (target != ownClientId)
+        return;
     s32 entrance = data.value("entranceIndex", -1);
     f32 px = data.value("x", 0.0f);
     f32 py = data.value("y", 0.0f);
     f32 pz = data.value("z", 0.0f);
     bool toHostPos = data.value("toHostPos", false);
 
-    if (gPlayState == nullptr) return;
+    if (gPlayState == nullptr)
+        return;
     if (entrance >= 0) {
-        gPlayState->linkAgeOnLoad     = gSaveContext.linkAge;
+        gPlayState->linkAgeOnLoad = gSaveContext.linkAge;
         gPlayState->nextEntranceIndex = entrance;
         gPlayState->transitionTrigger = TRANS_TRIGGER_START;
-        gPlayState->transitionType    = TRANS_TYPE_FADE_BLACK;
+        gPlayState->transitionType = TRANS_TYPE_FADE_BLACK;
         ::sHarpoonAuthorizedTransition = true;
         if (toHostPos) {
             // Land on host's exact position after the transition.
@@ -2836,18 +2975,18 @@ void Harpoon::HandleHarpoonPeerTeleport(const nlohmann::json& data) {
         Player* lp = GET_PLAYER(gPlayState);
         if (lp != nullptr) {
             lp->actor.world.pos = { px, py, pz };
-            lp->actor.home.pos  = { px, py, pz };
+            lp->actor.home.pos = { px, py, pz };
             lp->actor.velocity.x = lp->actor.velocity.y = lp->actor.velocity.z = 0.0f;
-            lp->linearVelocity   = 0.0f;
+            lp->linearVelocity = 0.0f;
         }
     }
-    SPDLOG_INFO("[Harpoon][GM] peer teleport received: entrance={} toHostPos={}",
-                entrance, toHostPos);
+    SPDLOG_INFO("[Harpoon][GM] peer teleport received: entrance={} toHostPos={}", entrance, toHostPos);
 }
 
 void Harpoon::HandleHarpoonHostTransfer(const nlohmann::json& data) {
     uint32_t newHost = data.value("newHostClientId", 0u);
-    if (newHost == 0) return;
+    if (newHost == 0)
+        return;
     hostClientId = newHost;
     SPDLOG_INFO("[Harpoon][GM] host transferred to cid={}", newHost);
 }
@@ -2863,9 +3002,8 @@ void Harpoon::HandleHarpoonHostTransfer(const nlohmann::json& data) {
 static HarpoonClient* _LookupClient(nlohmann::json& payload) {
     if (!payload.contains("clientId") && !payload.contains("source"))
         return nullptr;
-    uint32_t clientId = payload.contains("clientId")
-                         ? payload["clientId"].get<uint32_t>()
-                         : payload["source"].get<uint32_t>();
+    uint32_t clientId =
+        payload.contains("clientId") ? payload["clientId"].get<uint32_t>() : payload["source"].get<uint32_t>();
     auto& clients = Harpoon::Instance->clients;
     auto it = clients.find(clientId);
     return it == clients.end() ? nullptr : &it->second;
@@ -2873,7 +3011,8 @@ static HarpoonClient* _LookupClient(nlohmann::json& payload) {
 
 void Harpoon::HandlePacket_PlayerTransform(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     if (payload.contains("posRot")) {
         auto& pr = payload["posRot"];
         if (pr.contains("pos")) {
@@ -2887,8 +3026,7 @@ void Harpoon::HandlePacket_PlayerTransform(nlohmann::json payload) {
             c->posRot.rot.z = pr["rot"].value("z", (s16)0);
         }
         // Trigger deferred spawn if we now have a real position.
-        bool hasPos = (c->posRot.pos.x != 0.0f || c->posRot.pos.y != 0.0f ||
-                       c->posRot.pos.z != 0.0f);
+        bool hasPos = (c->posRot.pos.x != 0.0f || c->posRot.pos.y != 0.0f || c->posRot.pos.z != 0.0f);
         if (c->player == nullptr && hasPos && c->online) {
             shouldRefreshActors = true;
         }
@@ -2903,7 +3041,8 @@ void Harpoon::HandlePacket_PlayerTransform(nlohmann::json payload) {
 
 void Harpoon::HandlePacket_PlayerSkeleton(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     auto jointArray = payload.value("jointTable", std::vector<int>{});
     jointArray.resize(24 * 3);
     for (int i = 0; i < 24; i++) {
@@ -2916,7 +3055,8 @@ void Harpoon::HandlePacket_PlayerSkeleton(nlohmann::json payload) {
 
 void Harpoon::HandlePacket_PlayerLimbRotations(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     if (payload.contains("upperLimbRot")) {
         c->upperLimbRot.x = payload["upperLimbRot"].value("x", (s16)0);
         c->upperLimbRot.y = payload["upperLimbRot"].value("y", (s16)0);
@@ -2930,7 +3070,8 @@ void Harpoon::HandlePacket_PlayerLimbRotations(nlohmann::json payload) {
 
 void Harpoon::HandlePacket_PlayerAnimationFlags(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     c->stateFlags1 = payload.value("stateFlags1", c->stateFlags1);
     c->stateFlags2 = payload.value("stateFlags2", c->stateFlags2);
     c->actionVar1 = payload.value("actionVar1", c->actionVar1);
@@ -2939,7 +3080,8 @@ void Harpoon::HandlePacket_PlayerAnimationFlags(nlohmann::json payload) {
 
 void Harpoon::HandlePacket_PlayerMotionVars(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     c->speedXZ = payload.value("speedXZ", c->speedXZ);
     c->meleeWeaponState = payload.value("meleeWeaponState", c->meleeWeaponState);
     c->fpModeFlag = payload.value("fpModeFlag", c->fpModeFlag);
@@ -2947,7 +3089,8 @@ void Harpoon::HandlePacket_PlayerMotionVars(nlohmann::json payload) {
 
 void Harpoon::HandlePacket_PlayerBowState(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     c->bowStringDraw = payload.value("bowStringDraw", c->bowStringDraw);
     c->bowArrowState = payload.value("bowArrowState", c->bowArrowState);
     c->bowDrawAnimFrame = payload.value("bowDrawAnimFrame", c->bowDrawAnimFrame);
@@ -2955,7 +3098,8 @@ void Harpoon::HandlePacket_PlayerBowState(nlohmann::json payload) {
 
 void Harpoon::HandlePacket_PlayerHandTypes(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     c->leftHandType = payload.value("leftHandType", c->leftHandType);
     c->rightHandType = payload.value("rightHandType", c->rightHandType);
     c->sheathType = payload.value("sheathType", c->sheathType);
@@ -2963,30 +3107,30 @@ void Harpoon::HandlePacket_PlayerHandTypes(nlohmann::json payload) {
 
 void Harpoon::HandlePacket_PlayerVisualState(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     s16 newScene = payload.value("sceneNum", c->sceneNum);
-    s32 newAge   = payload.value("linkAge",  c->linkAge);
+    s32 newAge = payload.value("linkAge", c->linkAge);
     bool newSaveLoaded = payload.value("isSaveLoaded", c->isSaveLoaded);
     // Spawn or kill the teammate's dummy when their scene/age/save-loaded
     // status changes. Without this, joining a teammate already in a scene or
     // walking into their scene later wouldn't trigger the dummy spawn — they
     // stayed invisible even though their TRANSFORM packets were arriving.
-    if (newScene != c->sceneNum || newAge != c->linkAge ||
-        newSaveLoaded != c->isSaveLoaded) {
-        SPDLOG_INFO("[Harpoon] VisualState cid={} scene {}->{} age {}->{} saveLoaded {}->{}",
-                    c->clientId, c->sceneNum, newScene, c->linkAge, newAge,
-                    (int)c->isSaveLoaded, (int)newSaveLoaded);
+    if (newScene != c->sceneNum || newAge != c->linkAge || newSaveLoaded != c->isSaveLoaded) {
+        SPDLOG_INFO("[Harpoon] VisualState cid={} scene {}->{} age {}->{} saveLoaded {}->{}", c->clientId, c->sceneNum,
+                    newScene, c->linkAge, newAge, (int)c->isSaveLoaded, (int)newSaveLoaded);
         shouldRefreshActors = true;
     }
-    c->isSaveLoaded   = newSaveLoaded;
-    c->sceneNum       = newScene;
-    c->entranceIndex  = payload.value("entranceIndex", c->entranceIndex);
-    c->linkAge        = newAge;
+    c->isSaveLoaded = newSaveLoaded;
+    c->sceneNum = newScene;
+    c->entranceIndex = payload.value("entranceIndex", c->entranceIndex);
+    c->linkAge = newAge;
 }
 
 void Harpoon::HandlePacket_PlayerEquipVisible(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     c->currentBoots = payload.value("currentBoots", c->currentBoots);
     c->currentShield = payload.value("currentShield", c->currentShield);
     c->currentTunic = payload.value("currentTunic", c->currentTunic);
@@ -2999,14 +3143,16 @@ void Harpoon::HandlePacket_PlayerEquipVisible(nlohmann::json payload) {
 
 void Harpoon::HandlePacket_PlayerFace(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     c->face = payload.value("face", c->face);
     c->eyeIndex = payload.value("eyeIndex", c->eyeIndex);
 }
 
 void Harpoon::HandlePacket_PlayerScale(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     c->scaleX = payload.value("scaleX", c->scaleX);
     c->scaleY = payload.value("scaleY", c->scaleY);
     c->scaleZ = payload.value("scaleZ", c->scaleZ);
@@ -3014,7 +3160,8 @@ void Harpoon::HandlePacket_PlayerScale(nlohmann::json payload) {
 
 void Harpoon::HandlePacket_PlayerTransformation(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     c->transformation = payload.value("transformation", c->transformation);
     c->marioAnimId = payload.value("marioAnimId", c->marioAnimId);
     c->marioAnimFrame = payload.value("marioAnimFrame", c->marioAnimFrame);
@@ -3028,7 +3175,8 @@ void Harpoon::HandlePacket_PlayerTransformation(nlohmann::json payload) {
 
 void Harpoon::HandlePacket_PlayerGoronState(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     c->goronAction = payload.value("goronAction", c->goronAction);
     c->rollSquash = payload.value("rollSquash", c->rollSquash);
     c->rollSpikeActive = payload.value("rollSpikeActive", c->rollSpikeActive);
@@ -3037,7 +3185,8 @@ void Harpoon::HandlePacket_PlayerGoronState(nlohmann::json payload) {
 
 void Harpoon::HandlePacket_PlayerCustomItemState(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     // Custom items: unwrap a single-item payload that names the item via
     // item_id/itemId and contains the rest of its state. Same handler logic
     // as the legacy big-blob update — just smaller scope.
@@ -3046,7 +3195,8 @@ void Harpoon::HandlePacket_PlayerCustomItemState(nlohmann::json payload) {
 
 void Harpoon::HandlePacket_PlayerInvincibility(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     c->invincibilityTimer = payload.value("value", c->invincibilityTimer);
 }
 
@@ -3068,7 +3218,8 @@ void Harpoon::HandlePacket_SkinSyncAnnounceCatalog(nlohmann::json payload) {
 
 void Harpoon::HandlePacket_SkinSyncUpdateSlots(nlohmann::json payload) {
     auto* c = _LookupClient(payload);
-    if (!c) return;
+    if (!c)
+        return;
     // Either flat fields (legacy) or { slots: { adult, child, equipment, forced } }
     std::string adult, child, equip, forced;
     if (payload.contains("slots") && payload["slots"].is_object()) {
@@ -3111,7 +3262,8 @@ void Harpoon::SendPacket_Resume(const std::string& token) {
 }
 
 void Harpoon::SendPacket_PlayerTransform() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     Player* player = GET_PLAYER(gPlayState);
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_TRANSFORM;
@@ -3130,7 +3282,8 @@ void Harpoon::SendPacket_PlayerTransform() {
 }
 
 void Harpoon::SendPacket_PlayerSkeleton() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     Player* player = GET_PLAYER(gPlayState);
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_SKELETON;
@@ -3141,7 +3294,10 @@ void Harpoon::SendPacket_PlayerSkeleton() {
     if (modelType > 0) {
         Vec3s* mmJoints = TransformMasks_GetFormJointTable();
         s32 mmCount = TransformMasks_GetFormJointCount();
-        if (mmJoints != NULL && mmCount > 0) { srcJointTable = mmJoints; srcJointCount = mmCount; }
+        if (mmJoints != NULL && mmCount > 0) {
+            srcJointTable = mmJoints;
+            srcJointCount = mmCount;
+        }
     }
     std::vector<int> jointArray;
     for (s32 i = 0; i < 24; i++) {
@@ -3150,7 +3306,9 @@ void Harpoon::SendPacket_PlayerSkeleton() {
             jointArray.push_back(srcJointTable[i].y);
             jointArray.push_back(srcJointTable[i].z);
         } else {
-            jointArray.push_back(0); jointArray.push_back(0); jointArray.push_back(0);
+            jointArray.push_back(0);
+            jointArray.push_back(0);
+            jointArray.push_back(0);
         }
     }
     payload["jointTable"] = jointArray;
@@ -3160,7 +3318,8 @@ void Harpoon::SendPacket_PlayerSkeleton() {
 }
 
 void Harpoon::SendPacket_PlayerLimbRotations() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     Player* player = GET_PLAYER(gPlayState);
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_LIMB_ROT;
@@ -3176,7 +3335,8 @@ void Harpoon::SendPacket_PlayerLimbRotations() {
 }
 
 void Harpoon::SendPacket_PlayerAnimationFlags() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     Player* player = GET_PLAYER(gPlayState);
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_ANIM_FLAGS;
@@ -3189,7 +3349,8 @@ void Harpoon::SendPacket_PlayerAnimationFlags() {
 }
 
 void Harpoon::SendPacket_PlayerMotionVars() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     Player* player = GET_PLAYER(gPlayState);
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_MOTION_VARS;
@@ -3201,7 +3362,8 @@ void Harpoon::SendPacket_PlayerMotionVars() {
 }
 
 void Harpoon::SendPacket_PlayerBowState() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     Player* player = GET_PLAYER(gPlayState);
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_BOW_STATE;
@@ -3213,7 +3375,8 @@ void Harpoon::SendPacket_PlayerBowState() {
 }
 
 void Harpoon::SendPacket_PlayerHandTypes() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     Player* player = GET_PLAYER(gPlayState);
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_HAND_TYPES;
@@ -3224,7 +3387,8 @@ void Harpoon::SendPacket_PlayerHandTypes() {
 }
 
 void Harpoon::SendPacket_PlayerVisualState() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_VISUAL_STATE;
     payload["isSaveLoaded"] = true;
@@ -3235,7 +3399,8 @@ void Harpoon::SendPacket_PlayerVisualState() {
 }
 
 void Harpoon::SendPacket_PlayerEquipVisible() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     Player* player = GET_PLAYER(gPlayState);
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_EQUIP_VISIBLE;
@@ -3252,7 +3417,8 @@ void Harpoon::SendPacket_PlayerEquipVisible() {
 }
 
 void Harpoon::SendPacket_PlayerFace() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     Player* player = GET_PLAYER(gPlayState);
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_FACE;
@@ -3262,7 +3428,8 @@ void Harpoon::SendPacket_PlayerFace() {
 }
 
 void Harpoon::SendPacket_PlayerScale() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     Player* player = GET_PLAYER(gPlayState);
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_SCALE;
@@ -3274,7 +3441,8 @@ void Harpoon::SendPacket_PlayerScale() {
 }
 
 void Harpoon::SendPacket_PlayerTransformation() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     Player* player = GET_PLAYER(gPlayState);
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_TRANSFORMATION;
@@ -3300,9 +3468,11 @@ void Harpoon::SendPacket_PlayerTransformation() {
 }
 
 void Harpoon::SendPacket_PlayerGoronState() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     u8 modelType = TransformMasks_GetModelType();
-    if (modelType == 0) return;  // only meaningful when transformed
+    if (modelType == 0)
+        return; // only meaningful when transformed
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_GORON_STATE;
     payload["goronAction"] = TransformMasks_GetGoronAction();
@@ -3314,7 +3484,8 @@ void Harpoon::SendPacket_PlayerGoronState() {
 }
 
 void Harpoon::SendPacket_PlayerInvincibility() {
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     Player* player = GET_PLAYER(gPlayState);
     nlohmann::json payload;
     payload["type"] = HPN_PLAYER_INVINCIBILITY;
@@ -3327,7 +3498,8 @@ void Harpoon::SendPacket_PlayerCustomItemState() {
     // Emits ONE primitive per active custom item with its full state.
     // The new server primitive PLAYER.UPDATE_CUSTOM_ITEM_STATE is permissive
     // (extra="allow") so we can dump all the per-item fields.
-    if (!IsSaveLoaded()) return;
+    if (!IsSaveLoaded())
+        return;
     CustomItemState* ci = &gCustomItemState;
 
     auto emit = [&](const char* itemId, std::function<void(nlohmann::json&)> fill) {
@@ -3339,75 +3511,85 @@ void Harpoon::SendPacket_PlayerCustomItemState() {
         SendJsonToRemote(payload);
     };
 
-    if (ci->beetleActive) emit("beetle", [&](nlohmann::json& p) {
-        p["pos"] = { ci->beetlePos.x, ci->beetlePos.y, ci->beetlePos.z };
-        p["rot"] = { ci->beetleRot.x, ci->beetleRot.y, ci->beetleRot.z };
-        p["wingScale"] = ci->beetleWingScale;
-        p["state"] = ci->beetleState;
-    });
-    if (ci->gustJarMode > 0) emit("gust_jar", [&](nlohmann::json& p) {
-        p["mode"] = ci->gustJarMode;
-        p["element"] = ci->gustJarElement;
-        p["blowActive"] = ci->gustJarBlowActive;
-        p["heatTimer"] = ci->gustJarHeatTimer;
-    });
-    if (ci->fireRodActive) emit("fire_rod", [&](nlohmann::json& p) {
-        p["active"] = ci->fireRodProjActive;
-        p["count"] = ci->fireRodProjCount;
-        p["rodType"] = ci->fireRodProjType;
-        p["scale"] = ci->fireRodProjScale;
-        p["pos1"] = { ci->fireRodProjPos.x, ci->fireRodProjPos.y, ci->fireRodProjPos.z };
-        p["pos2"] = { ci->fireRodProjPos2.x, ci->fireRodProjPos2.y, ci->fireRodProjPos2.z };
-        p["pos3"] = { ci->fireRodProjPos3.x, ci->fireRodProjPos3.y, ci->fireRodProjPos3.z };
-    });
-    if (ci->iceRodActive) emit("ice_rod", [&](nlohmann::json& p) {
-        p["active"] = ci->iceRodProjActive;
-        p["count"] = ci->iceRodProjCount;
-        p["scale"] = ci->iceRodProjScale;
-        p["pos1"] = { ci->iceRodProjPos.x, ci->iceRodProjPos.y, ci->iceRodProjPos.z };
-        p["pos2"] = { ci->iceRodProjPos2.x, ci->iceRodProjPos2.y, ci->iceRodProjPos2.z };
-        p["pos3"] = { ci->iceRodProjPos3.x, ci->iceRodProjPos3.y, ci->iceRodProjPos3.z };
-    });
-    if (ci->lightRodActive) emit("light_rod", [&](nlohmann::json& p) {
-        p["active"] = ci->lightRodProjActive;
-        p["count"] = ci->lightRodProjCount;
-        p["pos1"] = { ci->lightRodProjPos.x, ci->lightRodProjPos.y, ci->lightRodProjPos.z };
-        p["pos2"] = { ci->lightRodProjPos2.x, ci->lightRodProjPos2.y, ci->lightRodProjPos2.z };
-        p["pos3"] = { ci->lightRodProjPos3.x, ci->lightRodProjPos3.y, ci->lightRodProjPos3.z };
-    });
-    if (ci->ballAndChainThrown) emit("ball_chain", [&](nlohmann::json& p) {
-        p["thrown"] = ci->ballAndChainThrown;
-        p["timer"] = ci->timer2;
-        p["pos"] = { ci->sharedProjectilePos.x, ci->sharedProjectilePos.y, ci->sharedProjectilePos.z };
-    });
-    if (ci->whipActive) emit("whip", [&](nlohmann::json& p) {
-        p["state"] = ci->whipState;
-        p["tipPos"] = { ci->whipTipPos.x, ci->whipTipPos.y, ci->whipTipPos.z };
-        p["attachPos"] = { ci->whipAttachPos.x, ci->whipAttachPos.y, ci->whipAttachPos.z };
-        p["attachNormal"] = { ci->whipAttachNormal.x, ci->whipAttachNormal.y, ci->whipAttachNormal.z };
-    });
-    if (ci->dekuLeafGliding || ci->dekuLeafBlowing) emit("deku_leaf", [&](nlohmann::json& p) {
-        p["gliding"] = ci->dekuLeafGliding;
-        p["blowing"] = ci->dekuLeafBlowing;
-        p["animTimer"] = ci->dekuLeafAnimTimer;
-    });
-    if (ci->shovelAnimating) emit("shovel", [&](nlohmann::json& p) {
-        p["animating"] = ci->shovelAnimating;
-    });
-    if (ci->dominionRodActive) emit("dominion_rod", [&](nlohmann::json& p) {
-        p["state"] = ci->dominionRodState;
-        p["orbPos"] = { ci->dominionRodOrbPos.x, ci->dominionRodOrbPos.y, ci->dominionRodOrbPos.z };
-    });
-    if (ci->switchHookActive) emit("switch_hook", [&](nlohmann::json& p) {
-        p["state"] = ci->switchHookState;
-        p["projPos"] = { ci->switchHookProjPos.x, ci->switchHookProjPos.y, ci->switchHookProjPos.z };
-    });
-    if (ci->timeGateActive) emit("time_gate", [&](nlohmann::json& p) {
-        p["itemVisible"] = ci->timeGateItemVisible;
-        p["portalActive"] = ci->timeGatePortalActive;
-        p["portalAlpha"] = ci->timeGatePortalAlpha;
-        p["portalScale"] = ci->timeGatePortalScale;
-    });
+    if (ci->beetleActive)
+        emit("beetle", [&](nlohmann::json& p) {
+            p["pos"] = { ci->beetlePos.x, ci->beetlePos.y, ci->beetlePos.z };
+            p["rot"] = { ci->beetleRot.x, ci->beetleRot.y, ci->beetleRot.z };
+            p["wingScale"] = ci->beetleWingScale;
+            p["state"] = ci->beetleState;
+        });
+    if (ci->gustJarMode > 0)
+        emit("gust_jar", [&](nlohmann::json& p) {
+            p["mode"] = ci->gustJarMode;
+            p["element"] = ci->gustJarElement;
+            p["blowActive"] = ci->gustJarBlowActive;
+            p["heatTimer"] = ci->gustJarHeatTimer;
+        });
+    if (ci->fireRodActive)
+        emit("fire_rod", [&](nlohmann::json& p) {
+            p["active"] = ci->fireRodProjActive;
+            p["count"] = ci->fireRodProjCount;
+            p["rodType"] = ci->fireRodProjType;
+            p["scale"] = ci->fireRodProjScale;
+            p["pos1"] = { ci->fireRodProjPos.x, ci->fireRodProjPos.y, ci->fireRodProjPos.z };
+            p["pos2"] = { ci->fireRodProjPos2.x, ci->fireRodProjPos2.y, ci->fireRodProjPos2.z };
+            p["pos3"] = { ci->fireRodProjPos3.x, ci->fireRodProjPos3.y, ci->fireRodProjPos3.z };
+        });
+    if (ci->iceRodActive)
+        emit("ice_rod", [&](nlohmann::json& p) {
+            p["active"] = ci->iceRodProjActive;
+            p["count"] = ci->iceRodProjCount;
+            p["scale"] = ci->iceRodProjScale;
+            p["pos1"] = { ci->iceRodProjPos.x, ci->iceRodProjPos.y, ci->iceRodProjPos.z };
+            p["pos2"] = { ci->iceRodProjPos2.x, ci->iceRodProjPos2.y, ci->iceRodProjPos2.z };
+            p["pos3"] = { ci->iceRodProjPos3.x, ci->iceRodProjPos3.y, ci->iceRodProjPos3.z };
+        });
+    if (ci->lightRodActive)
+        emit("light_rod", [&](nlohmann::json& p) {
+            p["active"] = ci->lightRodProjActive;
+            p["count"] = ci->lightRodProjCount;
+            p["pos1"] = { ci->lightRodProjPos.x, ci->lightRodProjPos.y, ci->lightRodProjPos.z };
+            p["pos2"] = { ci->lightRodProjPos2.x, ci->lightRodProjPos2.y, ci->lightRodProjPos2.z };
+            p["pos3"] = { ci->lightRodProjPos3.x, ci->lightRodProjPos3.y, ci->lightRodProjPos3.z };
+        });
+    if (ci->ballAndChainThrown)
+        emit("ball_chain", [&](nlohmann::json& p) {
+            p["thrown"] = ci->ballAndChainThrown;
+            p["timer"] = ci->timer2;
+            p["pos"] = { ci->sharedProjectilePos.x, ci->sharedProjectilePos.y, ci->sharedProjectilePos.z };
+        });
+    if (ci->whipActive)
+        emit("whip", [&](nlohmann::json& p) {
+            p["state"] = ci->whipState;
+            p["tipPos"] = { ci->whipTipPos.x, ci->whipTipPos.y, ci->whipTipPos.z };
+            p["attachPos"] = { ci->whipAttachPos.x, ci->whipAttachPos.y, ci->whipAttachPos.z };
+            p["attachNormal"] = { ci->whipAttachNormal.x, ci->whipAttachNormal.y, ci->whipAttachNormal.z };
+        });
+    if (ci->dekuLeafGliding || ci->dekuLeafBlowing)
+        emit("deku_leaf", [&](nlohmann::json& p) {
+            p["gliding"] = ci->dekuLeafGliding;
+            p["blowing"] = ci->dekuLeafBlowing;
+            p["animTimer"] = ci->dekuLeafAnimTimer;
+        });
+    if (ci->shovelAnimating)
+        emit("shovel", [&](nlohmann::json& p) { p["animating"] = ci->shovelAnimating; });
+    if (ci->dominionRodActive)
+        emit("dominion_rod", [&](nlohmann::json& p) {
+            p["state"] = ci->dominionRodState;
+            p["orbPos"] = { ci->dominionRodOrbPos.x, ci->dominionRodOrbPos.y, ci->dominionRodOrbPos.z };
+        });
+    if (ci->switchHookActive)
+        emit("switch_hook", [&](nlohmann::json& p) {
+            p["state"] = ci->switchHookState;
+            p["projPos"] = { ci->switchHookProjPos.x, ci->switchHookProjPos.y, ci->switchHookProjPos.z };
+        });
+    if (ci->timeGateActive)
+        emit("time_gate", [&](nlohmann::json& p) {
+            p["itemVisible"] = ci->timeGateItemVisible;
+            p["portalActive"] = ci->timeGatePortalActive;
+            p["portalAlpha"] = ci->timeGatePortalAlpha;
+            p["portalScale"] = ci->timeGatePortalScale;
+        });
 }
 
 void Harpoon::SendPacket_PlayerKill() {

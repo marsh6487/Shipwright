@@ -72,6 +72,12 @@ const char* MmAssets_GetPath(void);
  */
 void* MmAssets_LoadResource(const char* path);
 
+// MUST be MM's copy: no mod overrides, no archive priority, no fallback — returns MM's resource or
+// NULL. Use it for any path that also exists in oot.o2r (object_gi_hookshot, object_gi_zoramask,
+// object_gi_golonmask, object_gi_ki_tan_mask, object_gi_rabit_mask, object_gi_truth_mask, …), where
+// "by path" and "MM's" are different requests. Skijer's NEI
+void* MmAssets_LoadResourceStrict(const char* path);
+
 /**
  * Load a resource from mm.o2r and get its size
  * @param path Resource path (e.g., "objects/gameplay_keep/gPlayerAnim_...")
@@ -433,6 +439,86 @@ void MmDirectAudio_StopAll(void);
  * @param pos World position for spatial audio (NULL for 2D)
  */
 void MmGakki_PlayNote(s32 form, u8 buttonIndex, Vec3f* pos);
+
+/**
+ * How a form's instrument is voiced — the per-form equivalent of MM's
+ * sPlayerFormOcarinaInstruments (z_message.c:4560).
+ *
+ *   GAKKI_VOICE_NONE:    the plain ocarina. Nothing to suppress, nothing to synthesize
+ *                        (MM's OCARINA_INSTRUMENT_DEFAULT fallback — Human/Fierce Deity).
+ *   GAKKI_VOICE_NATIVE:  an instrument OoT's seq 0 already ships on its ocarina channel.
+ *                        Selected via AudioOcarina_SetInstrument (MM's own mechanism);
+ *                        the engine voices the notes, so NA_SE_OC_OCARINA must stay ON.
+ *   GAKKI_VOICE_MM_FONT: an MM-only instrument synthesized from mm.o2r soundfonts.
+ *                        NA_SE_OC_OCARINA is silenced and notes are driven off the
+ *                        OnOcarinaNote hook (exact pitch incl. sharps/flats + bend).
+ */
+typedef enum {
+    GAKKI_VOICE_NONE = 0,
+    GAKKI_VOICE_NATIVE,
+    GAKKI_VOICE_MM_FONT,
+} MmGakkiVoiceType;
+
+/** @return the form's MmGakkiVoiceType (GAKKI_VOICE_NONE when out of table range). */
+s32 MmGakki_GetVoiceType(s32 form);
+
+/**
+ * Resource path of the form's instrument animations, or NULL when the form has none.
+ *
+ * ONE system for every form: MM's own forms load their gakki clips out of mm.o2r through
+ * the MmAnim ids, while custom forms point at PlayerAnimation resources retargeted onto
+ * Link's skeleton (baked by tools/bake_oot_npc_link_anims.py). Both end up in the same
+ * gFormState.gakkiStartAnim/gakkiPlayAnim fields and are driven by the same code, so
+ * adding a form is a table row — not another branch in the per-form loader.
+ *
+ * @param form MM_PLAYER_FORM_* value
+ * @return "__OTR__…" path, or NULL to fall back to the MM clips / no animation
+ */
+const char* MmGakki_GetStartAnimPath(s32 form);
+const char* MmGakki_GetPlayAnimPath(s32 form);
+
+/**
+ * Display list of the form's instrument, drawn in place of the hand limb while the
+ * instrument is out, and the limb it attaches to.
+ *
+ * MM's forms bake their instrument into the form model, so they return NULL. Custom forms
+ * name a DL from oot.o2r: the Gerudo uses Skull Kid's gSkullKidLeftHandAndFluteDL, which
+ * holds hand AND flute in one list — the same hand the retargeted flute animation drives.
+ *
+ * @return "__OTR__…" DL path, or NULL when the form has no separate instrument model
+ */
+const char* MmGakki_GetInstrumentDL(s32 form);
+
+/**
+ * Sentinel returned by MmGakki_GetInstrumentDL for forms that play with NO instrument
+ * model: the limb is drawn empty, which also makes OoT's held ocarina invisible.
+ * Distinct from NULL, which means "don't touch the rendering".
+ */
+#define GAKKI_DL_HIDE ((const char*)-1)
+
+/** @return PLAYER_LIMB_* the instrument DL replaces (0 when the form has none). */
+s32 MmGakki_GetInstrumentLimb(s32 form);
+
+/** @return OCARINA_INSTRUMENT_* for GAKKI_VOICE_NATIVE forms, 0 otherwise. */
+s32 MmGakki_GetNativeInstrument(s32 form);
+
+/** @return 1 when the form's voice type is not GAKKI_VOICE_NONE. */
+s32 MmGakki_FormHasOwnInstrument(s32 form);
+
+/**
+ * Pitch-accurate gakki note (MM_FONT forms), driven from the OnOcarinaNote hook.
+ * @param pitch OoT OcarinaPitch: semitones from C4 (C4=0 → MIDI 60+pitch), already
+ *              including the Z/R sharp/flat modifiers.
+ * @param bendFreq sCurOcarinaBendFreq (control-stick bend multiplier; pass 1.0f for none).
+ * @param pos world position for spatial audio (NULL for 2D).
+ */
+void MmGakki_PlayPitch(s32 form, u8 pitch, f32 bendFreq, Vec3f* pos);
+
+/** Keep the held gakki note alive (call once per frame while the pitch is held). */
+void MmGakki_RefreshNote(void);
+
+/** Note-off: release the current gakki note. */
+void MmGakki_StopNote(void);
 
 #ifdef __cplusplus
 }

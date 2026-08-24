@@ -16,18 +16,23 @@
 #include "mods/nei_save.h"
 #include "mods/extended_equipment.h" // ExtEquip_GiveItem/HasItem, ITEM_EXT_BOOTS_2
 
-#define TRADE_ADULT_COUNT 20
-#define TRADE_ADULT_PENDANT 19 // last index = Pendant of Memories (== ITEM_EXT_BOOTS_2)
+#define TRADE_ADULT_COUNT 23
+#define TRADE_ADULT_PENDANT 19 // Pendant of Memories (== ITEM_EXT_BOOTS_2)
 
 // NEI trade index -> inventory item id. Order MUST match the tradeAdultOwned bit layout (nei_save.h).
+// APPEND ONLY — the index is the save bit, so reordering invalidates existing saves.
 static const u8 sTradeAdultItems[TRADE_ADULT_COUNT] = {
-    ITEM_POCKET_EGG,    ITEM_POCKET_CUCCO,    ITEM_COJIRO,          ITEM_ODD_MUSHROOM, // 0-3  (OoT)
-    ITEM_ODD_POTION,    ITEM_SAW,             ITEM_SWORD_BROKEN,    ITEM_PRESCRIPTION, // 4-7  (OoT)
-    ITEM_FROG,          ITEM_EYEDROPS,        ITEM_CLAIM_CHECK,                        // 8-10 (OoT)
-    ITEM_MM_MOONS_TEAR,                                                                // 11
-    ITEM_MM_DEED_LAND,  ITEM_MM_DEED_SWAMP,   ITEM_MM_DEED_MOUNTAIN, ITEM_MM_DEED_OCEAN, // 12-15
-    ITEM_MM_ROOM_KEY,   ITEM_MM_LETTER_KAFEI, ITEM_MM_SPECIAL_DELIVERY,                // 16-18
-    ITEM_EXT_BOOTS_2,                                                                  // 19 Pendant of Memories
+    ITEM_POCKET_EGG, ITEM_POCKET_CUCCO, ITEM_COJIRO, ITEM_ODD_MUSHROOM,               // 0-3  (OoT adult)
+    ITEM_ODD_POTION, ITEM_SAW, ITEM_SWORD_BROKEN, ITEM_PRESCRIPTION,                  // 4-7  (OoT adult)
+    ITEM_FROG, ITEM_EYEDROPS, ITEM_CLAIM_CHECK,                                       // 8-10 (OoT adult)
+    ITEM_MM_MOONS_TEAR,                                                               // 11
+    ITEM_MM_DEED_LAND, ITEM_MM_DEED_SWAMP, ITEM_MM_DEED_MOUNTAIN, ITEM_MM_DEED_OCEAN, // 12-15
+    ITEM_MM_ROOM_KEY, ITEM_MM_LETTER_KAFEI, ITEM_MM_SPECIAL_DELIVERY,                 // 16-18
+    ITEM_EXT_BOOTS_2,                                                                 // 19 Pendant of Memories
+    // OoT child trade chain — the non-mask half of SLOT_TRADE_CHILD. Moved here so the unified wheel
+    // holds EVERY non-mask trade item and SLOT_TRADE_CHILD is masks-only. Appended (not sorted into
+    // the OoT block) to keep the save bit layout stable for in-flight saves. Skijer's NEI
+    ITEM_WEIRD_EGG, ITEM_CHICKEN, ITEM_LETTER_ZELDA, // 20-22 (OoT child)
 };
 
 s32 TradeAdult_Count(void) {
@@ -42,6 +47,11 @@ u8 TradeAdult_ItemId(s32 index) {
 }
 
 s32 TradeAdult_IndexOfItem(u8 item) {
+    // ITEM_NONE never identifies a trade item (keeps the two builds' behaviour identical — the MM
+    // build aliases the OoT trade ids to ITEM_NONE, where an unguarded scan matched entry 0).
+    if (item == ITEM_NONE) {
+        return -1;
+    }
     for (s32 i = 0; i < TRADE_ADULT_COUNT; i++) {
         if (sTradeAdultItems[i] == item) {
             return i;
@@ -54,10 +64,9 @@ u8 TradeAdult_IsOwnedIndex(s32 index) {
     if (index < 0 || index >= TRADE_ADULT_COUNT) {
         return 0;
     }
-    if (index == TRADE_ADULT_PENDANT) {
-        // Owned if either flag is set (granted via the trade path or the combat equipment page).
-        return ((Nei_Save()->tradeAdultOwned & (1u << index)) != 0) || ExtEquip_HasItem(EQUIP_TYPE_BOOTS, 2);
-    }
+    // The pendant used to also count as owned via the ext BOOTS-2 grid bit. That bit is retired and
+    // nothing clears it, so it kept the pendant alive after the item was lost — and it would now
+    // recurse, since ExtEquip_PendantOwned() asks THIS function. One source of truth: this bitmask.
     return (Nei_Save()->tradeAdultOwned & (1u << index)) != 0;
 }
 
@@ -71,9 +80,9 @@ void TradeAdult_GiveIndex(s32 index) {
         return;
     }
     Nei_Save()->tradeAdultOwned |= (1u << index); // trade flag: wheel + MM sync (Anju exchange)
-    if (index == TRADE_ADULT_PENDANT) {
-        ExtEquip_GiveItem(EQUIP_TYPE_BOOTS, 2); // combat flag: C-equippable moveset (equip_pendant.c)
-    }
+    // Skijer 2026-07-29: NOTHING else to set for the Pendant — the ext BOOTS-2 grid slot is the CLIMB
+    // BOOTS now, so touching that bit would hand out a pair of boots. equip_pendant.c's moveset runs
+    // off ExtEquip_PendantActive() (ownership + toggle), dispatched outside the ext grid.
 }
 
 void TradeAdult_GiveItem(u8 item) {
@@ -94,10 +103,6 @@ void TradeAdult_SetOwnedIndex(s32 index, u8 on) {
         return;
     }
     Nei_Save()->tradeAdultOwned &= ~(1u << index);
-    if (index == TRADE_ADULT_PENDANT) {
-        // Bit 26 = ExtEquip owned (16 + EQUIP_TYPE_BOOTS*3 + (index-1)); see extended_equipment.c.
-        Nei_Save()->extEquipOwnedBits &= ~(1u << 26);
-    }
 }
 
 // Owned-item count (drives the 2D-grid layout: rows/cols sized to how many the player holds).

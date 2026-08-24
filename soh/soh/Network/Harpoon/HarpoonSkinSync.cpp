@@ -44,11 +44,11 @@ extern "C" {
 #include <unordered_set>
 #include <vector>
 
-#define HSS_LOG(fmt, ...)                                                              \
-    do {                                                                               \
-        char _buf[512];                                                                \
-        snprintf(_buf, sizeof(_buf), "[HarpoonSkinSync] " fmt, ##__VA_ARGS__);          \
-        SPDLOG_INFO("{}", _buf);                                                       \
+#define HSS_LOG(fmt, ...)                                                      \
+    do {                                                                       \
+        char _buf[512];                                                        \
+        snprintf(_buf, sizeof(_buf), "[HarpoonSkinSync] " fmt, ##__VA_ARGS__); \
+        SPDLOG_INFO("{}", _buf);                                               \
     } while (0)
 
 // =============================================================================
@@ -91,16 +91,19 @@ extern "C" {
 // Texture with Flags / Type / scales. The local user is unaffected because
 // nothing in their bytecode ever queries `__hsync__/...` paths.
 class HarpoonSyncWrapperArchive : public Ship::Archive {
-public:
+  public:
     HarpoonSyncWrapperArchive(std::shared_ptr<Ship::Archive> inner, const std::string& prefix)
-        : Ship::Archive(prefix), mInner(std::move(inner)), mPrefix(prefix) {}
+        : Ship::Archive(prefix), mInner(std::move(inner)), mPrefix(prefix) {
+    }
 
     bool Open() override {
-        if (!mInner) return false;
+        if (!mInner)
+            return false;
         // Inner archive must already be Open()ed by the caller — we only
         // index its files under the prefixed namespace.
         auto innerFiles = mInner->ListFiles();
-        if (!innerFiles) return false;
+        if (!innerFiles)
+            return false;
         for (auto& [hash, path] : *innerFiles) {
             // IndexFile populates the parent's mHashes (CRC64(prefix+path) →
             // prefix+path), and AddArchive will mirror those into the global
@@ -119,24 +122,31 @@ public:
     }
 
     std::shared_ptr<Ship::File> LoadFile(const std::string& filePath) override {
-        if (!mInner) return nullptr;
-        if (filePath.compare(0, mPrefix.size(), mPrefix) != 0) return nullptr;
+        if (!mInner)
+            return nullptr;
+        if (filePath.compare(0, mPrefix.size(), mPrefix) != 0)
+            return nullptr;
         return mInner->LoadFile(filePath.substr(mPrefix.size()));
     }
 
     std::shared_ptr<Ship::File> LoadFile(uint64_t hash) override {
-        if (!mInner) return nullptr;
+        if (!mInner)
+            return nullptr;
         auto it = mLocalReverseMap.find(hash);
-        if (it == mLocalReverseMap.end()) return nullptr;
+        if (it == mLocalReverseMap.end())
+            return nullptr;
         return mInner->LoadFile(it->second);
     }
 
-    bool WriteFile(const std::string& /*filename*/,
-                   const std::vector<uint8_t>& /*data*/) override { return false; }
+    bool WriteFile(const std::string& /*filename*/, const std::vector<uint8_t>& /*data*/) override {
+        return false;
+    }
 
-    const std::string& GetPrefix() const { return mPrefix; }
+    const std::string& GetPrefix() const {
+        return mPrefix;
+    }
 
-private:
+  private:
     std::shared_ptr<Ship::Archive> mInner;
     std::string mPrefix;
     // CRC64(prefix+path) -> path-without-prefix (i.e. inner archive's key)
@@ -323,8 +333,8 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
 // Defined after CacheVanillaFromArchive (helper sees same archive); also
 // called from LoadO2rOverride to detect override-bundled Link skeletons.
 static bool ExtractVanillaSkeletonFromArchive(Ship::Archive* archive, const std::string& path,
-                                              std::shared_ptr<Ship::IResource>& outHolder,
-                                              void**& outLimbTable, int& outDListCount);
+                                              std::shared_ptr<Ship::IResource>& outHolder, void**& outLimbTable,
+                                              int& outDListCount);
 
 // Safe predicate: is this pointer either (a) NULL, (b) an `__OTR__...` string
 // the engine's gSPDisplayList wrapper can resolve, or (c) plausibly a real
@@ -341,26 +351,33 @@ static bool ExtractVanillaSkeletonFromArchive(Ship::Archive* archive, const std:
 // dereference; otherwise the validator itself would crash on garbage. On
 // other platforms we fall back to a coarse aligned-pointer + magic check.
 static bool IsLikelyOtrStringOrGfxPtr(const void* p) {
-    if (p == nullptr) return true; // NULL is fine, callers know to skip
+    if (p == nullptr)
+        return true; // NULL is fine, callers know to skip
     uintptr_t addr = (uintptr_t)p;
-    if (addr < 0x10000ull) return false;          // tiny integers
-    if (addr & 0x1ull) return false;              // odd → can't be aligned ptr
+    if (addr < 0x10000ull)
+        return false; // tiny integers
+    if (addr & 0x1ull)
+        return false; // odd → can't be aligned ptr
 #ifdef _WIN32
     MEMORY_BASIC_INFORMATION mbi{};
-    if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ |
-                     PAGE_EXECUTE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_WRITECOPY;
-    if ((mbi.Protect & readable) == 0) return false;
-    if (mbi.Protect & PAGE_GUARD) return false;
+    if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0)
+        return false;
+    if (mbi.State != MEM_COMMIT)
+        return false;
+    DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_WRITECOPY |
+                     PAGE_EXECUTE_WRITECOPY;
+    if ((mbi.Protect & readable) == 0)
+        return false;
+    if (mbi.Protect & PAGE_GUARD)
+        return false;
     // Page is readable. Verify the first 7 bytes are within the same page so
     // we don't straddle into an unreadable region.
     uintptr_t pageEnd = (uintptr_t)mbi.BaseAddress + mbi.RegionSize;
-    if (addr + 7 > pageEnd) return false;
+    if (addr + 7 > pageEnd)
+        return false;
 #endif
     const unsigned char* s = (const unsigned char*)p;
-    if (s[0] == '_' && s[1] == '_' && s[2] == 'O' && s[3] == 'T' &&
-        s[4] == 'R' && s[5] == '_' && s[6] == '_') {
+    if (s[0] == '_' && s[1] == '_' && s[2] == 'O' && s[3] == 'T' && s[4] == 'R' && s[5] == '_' && s[6] == '_') {
         return true; // __OTR__ string — gSPDisplayList wrapper handles it
     }
     // Not an OTR string. It MIGHT still be a real Gfx* (raw bytecode pointer
@@ -380,9 +397,12 @@ static bool IsLikelyOtrStringOrGfxPtr(const void* p) {
     // the kind of garbage that landed in MM Young Link's child-limb dLists
     // and crashed the dummy draw.
     uint8_t op = s[0];
-    if (op <= 0x09) return true;
-    if (op >= 0x20 && op <= 0x33) return true;
-    if (op >= 0xD3 && op <= 0xFD) return true;
+    if (op <= 0x09)
+        return true;
+    if (op >= 0x20 && op <= 0x33)
+        return true;
+    if (op >= 0xD3 && op <= 0xFD)
+        return true;
     return false;
 }
 
@@ -391,12 +411,13 @@ static bool IsLikelyOtrStringOrGfxPtr(const void* p) {
 // IsLikelyOtrStringOrGfxPtr check; SkelAnime treats NULL as "draw nothing
 // for this limb" (line 156 of z_skelanime.c) which is the safe outcome.
 static void SanitizeLodLimbDLists(void* limbRaw, const char* skelPath, int limbIndex) {
-    if (limbRaw == nullptr) return;
+    if (limbRaw == nullptr)
+        return;
     LodLimb* limb = (LodLimb*)limbRaw;
     for (int s = 0; s < 2; s++) {
         if (!IsLikelyOtrStringOrGfxPtr(limb->dLists[s])) {
-            HSS_LOG("skel sanitize: '%s' limb[%d].dLists[%d]=%p is garbage — nulled to prevent crash",
-                    skelPath, limbIndex, s, limb->dLists[s]);
+            HSS_LOG("skel sanitize: '%s' limb[%d].dLists[%d]=%p is garbage — nulled to prevent crash", skelPath,
+                    limbIndex, s, limb->dLists[s]);
             limb->dLists[s] = nullptr;
         }
     }
@@ -410,13 +431,13 @@ static void SanitizeLodLimbDLists(void* limbRaw, const char* skelPath, int limbI
 // the data word for these.
 static inline bool IsTwoWordOTRCommand(uint8_t op) {
     switch (op) {
-        case G_SETTIMG_OTR_HASH:    // 0x20: header + uint64 hash
-        case G_VTX_OTR_FILEPATH:    // 0x24: filename + vtx data record
-        case G_VTX_OTR_HASH:        // 0x32: header + uint64 hash
-        case G_DL_OTR_HASH:         // 0x31: header + uint64 hash
-        case G_MARKER:              // 0x33: header + marker data
-        case G_BRANCH_Z_OTR:        // 0x35: header + branch data
-        case G_MTX_OTR:             // 0x36: header + uint64 hash
+        case G_SETTIMG_OTR_HASH: // 0x20: header + uint64 hash
+        case G_VTX_OTR_FILEPATH: // 0x24: filename + vtx data record
+        case G_VTX_OTR_HASH:     // 0x32: header + uint64 hash
+        case G_DL_OTR_HASH:      // 0x31: header + uint64 hash
+        case G_MARKER:           // 0x33: header + marker data
+        case G_BRANCH_Z_OTR:     // 0x35: header + branch data
+        case G_MTX_OTR:          // 0x36: header + uint64 hash
             return true;
         default:
             return false;
@@ -424,7 +445,8 @@ static inline bool IsTwoWordOTRCommand(uint8_t op) {
 }
 
 static bool ShouldNotify(const std::string& key) {
-    if (sNotified.count(key)) return false;
+    if (sNotified.count(key))
+        return false;
     sNotified.insert(key);
     return true;
 }
@@ -486,7 +508,8 @@ static std::filesystem::path FindGamemodesFolder() {
 // packs are distributed in either format.
 static std::shared_ptr<Ship::Archive> OpenOverrideArchive(const std::filesystem::path& archivePath) {
     std::string ext = archivePath.extension().string();
-    for (char& c : ext) c = (char)tolower((unsigned char)c);
+    for (char& c : ext)
+        c = (char)tolower((unsigned char)c);
     std::shared_ptr<Ship::Archive> archive;
     if (ext == ".o2r") {
         archive = std::make_shared<Ship::O2rArchive>(archivePath.string());
@@ -494,8 +517,7 @@ static std::shared_ptr<Ship::Archive> OpenOverrideArchive(const std::filesystem:
 #ifdef INCLUDE_MPQ_SUPPORT
         archive = std::make_shared<Ship::OtrArchive>(archivePath.string());
 #else
-        HSS_LOG(".otr unsupported in this build (no INCLUDE_MPQ_SUPPORT): %s",
-                archivePath.string().c_str());
+        HSS_LOG(".otr unsupported in this build (no INCLUDE_MPQ_SUPPORT): %s", archivePath.string().c_str());
         return nullptr;
 #endif
     } else {
@@ -514,14 +536,18 @@ static std::shared_ptr<Ship::Archive> OpenOverrideArchive(const std::filesystem:
 // Master Sword.o2r" work without special-casing).
 static bool LoadO2rOverride(const std::filesystem::path& o2rPath, O2rOverride& out) {
     auto archive = OpenOverrideArchive(o2rPath);
-    if (!archive) return false;
+    if (!archive)
+        return false;
     auto allFiles = archive->ListFiles();
-    if (!allFiles) return false;
+    if (!allFiles)
+        return false;
 
     auto resourceManager = Ship::Context::GetRawInstance()->GetResourceManager();
-    if (!resourceManager) return false;
+    if (!resourceManager)
+        return false;
     auto loader = resourceManager->GetResourceLoader();
-    if (!loader) return false;
+    if (!loader)
+        return false;
 
     // Mount this override globally under a NON-CONFLICTING `__hsync__/<modName>/`
     // prefix so the patcher can defer texture-metadata-needing SETTIMG_OTR
@@ -532,7 +558,8 @@ static bool LoadO2rOverride(const std::filesystem::path& o2rPath, O2rOverride& o
     {
         // Strip extension for a cleaner prefix (matches `name` field below).
         auto dot = overrideName.find_last_of('.');
-        if (dot != std::string::npos) overrideName = overrideName.substr(0, dot);
+        if (dot != std::string::npos)
+            overrideName = overrideName.substr(0, dot);
     }
     std::string syncPrefix = std::string("__hsync__/") + overrideName + "/";
     auto archiveMgr = resourceManager->GetArchiveManager();
@@ -541,11 +568,12 @@ static bool LoadO2rOverride(const std::filesystem::path& o2rPath, O2rOverride& o
         if (wrapper->Open()) {
             archiveMgr->AddArchive(wrapper);
             out.harpoonSyncPrefix = syncPrefix;
-            HSS_LOG("override '%s': mounted with prefix '%s' (%zu files indexed)",
-                    overrideName.c_str(), syncPrefix.c_str(), allFiles->size());
+            HSS_LOG("override '%s': mounted with prefix '%s' (%zu files indexed)", overrideName.c_str(),
+                    syncPrefix.c_str(), allFiles->size());
         } else {
             HSS_LOG("override '%s': wrapper archive failed to Open() — runtime "
-                    "metadata fallback DISABLED for this skin", overrideName.c_str());
+                    "metadata fallback DISABLED for this skin",
+                    overrideName.c_str());
         }
     }
 
@@ -564,15 +592,14 @@ static bool LoadO2rOverride(const std::filesystem::path& o2rPath, O2rOverride& o
         for (auto& [hash, path] : *allFiles) {
             if (path.find("_pal_rgba16") != std::string::npos) {
                 if (palCount < 5) {
-                    HSS_LOG("archive '%s' has palette '%s'",
-                            o2rPath.filename().string().c_str(), path.c_str());
-                    if (firstPalPath.empty()) firstPalPath = path;
+                    HSS_LOG("archive '%s' has palette '%s'", o2rPath.filename().string().c_str(), path.c_str());
+                    if (firstPalPath.empty())
+                        firstPalPath = path;
                 }
                 palCount++;
             }
         }
-        HSS_LOG("archive '%s' total _pal_rgba16 entries: %d",
-                o2rPath.filename().string().c_str(), palCount);
+        HSS_LOG("archive '%s' total _pal_rgba16 entries: %d", o2rPath.filename().string().c_str(), palCount);
     }
     // DEBUG: enumerate entries whose path mentions "hand", "fist", "glove"
     // or matches the OOT vanilla hand-DL / hand-Tex naming. Tells us whether
@@ -585,19 +612,17 @@ static bool LoadO2rOverride(const std::filesystem::path& o2rPath, O2rOverride& o
         int count = 0;
         for (auto& [hash, path] : *allFiles) {
             std::string lower = path;
-            for (char& c : lower) c = (char)tolower((unsigned char)c);
-            if (lower.find("hand") != std::string::npos ||
-                lower.find("fist") != std::string::npos ||
+            for (char& c : lower)
+                c = (char)tolower((unsigned char)c);
+            if (lower.find("hand") != std::string::npos || lower.find("fist") != std::string::npos ||
                 lower.find("glove") != std::string::npos) {
                 if (count < 40) {
-                    HSS_LOG("archive '%s' hand-related entry: '%s'",
-                            o2rPath.filename().string().c_str(), path.c_str());
+                    HSS_LOG("archive '%s' hand-related entry: '%s'", o2rPath.filename().string().c_str(), path.c_str());
                 }
                 count++;
             }
         }
-        HSS_LOG("archive '%s' total hand-related entries: %d",
-                o2rPath.filename().string().c_str(), count);
+        HSS_LOG("archive '%s' total hand-related entries: %d", o2rPath.filename().string().c_str(), count);
     }
     // Build the override's local hash → path map from the archive's file
     // listing. CRC64(path) = hash (matches Archive::IndexFile's encoding).
@@ -626,20 +651,22 @@ static bool LoadO2rOverride(const std::filesystem::path& o2rPath, O2rOverride& o
         // header identifies (DL, skeleton, texture, vertex, ...) — non-DL
         // resources still get cached but their entries simply never match the
         // gSPDisplayList path lookup at draw time, so they're harmless.
-        if (path.find(".meta") != std::string::npos) continue;
+        if (path.find(".meta") != std::string::npos)
+            continue;
 
         auto file = archive->LoadFile(path);
-        if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->empty()) continue;
+        if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->empty())
+            continue;
 
         std::shared_ptr<Ship::IResource> resource;
         try {
             resource = loader->LoadResource(path, file, nullptr);
-        } catch (...) {
-            resource = nullptr;
-        }
-        if (!resource) continue;
+        } catch (...) { resource = nullptr; }
+        if (!resource)
+            continue;
         Gfx* dl = (Gfx*)resource->GetRawPointer();
-        if (!dl) continue;
+        if (!dl)
+            continue;
         // Patch ONLY DisplayList resources — texture / vertex / palette
         // resources also live in this archive and casting their byte buffer
         // to Gfx* and walking it would run off the end of the allocation.
@@ -664,8 +691,10 @@ static bool LoadO2rOverride(const std::filesystem::path& o2rPath, O2rOverride& o
         // "__OTR__alt/objects/...". Store all four variants so we match
         // whatever the engine ends up querying.
         std::string archivePath = path;
-        if (archivePath.compare(0, 7, "__OTR__") == 0) archivePath.erase(0, 7);
-        if (archivePath.compare(0, 4, "alt/") == 0) archivePath.erase(0, 4);
+        if (archivePath.compare(0, 7, "__OTR__") == 0)
+            archivePath.erase(0, 7);
+        if (archivePath.compare(0, 4, "alt/") == 0)
+            archivePath.erase(0, 4);
         std::string otr = std::string("__OTR__") + archivePath;
         std::string altOtr = std::string("__OTR__alt/") + archivePath;
         std::string altRaw = std::string("alt/") + archivePath;
@@ -699,14 +728,16 @@ static bool LoadO2rOverride(const std::filesystem::path& o2rPath, O2rOverride& o
         "alt/objects/object_link_child/gLinkChildSkel",
     };
     for (auto* p : kAdultSkelPaths) {
-        if (out.adultLimbTable) break;
-        ExtractVanillaSkeletonFromArchive(archive.get(), p, out.adultSkelHolder,
-                                          out.adultLimbTable, out.adultDListCount);
+        if (out.adultLimbTable)
+            break;
+        ExtractVanillaSkeletonFromArchive(archive.get(), p, out.adultSkelHolder, out.adultLimbTable,
+                                          out.adultDListCount);
     }
     for (auto* p : kChildSkelPaths) {
-        if (out.childLimbTable) break;
-        ExtractVanillaSkeletonFromArchive(archive.get(), p, out.childSkelHolder,
-                                          out.childLimbTable, out.childDListCount);
+        if (out.childLimbTable)
+            break;
+        ExtractVanillaSkeletonFromArchive(archive.get(), p, out.childSkelHolder, out.childLimbTable,
+                                          out.childDListCount);
     }
 
     // Extract this override's eye + mouth textures (if present at the
@@ -715,60 +746,59 @@ static bool LoadO2rOverride(const std::filesystem::path& o2rPath, O2rOverride& o
     // textures instead of vanilla ones bleeding in. Without this every
     // dummy ends up with vanilla Link eyes / mouth on top of the override
     // body — looks weirdly half-vanilla.
-    static const char* kEyePathNames[] = {
-        "EyesOpenTex", "EyesHalfTex", "EyesClosedfTex",
-        "EyesRollLeftTex", "EyesRollRightTex", "EyesShockTex",
-        "EyesUnk1Tex", "EyesUnk2Tex"
-    };
-    static const char* kMouthPathNames[] = {
-        "Mouth1Tex", "Mouth2Tex", "Mouth3Tex", "Mouth4Tex"
-    };
+    static const char* kEyePathNames[] = { "EyesOpenTex",      "EyesHalfTex",  "EyesClosedfTex", "EyesRollLeftTex",
+                                           "EyesRollRightTex", "EyesShockTex", "EyesUnk1Tex",    "EyesUnk2Tex" };
+    static const char* kMouthPathNames[] = { "Mouth1Tex", "Mouth2Tex", "Mouth3Tex", "Mouth4Tex" };
     auto loadFaceTexFromOverride = [&](const std::string& fullPath, void*& outImageData) {
-        if (outImageData != nullptr) return;
+        if (outImageData != nullptr)
+            return;
         auto file = archive->LoadFile(fullPath);
-        if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->empty()) return;
+        if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->empty())
+            return;
         std::shared_ptr<Ship::IResource> res;
         try {
             res = loader->LoadResource(fullPath, file, nullptr);
-        } catch (...) {
-            res = nullptr;
-        }
-        if (!res) return;
+        } catch (...) { res = nullptr; }
+        if (!res)
+            return;
         auto tex = std::dynamic_pointer_cast<Fast::Texture>(res);
-        if (!tex || !tex->ImageData) return;
+        if (!tex || !tex->ImageData)
+            return;
         outImageData = tex->ImageData;
         out.faceTexHolders.push_back(std::move(res));
     };
     int faceTexCount = 0;
     for (int age = 0; age < 2; age++) {
-        const char* objectPrefix = (age == 0) ? "objects/object_link_boy/gLinkAdult"
-                                              : "objects/object_link_child/gLinkChild";
-        const char* altPrefix    = (age == 0) ? "alt/objects/object_link_boy/gLinkAdult"
-                                              : "alt/objects/object_link_child/gLinkChild";
+        const char* objectPrefix =
+            (age == 0) ? "objects/object_link_boy/gLinkAdult" : "objects/object_link_child/gLinkChild";
+        const char* altPrefix =
+            (age == 0) ? "alt/objects/object_link_boy/gLinkAdult" : "alt/objects/object_link_child/gLinkChild";
         for (int i = 0; i < 8; i++) {
             std::string p1 = std::string(objectPrefix) + kEyePathNames[i];
-            std::string p2 = std::string(altPrefix)    + kEyePathNames[i];
+            std::string p2 = std::string(altPrefix) + kEyePathNames[i];
             loadFaceTexFromOverride(p1, out.eyeImageData[age][i]);
-            if (!out.eyeImageData[age][i]) loadFaceTexFromOverride(p2, out.eyeImageData[age][i]);
-            if (out.eyeImageData[age][i]) faceTexCount++;
+            if (!out.eyeImageData[age][i])
+                loadFaceTexFromOverride(p2, out.eyeImageData[age][i]);
+            if (out.eyeImageData[age][i])
+                faceTexCount++;
         }
         for (int i = 0; i < 4; i++) {
             std::string p1 = std::string(objectPrefix) + kMouthPathNames[i];
-            std::string p2 = std::string(altPrefix)    + kMouthPathNames[i];
+            std::string p2 = std::string(altPrefix) + kMouthPathNames[i];
             loadFaceTexFromOverride(p1, out.mouthImageData[age][i]);
-            if (!out.mouthImageData[age][i]) loadFaceTexFromOverride(p2, out.mouthImageData[age][i]);
-            if (out.mouthImageData[age][i]) faceTexCount++;
+            if (!out.mouthImageData[age][i])
+                loadFaceTexFromOverride(p2, out.mouthImageData[age][i]);
+            if (out.mouthImageData[age][i])
+                faceTexCount++;
         }
     }
 
     HSS_LOG("Loaded override .o2r '%s' (%u entries, dlsAttempted=%u patched=%u skippedNotDL=%u textures=%u "
             "fromFallback=%u viaPrefix=%u failed=%u, adultSkel=%s childSkel=%s, faceTextures=%d)",
-            out.name.c_str(), (unsigned)loadedCount,
-            (unsigned)patchCtx.dlsAttempted, (unsigned)patchCtx.dlsPatched,
+            out.name.c_str(), (unsigned)loadedCount, (unsigned)patchCtx.dlsAttempted, (unsigned)patchCtx.dlsPatched,
             (unsigned)patchCtx.dlsSkippedNotDL, (unsigned)patchCtx.texturesResolved,
-            (unsigned)patchCtx.texturesResolvedFromFallback,
-            (unsigned)patchCtx.texturesViaPrefix, (unsigned)patchCtx.texturesFailed,
-            out.adultLimbTable ? "yes" : "no", out.childLimbTable ? "yes" : "no",
+            (unsigned)patchCtx.texturesResolvedFromFallback, (unsigned)patchCtx.texturesViaPrefix,
+            (unsigned)patchCtx.texturesFailed, out.adultLimbTable ? "yes" : "no", out.childLimbTable ? "yes" : "no",
             faceTexCount);
     return true;
 }
@@ -792,11 +822,15 @@ static bool LoadO2rOverride(const std::filesystem::path& o2rPath, O2rOverride& o
 // acceptable degradation (that one path may still leak through global, but
 // the rest of the patched DL is safe).
 static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchContext& ctx, int depth) {
-    if (!originalDL) return nullptr;
-    if (maxCmdCount == 0) return originalDL;
-    if (depth > 8) return originalDL; // safety against pathological recursion
+    if (!originalDL)
+        return nullptr;
+    if (maxCmdCount == 0)
+        return originalDL;
+    if (depth > 8)
+        return originalDL; // safety against pathological recursion
     auto memoIt = ctx.memo.find(originalDL);
-    if (memoIt != ctx.memo.end()) return memoIt->second;
+    if (memoIt != ctx.memo.end())
+        return memoIt->second;
 
     // Walk to ENDDL (0xDF) to determine bytecode length. Bounded by the
     // resource's actual size (passed in via maxCmdCount) so we never read
@@ -862,14 +896,14 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
         // Try a single archive with the given resolved path. Returns true
         // if loaded.
         auto tryArchiveWithPath = [&](ArchiveHandle& h, const std::string& resolvedPath) -> bool {
-            if (!h.archive) return false;
+            if (!h.archive)
+                return false;
             auto file = h.archive->LoadFile(resolvedPath);
-            if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->empty()) return false;
+            if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->empty())
+                return false;
             try {
                 outRes = ctx.loader->LoadResource(resolvedPath, file, nullptr);
-            } catch (...) {
-                outRes = nullptr;
-            }
+            } catch (...) { outRes = nullptr; }
             return outRes != nullptr;
         };
         // Build list of paths to try. Community packers store assets under
@@ -885,25 +919,31 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
             } else {
                 uint64_t hash = (uint64_t)key;
                 auto it = h.localHashMap.find(hash);
-                if (it == h.localHashMap.end()) return false;
+                if (it == h.localHashMap.end())
+                    return false;
                 basePath = it->second;
             }
             // Strip __OTR__ prefix if present (some bytecode embeds it).
-            if (basePath.compare(0, 7, "__OTR__") == 0) basePath = basePath.substr(7);
-            if (tryArchiveWithPath(h, basePath)) return true;
+            if (basePath.compare(0, 7, "__OTR__") == 0)
+                basePath = basePath.substr(7);
+            if (tryArchiveWithPath(h, basePath))
+                return true;
             // Try alt/ prefix variant if not already alt-prefixed. Many
             // mods (MM Young Link, etc.) bundle their assets under alt/
             // even though their DLs reference the bare path.
             if (basePath.compare(0, 4, "alt/") != 0) {
-                if (tryArchiveWithPath(h, "alt/" + basePath)) return true;
+                if (tryArchiveWithPath(h, "alt/" + basePath))
+                    return true;
             } else {
                 // Or strip alt/ if reference is alt-prefixed but archive
                 // stores bare path.
-                if (tryArchiveWithPath(h, basePath.substr(4))) return true;
+                if (tryArchiveWithPath(h, basePath.substr(4)))
+                    return true;
             }
             return false;
         };
-        if (tryArchive(ctx.primary)) return true;
+        if (tryArchive(ctx.primary))
+            return true;
         for (auto* fb : ctx.fallbackArchives) {
             if (tryArchive(*fb)) {
                 outUsedFallback = true;
@@ -912,15 +952,17 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
         }
         return false;
     };
-    for (size_t i = 0; i < cmdCount; ) {
+    for (size_t i = 0; i < cmdCount;) {
         Gfx& cmd = entry->bytes[i];
         uint8_t op = (uint8_t)(cmd.words.w0 >> 24);
-        if (op == G_ENDDL) break;
+        if (op == G_ENDDL)
+            break;
         size_t advance = IsTwoWordOTRCommand(op) ? 2 : 1;
         switch (op) {
             case G_SETTIMG_OTR_FILEPATH: {
                 const char* pathStr = (const char*)cmd.words.w1;
-                if (!LooksLikeValidStringPtr((uintptr_t)pathStr)) break;
+                if (!LooksLikeValidStringPtr((uintptr_t)pathStr))
+                    break;
                 std::string pathKey(pathStr);
                 std::shared_ptr<Ship::IResource> tex;
                 bool usedFallback = false;
@@ -930,7 +972,8 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
                     if (sLoggedFails < 30) {
                         sLoggedFails++;
                         HSS_LOG("patcher MISS: SETTIMG_OTR_FILEPATH path='%s' "
-                                "(not in primary archive or fallback)", pathStr);
+                                "(not in primary archive or fallback)",
+                                pathStr);
                     }
                     break;
                 }
@@ -996,7 +1039,8 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
                 cmd.words.w1 = (uintptr_t)texPtr->ImageData;
                 sPatchedDLResources.push_back(std::move(tex));
                 ctx.texturesResolved++;
-                if (usedFallback) ctx.texturesResolvedFromFallback++;
+                if (usedFallback)
+                    ctx.texturesResolvedFromFallback++;
                 break;
             }
             case G_SETTIMG_OTR_HASH: {
@@ -1007,10 +1051,10 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
                 // every Player limb DL texture, so without patching them
                 // every face / hand / chest texture leaks through global at
                 // interpret time.
-                if (i + 1 >= cmdCount) break;
+                if (i + 1 >= cmdCount)
+                    break;
                 Gfx& dataCmd = entry->bytes[i + 1];
-                uint64_t hash = ((uint64_t)dataCmd.words.w0 << 32) |
-                                (uint64_t)(uint32_t)dataCmd.words.w1;
+                uint64_t hash = ((uint64_t)dataCmd.words.w0 << 32) | (uint64_t)(uint32_t)dataCmd.words.w1;
                 std::shared_ptr<Ship::IResource> tex;
                 bool usedFallback = false;
                 if (!loadResourceWithFallback(hash, tex, usedFallback)) {
@@ -1046,8 +1090,7 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
                         // Convert opcode to G_SETTIMG_OTR_FILEPATH (the
                         // single-Gfx variant). w0 keeps fmt/size/width bits;
                         // we just swap the opcode byte.
-                        cmd.words.w0 = (cmd.words.w0 & 0x00FFFFFFu) |
-                                       ((uint32_t)G_SETTIMG_OTR_FILEPATH << 24);
+                        cmd.words.w0 = (cmd.words.w0 & 0x00FFFFFFu) | ((uint32_t)G_SETTIMG_OTR_FILEPATH << 24);
                         cmd.words.w1 = (uintptr_t)sPatchedPathStrings.back()->c_str();
                         dataCmd.words.w0 = (uint32_t)G_NOOP << 24;
                         dataCmd.words.w1 = 0;
@@ -1064,23 +1107,29 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
                 dataCmd.words.w1 = 0;
                 sPatchedDLResources.push_back(std::move(tex));
                 ctx.texturesResolved++;
-                if (usedFallback) ctx.texturesResolvedFromFallback++;
+                if (usedFallback)
+                    ctx.texturesResolvedFromFallback++;
                 advance = 1;
                 break;
             }
             case G_DL_OTR_FILEPATH: {
                 const char* pathStr = (const char*)cmd.words.w1;
-                if (!LooksLikeValidStringPtr((uintptr_t)pathStr)) break;
+                if (!LooksLikeValidStringPtr((uintptr_t)pathStr))
+                    break;
                 std::string pathKey(pathStr);
                 std::shared_ptr<Ship::IResource> sub;
                 bool usedFallback = false;
-                if (!loadResourceWithFallback(pathKey, sub, usedFallback)) break;
+                if (!loadResourceWithFallback(pathKey, sub, usedFallback))
+                    break;
                 auto subDL = std::dynamic_pointer_cast<Fast::DisplayList>(sub);
-                if (!subDL) break; // not actually a DisplayList resource
+                if (!subDL)
+                    break; // not actually a DisplayList resource
                 Gfx* subOriginal = (Gfx*)sub->GetRawPointer();
-                if (!subOriginal) break;
+                if (!subOriginal)
+                    break;
                 size_t subMax = sub->GetPointerSize() / sizeof(Gfx);
-                if (subMax == 0) break;
+                if (subMax == 0)
+                    break;
                 Gfx* subPatched = PatchDLForLocalArchive(subOriginal, subMax, ctx, depth + 1);
                 cmd.words.w0 = (cmd.words.w0 & 0x00FFFFFFu) | ((uint32_t)G_DL << 24);
                 cmd.words.w1 = (uintptr_t)subPatched;
@@ -1091,19 +1140,23 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
                 // 2-Gfx: header (with C0(16,1) push/branch flag), data = hash.
                 // Load sub-DL, recursively patch, replace with regular G_DL
                 // preserving the push/branch flag.
-                if (i + 1 >= cmdCount) break;
+                if (i + 1 >= cmdCount)
+                    break;
                 Gfx& dataCmd = entry->bytes[i + 1];
-                uint64_t hash = ((uint64_t)dataCmd.words.w0 << 32) |
-                                (uint64_t)(uint32_t)dataCmd.words.w1;
+                uint64_t hash = ((uint64_t)dataCmd.words.w0 << 32) | (uint64_t)(uint32_t)dataCmd.words.w1;
                 std::shared_ptr<Ship::IResource> sub;
                 bool usedFallback = false;
-                if (!loadResourceWithFallback(hash, sub, usedFallback)) break;
+                if (!loadResourceWithFallback(hash, sub, usedFallback))
+                    break;
                 auto subDL = std::dynamic_pointer_cast<Fast::DisplayList>(sub);
-                if (!subDL) break;
+                if (!subDL)
+                    break;
                 Gfx* subOriginal = (Gfx*)sub->GetRawPointer();
-                if (!subOriginal) break;
+                if (!subOriginal)
+                    break;
                 size_t subMax = sub->GetPointerSize() / sizeof(Gfx);
-                if (subMax == 0) break;
+                if (subMax == 0)
+                    break;
                 Gfx* subPatched = PatchDLForLocalArchive(subOriginal, subMax, ctx, depth + 1);
                 // Preserve push/branch bit (C0(16,1) — bit 16 of w0).
                 uint32_t pushBranchBit = cmd.words.w0 & 0x00010000u;
@@ -1120,9 +1173,11 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
                 // vtxDataOff). Convert to standard F3DEX2 G_VTX (single Gfx,
                 // 0x01). Encoding (from interpreter): C0(12,8) = n,
                 // C0(1,7) - C0(12,8) = v0  →  bits 1-7 hold (v0 + n).
-                if (i + 1 >= cmdCount) break;
+                if (i + 1 >= cmdCount)
+                    break;
                 const char* pathStr = (const char*)cmd.words.w1;
-                if (!LooksLikeValidStringPtr((uintptr_t)pathStr)) break;
+                if (!LooksLikeValidStringPtr((uintptr_t)pathStr))
+                    break;
                 Gfx& dataCmd = entry->bytes[i + 1];
                 uint32_t vtxCnt = (uint32_t)dataCmd.words.w0;
                 uint32_t vtxIdxOff = (uint32_t)(dataCmd.words.w1 >> 16);
@@ -1130,25 +1185,27 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
                 std::string pathKey(pathStr);
                 std::shared_ptr<Ship::IResource> vres;
                 bool usedFallback = false;
-                if (!loadResourceWithFallback(pathKey, vres, usedFallback)) break;
+                if (!loadResourceWithFallback(pathKey, vres, usedFallback))
+                    break;
                 auto vtxRes = std::dynamic_pointer_cast<Fast::Vertex>(vres);
-                if (!vtxRes) break;
+                if (!vtxRes)
+                    break;
                 void* vtxBaseRaw = vres->GetRawPointer();
-                if (!vtxBaseRaw) break;
+                if (!vtxBaseRaw)
+                    break;
                 // SECURITY: vtxDataOff/vtxCnt come from an attacker-controllable
                 // downloaded skin .o2r. Reject any range that would read past the
                 // vertex resource — otherwise Fast3D performs an OOB GPU read.
                 // Leave the original command untouched so the DL stays valid.
                 size_t maxVtx = vres->GetPointerSize() / sizeof(Vtx);
                 if ((size_t)vtxDataOff + (size_t)vtxCnt > maxVtx) {
-                    HSS_LOG("Rejecting out-of-bounds G_VTX (filepath '%s'): off=%u cnt=%u max=%zu",
-                            pathKey.c_str(), vtxDataOff, vtxCnt, maxVtx);
+                    HSS_LOG("Rejecting out-of-bounds G_VTX (filepath '%s'): off=%u cnt=%u max=%zu", pathKey.c_str(),
+                            vtxDataOff, vtxCnt, maxVtx);
                     break;
                 }
                 uintptr_t vtxAddr = (uintptr_t)vtxBaseRaw + (uintptr_t)vtxDataOff * sizeof(Vtx);
-                cmd.words.w0 = ((uint32_t)G_VTX << 24)
-                             | ((vtxCnt & 0xFFu) << 12)
-                             | (((vtxIdxOff + vtxCnt) & 0x7Fu) << 1);
+                cmd.words.w0 =
+                    ((uint32_t)G_VTX << 24) | ((vtxCnt & 0xFFu) << 12) | (((vtxIdxOff + vtxCnt) & 0x7Fu) << 1);
                 cmd.words.w1 = vtxAddr;
                 dataCmd.words.w0 = (uint32_t)G_NOOP << 24;
                 dataCmd.words.w1 = 0;
@@ -1164,17 +1221,20 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
                 // G_VTX header). We trust the existing w0 contains the
                 // count/index encoding already; we just rewrite opcode and
                 // resolve the hash to a raw pointer.
-                if (i + 1 >= cmdCount) break;
+                if (i + 1 >= cmdCount)
+                    break;
                 Gfx& dataCmd = entry->bytes[i + 1];
-                uint64_t hash = ((uint64_t)dataCmd.words.w0 << 32) |
-                                (uint64_t)(uint32_t)dataCmd.words.w1;
+                uint64_t hash = ((uint64_t)dataCmd.words.w0 << 32) | (uint64_t)(uint32_t)dataCmd.words.w1;
                 std::shared_ptr<Ship::IResource> vres;
                 bool usedFallback = false;
-                if (!loadResourceWithFallback(hash, vres, usedFallback)) break;
+                if (!loadResourceWithFallback(hash, vres, usedFallback))
+                    break;
                 auto vtxRes = std::dynamic_pointer_cast<Fast::Vertex>(vres);
-                if (!vtxRes) break;
+                if (!vtxRes)
+                    break;
                 void* vtxPtr = vres->GetRawPointer();
-                if (!vtxPtr) break;
+                if (!vtxPtr)
+                    break;
                 // SECURITY: the vertex count is already encoded in the existing
                 // w0 (F3DEX2 G_VTX: bits 12-19 = n). w1 is rewritten to the
                 // resource base at index 0, so Fast3D reads vertices 0..n-1. A
@@ -1183,8 +1243,7 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
                 uint32_t hashVtxCnt = (uint32_t)((cmd.words.w0 >> 12) & 0xFFu);
                 size_t maxVtx = vres->GetPointerSize() / sizeof(Vtx);
                 if ((size_t)hashVtxCnt > maxVtx) {
-                    HSS_LOG("Rejecting out-of-bounds G_VTX (hash): cnt=%u max=%zu",
-                            hashVtxCnt, maxVtx);
+                    HSS_LOG("Rejecting out-of-bounds G_VTX (hash): cnt=%u max=%zu", hashVtxCnt, maxVtx);
                     break;
                 }
                 cmd.words.w0 = (cmd.words.w0 & 0x00FFFFFFu) | ((uint32_t)G_VTX << 24);
@@ -1201,15 +1260,19 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
                 // Standard G_MTX has the same param layout, so we just
                 // change the opcode byte.
                 const char* pathStr = (const char*)cmd.words.w1;
-                if (!LooksLikeValidStringPtr((uintptr_t)pathStr)) break;
+                if (!LooksLikeValidStringPtr((uintptr_t)pathStr))
+                    break;
                 std::string pathKey(pathStr);
                 std::shared_ptr<Ship::IResource> mres;
                 bool usedFallback = false;
-                if (!loadResourceWithFallback(pathKey, mres, usedFallback)) break;
+                if (!loadResourceWithFallback(pathKey, mres, usedFallback))
+                    break;
                 auto mtxRes = std::dynamic_pointer_cast<Fast::Matrix>(mres);
-                if (!mtxRes) break;
+                if (!mtxRes)
+                    break;
                 void* mtxPtr = mres->GetRawPointer();
-                if (!mtxPtr) break;
+                if (!mtxPtr)
+                    break;
                 cmd.words.w0 = (cmd.words.w0 & 0x00FFFFFFu) | ((uint32_t)G_MTX << 24);
                 cmd.words.w1 = (uintptr_t)mtxPtr;
                 sPatchedDLResources.push_back(std::move(mres));
@@ -1218,17 +1281,20 @@ static Gfx* PatchDLForLocalArchive(Gfx* originalDL, size_t maxCmdCount, PatchCon
             case G_MTX_OTR: {
                 // 2-Gfx hash variant of G_MTX_OTR_FILEPATH. First Gfx has
                 // params in low 8 bits; second has hash.
-                if (i + 1 >= cmdCount) break;
+                if (i + 1 >= cmdCount)
+                    break;
                 Gfx& dataCmd = entry->bytes[i + 1];
-                uint64_t hash = ((uint64_t)dataCmd.words.w0 << 32) |
-                                (uint64_t)(uint32_t)dataCmd.words.w1;
+                uint64_t hash = ((uint64_t)dataCmd.words.w0 << 32) | (uint64_t)(uint32_t)dataCmd.words.w1;
                 std::shared_ptr<Ship::IResource> mres;
                 bool usedFallback = false;
-                if (!loadResourceWithFallback(hash, mres, usedFallback)) break;
+                if (!loadResourceWithFallback(hash, mres, usedFallback))
+                    break;
                 auto mtxRes = std::dynamic_pointer_cast<Fast::Matrix>(mres);
-                if (!mtxRes) break;
+                if (!mtxRes)
+                    break;
                 void* mtxPtr = mres->GetRawPointer();
-                if (!mtxPtr) break;
+                if (!mtxPtr)
+                    break;
                 cmd.words.w0 = (cmd.words.w0 & 0x00FFFFFFu) | ((uint32_t)G_MTX << 24);
                 cmd.words.w1 = (uintptr_t)mtxPtr;
                 dataCmd.words.w0 = (uint32_t)G_NOOP << 24;
@@ -1260,12 +1326,15 @@ static void CacheVanillaFromArchive(const std::string& archivePath) {
         return;
     }
     auto allFiles = archive->ListFiles();
-    if (!allFiles) return;
+    if (!allFiles)
+        return;
 
     auto resourceManager = Ship::Context::GetRawInstance()->GetResourceManager();
-    if (!resourceManager) return;
+    if (!resourceManager)
+        return;
     auto loader = resourceManager->GetResourceLoader();
-    if (!loader) return;
+    if (!loader)
+        return;
 
     PatchContext vanillaCtx{};
     vanillaCtx.primary.archive = archive.get();
@@ -1278,40 +1347,41 @@ static void CacheVanillaFromArchive(const std::string& archivePath) {
     // not in this archive).
     s32 added = 0;
     for (auto& [hash, path] : *allFiles) {
-        if (path.find(".meta") != std::string::npos) continue;
+        if (path.find(".meta") != std::string::npos)
+            continue;
         // Restrict to player-skin / equipment / get-item namespaces — anything
         // else stays under global resolution so texture packs etc. still work
         // for the world. We DON'T filter by name suffix anymore: community
         // skin .o2rs use a wide variety of conventions (gXxxxDL,
         // *_layer_Opaque, bone${N}_*_mesh, ...) and we want vanilla coverage
         // for every path the engine could query when drawing the dummy.
-        bool isInteresting = (path.find("object_link_boy/") != std::string::npos ||
-                              path.find("object_link_child/") != std::string::npos ||
-                              path.find("object_gi_") != std::string::npos ||
-                              path.find("object_sword") != std::string::npos ||
-                              path.find("object_shield") != std::string::npos);
-        if (!isInteresting) continue;
+        bool isInteresting =
+            (path.find("object_link_boy/") != std::string::npos ||
+             path.find("object_link_child/") != std::string::npos || path.find("object_gi_") != std::string::npos ||
+             path.find("object_sword") != std::string::npos || path.find("object_shield") != std::string::npos);
+        if (!isInteresting)
+            continue;
         // Skip the Link skeleton paths — those are FlexSkeletonHeader, not
         // Gfx*, and they're handled separately below via
         // ExtractVanillaSkeletonFromArchive so the dummy can swap to vanilla
         // limbs at draw time.
-        if (path.find("/gLinkAdultSkel") != std::string::npos ||
-            path.find("/gLinkChildSkel") != std::string::npos) {
+        if (path.find("/gLinkAdultSkel") != std::string::npos || path.find("/gLinkChildSkel") != std::string::npos) {
             continue;
         }
 
         auto file = archive->LoadFile(path);
-        if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->empty()) continue;
+        if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->empty())
+            continue;
 
         std::shared_ptr<Ship::IResource> resource;
         try {
             resource = loader->LoadResource(path, file, nullptr);
-        } catch (...) {
-            resource = nullptr;
-        }
-        if (!resource) continue;
+        } catch (...) { resource = nullptr; }
+        if (!resource)
+            continue;
         Gfx* dl = (Gfx*)resource->GetRawPointer();
-        if (!dl) continue;
+        if (!dl)
+            continue;
         // Same DL-only guard as in LoadO2rOverride: walking a non-DL byte
         // buffer as Gfx commands runs off the end of its allocation.
         vanillaCtx.dlsAttempted++;
@@ -1331,7 +1401,8 @@ static void CacheVanillaFromArchive(const std::string& archivePath) {
         // Match the same key variants we store for override DLs so the lookup
         // is symmetric.
         std::string normalized = path;
-        if (normalized.compare(0, 7, "__OTR__") == 0) normalized.erase(0, 7);
+        if (normalized.compare(0, 7, "__OTR__") == 0)
+            normalized.erase(0, 7);
         sVanillaDLs[std::string("__OTR__") + normalized] = dl;
         sVanillaDLs[normalized] = dl;
         sVanillaResourceHolders.push_back(std::move(resource));
@@ -1345,59 +1416,47 @@ static void CacheVanillaFromArchive(const std::string& archivePath) {
     // archive sidesteps the global stack entirely.
     if (sVanillaAdultLimbTable == nullptr) {
         ExtractVanillaSkeletonFromArchive(archive.get(), "objects/object_link_boy/gLinkAdultSkel",
-                                          sVanillaAdultSkelHolder, sVanillaAdultLimbTable,
-                                          sVanillaAdultDListCount);
+                                          sVanillaAdultSkelHolder, sVanillaAdultLimbTable, sVanillaAdultDListCount);
     }
     if (sVanillaChildLimbTable == nullptr) {
         ExtractVanillaSkeletonFromArchive(archive.get(), "objects/object_link_child/gLinkChildSkel",
-                                          sVanillaChildSkelHolder, sVanillaChildLimbTable,
-                                          sVanillaChildDListCount);
+                                          sVanillaChildSkelHolder, sVanillaChildLimbTable, sVanillaChildDListCount);
     }
 
     // Vanilla eye + mouth texture image data — pulled directly from this
     // archive (oot.o2r) so they cannot be intercepted by the local user's
     // globally-mounted skin mods at interpret time.
     static const char* kEyePaths[2][8] = {
-        { "objects/object_link_boy/gLinkAdultEyesOpenTex",
-          "objects/object_link_boy/gLinkAdultEyesHalfTex",
-          "objects/object_link_boy/gLinkAdultEyesClosedfTex",
-          "objects/object_link_boy/gLinkAdultEyesRollLeftTex",
-          "objects/object_link_boy/gLinkAdultEyesRollRightTex",
-          "objects/object_link_boy/gLinkAdultEyesShockTex",
-          "objects/object_link_boy/gLinkAdultEyesUnk1Tex",
-          "objects/object_link_boy/gLinkAdultEyesUnk2Tex" },
-        { "objects/object_link_child/gLinkChildEyesOpenTex",
-          "objects/object_link_child/gLinkChildEyesHalfTex",
-          "objects/object_link_child/gLinkChildEyesClosedfTex",
-          "objects/object_link_child/gLinkChildEyesRollLeftTex",
-          "objects/object_link_child/gLinkChildEyesRollRightTex",
-          "objects/object_link_child/gLinkChildEyesShockTex",
-          "objects/object_link_child/gLinkChildEyesUnk1Tex",
-          "objects/object_link_child/gLinkChildEyesUnk2Tex" },
+        { "objects/object_link_boy/gLinkAdultEyesOpenTex", "objects/object_link_boy/gLinkAdultEyesHalfTex",
+          "objects/object_link_boy/gLinkAdultEyesClosedfTex", "objects/object_link_boy/gLinkAdultEyesRollLeftTex",
+          "objects/object_link_boy/gLinkAdultEyesRollRightTex", "objects/object_link_boy/gLinkAdultEyesShockTex",
+          "objects/object_link_boy/gLinkAdultEyesUnk1Tex", "objects/object_link_boy/gLinkAdultEyesUnk2Tex" },
+        { "objects/object_link_child/gLinkChildEyesOpenTex", "objects/object_link_child/gLinkChildEyesHalfTex",
+          "objects/object_link_child/gLinkChildEyesClosedfTex", "objects/object_link_child/gLinkChildEyesRollLeftTex",
+          "objects/object_link_child/gLinkChildEyesRollRightTex", "objects/object_link_child/gLinkChildEyesShockTex",
+          "objects/object_link_child/gLinkChildEyesUnk1Tex", "objects/object_link_child/gLinkChildEyesUnk2Tex" },
     };
     static const char* kMouthPaths[2][4] = {
-        { "objects/object_link_boy/gLinkAdultMouth1Tex",
-          "objects/object_link_boy/gLinkAdultMouth2Tex",
-          "objects/object_link_boy/gLinkAdultMouth3Tex",
-          "objects/object_link_boy/gLinkAdultMouth4Tex" },
-        { "objects/object_link_child/gLinkChildMouth1Tex",
-          "objects/object_link_child/gLinkChildMouth2Tex",
-          "objects/object_link_child/gLinkChildMouth3Tex",
-          "objects/object_link_child/gLinkChildMouth4Tex" },
+        { "objects/object_link_boy/gLinkAdultMouth1Tex", "objects/object_link_boy/gLinkAdultMouth2Tex",
+          "objects/object_link_boy/gLinkAdultMouth3Tex", "objects/object_link_boy/gLinkAdultMouth4Tex" },
+        { "objects/object_link_child/gLinkChildMouth1Tex", "objects/object_link_child/gLinkChildMouth2Tex",
+          "objects/object_link_child/gLinkChildMouth3Tex", "objects/object_link_child/gLinkChildMouth4Tex" },
     };
     auto loadFaceTex = [&](const char* path, void*& outImageData) {
-        if (outImageData != nullptr) return; // already loaded from a prior archive
+        if (outImageData != nullptr)
+            return; // already loaded from a prior archive
         auto file = archive->LoadFile(path);
-        if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->empty()) return;
+        if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->empty())
+            return;
         std::shared_ptr<Ship::IResource> res;
         try {
             res = loader->LoadResource(path, file, nullptr);
-        } catch (...) {
-            res = nullptr;
-        }
-        if (!res) return;
+        } catch (...) { res = nullptr; }
+        if (!res)
+            return;
         auto tex = std::dynamic_pointer_cast<Fast::Texture>(res);
-        if (!tex || !tex->ImageData) return;
+        if (!tex || !tex->ImageData)
+            return;
         outImageData = tex->ImageData;
         sVanillaFaceTexResources.push_back(std::move(res));
     };
@@ -1405,11 +1464,13 @@ static void CacheVanillaFromArchive(const std::string& archivePath) {
     for (int age = 0; age < 2; age++) {
         for (int i = 0; i < 8; i++) {
             loadFaceTex(kEyePaths[age][i], sVanillaEyeImageData[age][i]);
-            if (sVanillaEyeImageData[age][i]) eyesLoaded++;
+            if (sVanillaEyeImageData[age][i])
+                eyesLoaded++;
         }
         for (int i = 0; i < 4; i++) {
             loadFaceTex(kMouthPaths[age][i], sVanillaMouthImageData[age][i]);
-            if (sVanillaMouthImageData[age][i]) mouthsLoaded++;
+            if (sVanillaMouthImageData[age][i])
+                mouthsLoaded++;
         }
     }
     if (eyesLoaded || mouthsLoaded) {
@@ -1425,8 +1486,7 @@ static void CacheVanillaFromArchive(const std::string& archivePath) {
     sVanillaArchiveHandles.push_back(std::move(vanillaHandle));
     sVanillaArchives.push_back(std::move(archive));
     HSS_LOG("vanilla cache: '%s' loaded %d entries (dlsAttempted=%u patched=%u skippedNotDL=%u textures=%u failed=%u)",
-            archivePath.c_str(), added,
-            (unsigned)vanillaCtx.dlsAttempted, (unsigned)vanillaCtx.dlsPatched,
+            archivePath.c_str(), added, (unsigned)vanillaCtx.dlsAttempted, (unsigned)vanillaCtx.dlsPatched,
             (unsigned)vanillaCtx.dlsSkippedNotDL, (unsigned)vanillaCtx.texturesResolved,
             (unsigned)vanillaCtx.texturesFailed);
 }
@@ -1439,13 +1499,16 @@ static void CacheVanillaFromArchive(const std::string& archivePath) {
 // The returned IResource is the holder for limbTable's memory; caller must
 // keep the shared_ptr alive for the duration of the cache.
 static bool ExtractVanillaSkeletonFromArchive(Ship::Archive* archive, const std::string& path,
-                                              std::shared_ptr<Ship::IResource>& outHolder,
-                                              void**& outLimbTable, int& outDListCount) {
-    if (!archive) return false;
+                                              std::shared_ptr<Ship::IResource>& outHolder, void**& outLimbTable,
+                                              int& outDListCount) {
+    if (!archive)
+        return false;
     auto resourceManager = Ship::Context::GetRawInstance()->GetResourceManager();
-    if (!resourceManager) return false;
+    if (!resourceManager)
+        return false;
     auto loader = resourceManager->GetResourceLoader();
-    if (!loader) return false;
+    if (!loader)
+        return false;
 
     auto file = archive->LoadFile(path);
     if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->empty()) {
@@ -1455,9 +1518,7 @@ static bool ExtractVanillaSkeletonFromArchive(Ship::Archive* archive, const std:
     std::shared_ptr<Ship::IResource> resource;
     try {
         resource = loader->LoadResource(path, file, nullptr);
-    } catch (...) {
-        resource = nullptr;
-    }
+    } catch (...) { resource = nullptr; }
     if (!resource) {
         HSS_LOG("vanilla skel cache: ResourceLoader returned null for '%s'", path.c_str());
         return false;
@@ -1475,13 +1536,11 @@ static bool ExtractVanillaSkeletonFromArchive(Ship::Archive* archive, const std:
         return false;
     }
     if (skelRes->type != SOH::SkeletonType::Flex) {
-        HSS_LOG("skel cache: '%s' type=%d (expected Flex=1) — rejected",
-                path.c_str(), (int)skelRes->type);
+        HSS_LOG("skel cache: '%s' type=%d (expected Flex=1) — rejected", path.c_str(), (int)skelRes->type);
         return false;
     }
     if (skelRes->limbType != SOH::LimbType::LOD) {
-        HSS_LOG("skel cache: '%s' limbType=%d (expected LOD=2) — rejected",
-                path.c_str(), (int)skelRes->limbType);
+        HSS_LOG("skel cache: '%s' limbType=%d (expected LOD=2) — rejected", path.c_str(), (int)skelRes->limbType);
         return false;
     }
     auto* hdr = reinterpret_cast<FlexSkeletonHeader*>(resource->GetRawPointer());
@@ -1530,17 +1589,16 @@ static bool ExtractVanillaSkeletonFromArchive(Ship::Archive* archive, const std:
         // entries can lack the alt prefix on some packers) end up with
         // 21/21 stillNull limbs and the override skel gets rejected,
         // forcing the dummy back to vanilla geometry.
-        auto tryLoadLimb = [&](const std::string& p,
-                               std::shared_ptr<Ship::IResource>& outRes,
+        auto tryLoadLimb = [&](const std::string& p, std::shared_ptr<Ship::IResource>& outRes,
                                std::string& usedPath) -> bool {
             auto f = archive->LoadFile(p);
-            if (!f || !f->IsLoaded || !f->Buffer || f->Buffer->empty()) return false;
+            if (!f || !f->IsLoaded || !f->Buffer || f->Buffer->empty())
+                return false;
             try {
                 outRes = loader->LoadResource(p, f, nullptr);
-            } catch (...) {
-                outRes = nullptr;
-            }
-            if (outRes) usedPath = p;
+            } catch (...) { outRes = nullptr; }
+            if (outRes)
+                usedPath = p;
             return outRes != nullptr;
         };
         std::shared_ptr<Ship::IResource> limbRes;
@@ -1554,12 +1612,14 @@ static bool ExtractVanillaSkeletonFromArchive(Ship::Archive* archive, const std:
             }
         }
         if (!ok || !limbRes) {
-            if (skelRes->skeletonHeaderSegments[i] == nullptr) stillNull++;
+            if (skelRes->skeletonHeaderSegments[i] == nullptr)
+                stillNull++;
             continue;
         }
         void* limbRaw = limbRes->GetRawPointer();
         if (!limbRaw) {
-            if (skelRes->skeletonHeaderSegments[i] == nullptr) stillNull++;
+            if (skelRes->skeletonHeaderSegments[i] == nullptr)
+                stillNull++;
             continue;
         }
         // Sanitize the limb's dLists fields BEFORE publishing the pointer —
@@ -1582,8 +1642,8 @@ static bool ExtractVanillaSkeletonFromArchive(Ship::Archive* archive, const std:
     for (size_t i = 0; i < skelRes->skeletonHeaderSegments.size(); i++) {
         SanitizeLodLimbDLists(skelRes->skeletonHeaderSegments[i], path.c_str(), (int)i);
     }
-    HSS_LOG("skel cache: '%s' limb patch — factoryHadIt=%d patchedLocally=%d stillNull=%d",
-            path.c_str(), factoryHadIt, patchedLimbs, stillNull);
+    HSS_LOG("skel cache: '%s' limb patch — factoryHadIt=%d patchedLocally=%d stillNull=%d", path.c_str(), factoryHadIt,
+            patchedLimbs, stillNull);
     // Now require root non-null after the local patch attempt.
     if (hdr->sh.segment[0] == nullptr) {
         HSS_LOG("skel cache: '%s' root limb still null after local patch — rejected", path.c_str());
@@ -1594,20 +1654,19 @@ static bool ExtractVanillaSkeletonFromArchive(Ship::Archive* archive, const std:
     // the engine to handle small differences. Strict equality would
     // reject vanilla itself.
     if (hdr->sh.limbCount < 1 || hdr->sh.limbCount > 32) {
-        HSS_LOG("skel cache: '%s' limbCount=%u out of sane range — rejected",
-                path.c_str(), (unsigned)hdr->sh.limbCount);
+        HSS_LOG("skel cache: '%s' limbCount=%u out of sane range — rejected", path.c_str(),
+                (unsigned)hdr->sh.limbCount);
         return false;
     }
     if (hdr->dListCount < 1 || hdr->dListCount > 32) {
-        HSS_LOG("skel cache: '%s' dListCount=%u out of sane range — rejected",
-                path.c_str(), (unsigned)hdr->dListCount);
+        HSS_LOG("skel cache: '%s' dListCount=%u out of sane range — rejected", path.c_str(), (unsigned)hdr->dListCount);
         return false;
     }
     outHolder = resource;
     outLimbTable = hdr->sh.segment;
     outDListCount = hdr->dListCount;
-    HSS_LOG("vanilla skel cache: '%s' limbs=%u dLists=%u (from local archive)",
-            path.c_str(), (unsigned)hdr->sh.limbCount, (unsigned)hdr->dListCount);
+    HSS_LOG("vanilla skel cache: '%s' limbs=%u dLists=%u (from local archive)", path.c_str(),
+            (unsigned)hdr->sh.limbCount, (unsigned)hdr->dListCount);
     return true;
 }
 
@@ -1620,7 +1679,8 @@ void InitO2rOverrides() {
     // it walks every Player DL in oot.o2r plus every override .o2r, so we
     // only run it once per process. Called from Harpoon::OnConnected() the
     // first time the user joins a session — subsequent reconnects are no-ops.
-    if (sInitialized) return;
+    if (sInitialized)
+        return;
     sInitialized = true;
 
     sOverrides.clear();
@@ -1640,8 +1700,10 @@ void InitO2rOverrides() {
     sVanillaChildDListCount = 0;
     sVanillaFaceTexResources.clear();
     for (int a = 0; a < 2; a++) {
-        for (int i = 0; i < 8; i++) sVanillaEyeImageData[a][i] = nullptr;
-        for (int i = 0; i < 4; i++) sVanillaMouthImageData[a][i] = nullptr;
+        for (int i = 0; i < 8; i++)
+            sVanillaEyeImageData[a][i] = nullptr;
+        for (int i = 0; i < 4; i++)
+            sVanillaMouthImageData[a][i] = nullptr;
     }
 
     // Pre-cache vanilla Link/equipment DLs AND the vanilla Link skeleton
@@ -1652,7 +1714,8 @@ void InitO2rOverrides() {
     // would return the modded skeleton instead of vanilla.
     for (const char* gameOtr : { "oot.o2r", "oot-mq.o2r" }) {
         std::string p = Ship::Context::LocateFileAcrossAppDirs(gameOtr, appShortName);
-        if (!p.empty()) CacheVanillaFromArchive(p);
+        if (!p.empty())
+            CacheVanillaFromArchive(p);
     }
 
     // ALSO open mm.o2r and soh.o2r as additional fallback archives for the
@@ -1667,14 +1730,16 @@ void InitO2rOverrides() {
     // Just open + register as ArchiveHandle for the patcher's fallback.
     for (const char* sharedOtr : { "mm.o2r", "soh.o2r" }) {
         std::string p = Ship::Context::LocateFileAcrossAppDirs(sharedOtr, appShortName);
-        if (p.empty()) continue;
+        if (p.empty())
+            continue;
         auto sharedArchive = std::make_shared<Ship::O2rArchive>(p);
         if (!sharedArchive->Open()) {
             HSS_LOG("shared fallback: failed to open '%s'", p.c_str());
             continue;
         }
         auto allFiles = sharedArchive->ListFiles();
-        if (!allFiles) continue;
+        if (!allFiles)
+            continue;
         auto handle = std::make_unique<ArchiveHandle>();
         handle->archive = sharedArchive.get();
         for (auto& [hash, filePath] : *allFiles) {
@@ -1682,8 +1747,7 @@ void InitO2rOverrides() {
         }
         sVanillaArchiveHandles.push_back(std::move(handle));
         sVanillaArchives.push_back(std::move(sharedArchive));
-        HSS_LOG("shared fallback: opened '%s' with %zu entries",
-                p.c_str(), allFiles->size());
+        HSS_LOG("shared fallback: opened '%s' with %zu entries", p.c_str(), allFiles->size());
     }
 
     auto syncPath = FindSyncFolder();
@@ -1706,29 +1770,30 @@ void InitO2rOverrides() {
         std::filesystem::recursive_directory_iterator it(
             syncPath, std::filesystem::directory_options::skip_permission_denied, ec);
         if (ec) {
-            HSS_LOG("Failed to open '%s' for scanning (%s); override registry empty",
-                    syncPath.string().c_str(), ec.message().c_str());
+            HSS_LOG("Failed to open '%s' for scanning (%s); override registry empty", syncPath.string().c_str(),
+                    ec.message().c_str());
         } else {
             const std::filesystem::recursive_directory_iterator end;
             for (; it != end; it.increment(ec)) {
                 if (ec) {
                     // Could not advance (e.g. symlink cycle / vanished dir).
                     // Stop walking but keep whatever we already collected.
-                    HSS_LOG("Stopped scanning '%s' early: %s",
-                            syncPath.string().c_str(), ec.message().c_str());
+                    HSS_LOG("Stopped scanning '%s' early: %s", syncPath.string().c_str(), ec.message().c_str());
                     break;
                 }
                 try {
                     const auto& entry = *it;
                     std::error_code isDirEc;
-                    if (entry.is_directory(isDirEc) || isDirEc) continue;
+                    if (entry.is_directory(isDirEc) || isDirEc)
+                        continue;
                     std::string ext = entry.path().extension().string();
-                    for (char& c : ext) c = (char)tolower((unsigned char)c);
-                    if (ext == ".o2r" || ext == ".otr") o2rFiles.push_back(entry.path());
+                    for (char& c : ext)
+                        c = (char)tolower((unsigned char)c);
+                    if (ext == ".o2r" || ext == ".otr")
+                        o2rFiles.push_back(entry.path());
                 } catch (const std::exception& e) {
                     // Defensive: any per-entry failure must not kill the join.
-                    HSS_LOG("Skipping unreadable entry under '%s': %s",
-                            syncPath.string().c_str(), e.what());
+                    HSS_LOG("Skipping unreadable entry under '%s': %s", syncPath.string().c_str(), e.what());
                     continue;
                 }
             }
@@ -1765,9 +1830,10 @@ void InitO2rOverrides() {
     int handCachedCount = 0;
     for (const char* p : kProbeHandDLs) {
         bool present = sVanillaDLs.count(p) > 0;
-        HSS_LOG("vanilla cache probe: %s -> %s",
-                p, present ? "PRESENT (would intercept)" : "MISSING (will leak local mod!)");
-        if (present) handCachedCount++;
+        HSS_LOG("vanilla cache probe: %s -> %s", p,
+                present ? "PRESENT (would intercept)" : "MISSING (will leak local mod!)");
+        if (present)
+            handCachedCount++;
     }
     HSS_LOG("vanilla cache hand-DL probe: %d/%d cached", handCachedCount,
             (int)(sizeof(kProbeHandDLs) / sizeof(kProbeHandDLs[0])));
@@ -1776,13 +1842,15 @@ void InitO2rOverrides() {
 void BeginRemoteOverrides(const std::vector<std::string>& enabledMods) {
     sActiveOverrideIndices.clear();
     sInRemoteDraw = true; // gate the vanilla fallback regardless of match count
-    if (sOverrides.empty()) return;
+    if (sOverrides.empty())
+        return;
     std::string matched;
     for (const auto& modName : enabledMods) {
         for (size_t i = 0; i < sOverrides.size(); i++) {
             if (sOverrides[i].name == modName) {
                 sActiveOverrideIndices.push_back(i);
-                if (!matched.empty()) matched += ", ";
+                if (!matched.empty())
+                    matched += ", ";
                 matched += modName;
                 break;
             }
@@ -1792,8 +1860,8 @@ void BeginRemoteOverrides(const std::vector<std::string>& enabledMods) {
     // are active without spamming each frame.
     static std::string sLastMatched;
     if (sLastMatched != matched) {
-        HSS_LOG("BeginRemoteOverrides: enabledMods=%d active=%d [%s]",
-                (int)enabledMods.size(), (int)sActiveOverrideIndices.size(), matched.c_str());
+        HSS_LOG("BeginRemoteOverrides: enabledMods=%d active=%d [%s]", (int)enabledMods.size(),
+                (int)sActiveOverrideIndices.size(), matched.c_str());
         sLastMatched = matched;
     }
 }
@@ -1804,9 +1872,11 @@ void EndRemoteOverrides() {
 }
 
 void NotifyMissingPak(uint32_t clientId, const std::string& playerName, const std::string& skinName) {
-    if (skinName.empty()) return;
+    if (skinName.empty())
+        return;
     std::string key = "missing:" + std::to_string(clientId) + ":" + skinName;
-    if (!ShouldNotify(key)) return;
+    if (!ShouldNotify(key))
+        return;
 
     Notification::Emit({
         .prefix = playerName,
@@ -1825,13 +1895,13 @@ void NotifyMissingPak(uint32_t clientId, const std::string& playerName, const st
 // override applied — the user does have it, just not as a global mod.
 static bool HaveOverrideForName(const std::string& modName) {
     for (const auto& o : sOverrides) {
-        if (o.name == modName) return true;
+        if (o.name == modName)
+            return true;
     }
     return false;
 }
 
-void NotifyO2rDivergence(uint32_t clientId, const std::string& playerName,
-                         const std::vector<std::string>& remoteMods,
+void NotifyO2rDivergence(uint32_t clientId, const std::string& playerName, const std::vector<std::string>& remoteMods,
                          const std::vector<std::string>& remoteSyncMods) {
     const auto& localMods = ModMenu_GetEnabledMods();
     std::set<std::string> localSet(localMods.begin(), localMods.end());
@@ -1839,10 +1909,13 @@ void NotifyO2rDivergence(uint32_t clientId, const std::string& playerName,
     std::set<std::string> remoteSyncSet(remoteSyncMods.begin(), remoteSyncMods.end());
 
     for (const auto& m : remoteSet) {
-        if (localSet.count(m)) continue;
-        if (HaveOverrideForName(m)) continue; // we can render their dummy with our override
+        if (localSet.count(m))
+            continue;
+        if (HaveOverrideForName(m))
+            continue; // we can render their dummy with our override
         std::string key = "divR:" + std::to_string(clientId) + ":" + m;
-        if (!ShouldNotify(key)) continue;
+        if (!ShouldNotify(key))
+            continue;
         Notification::Emit({
             .prefix = playerName,
             .prefixColor = ImVec4(0.7f, 0.9f, 1.0f, 1.0f),
@@ -1855,15 +1928,18 @@ void NotifyO2rDivergence(uint32_t clientId, const std::string& playerName,
     }
 
     for (const auto& m : localSet) {
-        if (remoteSet.count(m)) continue;
+        if (remoteSet.count(m))
+            continue;
         // Suppress when the remote has our mod in their harpoon/skins —
         // they CAN render us correctly even though they haven't enabled it
         // globally. This is the common case the user complained about: the
         // notification was firing despite both clients having each other's
         // mods available for sync rendering.
-        if (remoteSyncSet.count(m)) continue;
+        if (remoteSyncSet.count(m))
+            continue;
         std::string key = "divL:" + std::to_string(clientId) + ":" + m;
-        if (!ShouldNotify(key)) continue;
+        if (!ShouldNotify(key))
+            continue;
         Notification::Emit({
             .prefix = "You",
             .prefixColor = ImVec4(0.7f, 0.9f, 1.0f, 1.0f),
@@ -1891,9 +1967,11 @@ static std::vector<std::string> sInstalledGamemodes;
 static bool sGamemodesCached = false;
 
 std::filesystem::path GetGamemodeManifestPath(const std::string& gamemodeId) {
-    if (gamemodeId.empty()) return {};
+    if (gamemodeId.empty())
+        return {};
     auto root = FindGamemodesFolder();
-    if (root.empty()) return {};
+    if (root.empty())
+        return {};
     auto manifest = root / gamemodeId / "gamemode.yaml";
     std::error_code ec;
     if (!std::filesystem::exists(manifest, ec) || !std::filesystem::is_regular_file(manifest, ec)) {
@@ -1921,8 +1999,10 @@ std::vector<std::string> GetInstalledGamemodes(bool forceRescan) {
 
     std::error_code ec;
     for (auto& entry : std::filesystem::directory_iterator(root, ec)) {
-        if (ec) break;
-        if (!entry.is_directory()) continue;
+        if (ec)
+            break;
+        if (!entry.is_directory())
+            continue;
         auto manifest = entry.path() / "gamemode.yaml";
         std::error_code ec2;
         if (std::filesystem::exists(manifest, ec2) && std::filesystem::is_regular_file(manifest, ec2)) {
@@ -1931,8 +2011,7 @@ std::vector<std::string> GetInstalledGamemodes(bool forceRescan) {
     }
     std::sort(sInstalledGamemodes.begin(), sInstalledGamemodes.end());
     sGamemodesCached = true;
-    HSS_LOG("Found %d gamemode pack(s) in %s",
-            (int)sInstalledGamemodes.size(), root.string().c_str());
+    HSS_LOG("Found %d gamemode pack(s) in %s", (int)sInstalledGamemodes.size(), root.string().c_str());
     return sInstalledGamemodes;
 }
 
@@ -1952,20 +2031,24 @@ int GetVanillaLinkDListCount(bool isAdult) {
 // vanilla.
 void** GetActiveOverrideLinkLimbTable(bool isAdult) {
     for (size_t idx : sActiveOverrideIndices) {
-        if (idx >= sOverrides.size()) continue;
+        if (idx >= sOverrides.size())
+            continue;
         const auto& o = sOverrides[idx];
         void** lt = isAdult ? o.adultLimbTable : o.childLimbTable;
-        if (lt) return lt;
+        if (lt)
+            return lt;
     }
     return nullptr;
 }
 
 int GetActiveOverrideLinkDListCount(bool isAdult) {
     for (size_t idx : sActiveOverrideIndices) {
-        if (idx >= sOverrides.size()) continue;
+        if (idx >= sOverrides.size())
+            continue;
         const auto& o = sOverrides[idx];
         int dl = isAdult ? o.adultDListCount : o.childDListCount;
-        if (dl > 0) return dl;
+        if (dl > 0)
+            return dl;
     }
     return 0;
 }
@@ -1986,28 +2069,36 @@ void Reset() {
 // dummy's face). Returns NULL when not in a remote-dummy draw block, so
 // the local player's own draw still uses its normal pak / vanilla path.
 extern "C" void* HarpoonSkinSync_GetVanillaEyeTexture(int32_t eyeIndex, int32_t isAdult) {
-    if (!sInRemoteDraw) return nullptr;
-    if (eyeIndex < 0 || eyeIndex >= 8) return nullptr;
+    if (!sInRemoteDraw)
+        return nullptr;
+    if (eyeIndex < 0 || eyeIndex >= 8)
+        return nullptr;
     int age = isAdult ? 0 : 1;
     // Prefer the active override's eye texture (so Mario dummy gets Mario's
     // eyes, MM Young Link's dummy gets MMYL's eyes, etc.). Fall back to
     // vanilla pre-resolved bytes when no override has it.
     for (size_t idx : sActiveOverrideIndices) {
-        if (idx >= sOverrides.size()) continue;
+        if (idx >= sOverrides.size())
+            continue;
         void* p = sOverrides[idx].eyeImageData[age][eyeIndex];
-        if (p) return p;
+        if (p)
+            return p;
     }
     return sVanillaEyeImageData[age][eyeIndex];
 }
 
 extern "C" void* HarpoonSkinSync_GetVanillaMouthTexture(int32_t mouthIndex, int32_t isAdult) {
-    if (!sInRemoteDraw) return nullptr;
-    if (mouthIndex < 0 || mouthIndex >= 4) return nullptr;
+    if (!sInRemoteDraw)
+        return nullptr;
+    if (mouthIndex < 0 || mouthIndex >= 4)
+        return nullptr;
     int age = isAdult ? 0 : 1;
     for (size_t idx : sActiveOverrideIndices) {
-        if (idx >= sOverrides.size()) continue;
+        if (idx >= sOverrides.size())
+            continue;
         void* p = sOverrides[idx].mouthImageData[age][mouthIndex];
-        if (p) return p;
+        if (p)
+            return p;
     }
     return sVanillaMouthImageData[age][mouthIndex];
 }
@@ -2027,20 +2118,22 @@ extern "C" void* HarpoonSkinSync_GetVanillaMouthTexture(int32_t mouthIndex, int3
 //     back to ResourceMgr_LoadGfxByName so a missing entry still renders
 //     SOMETHING rather than an empty hand).
 extern "C" void* HarpoonSkinSync_ResolvePlayerLimbDL(const char* otrPath) {
-    if (otrPath == nullptr) return nullptr;
-    if (!sInRemoteDraw) return nullptr;
+    if (otrPath == nullptr)
+        return nullptr;
+    if (!sInRemoteDraw)
+        return nullptr;
     // First: an active override .o2r the remote has wins. Mirrors
     // GetDLOverride's lookup so per-skin custom hand DLs (when packers
     // bother to bundle them at the canonical path) take precedence.
     for (size_t idx : sActiveOverrideIndices) {
-        if (idx >= sOverrides.size()) continue;
+        if (idx >= sOverrides.size())
+            continue;
         const auto& o = sOverrides[idx];
         auto it = o.dlsByPath.find(otrPath);
         if (it != o.dlsByPath.end() && it->second != nullptr) {
             static std::set<std::string> sLoggedHandOverride;
             if (sLoggedHandOverride.insert(otrPath).second) {
-                HSS_LOG("ResolvePlayerLimbDL: '%s' from override '%s'",
-                        otrPath, o.name.c_str());
+                HSS_LOG("ResolvePlayerLimbDL: '%s' from override '%s'", otrPath, o.name.c_str());
             }
             return (void*)it->second;
         }
@@ -2064,7 +2157,8 @@ extern "C" void* HarpoonSkinSync_ResolvePlayerLimbDL(const char* otrPath) {
     static std::set<std::string> sLoggedHandMiss;
     if (sLoggedHandMiss.insert(otrPath).second) {
         HSS_LOG("ResolvePlayerLimbDL: MISS '%s' (no override / no vanilla cache; "
-                "global stack will leak local mod for this path)", otrPath);
+                "global stack will leak local mod for this path)",
+                otrPath);
     }
     return nullptr;
 }
@@ -2074,11 +2168,13 @@ extern "C" void* HarpoonSkinSync_ResolvePlayerLimbDL(const char* otrPath) {
 // stack and returns the first matching native Gfx*, or NULL if no match (in
 // which case pak_loader continues with its own local .pak / equipment logic).
 extern "C" Gfx* HarpoonSkinSync_GetDLOverride(const char* otrPath) {
-    if (otrPath == nullptr) return nullptr;
+    if (otrPath == nullptr)
+        return nullptr;
 
     // First: any active override .o2r the remote has wins.
     for (size_t idx : sActiveOverrideIndices) {
-        if (idx >= sOverrides.size()) continue;
+        if (idx >= sOverrides.size())
+            continue;
         const auto& o = sOverrides[idx];
         auto it = o.dlsByPath.find(otrPath);
         if (it != o.dlsByPath.end() && it->second != nullptr) {

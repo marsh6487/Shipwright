@@ -312,6 +312,12 @@ RANDO_ENUM_ITEM(RSK_MM_MASKS_TRANSFORM)
 RANDO_ENUM_ITEM(RSK_EXT_EQUIPMENT)
 RANDO_ENUM_ITEM(RSK_NEI_WEAPON_UPGRADES)
 RANDO_ENUM_ITEM(RSK_STARTING_BUNNY_HOOD)
+// Skijer's NEI — appended (the list is append-only; raw values are stored in seeds).
+RANDO_ENUM_ITEM(RSK_SHUFFLE_BOMB_ARROWS)
+RANDO_ENUM_ITEM(RSK_ELEMENTAL_WAND_SHUFFLE)
+// 2026-08-06 symmetric cross-game categories: MM songs in a solo-OoT pool (the masks/items/equipment
+// categories already exist above as RSK_MM_MASKS_* / RSK_SKIJER_CUSTOM_ITEMS / RSK_EXT_EQUIPMENT).
+RANDO_ENUM_ITEM(RSK_MM_SONGS)
 RANDO_ENUM_ITEM(RSK_MAX)
 RANDO_ENUM_END(RandomizerSettingKey)
 

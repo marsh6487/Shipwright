@@ -25,7 +25,7 @@
 // ---------------------------------------------------------------------------
 // Melee Hit Callback
 // ---------------------------------------------------------------------------
-static void Byrna_OnMeleeHit(Player* player, PlayState* play) {
+static void GreatFairySword_RecoverOnHit(Player* player, PlayState* play) {
     s32 damage = 0;
 
     if (player->meleeWeaponQuads[0].base.atFlags & AT_HIT) {
@@ -48,58 +48,77 @@ static void Byrna_OnMeleeHit(Player* player, PlayState* play) {
 }
 
 // ---------------------------------------------------------------------------
-// Per-frame Behavior
+// Cane of Byrna — Insect Glaive (Skijer 2026-08-15).
+//
+// The slot's HP/MP-on-hit recovery moved to the Great Fairy's Sword below and is
+// NOT coming back. What lives here now is the MHR Insect Glaive kit; see
+// nei_hd_models/gerudo_mhr_dualblades_lab/MHR_EXT_SWORD_PORT_SPEC.md §12.
+//
+// STAGED ON PURPOSE. This is phase 1-3 of that plan: the light orb / Kinsect
+// only. The glaive MOVESET (phase 4) will take over B and bring the forced
+// PLAYER_IA_SWORD_BIGGORON base with it — until then the player keeps whatever
+// sword they had, which is exactly what makes the orb testable on its own.
+// Consequence while phase 4 is pending: holding B still charges the vanilla spin
+// attack alongside the orb charge, and R still raises a real shield. Both stop
+// once the moveset owns those buttons.
+//
+//   B held  -> charge, then summon the orb (costs magic)
+//   R + B   -> send the orb at a target; it harvests an extract and returns
 // ---------------------------------------------------------------------------
+#define BYRNA_CHARGE_FRAMES 15 // ~0.75 s at 20 Hz (R_UPDATE_RATE = 3)
+
+static s16 sByrnaChargeTimer = 0;
+
 static void Byrna_Behavior(Player* player, PlayState* play) {
-    // Skip during cutscenes, dying, loading, etc.
+    Input* in;
+    u8 bHeld;
+    u8 bPress;
+    u8 rHeld;
+
+    if (player == NULL || play == NULL) {
+        return;
+    }
+    // Never act while the player is not in control of himself.
     if (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
                                PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_GETTING_ITEM)) {
+        sByrnaChargeTimer = 0;
         return;
     }
 
-    // Save original sword state before overriding (only once)
-    if (!gExtEquipBehavior.byrnaActive) {
-        gExtEquipBehavior.byrnaSavedSwordEquip =
-            (gSaveContext.equips.equipment >> gEquipShifts[EQUIP_TYPE_SWORD]) & 0xF;
-        gExtEquipBehavior.byrnaSavedButtonItem = gSaveContext.equips.buttonItems[0];
-        gExtEquipBehavior.byrnaSavedSwordHealth = gSaveContext.swordHealth;
-        gExtEquipBehavior.byrnaSavedBgsFlag = gSaveContext.bgsFlag;
-        gExtEquipBehavior.byrnaActive = 1;
+    gExtEquipBehavior.byrnaActive = 1;
+
+    in = &play->state.input[0];
+    bHeld = CHECK_BTN_ALL(in->cur.button, BTN_B) != 0;
+    bPress = CHECK_BTN_ALL(in->press.button, BTN_B) != 0;
+    rHeld = CHECK_BTN_ALL(in->cur.button, BTN_R) != 0;
+
+    // R+B sends the orb out. Checked before the charge so the two never fight
+    // over the same B press.
+    if (rHeld && bPress) {
+        ByrnaOrb_Launch(play);
+        sByrnaChargeTimer = 0;
+        return;
     }
 
-    // Only force BGS IA when player is actively holding a sword (not sheathed/NONE, not C-button items)
-    if (player->heldItemAction == PLAYER_IA_SWORD_MASTER || player->heldItemAction == PLAYER_IA_SWORD_KOKIRI) {
-        player->heldItemAction = PLAYER_IA_SWORD_BIGGORON;
-    }
-
-    // Force BGS equipment so the sword system works
-    Inventory_ChangeEquipment(EQUIP_TYPE_SWORD, EQUIP_VALUE_SWORD_BIGGORON);
-
-    // Keep B button showing BGS item (icon override handled by ExtInv_GetItemIcon)
-    gSaveContext.equips.buttonItems[0] = ITEM_SWORD_BGS;
-
-    // Force bgsFlag = 1 so the game treats this as true BGS (no durability loss).
-    // Without this, if the player owns Giant's Knife (bgsFlag=0), swings would
-    // decrement swordHealth and eventually "break" the GK.
-    gSaveContext.bgsFlag = 1;
-
-    // Force swordHealth > 0 so spin attack / charge attack works
-    // (BGS normally breaks when swordHealth reaches 0)
-    if (gSaveContext.swordHealth <= 0.0f) {
-        gSaveContext.swordHealth = 8.0f;
+    // B held summons. The timer only fires once per hold (it stops climbing at
+    // the threshold), so keeping B down does not drain magic every frame.
+    if (bHeld && !rHeld) {
+        if (sByrnaChargeTimer < BYRNA_CHARGE_FRAMES) {
+            sByrnaChargeTimer++;
+            if (sByrnaChargeTimer == BYRNA_CHARGE_FRAMES) {
+                ByrnaOrb_Summon(play);
+            }
+        }
+    } else {
+        sByrnaChargeTimer = 0;
     }
 }
 
-// Restore original sword state when Byrna is unequipped
 static void Byrna_Cleanup(void) {
-    if (!gExtEquipBehavior.byrnaActive)
-        return;
-
-    // Restore original sword equipment
-    Inventory_ChangeEquipment(EQUIP_TYPE_SWORD, gExtEquipBehavior.byrnaSavedSwordEquip);
-    gSaveContext.equips.buttonItems[0] = gExtEquipBehavior.byrnaSavedButtonItem;
-    gSaveContext.swordHealth = gExtEquipBehavior.byrnaSavedSwordHealth;
-    gSaveContext.bgsFlag = gExtEquipBehavior.byrnaSavedBgsFlag;
+    // Runs every frame while the slot is NOT equipped, so it has to be cheap and
+    // idempotent — both of these are.
+    ByrnaOrb_Cleanup();
+    sByrnaChargeTimer = 0;
     gExtEquipBehavior.byrnaActive = 0;
 }
 
@@ -129,6 +148,5 @@ static void GreatFairySword_Behavior(Player* player, PlayState* play) {
 }
 
 static void GreatFairySword_OnMeleeHit(Player* player, PlayState* play) {
-    // Same HP/MP recovery as the Cane of Byrna.
-    Byrna_OnMeleeHit(player, play);
+    GreatFairySword_RecoverOnHit(player, play);
 }

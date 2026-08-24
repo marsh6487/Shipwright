@@ -29,12 +29,12 @@ void Harpoon::SendPacket_SetFlag(s16 sceneNum, s16 flagType, s16 flag) {
         if (!warned) {
             warned = true;
             SPDLOG_WARN("[Harpoon] flag not broadcast — current room has sync_items=false "
-                        "(sceneNum={} flagType={} flag={})", sceneNum, flagType, flag);
+                        "(sceneNum={} flagType={} flag={})",
+                        sceneNum, flagType, flag);
         }
         return;
     }
-    SPDLOG_DEBUG("[Harpoon] SendPacket_SetFlag scene={} type={} flag={}",
-                 sceneNum, flagType, flag);
+    SPDLOG_DEBUG("[Harpoon] SendPacket_SetFlag scene={} type={} flag={}", sceneNum, flagType, flag);
 
     nlohmann::json payload;
     payload["type"] = HPN_SET_FLAG;
@@ -89,8 +89,7 @@ void Harpoon::HandlePacket_SetFlag(nlohmann::json payload) {
 // ============================================================================
 
 void Harpoon::SendPacket_UnsetFlag(s16 sceneNum, s16 flagType, s16 flag) {
-    if (!IsSaveLoaded() || isProcessingIncomingPacket || isHandlingUpdateTeamState ||
-        !syncItems) {
+    if (!IsSaveLoaded() || isProcessingIncomingPacket || isHandlingUpdateTeamState || !syncItems) {
         return;
     }
 
@@ -360,9 +359,9 @@ void Harpoon::SendPacket_CutsceneTrigger(s32 cutsceneIndex, s16 sceneNum) {
         return;
     }
     nlohmann::json payload;
-    payload["type"]          = HPN_SAVE_CUTSCENE;
+    payload["type"] = HPN_SAVE_CUTSCENE;
     payload["cutsceneIndex"] = cutsceneIndex;
-    payload["sceneNum"]      = sceneNum;
+    payload["sceneNum"] = sceneNum;
     SendJsonToRemote(payload);
 }
 
@@ -423,8 +422,7 @@ void Harpoon::SendPacket_GameComplete() {
 }
 
 void Harpoon::HandlePacket_GameComplete(nlohmann::json payload) {
-    uint32_t clientId = payload.value("clientId",
-                          payload.value("source", 0u));
+    uint32_t clientId = payload.value("clientId", payload.value("source", 0u));
     std::string senderName = "Someone";
     if (clients.contains(clientId)) {
         senderName = clients[clientId].name;
@@ -450,18 +448,17 @@ void Harpoon::SendPacket_OcarinaSfx(uint8_t note, float modulator, int8_t bend) 
     }
 
     nlohmann::json payload;
-    payload["type"]      = HPN_AUDIO_OCARINA;
-    payload["note"]      = note;
+    payload["type"] = HPN_AUDIO_OCARINA;
+    payload["note"] = note;
     payload["modulator"] = modulator;
-    payload["bend"]      = bend;
-    payload["quiet"]     = true;
+    payload["bend"] = bend;
+    payload["quiet"] = true;
 
     // Anchor's pattern: send a separate addressed copy per teammate in the
     // same scene. Server-side this becomes one broadcast filtered by scene
     // (or several `targetClientId` deliveries).
     for (auto& [clientId, client] : clients) {
-        if (client.sceneNum == gPlayState->sceneNum && client.online &&
-            client.isSaveLoaded && !client.self) {
+        if (client.sceneNum == gPlayState->sceneNum && client.online && client.isSaveLoaded && !client.self) {
             payload["targetClientId"] = clientId;
             SendJsonToRemote(payload);
         }
@@ -469,25 +466,24 @@ void Harpoon::SendPacket_OcarinaSfx(uint8_t note, float modulator, int8_t bend) 
 }
 
 void Harpoon::HandlePacket_OcarinaSfx(nlohmann::json payload) {
-    uint32_t clientId = payload.value("clientId",
-                          payload.value("source", 0u));
+    uint32_t clientId = payload.value("clientId", payload.value("source", 0u));
     if (!clients.contains(clientId) || clients[clientId].player == nullptr) {
         return;
     }
 
     auto& client = clients[clientId];
-    uint8_t note   = payload.value("note", (uint8_t)0xFF);
+    uint8_t note = payload.value("note", (uint8_t)0xFF);
     float modulator = payload.value("modulator", 1.0f);
-    int8_t bend    = payload.value("bend", (int8_t)0);
+    int8_t bend = payload.value("bend", (int8_t)0);
 
     client.ocarinaModulator = modulator;
-    client.ocarinaBend      = bend;
+    client.ocarinaBend = bend;
 
     if ((note != 0xFF) && (client.ocarinaNote != note)) {
         Audio_QueueCmdS8(0x6 << 24 | SEQ_PLAYER_SFX << 16 | 0xD07, client.ocarinaBend - 1);
         Audio_QueueCmdS8(0x6 << 24 | SEQ_PLAYER_SFX << 16 | 0xD05, note);
-        Audio_PlaySoundGeneral(NA_SE_OC_OCARINA, &client.player->actor.projectedPos, 4,
-                               &client.ocarinaModulator, &sRelativeOcarinaVolume, &gSfxDefaultReverb);
+        Audio_PlaySoundGeneral(NA_SE_OC_OCARINA, &client.player->actor.projectedPos, 4, &client.ocarinaModulator,
+                               &sRelativeOcarinaVolume, &gSfxDefaultReverb);
     } else if ((client.ocarinaNote != 0xFF) && (note == 0xFF)) {
         Audio_StopSfxById(NA_SE_OC_OCARINA);
     }
@@ -509,15 +505,19 @@ void Harpoon::HandlePacket_OcarinaSfx(nlohmann::json payload) {
 // ============================================================================
 
 #include <unordered_map>
-namespace { std::unordered_map<const Actor*, uint32_t> sVfxActorOwners; }
+namespace {
+std::unordered_map<const Actor*, uint32_t> sVfxActorOwners;
+}
 
 void Harpoon::SetVfxActorOwner(const Actor* actor, uint32_t ownerClientId) {
-    if (actor == nullptr) return;
+    if (actor == nullptr)
+        return;
     sVfxActorOwners[actor] = ownerClientId;
 }
 
 uint32_t Harpoon::GetVfxActorOwner(const Actor* actor) {
-    if (actor == nullptr) return 0;
+    if (actor == nullptr)
+        return 0;
     auto it = sVfxActorOwners.find(actor);
     return it == sVfxActorOwners.end() ? 0 : it->second;
 }
@@ -532,33 +532,31 @@ void Harpoon::ClearVfxActorOwners() {
     sVfxActorOwners.clear();
 }
 
-void Harpoon::SendPacket_SpawnVfxActor(int16_t actorId, float posX, float posY, float posZ,
-                                        int16_t rotX, int16_t rotY, int16_t rotZ,
-                                        int16_t params, const char* vfxKind,
-                                        bool attachedToOwner) {
+void Harpoon::SendPacket_SpawnVfxActor(int16_t actorId, float posX, float posY, float posZ, int16_t rotX, int16_t rotY,
+                                       int16_t rotZ, int16_t params, const char* vfxKind, bool attachedToOwner) {
     if (!IsSaveLoaded() || !isConnected) {
         return;
     }
     nlohmann::json payload;
-    payload["type"]            = HPN_APPEARANCE_SPAWN_VFX;
-    payload["actorId"]         = actorId;
-    payload["posX"]            = posX;
-    payload["posY"]            = posY;
-    payload["posZ"]            = posZ;
-    payload["rotX"]            = rotX;
-    payload["rotY"]            = rotY;
-    payload["rotZ"]            = rotZ;
-    payload["params"]          = params;
-    payload["vfxKind"]         = vfxKind ? vfxKind : "generic";
+    payload["type"] = HPN_APPEARANCE_SPAWN_VFX;
+    payload["actorId"] = actorId;
+    payload["posX"] = posX;
+    payload["posY"] = posY;
+    payload["posZ"] = posZ;
+    payload["rotX"] = rotX;
+    payload["rotY"] = rotY;
+    payload["rotZ"] = rotZ;
+    payload["params"] = params;
+    payload["vfxKind"] = vfxKind ? vfxKind : "generic";
     payload["attachedToOwner"] = attachedToOwner;
     SendJsonToRemote(payload);
 }
 
 void Harpoon::HandlePacket_SpawnVfxActor(nlohmann::json payload) {
-    if (!IsSaveLoaded() || gPlayState == nullptr) return;
+    if (!IsSaveLoaded() || gPlayState == nullptr)
+        return;
 
-    uint32_t ownerClientId = payload.value("clientId",
-                                payload.value("source", 0u));
+    uint32_t ownerClientId = payload.value("clientId", payload.value("source", 0u));
     if (ownerClientId == ownClientId) {
         // Echo of our own packet — ignore (we already spawned locally).
         return;
@@ -574,14 +572,11 @@ void Harpoon::HandlePacket_SpawnVfxActor(nlohmann::json payload) {
     int16_t params = (int16_t)payload.value("params", 0);
     std::string vfxKind = payload.value("vfxKind", std::string("generic"));
 
-    Actor* spawned = Actor_Spawn(&gPlayState->actorCtx, gPlayState, actorId,
-                                 px, py, pz, rx, ry, rz, params);
+    Actor* spawned = Actor_Spawn(&gPlayState->actorCtx, gPlayState, actorId, px, py, pz, rx, ry, rz, params);
     if (spawned == nullptr) {
-        SPDLOG_DEBUG("[Harpoon] HandlePacket_SpawnVfxActor: Actor_Spawn failed for id={} kind={}",
-                     actorId, vfxKind);
+        SPDLOG_DEBUG("[Harpoon] HandlePacket_SpawnVfxActor: Actor_Spawn failed for id={} kind={}", actorId, vfxKind);
         return;
     }
     SetVfxActorOwner(spawned, ownerClientId);
-    SPDLOG_DEBUG("[Harpoon] spawned VFX actor id={} kind={} owner={}",
-                 actorId, vfxKind, ownerClientId);
+    SPDLOG_DEBUG("[Harpoon] spawned VFX actor id={} kind={} owner={}", actorId, vfxKind, ownerClientId);
 }

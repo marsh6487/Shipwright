@@ -445,11 +445,14 @@ void BgHakaTrap_FanBlade_UpdateFanRotation(BgHakaTrap* this, PlayState* play, s1
 
     Actor_WorldToActorCoords(&this->dyna.actor, &sp18, &player->actor.world.pos);
 
-    if (!ExtEquip_HasSnowquillResistance(SNOWQUILL_RESIST_WIND) && (fabsf(sp18.x) < 70.0f) &&
-        (fabsf(sp18.y) < 100.0f) && (sp18.z < 500.0f) &&
+    if ((fabsf(sp18.x) < 70.0f) && (fabsf(sp18.y) < 100.0f) && (sp18.z < 500.0f) &&
         (GET_PLAYER(play)->currentBoots != PLAYER_BOOTS_IRON)) {
-        player->pushedSpeed = ((500.0f - sp18.z) * 0.06f + 5.0f) * arg2 * (1.0f / 0x3A00) * (2.0f / 3.0f);
-        player->pushedYaw = this->dyna.actor.shape.rot.y;
+        if (ExtEquip_HasSagesResistance(SAGES_RESIST_WIND)) {
+            ExtEquip_SagesFlash(SAGES_RESIST_WIND);
+        } else {
+            player->pushedSpeed = ((500.0f - sp18.z) * 0.06f + 5.0f) * arg2 * (1.0f / 0x3A00) * (2.0f / 3.0f);
+            player->pushedYaw = this->dyna.actor.shape.rot.y;
+        }
     }
 }
 

@@ -24,8 +24,18 @@
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-#define CHAMPION_FLURRY_DURATION 100 // real frames the slow window lasts
-#define CHAMPION_FLURRY_HIT_MAX 7    // hits that end the window early
+#define CHAMPION_FLURRY_DURATION 100 // real frames the committed rush lasts
+
+// BOTW splits the move in two: the perfect dodge only slows time, and the rush itself
+// starts when you swing. This is how long that offer stays open before time resumes.
+#define CHAMPION_FLURRY_OFFER_FRAMES 45
+
+// BOTW cancels the rush if Link stops connecting. Every landed hit refreshes this.
+#define CHAMPION_FLURRY_CONNECT_FRAMES 45
+
+// Hits before the rush ends. BOTW: 7 with a one-handed weapon, 4 with a two-hander.
+#define CHAMPION_FLURRY_HIT_MAX 7
+#define CHAMPION_FLURRY_HIT_MAX_TWOHAND 4
 
 // World speed during both modes. This is SLOW MOTION, not a stop: the world
 // still visibly moves, you just get time to read it. See the note in z_actor.c —
@@ -39,17 +49,19 @@
 #define CHAMPION_TINT_ALPHA 30      // subtle blue tint (BOTW has no heavy overlay)
 
 // Flurry Rush trigger + blink.
-#define CHAMPION_DODGE_RANGE 140.0f    // how close an incoming attack must sweep
-#define CHAMPION_TELEPORT_DIST 65.0f   // where Link lands relative to the enemy
-#define CHAMPION_MAX_TELEPORT 600.0f   // never blink across the room to a far target
+#define CHAMPION_DODGE_RANGE 140.0f     // how close an incoming attack must sweep
+#define CHAMPION_DODGE_COOLDOWN 20      // frames before the same hop may re-trigger
+#define CHAMPION_TELEPORT_DIST 65.0f    // where Link lands relative to the enemy
+#define CHAMPION_MAX_TELEPORT 600.0f    // never blink across the room to a far target
 #define CHAMPION_ATTACK_SNAPSHOT_MAX 24 // incoming attacks tracked per frame
 
 #ifndef BGCHECKFLAG_GROUND
 #define BGCHECKFLAG_GROUND 0x0001
 #endif
 
-// Forward declarations (defined later in z_player.c unity build)
-extern void Player_SetIntangibility(Player* player, s32 timer);
+// Forward declarations (defined later in z_player.c unity build).
+// No Player_SetIntangibility here on purpose: BOTW leaves Link vulnerable for the whole
+// flurry, and a hit cancels it. See the damage check in Champion_Behavior.
 extern int Player_IsZTargeting(Player* this);
 
 // ---------------------------------------------------------------------------
@@ -57,7 +69,8 @@ extern int Player_IsZTargeting(Player* this);
 // ---------------------------------------------------------------------------
 typedef enum {
     CHAMPION_IDLE,
-    CHAMPION_FLURRY_RUSH,
+    CHAMPION_FLURRY_OFFER, // dodge landed: world slowed, waiting for Link to swing
+    CHAMPION_FLURRY_RUSH,  // committed: blinked in, the victim cannot go invulnerable
     CHAMPION_BULLET_TIME,
 } ChampionState;
 
@@ -67,8 +80,15 @@ typedef enum {
 static ChampionState sChampionState = CHAMPION_IDLE;
 static s16 sChampionTimer = 0;
 static u8 sChampionHitCount = 0;
-static u8 sPrevHopping = 0; // for rising-edge detection
 static s16 sScreenFlashTimer = 0;
+// The enemy this flurry is aimed at. Its invulnerability is stripped every frame of the
+// window so consecutive swings all land; nothing else in the room is affected.
+static Actor* sChampionFlurryTarget = NULL;
+static s16 sChampionConnectTimer = 0; // frames left to land the next hit before it fizzles
+static s8 sChampionPrevInvinc = 0;    // damage edge detection — a hit cancels the rush
+// Blocks a re-trigger while still inside the hop that just produced a flurry. Without it
+// a single sidehop next to a sustained hitbox would re-arm the moment the last one ended.
+static s16 sChampionDodgeCooldown = 0;
 
 // ---------------------------------------------------------------------------
 // Incoming-attack snapshot
@@ -174,13 +194,19 @@ static u8 Champion_IncomingAttackNearby(Player* player) {
  * Returns 1 if Link is holding any first-person aimable item:
  * bow variants, slingshot, hookshot/longshot, boomerang.
  */
-static u8 Champion_IsAimableItem(Player* player) {
-    PlayerItemAction ia = player->heldItemAction;
+static u8 Champion_IsAimableAction(PlayerItemAction ia) {
     if (ia >= PLAYER_IA_BOW && ia <= PLAYER_IA_LONGSHOT)
         return 1; // bow..sling..hookshot..longshot
     if (ia == PLAYER_IA_BOOMERANG)
         return 1;
     return 0;
+}
+
+static u8 Champion_IsAimableItem(Player* player) {
+    // heldItemAction can briefly lag itemAction while the airborne upper-body
+    // transition hands control to the first-person action. Accept either side
+    // of that transition so the permission cannot disappear for one frame.
+    return Champion_IsAimableAction(player->heldItemAction) || Champion_IsAimableAction(player->itemAction);
 }
 
 /** Is Link actually aiming the thing, as opposed to merely holding it? */
@@ -206,7 +232,7 @@ u8 Champion_AllowsMidairAim(Player* player) {
     if ((player == NULL) || !ExtEquip_IsChampionTunic()) {
         return 0;
     }
-    return Champion_IsAimableItem(player);
+    return (sChampionState == CHAMPION_BULLET_TIME) || Champion_IsAimableItem(player);
 }
 
 /** The locked-on actor, but only when it is something worth flurrying around. */
@@ -227,8 +253,9 @@ static Actor* Champion_LockedEnemy(Player* player) {
  * fillScreen must be toggled alongside screenFillColor for the engine to
  * render the overlay. fillScreen persists until explicitly cleared.
  *
- * golden=1 → warm gold (Flurry Rush)
- * golden=0 → cool blue (Bullet Time)
+ * golden=1 → warm gold (unused: both modes are blue now, so the tunic reads as one
+ *            coherent effect instead of two unrelated ones)
+ * golden=0 → cool blue (Bullet Time AND Flurry Rush)
  * alpha=0  → clear tint
  */
 static void Champion_SetScreenTint(PlayState* play, u8 golden, u8 alpha) {
@@ -255,15 +282,15 @@ static void Champion_SetScreenTint(PlayState* play, u8 golden, u8 alpha) {
 // ---------------------------------------------------------------------------
 
 /**
- * The BOTW blink: drop Link on the far side of the enemy he is locked onto,
- * turned to face it, so the dodge ends with the enemy's back to him.
+ * The BOTW blink: close the distance to the enemy Link is locked onto in a single frame
+ * and turn him to face it, so the dodge ends with him already in striking range.
  *
  * prevPos is written alongside world.pos and bgCheckFlags cleared so the engine
  * does not treat the jump as a collision sweep and drag him back — the same trick
  * the Switch Hook's swap uses. Y comes from the ENEMY, not from Link, so blinking
  * past a flying or elevated target does not leave him standing in the air.
  */
-static void Champion_BlinkBehindTarget(Player* player, Actor* target) {
+static void Champion_BlinkToTarget(Player* player, Actor* target) {
     f32 dx = player->actor.world.pos.x - target->world.pos.x;
     f32 dz = player->actor.world.pos.z - target->world.pos.z;
     f32 distXZ = sqrtf((dx * dx) + (dz * dz));
@@ -279,9 +306,11 @@ static void Champion_BlinkBehindTarget(Player* player, Actor* target) {
         distXZ = 1.0f;
     }
 
-    // Mirror Link to the OPPOSITE side of the enemy, at a fixed reach.
-    dest.x = target->world.pos.x - (dx / distXZ) * CHAMPION_TELEPORT_DIST;
-    dest.z = target->world.pos.z - (dz / distXZ) * CHAMPION_TELEPORT_DIST;
+    // Close the gap: drop Link at striking distance on the side he already was, rather
+    // than mirroring him past the enemy. (dx,dz) points FROM the enemy TO Link, so adding
+    // it keeps him on his own side; subtracting would put him behind.
+    dest.x = target->world.pos.x + (dx / distXZ) * CHAMPION_TELEPORT_DIST;
+    dest.z = target->world.pos.z + (dz / distXZ) * CHAMPION_TELEPORT_DIST;
     dest.y = target->world.pos.y;
 
     player->actor.world.pos = dest;
@@ -298,31 +327,60 @@ static void Champion_BlinkBehindTarget(Player* player, Actor* target) {
     player->yaw = player->actor.shape.rot.y;
 }
 
-static void Champion_EnterFlurry(Player* player, PlayState* play, Actor* target) {
-    sChampionState = CHAMPION_FLURRY_RUSH;
-    sChampionTimer = CHAMPION_FLURRY_DURATION;
+/**
+ * The perfect dodge itself. Time slows and the offer opens — but Link does not move and
+ * the enemy is not touched yet. In BOTW the dodge only buys you the slow-motion; the rush
+ * is a separate commitment you make by swinging, and you can decline it and just reposition.
+ *
+ * Note Link gets NO intangibility here. BOTW leaves him vulnerable throughout: another
+ * enemy landing a hit cancels the whole thing, which is what stops the move from being
+ * free value in a crowd.
+ */
+static void Champion_EnterFlurryOffer(Player* player, PlayState* play, Actor* target) {
+    sChampionState = CHAMPION_FLURRY_OFFER;
+    sChampionTimer = CHAMPION_FLURRY_OFFER_FRAMES;
     sChampionHitCount = 0;
-
-    if (target != NULL) {
-        Champion_BlinkBehindTarget(player, target);
-    }
+    sChampionFlurryTarget = target;
 
     TimeCtl_Request(TIMECTL_OWNER_CHAMPION, CHAMPION_SLOW_FACTOR, 0);
-    Player_SetIntangibility(player, CHAMPION_FLURRY_DURATION);
 
     sScreenFlashTimer = CHAMPION_SCREEN_FLASH;
-    Champion_SetScreenTint(play, 1, 200);
+    Champion_SetScreenTint(play, 0, 200);
 
     Audio_PlaySoundGeneral(NA_SE_SY_ATTENTION_ON, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
+/** Link swung during the offer: close the distance and open the victim up. */
+static void Champion_CommitFlurry(Player* player, PlayState* play) {
+    sChampionState = CHAMPION_FLURRY_RUSH;
+    sChampionTimer = CHAMPION_FLURRY_DURATION;
+    sChampionConnectTimer = CHAMPION_FLURRY_CONNECT_FRAMES;
+    sChampionHitCount = 0;
+
+    if (sChampionFlurryTarget != NULL) {
+        Champion_BlinkToTarget(player, sChampionFlurryTarget);
+    }
+
+    Champion_SetScreenTint(play, 0, 120);
+    Audio_PlaySoundGeneral(NA_SE_SY_ATTENTION_ON, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
+/** 7 swings with a one-handed weapon, 4 with a two-hander, as in BOTW. */
+static u8 Champion_FlurryHitLimit(Player* player) {
+    return Player_HoldsTwoHandedWeapon(player) ? CHAMPION_FLURRY_HIT_MAX_TWOHAND : CHAMPION_FLURRY_HIT_MAX;
 }
 
 static void Champion_ExitFlurry(PlayState* play) {
     sChampionState = CHAMPION_IDLE;
     sChampionTimer = 0;
     sChampionHitCount = 0;
+    sChampionConnectTimer = 0;
+    sChampionFlurryTarget = NULL;
+    sChampionDodgeCooldown = CHAMPION_DODGE_COOLDOWN;
     TimeCtl_Release(TIMECTL_OWNER_CHAMPION);
-    Champion_SetScreenTint(play, 1, 0);
+    Champion_SetScreenTint(play, 0, 0);
 }
 
 static void Champion_EnterBulletTime(Player* player, PlayState* play) {
@@ -344,12 +402,12 @@ static void Champion_ExitBulletTime(Player* player, PlayState* play) {
 // Melee hit callback — called from ExtEquip_OnMeleeHitDispatch
 // ---------------------------------------------------------------------------
 static void Champion_OnMeleeHit(Player* player, PlayState* play) {
-    (void)player;
     if (sChampionState != CHAMPION_FLURRY_RUSH) {
         return;
     }
+    sChampionConnectTimer = CHAMPION_FLURRY_CONNECT_FRAMES; // connecting keeps it alive
     sChampionHitCount++;
-    if (sChampionHitCount >= CHAMPION_FLURRY_HIT_MAX) {
+    if (sChampionHitCount >= Champion_FlurryHitLimit(player)) {
         Champion_ExitFlurry(play);
     }
 }
@@ -365,26 +423,35 @@ static void Champion_Behavior(Player* player, PlayState* play) {
     u32 blockedFlags = PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
                        PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_GETTING_ITEM;
     if (player->stateFlags1 & blockedFlags) {
-        if (sChampionState == CHAMPION_FLURRY_RUSH) {
+        if ((sChampionState == CHAMPION_FLURRY_RUSH) || (sChampionState == CHAMPION_FLURRY_OFFER)) {
             Champion_ExitFlurry(play);
         } else if (sChampionState == CHAMPION_BULLET_TIME) {
             Champion_ExitBulletTime(player, play);
         }
-        sPrevHopping = 0;
         return;
     }
 
     // ---- Screen flash fade -------------------------------------------------
     if (sScreenFlashTimer > 0) {
         sScreenFlashTimer--;
-        if (sScreenFlashTimer == 0 && sChampionState == CHAMPION_FLURRY_RUSH) {
-            Champion_SetScreenTint(play, 1, 50); // settle to dim persistent gold
+        if (sScreenFlashTimer == 0 &&
+            ((sChampionState == CHAMPION_FLURRY_RUSH) || (sChampionState == CHAMPION_FLURRY_OFFER))) {
+            Champion_SetScreenTint(play, 0, 50); // settle to a dim persistent blue
         }
     }
 
     // ---- Per-frame reads ---------------------------------------------------
     u8 curHopping = (player->stateFlags2 & PLAYER_STATE2_HOPPING) != 0;
     u8 onGround = (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) != 0;
+    // Same damage edge the custom items use (see ItemInput_CheckDamage). Read once per
+    // frame so both flurry states see the identical value.
+    u8 tookDamage = (player->invincibilityTimer > 0) && (sChampionPrevInvinc == 0);
+
+    sChampionPrevInvinc = player->invincibilityTimer;
+
+    if (sChampionDodgeCooldown > 0) {
+        sChampionDodgeCooldown--;
+    }
 
     // ---- State machine -----------------------------------------------------
     switch (sChampionState) {
@@ -398,20 +465,64 @@ static void Champion_Behavior(Player* player, PlayState* play) {
             }
             // Flurry Rush: the first frame of a sidehop/backflip, while locked on,
             // with a damage collider sweeping past. That is the BOTW perfect dodge.
-            u8 risingEdge = curHopping && !sPrevHopping;
-            if (risingEdge && Player_IsZTargeting(player) && Champion_IncomingAttackNearby(player)) {
-                Champion_EnterFlurry(player, play, Champion_LockedEnemy(player));
+            // Any frame of the hop counts, not just its first. Requiring the rising edge
+            // meant the incoming attack had to be inside CHAMPION_DODGE_RANGE on exactly
+            // the frame the hop started — a one-frame coincidence that mostly did not
+            // happen, since the blade is usually still travelling toward Link then. Being
+            // airborne in a sidehop or backflip IS the dodge; the distance test to the
+            // sweeping damage collider is what decides whether it was a good one.
+            if (curHopping && (sChampionDodgeCooldown == 0) && Player_IsZTargeting(player) &&
+                Champion_IncomingAttackNearby(player)) {
+                Champion_EnterFlurryOffer(player, play, Champion_LockedEnemy(player));
+            }
+            break;
+        }
+
+        case CHAMPION_FLURRY_OFFER: {
+            // Time is slowed and the rush is on offer. Swing to take it, or let it lapse
+            // and just use the slow motion to reposition — both are valid in BOTW.
+            if (tookDamage) {
+                Champion_ExitFlurry(play);
+                break;
+            }
+            if (CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B) && (sChampionFlurryTarget != NULL) &&
+                (sChampionFlurryTarget->update != NULL)) {
+                Champion_CommitFlurry(player, play);
+                break;
+            }
+            if (--sChampionTimer <= 0) {
+                Champion_ExitFlurry(play);
             }
             break;
         }
 
         case CHAMPION_FLURRY_RUSH: {
-            if (sChampionTimer > 0) {
-                sChampionTimer--;
-                // Keep iframes in sync with remaining window
-                Player_SetIntangibility(player, sChampionTimer);
+            // Link is NOT invincible here — a hit from anything cancels the rush. That is
+            // what keeps the move honest when more than one enemy is on you.
+            if (tookDamage) {
+                Champion_ExitFlurry(play);
+                break;
             }
-            if (sChampionTimer <= 0) {
+
+            // Hold the victim open. Enemies go invulnerable between hits, which would eat
+            // every swing after the first; clearing it each frame is what turns the window
+            // into a real combo. Only this one enemy — the rest of the room is untouched.
+            if ((sChampionFlurryTarget != NULL) && (sChampionFlurryTarget->update != NULL)) {
+                TimeCtl_ClearIframes(sChampionFlurryTarget);
+            } else {
+                sChampionFlurryTarget = NULL; // it died or despawned mid-flurry
+                Champion_ExitFlurry(play);
+                break;
+            }
+
+            // Stop connecting and it fizzles out, rather than handing you a free slow-mo
+            // window to stroll around in. Every landed hit refreshes this.
+            if (--sChampionConnectTimer <= 0) {
+                Champion_ExitFlurry(play);
+                break;
+            }
+
+            if (--sChampionTimer <= 0) {
                 Champion_ExitFlurry(play);
             }
             break;
@@ -434,8 +545,6 @@ static void Champion_Behavior(Player* player, PlayState* play) {
             break;
         }
     }
-
-    sPrevHopping = curHopping;
 }
 
 // ---------------------------------------------------------------------------
@@ -454,6 +563,9 @@ static void Champion_Cleanup(PlayState* play) {
     sChampionState = CHAMPION_IDLE;
     sChampionTimer = 0;
     sChampionHitCount = 0;
-    sPrevHopping = 0;
+    sChampionConnectTimer = 0;
+    sChampionPrevInvinc = 0;
+    sChampionDodgeCooldown = 0;
+    sChampionFlurryTarget = NULL;
     sScreenFlashTimer = 0;
 }

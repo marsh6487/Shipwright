@@ -29,15 +29,16 @@ extern "C" {
 #include "variables.h"
 }
 
-#define GARO_SKIN_SKEL_OTR  "__OTR__objects/garo/gGaroSkinSkel"
-#define GARO_MAT_DL_OTR     "__OTR__objects/garo/gGaroSkinMatDL"
+#define GARO_SKIN_SKEL_OTR "__OTR__objects/forms/garo/gGaroSkinSkel"
+#define GARO_MAT_DL_OTR "__OTR__objects/forms/garo/gGaroSkinMatDL"
 
 static Skin sGaroSkin = {};
 static Gfx* sGaroMatDL = nullptr; // material DL: combiner / render mode / texture load
 static bool sInitialized = false;
 
 extern "C" s32 GaroSkin_Setup(PlayState* play) {
-    if (sInitialized) return 1;
+    if (sInitialized)
+        return 1;
 
     SkeletonHeader* skel = ResourceMgr_LoadSkeletonByName(GARO_SKIN_SKEL_OTR, NULL);
     if (skel == nullptr) {
@@ -68,14 +69,12 @@ extern "C" s32 GaroSkin_Setup(PlayState* play) {
             vtxEntry->buf[0] = NULL;
             vtxEntry->buf[1] = NULL;
         } else {
-            SkinAnimatedLimbData* anim =
-                (SkinAnimatedLimbData*)SEGMENTED_TO_VIRTUAL(limb->segment);
+            SkinAnimatedLimbData* anim = (SkinAnimatedLimbData*)SEGMENTED_TO_VIRTUAL(limb->segment);
             vtxEntry->index = 0;
             vtxEntry->buf[0] = (Vtx*)malloc(anim->totalVtxCount * sizeof(Vtx));
             vtxEntry->buf[1] = (Vtx*)malloc(anim->totalVtxCount * sizeof(Vtx));
             if (!vtxEntry->buf[0] || !vtxEntry->buf[1]) {
-                SPDLOG_WARN("[GaroSkin] vtxBuf alloc failed for limb {} ({} verts)",
-                            i, anim->totalVtxCount);
+                SPDLOG_WARN("[GaroSkin] vtxBuf alloc failed for limb {} ({} verts)", i, anim->totalVtxCount);
                 return 0;
             }
             // Inlined Skin_InitAnimatedLimb (internal to z_skin_awb.c, not in
@@ -96,8 +95,8 @@ extern "C" s32 GaroSkin_Setup(PlayState* play) {
                 }
             }
             animatedCount++;
-            SPDLOG_INFO("[GaroSkin] limb {} animated: {} verts, {} modifs",
-                        i, anim->totalVtxCount, anim->limbModifCount);
+            SPDLOG_INFO("[GaroSkin] limb {} animated: {} verts, {} modifs", i, anim->totalVtxCount,
+                        anim->limbModifCount);
         }
     }
 
@@ -114,19 +113,20 @@ extern "C" s32 GaroSkin_Setup(PlayState* play) {
     sGaroMatDL = ResourceMgr_LoadGfxByName(GARO_MAT_DL_OTR);
     if (sGaroMatDL == nullptr) {
         SPDLOG_WARN("[GaroSkin] LoadGfxByName('{}') failed — verts will render "
-                    "with whatever combiner state was last set", GARO_MAT_DL_OTR);
+                    "with whatever combiner state was last set",
+                    GARO_MAT_DL_OTR);
     } else {
         SPDLOG_INFO("[GaroSkin] material DL loaded at {}", (void*)sGaroMatDL);
     }
 
-    SPDLOG_INFO("[GaroSkin] manual setup OK: {} limbs, {} animated",
-                limbCount, animatedCount);
+    SPDLOG_INFO("[GaroSkin] manual setup OK: {} limbs, {} animated", limbCount, animatedCount);
     sInitialized = true;
     return 1;
 }
 
 extern "C" void GaroSkin_Teardown(PlayState* play) {
-    if (!sInitialized) return;
+    if (!sInitialized)
+        return;
     if (sGaroSkin.vtxTable) {
         for (s32 i = 0; i < sGaroSkin.limbCount; i++) {
             if (sGaroSkin.vtxTable[i].buf[0]) {
@@ -158,14 +158,14 @@ extern "C" void GaroSkin_Draw(PlayState* play, Player* player) {
     // is dangling.
     if (sInitialized) {
         SkeletonHeader* current = ResourceMgr_LoadSkeletonByName(GARO_SKIN_SKEL_OTR, NULL);
-        if (current != nullptr &&
-            (SkeletonHeader*)SEGMENTED_TO_VIRTUAL(current) != sGaroSkin.skeletonHeader) {
+        if (current != nullptr && (SkeletonHeader*)SEGMENTED_TO_VIRTUAL(current) != sGaroSkin.skeletonHeader) {
             SPDLOG_INFO("[GaroSkin] skeleton pointer changed; re-initialising");
             GaroSkin_Teardown(play);
         }
     }
     if (!sInitialized) {
-        if (!GaroSkin_Setup(play)) return;
+        if (!GaroSkin_Setup(play))
+            return;
     }
 
     // === Hybrid skeleton translator ===

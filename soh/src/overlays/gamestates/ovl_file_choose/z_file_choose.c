@@ -789,7 +789,8 @@ void FileChoose_UpdateRandomizerMenu(GameState* thisx) {
     // COMBO: on the "Load Combo Seed" row, stick left/right picks which .fleet to load.
     if (isCombo && this->randomizerIndex == CBO_LOAD_SEED) {
         int cnt = FleetComboFS_FleetCount();
-        if (cnt > 0 && (ABS(this->stickRelX) > 30 || (dpad && CHECK_BTN_ANY(input->press.button, BTN_DLEFT | BTN_DRIGHT)))) {
+        if (cnt > 0 &&
+            (ABS(this->stickRelX) > 30 || (dpad && CHECK_BTN_ANY(input->press.button, BTN_DLEFT | BTN_DRIGHT)))) {
             if (this->stickRelX > 30 || (dpad && CHECK_BTN_ANY(input->press.button, BTN_DRIGHT))) {
                 sComboFleetIdx = (sComboFleetIdx + 1) % cnt;
             } else {
@@ -1901,8 +1902,10 @@ void FileChoose_DrawWindowContents(GameState* thisx) {
                 textColorR = textColorG = textColorB = 100;
             }
 
-            Interface_DrawTextLine(this->state.gfxCtx, (isCombo ? SohFileSelect_GetComboSettingText : SohFileSelect_GetSettingText)(index, language), 70,
-                                   (80 + (index * 16)), textColorR, textColorG, textColorB, textAlpha, 0.8f, true);
+            Interface_DrawTextLine(
+                this->state.gfxCtx,
+                (isCombo ? SohFileSelect_GetComboSettingText : SohFileSelect_GetSettingText)(index, language), 70,
+                (80 + (index * 16)), textColorR, textColorG, textColorB, textAlpha, 0.8f, true);
         }
 
         // COMBO: while the "Load Combo Seed" row is selected, show the currently-picked .fleet file
@@ -1918,7 +1921,8 @@ void FileChoose_DrawWindowContents(GameState* thisx) {
                 if (idx >= cnt) {
                     idx = cnt - 1;
                 }
-                snprintf(sSeedLine, sizeof(sSeedLine), "> %s   (<- -> to pick, A to load)", FleetComboFS_FleetName(idx));
+                snprintf(sSeedLine, sizeof(sSeedLine), "> %s   (<- -> to pick, A to load)",
+                         FleetComboFS_FleetName(idx));
             } else {
                 snprintf(sSeedLine, sizeof(sSeedLine), "(no .fleet in the fleet/ folder)");
             }
@@ -1927,16 +1931,19 @@ void FileChoose_DrawWindowContents(GameState* thisx) {
 
         // Show text to indicate randomizer / combo is being generated.
         if (generating || FleetComboFS_IsBusy()) {
-            Interface_DrawTextLine(this->state.gfxCtx, (isCombo ? SohFileSelect_GetComboSettingText : SohFileSelect_GetSettingText)(genTextIdx, language), 70,
-                                   (80 + 72), 255, 255, 255, textAlpha, 0.8f, true);
+            Interface_DrawTextLine(
+                this->state.gfxCtx,
+                (isCombo ? SohFileSelect_GetComboSettingText : SohFileSelect_GetSettingText)(genTextIdx, language), 70,
+                (80 + 72), 255, 255, 255, textAlpha, 0.8f, true);
         }
 
         // If no seed is ready and "Start" is selected, explain why you can't start yet.
         if (!Randomizer_IsSeedGenerated() && !Randomizer_IsSpoilerLoaded() &&
             this->randomizerIndex == RSM_START_RANDOMIZER) {
-            Interface_DrawTextLine(this->state.gfxCtx,
-                                   (isCombo ? SohFileSelect_GetComboSettingText : SohFileSelect_GetSettingText)(noSeedTextIdx, language), 70, (80 + 72),
-                                   240, 80, 80, textAlpha, 0.8f, true);
+            Interface_DrawTextLine(
+                this->state.gfxCtx,
+                (isCombo ? SohFileSelect_GetComboSettingText : SohFileSelect_GetSettingText)(noSeedTextIdx, language),
+                70, (80 + 72), 240, 80, 80, textAlpha, 0.8f, true);
         }
 
         // COMBO: a small line describing the OoT x MM run (goal). Seed-hash icons draw via the normal

@@ -1302,8 +1302,7 @@ void BossFd_CollisionCheck(BossFd* this, PlayState* play) {
     // so normal play / the boomerang regression is untouched. Mash to death.
     if (BossSuperDamage_IsFormActive(play) &&
         ((headCollider->info.bumperFlags & BUMP_HIT) ||
-         BossSuperDamage_FormAttackReaches(play, &this->headPos,
-                                           BossSuperDamage_FormAttackRange(play) + 60.0f))) {
+         BossSuperDamage_FormAttackReaches(play, &this->headPos, BossSuperDamage_FormAttackRange(play) + 60.0f))) {
         headCollider->info.bumperFlags &= ~BUMP_HIT;
         if ((s8)this->actor.colChkInfo.health <= 0) {
             return; // already dying — ignore further hits while the death plays out
@@ -1325,8 +1324,8 @@ void BossFd_CollisionCheck(BossFd* this, PlayState* play) {
         }
         this->work[BFD_DAMAGE_FLASH_TIMER] = 10;
         this->work[BFD_INVINC_TIMER] = 12; // short cooldown so mashing lands fast
-        Audio_PlaySoundGeneral(NA_SE_EN_VALVAISA_DAMAGE1, &this->actor.projectedPos, 4,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        Audio_PlaySoundGeneral(NA_SE_EN_VALVAISA_DAMAGE1, &this->actor.projectedPos, 4, &gSfxDefaultFreqAndVolScale,
+                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         return;
     }
 

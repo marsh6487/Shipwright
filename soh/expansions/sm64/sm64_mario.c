@@ -126,30 +126,19 @@ static s32 Sm64_LoadDll(void) {
     p_sm64_play_sound_global = (pfn_sm64_play_sound_global)SM64_GET_PROC(sDllHandle, "sm64_play_sound_global");
     p_sm64_set_sound_volume = (pfn_sm64_set_sound_volume)SM64_GET_PROC(sDllHandle, "sm64_set_sound_volume");
     p_sm64_set_mario_action = (pfn_sm64_set_mario_action)SM64_GET_PROC(sDllHandle, "sm64_set_mario_action");
-    p_sm64_set_mario_action_arg =
-        (pfn_sm64_set_mario_action_arg)SM64_GET_PROC(sDllHandle, "sm64_set_mario_action_arg");
+    p_sm64_set_mario_action_arg = (pfn_sm64_set_mario_action_arg)SM64_GET_PROC(sDllHandle, "sm64_set_mario_action_arg");
     p_sm64_set_mario_forward_velocity =
         (pfn_sm64_set_mario_forward_velocity)SM64_GET_PROC(sDllHandle, "sm64_set_mario_forward_velocity");
-    p_sm64_set_mario_velocity =
-        (pfn_sm64_set_mario_velocity)SM64_GET_PROC(sDllHandle, "sm64_set_mario_velocity");
-    p_sm64_set_mario_animation =
-        (pfn_sm64_set_mario_animation)SM64_GET_PROC(sDllHandle, "sm64_set_mario_animation");
-    p_sm64_mario_create_puppet =
-        (pfn_sm64_mario_create_puppet)SM64_GET_PROC(sDllHandle, "sm64_mario_create_puppet");
-    p_sm64_set_mario_anim_frame =
-        (pfn_sm64_set_mario_anim_frame)SM64_GET_PROC(sDllHandle, "sm64_set_mario_anim_frame");
-    p_sm64_set_mario_faceangle =
-        (pfn_sm64_set_mario_faceangle)SM64_GET_PROC(sDllHandle, "sm64_set_mario_faceangle");
-    p_sm64_mario_tick_puppet =
-        (pfn_sm64_mario_tick_puppet)SM64_GET_PROC(sDllHandle, "sm64_mario_tick_puppet");
-    p_sm64_mario_grab_dummy =
-        (pfn_sm64_mario_grab_dummy)SM64_GET_PROC(sDllHandle, "sm64_mario_grab_dummy");
-    p_sm64_mario_release_dummy =
-        (pfn_sm64_mario_release_dummy)SM64_GET_PROC(sDllHandle, "sm64_mario_release_dummy");
-    p_sm64_mario_interact_cap =
-        (pfn_sm64_mario_interact_cap)SM64_GET_PROC(sDllHandle, "sm64_mario_interact_cap");
-    p_sm64_set_mario_state =
-        (pfn_sm64_set_mario_state)SM64_GET_PROC(sDllHandle, "sm64_set_mario_state");
+    p_sm64_set_mario_velocity = (pfn_sm64_set_mario_velocity)SM64_GET_PROC(sDllHandle, "sm64_set_mario_velocity");
+    p_sm64_set_mario_animation = (pfn_sm64_set_mario_animation)SM64_GET_PROC(sDllHandle, "sm64_set_mario_animation");
+    p_sm64_mario_create_puppet = (pfn_sm64_mario_create_puppet)SM64_GET_PROC(sDllHandle, "sm64_mario_create_puppet");
+    p_sm64_set_mario_anim_frame = (pfn_sm64_set_mario_anim_frame)SM64_GET_PROC(sDllHandle, "sm64_set_mario_anim_frame");
+    p_sm64_set_mario_faceangle = (pfn_sm64_set_mario_faceangle)SM64_GET_PROC(sDllHandle, "sm64_set_mario_faceangle");
+    p_sm64_mario_tick_puppet = (pfn_sm64_mario_tick_puppet)SM64_GET_PROC(sDllHandle, "sm64_mario_tick_puppet");
+    p_sm64_mario_grab_dummy = (pfn_sm64_mario_grab_dummy)SM64_GET_PROC(sDllHandle, "sm64_mario_grab_dummy");
+    p_sm64_mario_release_dummy = (pfn_sm64_mario_release_dummy)SM64_GET_PROC(sDllHandle, "sm64_mario_release_dummy");
+    p_sm64_mario_interact_cap = (pfn_sm64_mario_interact_cap)SM64_GET_PROC(sDllHandle, "sm64_mario_interact_cap");
+    p_sm64_set_mario_state = (pfn_sm64_set_mario_state)SM64_GET_PROC(sDllHandle, "sm64_set_mario_state");
     p_sm64_stop_background_music =
         (pfn_sm64_stop_background_music)SM64_GET_PROC(sDllHandle, "sm64_stop_background_music");
     p_sm64_get_current_background_music =
@@ -218,21 +207,21 @@ static struct SM64MarioGeometryBuffers sSm64OutBuffers;
 // libsm64 action / flag constants — mirror values from SM64 decomp's sm64.h
 // (the values are stable across libsm64 builds since they match SM64's ABI).
 // =============================================================================
-#define SM64_MARIO_PUNCHING         0x00100000
-#define SM64_MARIO_KICKING          0x00200000
-#define SM64_ACT_PUNCHING           0x00800380
-#define SM64_ACT_GROUND_POUND_LAND  0x0080023C
-#define SM64_ACT_DIVE               0x0188088A
-#define SM64_ACT_DIVE_SLIDE         0x00880456
-#define SM64_ACT_SLIDE_KICK         0x018008AA
-#define SM64_ACT_SLIDE_KICK_SLIDE   0x0080045A
+#define SM64_MARIO_PUNCHING 0x00100000
+#define SM64_MARIO_KICKING 0x00200000
+#define SM64_ACT_PUNCHING 0x00800380
+#define SM64_ACT_GROUND_POUND_LAND 0x0080023C
+#define SM64_ACT_DIVE 0x0188088A
+#define SM64_ACT_DIVE_SLIDE 0x00880456
+#define SM64_ACT_SLIDE_KICK 0x018008AA
+#define SM64_ACT_SLIDE_KICK_SLIDE 0x0080045A
 
 // Water actions + flag (sm64.h:264, 303, and ACT_FLAG_SWIMMING = 0x00002000).
 // Used by the surface-jump logic so pressing A while swimming near the
 // water surface pops Mario out cleanly instead of getting stuck idling.
-#define SM64_ACT_WATER_JUMP         0x01000889
-#define SM64_ACT_WATER_IDLE         0x380022C0
-#define SM64_ACT_FLAG_SWIMMING      0x00002000
+#define SM64_ACT_WATER_JUMP 0x01000889
+#define SM64_ACT_WATER_IDLE 0x380022C0
+#define SM64_ACT_FLAG_SWIMMING 0x00002000
 
 // Hold / throw actions (sm64.h:181, 215, 410, 414). Safe to drive directly
 // because we install a sentinel held-object via the patched libsm64 export
@@ -241,35 +230,35 @@ static struct SM64MarioGeometryBuffers sSm64OutBuffers;
 // animation flow (PICK_UP_LIGHT_OBJ → IDLE_WITH_LIGHT_OBJ →
 // WALK_WITH_LIGHT_OBJ → THROW_LIGHT_OBJECT) without dereferencing NULL.
 // Without the patch these would crash inside sm64.dll!sm64_mario_tick.
-#define SM64_ACT_PICKING_UP         0x00000383
-#define SM64_ACT_HOLD_IDLE          0x08000207
-#define SM64_ACT_HOLD_WALKING       0x00000442
-#define SM64_ACT_THROWING           0x80000588
+#define SM64_ACT_PICKING_UP 0x00000383
+#define SM64_ACT_HOLD_IDLE 0x08000207
+#define SM64_ACT_HOLD_WALKING 0x00000442
+#define SM64_ACT_THROWING 0x80000588
 
 // Mario's internal full health value (libsm64.h: 0x880 = 8 segments × 0x110).
 // Used for the Link↔Mario HP sync — we scale Link's quarter-hearts into
 // this range each frame so libsm64 never runs Mario's death check against
 // a stale value that disagrees with OOT's.
-#define SM64_MARIO_MAX_HP           0x0880
+#define SM64_MARIO_MAX_HP 0x0880
 
 // Cap power-up flags (sm64.h:116-118) — passed to sm64_mario_interact_cap.
 // Maps OOT spells to SM64 caps in the Mario item bridge:
 //   Nayru's Love → Metal Cap (invincibility, sinks in water)
 //   Farore's Wind → Wing Cap (flight via triple jump → flap)
-#define SM64_MARIO_NORMAL_CAP       0x00000001
-#define SM64_MARIO_VANISH_CAP       0x00000002
-#define SM64_MARIO_METAL_CAP        0x00000004
-#define SM64_MARIO_WING_CAP         0x00000008
-#define SM64_MARIO_CAP_ON_HEAD      0x00000010  // restored after clearing a special cap
+#define SM64_MARIO_NORMAL_CAP 0x00000001
+#define SM64_MARIO_VANISH_CAP 0x00000002
+#define SM64_MARIO_METAL_CAP 0x00000004
+#define SM64_MARIO_WING_CAP 0x00000008
+#define SM64_MARIO_CAP_ON_HEAD 0x00000010 // restored after clearing a special cap
 
 // Remote-Mario (Harpoon) cap sync: the local Mario's cap flags are broadcast so a
 // peer can skin the matching cap on its puppet. SM64_REMOTE_FIRE_BIT is a SOH-only
 // bit (Fire mode has no libsm64 flag) packed above libsm64's flag range (max
 // 0x00400000) — it's masked off before reaching the puppet's libsm64 state.
-#define SM64_REMOTE_FIRE_BIT        0x40000000
-#define SM64_REMOTE_CAP_MASK                                                          \
-    (SM64_MARIO_NORMAL_CAP | SM64_MARIO_VANISH_CAP | SM64_MARIO_METAL_CAP |           \
-     SM64_MARIO_WING_CAP | SM64_MARIO_CAP_ON_HEAD)
+#define SM64_REMOTE_FIRE_BIT 0x40000000
+#define SM64_REMOTE_CAP_MASK                                                                      \
+    (SM64_MARIO_NORMAL_CAP | SM64_MARIO_VANISH_CAP | SM64_MARIO_METAL_CAP | SM64_MARIO_WING_CAP | \
+     SM64_MARIO_CAP_ON_HEAD)
 
 // How often (in frames) to re-upload OOT collision into libsm64 so the LIVE
 // world stays in sync: broken blocks stop colliding, dynapoly doors / moving
@@ -282,8 +271,8 @@ static struct SM64MarioGeometryBuffers sSm64OutBuffers;
 // cheap per-frame signature) — but no more often than _FRAMES while it keeps
 // moving, and at least every _MAX frames as a safety net. Net: static scenes load
 // surfaces ONCE; only moving platforms/doors trigger periodic rebuilds.
-#define SM64_SURFACE_REFRESH_FRAMES 4  // min frames between rebuilds while dynapoly moves
-#define SM64_SURFACE_REFRESH_MAX    30 // safety-net rebuild interval when nothing moves
+#define SM64_SURFACE_REFRESH_FRAMES 4 // min frames between rebuilds while dynapoly moves
+#define SM64_SURFACE_REFRESH_MAX 30   // safety-net rebuild interval when nothing moves
 
 // =============================================================================
 // Damage / environment reaction actions (sm64.h). Forced via set_mario_action
@@ -293,16 +282,16 @@ static struct SM64MarioGeometryBuffers sSm64OutBuffers;
 // shiver. Defined here (before sm64_mario_items.c is #included) so the cap
 // handler there can reach SM64_ACT_PUTTING_ON_CAP / SM64_ACT_FLAG_AIR too.
 // =============================================================================
-#define SM64_ACT_FLAG_AIR           0x00000800
-#define SM64_ACT_FLAG_IDLE          0x00400000
-#define SM64_ACT_IDLE               0x0C400201  // grounded standing idle
-#define SM64_ACT_SHIVERING          0x0C40020B  // cold idle (Ice Cavern)
-#define SM64_ACT_SHOCKED            0x00020338  // electric (bodyShockTimer)
-#define SM64_ACT_BURNING_GROUND     0x00020449  // on fire, grounded
-#define SM64_ACT_BURNING_JUMP       0x010208B4  // on fire, airborne
-#define SM64_ACT_PUTTING_ON_CAP     0x0000133D  // cap-on visual
-#define SM64_ACT_TWIRLING           0x108008A4  // X (C-Left) spin — ACT_FLAG_ATTACKING
-#define SM64_ACT_FORWARD_ROLLOUT    0x010008A6  // Y (C-Right) forward spin roll
+#define SM64_ACT_FLAG_AIR 0x00000800
+#define SM64_ACT_FLAG_IDLE 0x00400000
+#define SM64_ACT_IDLE 0x0C400201            // grounded standing idle
+#define SM64_ACT_SHIVERING 0x0C40020B       // cold idle (Ice Cavern)
+#define SM64_ACT_SHOCKED 0x00020338         // electric (bodyShockTimer)
+#define SM64_ACT_BURNING_GROUND 0x00020449  // on fire, grounded
+#define SM64_ACT_BURNING_JUMP 0x010208B4    // on fire, airborne
+#define SM64_ACT_PUTTING_ON_CAP 0x0000133D  // cap-on visual
+#define SM64_ACT_TWIRLING 0x108008A4        // X (C-Left) spin — ACT_FLAG_ATTACKING
+#define SM64_ACT_FORWARD_ROLLOUT 0x010008A6 // Y (C-Right) forward spin roll
 
 // =============================================================================
 // Master-Sword punch collider (AT) — positioned at Mario's fist per-frame
@@ -311,12 +300,13 @@ static ColliderCylinder sSm64AttackCollider;
 static u8 sSm64AttackColliderInited = 0;
 
 static ColliderCylinderInit sSm64AttackColliderInit = {
-    { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE,
-      OC1_NONE, OC2_TYPE_PLAYER, COLSHAPE_CYLINDER },
+    { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_TYPE_PLAYER, COLSHAPE_CYLINDER },
     { ELEMTYPE_UNK0,
       { DMG_SLASH_MASTER | DMG_JUMP_MASTER | DMG_SPIN_MASTER, 0x00, 0x08 },
       { 0x00000000, 0x00, 0x00 },
-      TOUCH_ON | TOUCH_NEAREST, BUMP_NONE, OCELEM_NONE },
+      TOUCH_ON | TOUCH_NEAREST,
+      BUMP_NONE,
+      OCELEM_NONE },
     { 15, 40, -20, { 0, 0, 0 } }
 };
 
@@ -332,13 +322,14 @@ static ColliderCylinder sSm64MetalCollider;
 static u8 sSm64MetalColliderInited = 0;
 
 static ColliderCylinderInit sSm64MetalColliderInit = {
-    { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE,
-      OC1_NONE, OC2_TYPE_PLAYER, COLSHAPE_CYLINDER },
+    { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_TYPE_PLAYER, COLSHAPE_CYLINDER },
     { ELEMTYPE_UNK0,
-      { 0xFFFFFFFF, 0x00, 0x08 },   // dmgFlags = ALL damage types → kills/breaks everything
+      { 0xFFFFFFFF, 0x00, 0x08 }, // dmgFlags = ALL damage types → kills/breaks everything
       { 0x00000000, 0x00, 0x00 },
-      TOUCH_ON | TOUCH_SFX_NONE, BUMP_NONE, OCELEM_NONE },
-    { 45, 70, -10, { 0, 0, 0 } }    // radius 45, height 70, yShift -10 (whole-body reach)
+      TOUCH_ON | TOUCH_SFX_NONE,
+      BUMP_NONE,
+      OCELEM_NONE },
+    { 45, 70, -10, { 0, 0, 0 } } // radius 45, height 70, yShift -10 (whole-body reach)
 };
 
 // =============================================================================
@@ -416,7 +407,8 @@ static s32 Sm64_InitLibrary(void) {
     // and sm64_audio_tick fills PCM buffers we mix into SoH's audio output.
     if (p_sm64_audio_init) {
         p_sm64_audio_init(sSm64RomData);
-        if (p_sm64_set_sound_volume) p_sm64_set_sound_volume(0.8f);
+        if (p_sm64_set_sound_volume)
+            p_sm64_set_sound_volume(0.8f);
         lusprintf(__FILE__, __LINE__, 2, "[SM64] Audio engine initialized");
     }
 
@@ -472,10 +464,9 @@ static u32 Sm64_LoadSceneSurfacesEx(PlayState* play, u8 floorOnly) {
         static u32 sZeroFrames = 0;
         if ((sZeroFrames % 60) == 0) {
             lusprintf(__FILE__, __LINE__, 2,
-                "[SM64] Extract returned null=%d count=%u scene=%d srcNumPolys=%d floorOnly=%d",
-                surfaces == NULL, numSurfaces, play->sceneNum,
-                play->colCtx.colHeader ? play->colCtx.colHeader->numPolygons : -1,
-                floorOnly);
+                      "[SM64] Extract returned null=%d count=%u scene=%d srcNumPolys=%d floorOnly=%d", surfaces == NULL,
+                      numSurfaces, play->sceneNum, play->colCtx.colHeader ? play->colCtx.colHeader->numPolygons : -1,
+                      floorOnly);
         }
         sZeroFrames++;
         return 0;
@@ -486,8 +477,8 @@ static u32 Sm64_LoadSceneSurfacesEx(PlayState* play, u8 floorOnly) {
         // frames), so logging every call would spam. Log ~once per second.
         static u32 sLoadLog = 0;
         if ((sLoadLog++ % 60) == 0) {
-            lusprintf(__FILE__, __LINE__, 2, "[SM64] Loaded %u surfaces for scene %d (floorOnly=%d)",
-                numSurfaces, play->sceneNum, floorOnly);
+            lusprintf(__FILE__, __LINE__, 2, "[SM64] Loaded %u surfaces for scene %d (floorOnly=%d)", numSurfaces,
+                      play->sceneNum, floorOnly);
         }
     }
     p_sm64_static_surfaces_load(surfaces, numSurfaces);
@@ -525,27 +516,26 @@ s32 Sm64Mario_Init(PlayState* play, Player* player) {
     // later mario_create attempts fail against irrelevant collision.
     if (sSm64SurfacesForScene != play->sceneNum) {
         u32 count = Sm64_LoadSceneSurfaces(play);
-        if (count == 0) return 0; // Surfaces not ready yet, retry next frame
+        if (count == 0)
+            return 0; // Surfaces not ready yet, retry next frame
         sSm64SurfacesForScene = play->sceneNum;
     }
 
     // Spawn Mario at Link's position (scaled into libsm64 world). find_floor
     // (surface_collision.c:140) accepts any surface whose height <= y + 78.
     if (p_sm64_mario_create) {
-        sSm64MarioId = p_sm64_mario_create(
-            player->actor.world.pos.x * SM64_WORLD_SCALE,
-            player->actor.world.pos.y * SM64_WORLD_SCALE,
-            player->actor.world.pos.z * SM64_WORLD_SCALE);
-        lusprintf(__FILE__, __LINE__, 2, "[SM64] mario_create id=%d pos=(%.0f,%.0f,%.0f) scene=%d",
-            sSm64MarioId, player->actor.world.pos.x, player->actor.world.pos.y,
-            player->actor.world.pos.z, play->sceneNum);
+        sSm64MarioId = p_sm64_mario_create(player->actor.world.pos.x * SM64_WORLD_SCALE,
+                                           player->actor.world.pos.y * SM64_WORLD_SCALE,
+                                           player->actor.world.pos.z * SM64_WORLD_SCALE);
+        lusprintf(__FILE__, __LINE__, 2, "[SM64] mario_create id=%d pos=(%.0f,%.0f,%.0f) scene=%d", sSm64MarioId,
+                  player->actor.world.pos.x, player->actor.world.pos.y, player->actor.world.pos.z, play->sceneNum);
     }
 
     if (sSm64MarioId >= 0) {
         // Independent health: restore Mario's carried-over HP (full the first time).
         if (p_sm64_set_mario_health) {
             p_sm64_set_mario_health(sSm64MarioId,
-                (sMarioHealthPersist > 0) ? (u16)sMarioHealthPersist : (u16)SM64_MARIO_MAX_HP);
+                                    (sMarioHealthPersist > 0) ? (u16)sMarioHealthPersist : (u16)SM64_MARIO_MAX_HP);
             sMarioLinkMirrorHP = -1;
         }
         sSm64LastSceneNum = play->sceneNum;
@@ -615,10 +605,13 @@ static Actor* Sm64Mario_FindGrabbable(PlayState* play, Player* player) {
     for (cat = 0; cat < ACTORCAT_MAX; cat++) {
         Actor* a;
         for (a = play->actorCtx.actorLists[cat].head; a != NULL; a = a->next) {
-            if (a == NULL || a->update == NULL) continue;
-            if (!Sm64Mario_IsGrabbableId(a->id)) continue;
+            if (a == NULL || a->update == NULL)
+                continue;
+            if (!Sm64Mario_IsGrabbableId(a->id))
+                continue;
             // Skip actors already parented to someone (already held).
-            if (a->parent != NULL) continue;
+            if (a->parent != NULL)
+                continue;
             f32 d = Math_Vec3f_DistXYZ(&player->actor.world.pos, &a->world.pos);
             if (d < bestDist) {
                 bestDist = d;
@@ -779,8 +772,8 @@ static void Sm64Mario_ApplyBehaviorAnims(PlayState* play, Player* player) {
     // back to walking when the stick moves, so movement is unaffected.
     if (play->sceneNum == SCENE_ICE_CAVERN) {
         Input* in = &play->state.input[0];
-        u8 idleNoInput = (in->rel.stick_x == 0) && (in->rel.stick_y == 0) &&
-                         ((in->cur.button & (BTN_A | BTN_B | BTN_Z)) == 0);
+        u8 idleNoInput =
+            (in->rel.stick_x == 0) && (in->rel.stick_y == 0) && ((in->cur.button & (BTN_A | BTN_B | BTN_Z)) == 0);
         if (idleNoInput && (act & SM64_ACT_FLAG_IDLE) && (act != SM64_ACT_SHIVERING)) {
             p_sm64_set_mario_action(sSm64MarioId, SM64_ACT_SHIVERING);
         }
@@ -814,10 +807,10 @@ static s16 Sm64Mario_StickSpinReady(Input* in) {
             f32 cross = sPrevX * sz - sPrevZ * sx;
             f32 dot = sPrevX * sx + sPrevZ * sz;
             f32 d = atan2f(cross, dot);
-            if (fabsf(d) > 0.22f) {  // only count FAST rotation (a real spin)
+            if (fabsf(d) > 0.22f) { // only count FAST rotation (a real spin)
                 sAccum += d;
             } else {
-                sAccum *= 0.5f;      // slow aim/turn -> decay, don't accumulate
+                sAccum *= 0.5f; // slow aim/turn -> decay, don't accumulate
             }
         }
         sPrevX = sx;
@@ -827,18 +820,21 @@ static s16 Sm64Mario_StickSpinReady(Input* in) {
             sAccum = 0.0f;
         }
     } else {
-        sAccum = 0.0f;               // stick released -> full reset
+        sAccum = 0.0f; // stick released -> full reset
         sPrevX = sPrevZ = 0.0f;
     }
-    if (sReady > 0) sReady--;
+    if (sReady > 0)
+        sReady--;
     return sReady;
 }
 
 static void Sm64Mario_HandleMoves(PlayState* play) {
-    if (sSm64MarioId < 0 || !p_sm64_set_mario_action) return;
+    if (sSm64MarioId < 0 || !p_sm64_set_mario_action)
+        return;
     // No Cappy / roll while a transform cap is active (Wing / Metal / Vanish /
     // Fire Flower) — those power-ups own Mario's moveset.
-    if (Sm64MarioCaps_GetActiveIndex() >= 0) return;
+    if (Sm64MarioCaps_GetActiveIndex() >= 0)
+        return;
     Input* in = &play->state.input[0];
     u8 grounded = !(sSm64OutState.action & SM64_ACT_FLAG_AIR);
 
@@ -850,9 +846,9 @@ static void Sm64Mario_HandleMoves(PlayState* play) {
 
         s32 mode;
         if (!grounded) {
-            mode = SM64_CAPPY_DIVE;             // air throw
+            mode = SM64_CAPPY_DIVE; // air throw
         } else if (spinReady > 0) {
-            mode = SM64_CAPPY_SPIN;             // spun the stick
+            mode = SM64_CAPPY_SPIN; // spun the stick
         } else {
             mode = SM64_CAPPY_FWD;
         }
@@ -1018,8 +1014,10 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
         // Do NOT block on PLAYER_STATE1_LOADING — Init path doesn't, and Init
         // works for the same scene via CVAR toggle. colHeader + numPolygons > 0
         // are the only real safety gates.
-        if (play->colCtx.colHeader == NULL) blockReason = 2;
-        else if (play->colCtx.colHeader->numPolygons == 0) blockReason = 3;
+        if (play->colCtx.colHeader == NULL)
+            blockReason = 2;
+        else if (play->colCtx.colHeader->numPolygons == 0)
+            blockReason = 3;
 
         // Step 1 — always: drop old Mario + state. Safe to call every frame
         // while retrying; these are idempotent.
@@ -1034,10 +1032,9 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
         if (blockReason != 0) {
             if (blockReason != sScBlockReasonPrev || (sScBlockFrames % 60) == 0) {
                 lusprintf(__FILE__, __LINE__, 2,
-                    "[SM64] Scene-change blocked reason=%u scene=%d flags1=0x%08x colHeader=%p numPolys=%d",
-                    blockReason, play->sceneNum, player->stateFlags1,
-                    (void*)play->colCtx.colHeader,
-                    play->colCtx.colHeader ? play->colCtx.colHeader->numPolygons : -1);
+                          "[SM64] Scene-change blocked reason=%u scene=%d flags1=0x%08x colHeader=%p numPolys=%d",
+                          blockReason, play->sceneNum, player->stateFlags1, (void*)play->colCtx.colHeader,
+                          play->colCtx.colHeader ? play->colCtx.colHeader->numPolygons : -1);
                 sScBlockReasonPrev = blockReason;
             }
             sScBlockFrames++;
@@ -1055,8 +1052,8 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
                 static u32 sScZeroFrames = 0;
                 if ((sScZeroFrames % 60) == 0) {
                     lusprintf(__FILE__, __LINE__, 2,
-                        "[SM64] Scene-change: LoadSceneSurfaces returned 0 scene=%d numPolys=%d",
-                        play->sceneNum, play->colCtx.colHeader->numPolygons);
+                              "[SM64] Scene-change: LoadSceneSurfaces returned 0 scene=%d numPolys=%d", play->sceneNum,
+                              play->colCtx.colHeader->numPolygons);
                 }
                 sScZeroFrames++;
                 return;
@@ -1066,20 +1063,19 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
 
         // Step 4 — create Mario (OOT pos scaled into libsm64 world).
         if (p_sm64_mario_create) {
-            sSm64MarioId = p_sm64_mario_create(
-                player->actor.world.pos.x * SM64_WORLD_SCALE,
-                player->actor.world.pos.y * SM64_WORLD_SCALE,
-                player->actor.world.pos.z * SM64_WORLD_SCALE);
+            sSm64MarioId = p_sm64_mario_create(player->actor.world.pos.x * SM64_WORLD_SCALE,
+                                               player->actor.world.pos.y * SM64_WORLD_SCALE,
+                                               player->actor.world.pos.z * SM64_WORLD_SCALE);
             lusprintf(__FILE__, __LINE__, 2, "[SM64] Scene change: create id=%d pos=(%.0f,%.0f,%.0f) scene=%d",
-                sSm64MarioId, player->actor.world.pos.x, player->actor.world.pos.y,
-                player->actor.world.pos.z, play->sceneNum);
+                      sSm64MarioId, player->actor.world.pos.x, player->actor.world.pos.y, player->actor.world.pos.z,
+                      play->sceneNum);
         }
 
         if (sSm64MarioId >= 0) {
             // Independent health: restore Mario's carried-over HP across the scene change.
             if (p_sm64_set_mario_health) {
                 p_sm64_set_mario_health(sSm64MarioId,
-                    (sMarioHealthPersist > 0) ? (u16)sMarioHealthPersist : (u16)SM64_MARIO_MAX_HP);
+                                        (sMarioHealthPersist > 0) ? (u16)sMarioHealthPersist : (u16)SM64_MARIO_MAX_HP);
                 sMarioLinkMirrorHP = -1;
             }
             sSm64LastSceneNum = play->sceneNum;
@@ -1126,10 +1122,9 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
     // Grab uses BGCHECKFLAG_WALL (0x8, just touching a movable dyna), NOT 0x200
     // (PLAYER_WALL_INTERACT) — the latter needs Link velocity into the wall, which is
     // never set for a libsm64-driven Mario, so it was why the grab never fired.
-    if (!Sm64Mario_OotIsScriptingPlayer(play, player) &&
-        !(player->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) && (player->actor.bgCheckFlags & 1) &&
-        (player->actor.bgCheckFlags & 0x8) && (player->actor.wallBgId != BGCHECK_SCENE) &&
-        CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_B)) {
+    if (!Sm64Mario_OotIsScriptingPlayer(play, player) && !(player->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) &&
+        (player->actor.bgCheckFlags & 1) && (player->actor.bgCheckFlags & 0x8) &&
+        (player->actor.wallBgId != BGCHECK_SCENE) && CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_B)) {
         DynaPolyActor* block = DynaPoly_GetActor(&play->colCtx, player->actor.wallBgId);
         if (block != NULL && block->actor.id != ACTOR_BG_HEAVY_BLOCK) {
             player->unk_3C4 = &block->actor;
@@ -1165,9 +1160,9 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
             (play->transitionTrigger != TRANS_TRIGGER_OFF) || (play->csCtx.state != CS_STATE_IDLE) ||
             (player->csAction != 0) || (player->actionFunc == Player_Action_80845EF8) ||
             (player->actionFunc == Player_Action_80845CA4) ||
-            (player->stateFlags1 & (PLAYER_STATE1_LOADING | PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_IN_ITEM_CS |
-                                    PLAYER_STATE1_TALKING | PLAYER_STATE1_CLIMBING_LEDGE |
-                                    PLAYER_STATE1_HANGING_OFF_LEDGE | PLAYER_STATE1_FIRST_PERSON));
+            (player->stateFlags1 &
+             (PLAYER_STATE1_LOADING | PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_TALKING |
+              PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_HANGING_OFF_LEDGE | PLAYER_STATE1_FIRST_PERSON));
         if (reallyScripted) {
             sParkFrames = 0;
         } else {
@@ -1195,13 +1190,13 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
             // ONLY puppet tick (same safe path as the remote-Mario renderer). Pin
             // the readback position so Sm64Mario_Draw's (link − mario) delta stays
             // ~0 and the door-pose mesh draws right at Link.
-            u8 inDoor = (player->actionFunc == Player_Action_80845EF8) ||
-                        (player->actionFunc == Player_Action_80845CA4);
+            u8 inDoor =
+                (player->actionFunc == Player_Action_80845EF8) || (player->actionFunc == Player_Action_80845CA4);
             u8 inPushPull = (player->actionFunc == Player_Action_8084B78C) ||
                             (player->actionFunc == Player_Action_8084B898) ||
                             (player->actionFunc == Player_Action_8084B9E4);
-            if (inDoor && p_sm64_set_mario_animation && p_sm64_set_mario_anim_frame &&
-                p_sm64_mario_tick_puppet && p_sm64_set_mario_faceangle) {
+            if (inDoor && p_sm64_set_mario_animation && p_sm64_set_mario_anim_frame && p_sm64_mario_tick_puppet &&
+                p_sm64_set_mario_faceangle) {
                 // On the first door frame, snap the travel reference to Link so the
                 // first-frame delta is 0 (face Link while the door opens in place).
                 if (sSm64DoorAnimFrame == 0) {
@@ -1237,8 +1232,7 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
                 // turned to it on grab) and loop the SM64 pushing anim while OOT slides
                 // the Obj_Oshihiki + Link. Geometry-only puppet tick, same safe path as
                 // the door — running the physics tick at the scripted pos can NULL-deref.
-                p_sm64_set_mario_faceangle(sSm64MarioId,
-                                           (f32)player->actor.shape.rot.y * 3.14159f / 32768.0f);
+                p_sm64_set_mario_faceangle(sSm64MarioId, (f32)player->actor.shape.rot.y * 3.14159f / 32768.0f);
                 p_sm64_set_mario_animation(sSm64MarioId, 0x6C); // MARIO_ANIM_PUSHING
                 p_sm64_set_mario_anim_frame(sSm64MarioId, sSm64PushAnimFrame);
                 if (++sSm64PushAnimFrame >= 28) {
@@ -1274,8 +1268,7 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
     // Sm64Mario_Draw computes (linkPos − marioStalePos) and shifts the
     // mesh visually too, so Mario stays visible throughout the cutscene.
     // Audio refill keeps SM64 SFX from starving.
-    if ((player->stateFlags1 & (PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_IN_ITEM_CS)) ||
-        Player_InCsMode(play)) {
+    if ((player->stateFlags1 & (PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_IN_ITEM_CS)) || Player_InCsMode(play)) {
         // Update libsm64's INTERNAL Mario position each frame so when the
         // tick resumes after the cutscene, Mario starts at Link's current
         // (post-cutscene) position. Without this, walking through a door
@@ -1286,10 +1279,9 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
         // delta. Keeping it stale means the delta tracks Link's cutscene
         // movement and the mesh visually slides along with him.
         if (p_sm64_set_mario_position && sSm64MarioId >= 0) {
-            p_sm64_set_mario_position(sSm64MarioId,
-                player->actor.world.pos.x * SM64_WORLD_SCALE,
-                player->actor.world.pos.y * SM64_WORLD_SCALE,
-                player->actor.world.pos.z * SM64_WORLD_SCALE);
+            p_sm64_set_mario_position(sSm64MarioId, player->actor.world.pos.x * SM64_WORLD_SCALE,
+                                      player->actor.world.pos.y * SM64_WORLD_SCALE,
+                                      player->actor.world.pos.z * SM64_WORLD_SCALE);
         }
         Sm64Audio_RefillRing();
         return;
@@ -1299,13 +1291,11 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
     // /carrying, ledge climb, loading zone). Safe to zero-input tick — these
     // don't crash libsm64, they just need Mario's physics paused so his
     // mesh mirrors Link while the vanilla action func drives the anim.
-    if (player->stateFlags1 & (PLAYER_STATE1_LOADING |
-                                PLAYER_STATE1_TALKING |
-                                // CARRYING_ACTOR NOT deferred: Mario keeps ticking
-                                // (walks with the held item, which TryGrabOrThrow
-                                // pins to his hands) instead of freezing.
-                                PLAYER_STATE1_CLIMBING_LEDGE |
-                                PLAYER_STATE1_HANGING_OFF_LEDGE)) {
+    if (player->stateFlags1 & (PLAYER_STATE1_LOADING | PLAYER_STATE1_TALKING |
+                               // CARRYING_ACTOR NOT deferred: Mario keeps ticking
+                               // (walks with the held item, which TryGrabOrThrow
+                               // pins to his hands) instead of freezing.
+                               PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_HANGING_OFF_LEDGE)) {
         // Only zero velocity for pure transitions — for TALKING/CARRYING the
         // vanilla action func manages velocity itself, so don't stomp it.
         if (player->stateFlags1 & PLAYER_STATE1_LOADING) {
@@ -1315,10 +1305,9 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
             player->actor.velocity.z = 0.0f;
         }
         if (p_sm64_set_mario_position) {
-            p_sm64_set_mario_position(sSm64MarioId,
-                player->actor.world.pos.x * SM64_WORLD_SCALE,
-                player->actor.world.pos.y * SM64_WORLD_SCALE,
-                player->actor.world.pos.z * SM64_WORLD_SCALE);
+            p_sm64_set_mario_position(sSm64MarioId, player->actor.world.pos.x * SM64_WORLD_SCALE,
+                                      player->actor.world.pos.y * SM64_WORLD_SCALE,
+                                      player->actor.world.pos.z * SM64_WORLD_SCALE);
         }
         if (p_sm64_mario_tick) {
             struct SM64MarioInputs zi;
@@ -1338,24 +1327,20 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
     {
         s32 scriptedCs = (play->csCtx.state != CS_STATE_IDLE);
         Input* userInputProbe = &play->state.input[0];
-        s32 userWantsControl =
-            (userInputProbe->rel.stick_x != 0) ||
-            (userInputProbe->rel.stick_y != 0) ||
-            (userInputProbe->cur.button & (BTN_A | BTN_B | BTN_Z | BTN_R)) != 0;
-        u32 softDefer = !userWantsControl && (
-            (player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) ||
-            (player->stateFlags1 & PLAYER_STATE1_IN_ITEM_CS) ||
-            ((player->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE) && scriptedCs));
+        s32 userWantsControl = (userInputProbe->rel.stick_x != 0) || (userInputProbe->rel.stick_y != 0) ||
+                               (userInputProbe->cur.button & (BTN_A | BTN_B | BTN_Z | BTN_R)) != 0;
+        u32 softDefer = !userWantsControl && ((player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) ||
+                                              (player->stateFlags1 & PLAYER_STATE1_IN_ITEM_CS) ||
+                                              ((player->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE) && scriptedCs));
         if (softDefer) {
             player->linearVelocity = 0.0f;
             player->actor.velocity.x = 0.0f;
             player->actor.velocity.y = 0.0f;
             player->actor.velocity.z = 0.0f;
             if (p_sm64_set_mario_position) {
-                p_sm64_set_mario_position(sSm64MarioId,
-                    player->actor.world.pos.x * SM64_WORLD_SCALE,
-                    player->actor.world.pos.y * SM64_WORLD_SCALE,
-                    player->actor.world.pos.z * SM64_WORLD_SCALE);
+                p_sm64_set_mario_position(sSm64MarioId, player->actor.world.pos.x * SM64_WORLD_SCALE,
+                                          player->actor.world.pos.y * SM64_WORLD_SCALE,
+                                          player->actor.world.pos.z * SM64_WORLD_SCALE);
             }
             if (p_sm64_mario_tick) {
                 struct SM64MarioInputs zi;
@@ -1370,13 +1355,12 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
 
     // Damage/talking/item/dead: sync position but keep ticking so Mario keeps
     // animating in place. These states don't invalidate the camera.
-    if (player->stateFlags1 & (PLAYER_STATE1_DAMAGED | PLAYER_STATE1_TALKING |
-                                PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_DEAD)) {
+    if (player->stateFlags1 &
+        (PLAYER_STATE1_DAMAGED | PLAYER_STATE1_TALKING | PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_DEAD)) {
         if (p_sm64_set_mario_position) {
-            p_sm64_set_mario_position(sSm64MarioId,
-                player->actor.world.pos.x * SM64_WORLD_SCALE,
-                player->actor.world.pos.y * SM64_WORLD_SCALE,
-                player->actor.world.pos.z * SM64_WORLD_SCALE);
+            p_sm64_set_mario_position(sSm64MarioId, player->actor.world.pos.x * SM64_WORLD_SCALE,
+                                      player->actor.world.pos.y * SM64_WORLD_SCALE,
+                                      player->actor.world.pos.z * SM64_WORLD_SCALE);
         }
         // Fall through to tick so the animation state machine advances.
     }
@@ -1390,7 +1374,8 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
     lookX = cam->at.x - cam->eye.x;
     lookZ = cam->at.z - cam->eye.z;
     lookMag = sqrtf(lookX * lookX + lookZ * lookZ);
-    if (lookMag < 0.001f) lookMag = 0.001f;
+    if (lookMag < 0.001f)
+        lookMag = 0.001f;
 
     input = &play->state.input[0];
 
@@ -1449,7 +1434,8 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
         static float sTickAccum = 0.0f;
         const float SM64_TICK_DT = 1.0f / 30.0f;
         int rate = R_UPDATE_RATE;
-        if (rate < 1) rate = 3;            // guard against weird values
+        if (rate < 1)
+            rate = 3; // guard against weird values
         float ootFrameDt = (float)rate / 60.0f;
         sTickAccum += ootFrameDt;
         int ticksThisFrame = 0;
@@ -1457,7 +1443,7 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
             sSm64OutBuffers.numTrianglesUsed = 0;
             p_sm64_mario_tick(sSm64MarioId, &inputs, &sSm64OutState, &sSm64OutBuffers);
             sTickAccum -= SM64_TICK_DT;
-            if (++ticksThisFrame >= 3) {   // cap "spiral of death" if we fall behind
+            if (++ticksThisFrame >= 3) { // cap "spiral of death" if we fall behind
                 sTickAccum = 0.0f;
                 break;
             }
@@ -1526,10 +1512,10 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
     // Detected via sSm64OutState.flags & MARIO_VANISH_CAP — libsm64 also
     // auto-expires the cap after its internal timer.
     {
-        static u8  sVanishCapPrev = 0;
+        static u8 sVanishCapPrev = 0;
         static u32 sSurfRefresh = 0;
         static u32 sDynaSig = 0xFFFFFFFFu; // signature of the last-uploaded dynapoly state
-        static u8  sDidInitialLoad = 0;
+        static u8 sDidInitialLoad = 0;
         u8 vanishNow = (sSm64OutState.flags & SM64_MARIO_VANISH_CAP) != 0;
         u8 vanishEdge = (vanishNow != sVanishCapPrev);
 
@@ -1561,8 +1547,7 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
         // the _MAX safety net. A continuously-moving platform thus rebuilds at most
         // every _FRAMES (not every frame); a fully static scene loads ONCE then only
         // hits the rare safety net.
-        u8 due = vanishEdge || !sDidInitialLoad ||
-                 (sigChanged && sSurfRefresh >= SM64_SURFACE_REFRESH_FRAMES) ||
+        u8 due = vanishEdge || !sDidInitialLoad || (sigChanged && sSurfRefresh >= SM64_SURFACE_REFRESH_FRAMES) ||
                  (sSurfRefresh >= SM64_SURFACE_REFRESH_MAX);
         if (due) {
             Sm64_LoadSceneSurfacesEx(play, vanishNow);
@@ -1572,7 +1557,7 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
             if (vanishEdge) {
                 sVanishCapPrev = vanishNow;
                 lusprintf(__FILE__, __LINE__, 2, "[SM64] Vanish cap %s — surfaces swapped (floorOnly=%d)",
-                    vanishNow ? "ACTIVATED" : "EXPIRED", vanishNow);
+                          vanishNow ? "ACTIVATED" : "EXPIRED", vanishNow);
             }
         }
     }
@@ -1676,8 +1661,7 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
         }
         player->bodyPartsPos[PLAYER_BODYPART_L_FOOT].y = player->actor.world.pos.y;
         player->bodyPartsPos[PLAYER_BODYPART_R_FOOT].y = player->actor.world.pos.y;
-        player->bodyPartsPos[PLAYER_BODYPART_HEAD].y =
-            player->actor.world.pos.y + marioHeight - 10.0f;
+        player->bodyPartsPos[PLAYER_BODYPART_HEAD].y = player->actor.world.pos.y + marioHeight - 10.0f;
 
         // Foot shadow: ActorShadow_DrawFeet (the player's shadowDraw) reads
         // actor.shape.feetPos[], which Link's skeleton PostLimbDraw normally
@@ -1704,11 +1688,9 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
     // heuristic inside libsm64 may not recognize "I'm right at the top" in
     // all scenes. Force-transition to ACT_WATER_JUMP when the player clearly
     // wants out and Mario is swimming near the surface.
-    if (p_sm64_set_mario_action &&
-        (input->press.button & BTN_A) &&
+    if (p_sm64_set_mario_action && (input->press.button & BTN_A) &&
         (sSm64OutState.action & SM64_ACT_FLAG_SWIMMING) != 0) {
-        f32 waterYOoT = Sm64Surfaces_GetWaterLevel(play,
-            player->actor.world.pos.x, player->actor.world.pos.z);
+        f32 waterYOoT = Sm64Surfaces_GetWaterLevel(play, player->actor.world.pos.x, player->actor.world.pos.z);
         if (waterYOoT > -10000.0f) {
             f32 marioYOoT = sSm64OutState.position[1] / SM64_WORLD_SCALE;
             // Within ~1 Mario-head-height (20 OOT ≈ 80 SM64 units) of the
@@ -1740,7 +1722,8 @@ void Sm64Mario_Update(PlayState* play, Player* player) {
 }
 
 void Sm64Mario_Draw(PlayState* play, Player* player) {
-    if (!Sm64Mario_HasMesh()) return;
+    if (!Sm64Mario_HasMesh())
+        return;
     // Pass (linkPos - marioPosAtLastTick) as a render-time translation.
     // In normal play the tick just ran so marioPos ≈ linkPos (delta ≈ 0).
     // During the no-tick defer (item-get, cutscenes) the tick was skipped
@@ -1760,10 +1743,10 @@ void Sm64Mario_Draw(PlayState* play, Player* player) {
     // Wing cap → drop alpha on the wing-texture tiles so the alpha-cutout
     // wing edges don't render an opaque halo.
     u8 translucent = (sSm64OutState.flags & SM64_MARIO_VANISH_CAP) != 0;
-    u8 metalTint   = (sSm64OutState.flags & SM64_MARIO_METAL_CAP) != 0;
-    u8 wingCap     = (sSm64OutState.flags & SM64_MARIO_WING_CAP) != 0;
+    u8 metalTint = (sSm64OutState.flags & SM64_MARIO_METAL_CAP) != 0;
+    u8 wingCap = (sSm64OutState.flags & SM64_MARIO_WING_CAP) != 0;
     // Fire cap has no libsm64 flag (it's a pure OOT-side cap) — query the cap module.
-    u8 fireActive  = Sm64MarioCaps_IsFireActive();
+    u8 fireActive = Sm64MarioCaps_IsFireActive();
     // Cap-state heartbeat — log on any cap edge change so we can verify
     // the libsm64 patched interact_cap is actually applying the new cap
     // flag. If the user casts Vanish then Metal and the log doesn't show
@@ -1773,12 +1756,10 @@ void Sm64Mario_Draw(PlayState* play, Player* player) {
         u32 nowState = sSm64OutState.flags & (SM64_MARIO_VANISH_CAP | SM64_MARIO_METAL_CAP | SM64_MARIO_WING_CAP);
         if (nowState != sLastCapState) {
             lusprintf(__FILE__, __LINE__, 2,
-                "[SM64] Cap state change: 0x%X → 0x%X (V=%d M=%d W=%d) translucent=%d metalTint=%d",
-                sLastCapState, nowState,
-                (nowState & SM64_MARIO_VANISH_CAP) ? 1 : 0,
-                (nowState & SM64_MARIO_METAL_CAP) ? 1 : 0,
-                (nowState & SM64_MARIO_WING_CAP) ? 1 : 0,
-                translucent, metalTint);
+                      "[SM64] Cap state change: 0x%X → 0x%X (V=%d M=%d W=%d) translucent=%d metalTint=%d",
+                      sLastCapState, nowState, (nowState & SM64_MARIO_VANISH_CAP) ? 1 : 0,
+                      (nowState & SM64_MARIO_METAL_CAP) ? 1 : 0, (nowState & SM64_MARIO_WING_CAP) ? 1 : 0, translucent,
+                      metalTint);
             sLastCapState = nowState;
         }
     }
@@ -1796,8 +1777,8 @@ void Sm64Mario_Draw(PlayState* play, Player* player) {
             tintB = hb;
         }
     }
-    Sm64Render_DrawMarioMesh(play, &sSm64OutBuffers, dx, dy, dz, translucent, metalTint, wingCap,
-                             fireActive, recolor, tintR, tintG, tintB, /*modelMtx*/ NULL);
+    Sm64Render_DrawMarioMesh(play, &sSm64OutBuffers, dx, dy, dz, translucent, metalTint, wingCap, fireActive, recolor,
+                             tintR, tintG, tintB, /*modelMtx*/ NULL);
 
     // If the player is holding a deku stick C-button, render the lit stick
     // model floating at Mario's hand. State + render impl live in
@@ -1839,12 +1820,14 @@ static u32 sSm64ResumeCountdown = 0;
 static u8 sSm64PrevSuspendTrigger = 0;
 
 u8 Sm64Mario_IsActive(void) {
-    if (sSm64SuspendActive) return 0;
+    if (sSm64SuspendActive)
+        return 0;
     // Mario dead (the health manager set Link's HP to 0): yield so OOT runs its
     // own death / game-over / respawn on Link without Mario overriding it —
     // otherwise the player is stuck mid-death (softlock). On respawn the scene
     // reloads, OnPlayerInit recreates Mario at full, and this returns true again.
-    if (gSaveContext.health <= 0) return 0;
+    if (gSaveContext.health <= 0)
+        return 0;
     return CVarGetInteger("gSm64Mario", 0) != 0;
 }
 
@@ -1856,9 +1839,8 @@ void Sm64Mario_TickTransitionSuspend(PlayState* play, Player* player) {
 
     u8 nowLoading = (player->stateFlags1 & PLAYER_STATE1_LOADING) != 0;
     u8 nowCutscene = Player_InCsMode(play) ||
-        (player->stateFlags1 & (PLAYER_STATE1_GETTING_ITEM |
-                                PLAYER_STATE1_IN_ITEM_CS |
-                                PLAYER_STATE1_IN_CUTSCENE)) != 0;
+                     (player->stateFlags1 &
+                      (PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_IN_CUTSCENE)) != 0;
     // Persistence: ONLY the actual scene-load fade detransforms Mario. Cutscenes
     // / talk / doors / item-get are handled live by the defer branches in
     // Sm64Mario_Update (sync position, skip the crash-prone tick, the draw shifts
@@ -1884,7 +1866,8 @@ void Sm64Mario_TickTransitionSuspend(PlayState* play, Player* player) {
     // re-transform Mario mid-cutscene.
     if (nowSuspend) {
         sSm64SuspendActive = 1;
-        if (sSm64ResumeCountdown < 3) sSm64ResumeCountdown = 3;
+        if (sSm64ResumeCountdown < 3)
+            sSm64ResumeCountdown = 3;
     } else if (sSm64ResumeCountdown > 0) {
         sSm64ResumeCountdown--;
         if (sSm64ResumeCountdown == 0) {
@@ -1983,8 +1966,8 @@ u8 Sm64Remote_CanRender(void) {
 // shirt) recolored to (tintR,tintG,tintB). Returns 1 on success; 0 if we can't
 // render (caller then draws the normal Link dummy). Immediate-mode: it poses,
 // puppet-ticks, and draws the shared renderer instance all within this call.
-u8 Sm64Remote_DrawPuppet(PlayState* play, f32 x, f32 y, f32 z, s16 faceYaw, s32 animId,
-                         s16 animFrame, u32 marioFlags, u8 tintR, u8 tintG, u8 tintB) {
+u8 Sm64Remote_DrawPuppet(PlayState* play, f32 x, f32 y, f32 z, s16 faceYaw, s32 animId, s16 animFrame, u32 marioFlags,
+                         u8 tintR, u8 tintG, u8 tintB) {
     if (play == NULL || !Sm64Remote_CanRender()) {
         return 0;
     }
@@ -2003,8 +1986,7 @@ u8 Sm64Remote_DrawPuppet(PlayState* play, f32 x, f32 y, f32 z, s16 faceYaw, s32 
     // (they're per-globalState and only the local Mario loads them), so the normal
     // create would fail its floor check. The puppet never runs physics anyway.
     if (sSm64PuppetId < 0) {
-        sSm64PuppetId = p_sm64_mario_create_puppet(x * SM64_WORLD_SCALE, y * SM64_WORLD_SCALE,
-                                                   z * SM64_WORLD_SCALE);
+        sSm64PuppetId = p_sm64_mario_create_puppet(x * SM64_WORLD_SCALE, y * SM64_WORLD_SCALE, z * SM64_WORLD_SCALE);
         if (sSm64PuppetId < 0) {
             return 0;
         }
@@ -2014,8 +1996,7 @@ u8 Sm64Remote_DrawPuppet(PlayState* play, f32 x, f32 y, f32 z, s16 faceYaw, s32 
     // gfx.pos and set_mario_faceangle writes gfx.angle, so the geometry-only tick
     // skins the mesh at exactly this transform. OOT binary yaw → libsm64 radians
     // is the inverse of the local readback (shape.rot.y = faceAngle/PI*32768).
-    p_sm64_set_mario_position(sSm64PuppetId, x * SM64_WORLD_SCALE, y * SM64_WORLD_SCALE,
-                              z * SM64_WORLD_SCALE);
+    p_sm64_set_mario_position(sSm64PuppetId, x * SM64_WORLD_SCALE, y * SM64_WORLD_SCALE, z * SM64_WORLD_SCALE);
     p_sm64_set_mario_faceangle(sSm64PuppetId, (f32)faceYaw * 3.14159f / 32768.0f);
 
     // Drive the exact animation the remote is playing.
@@ -2050,14 +2031,13 @@ u8 Sm64Remote_DrawPuppet(PlayState* play, f32 x, f32 y, f32 z, s16 faceYaw, s32 
     // keeps the Harpoon tint for the plain / wing / vanish caps so peers stay
     // colour-coded; metal's envmap and fire's recolor override it as intended.
     u8 translucent = (marioFlags & SM64_MARIO_VANISH_CAP) != 0;
-    u8 metalTint   = (marioFlags & SM64_MARIO_METAL_CAP) != 0;
-    u8 wingCap     = (marioFlags & SM64_MARIO_WING_CAP) != 0;
-    u8 fireActive  = (marioFlags & SM64_REMOTE_FIRE_BIT) != 0;
+    u8 metalTint = (marioFlags & SM64_MARIO_METAL_CAP) != 0;
+    u8 wingCap = (marioFlags & SM64_MARIO_WING_CAP) != 0;
+    u8 fireActive = (marioFlags & SM64_REMOTE_FIRE_BIT) != 0;
 
     // Mesh verts come out at libsm64 world coords; ×SM64_SCALE (in the renderer)
     // lands them back at the OOT world pos we set, so no extra offset is needed.
-    Sm64Render_DrawMarioMesh(play, &sSm64PuppetBuffers, 0.0f, 0.0f, 0.0f,
-                             translucent, metalTint, wingCap, fireActive,
+    Sm64Render_DrawMarioMesh(play, &sSm64PuppetBuffers, 0.0f, 0.0f, 0.0f, translucent, metalTint, wingCap, fireActive,
                              /*recolor*/ 1, tintR, tintG, tintB, /*modelMtx*/ NULL);
     return 1;
 }
@@ -2077,7 +2057,7 @@ u8 Sm64Remote_DrawPuppet(PlayState* play, f32 x, f32 y, f32 z, s16 faceYaw, s32 
 // bigger Mario) / .AtY (raise/lower) / .RotY (facing, degrees) / .AnimId. Set e.g.
 // `set gSm64Kaleido.Dist 70` in the console until Mario is framed like Link was.
 // =============================================================================
-extern int gPauseLinkFrameBuffer; // SOH pause "Link" framebuffer (z_kaleido_equipment.c)
+extern int gPauseLinkFrameBuffer;       // SOH pause "Link" framebuffer (z_kaleido_equipment.c)
 static void Sm64Audio_RefillRing(void); // defined below — pumped here during the pause
 
 u8 Sm64Kaleido_DrawForm(PlayState* play) {
@@ -2158,12 +2138,12 @@ u8 Sm64Kaleido_DrawForm(PlayState* play) {
     //   gSm64Kaleido.Dist = camera distance (smaller → BIGGER Mario)
     //   gSm64Kaleido.AtY  = look-at height (raise/lower Mario in the frame)
     f32 dist = CVarGetFloat("gSm64Kaleido.Dist", 60.0f);
-    f32 atY  = CVarGetFloat("gSm64Kaleido.AtY", 22.0f);
+    f32 atY = CVarGetFloat("gSm64Kaleido.AtY", 22.0f);
 
-    s32 width  = PAUSE_EQUIP_PLAYER_WIDTH;
+    s32 width = PAUSE_EQUIP_PLAYER_WIDTH;
     s32 height = PAUSE_EQUIP_PLAYER_HEIGHT;
 
-    Mtx* perspMtx  = Graph_Alloc(play->state.gfxCtx, sizeof(Mtx));
+    Mtx* perspMtx = Graph_Alloc(play->state.gfxCtx, sizeof(Mtx));
     Mtx* lookAtMtx = Graph_Alloc(play->state.gfxCtx, sizeof(Mtx));
     u16 perspNorm;
     Gfx* opaRef; // reserved POLY_OPA slot — branches the normal flow PAST our sub-list
@@ -2213,8 +2193,7 @@ u8 Sm64Kaleido_DrawForm(PlayState* play) {
         gDPFillRectangle(POLY_OPA_DISP++, 0, 0, width - 1, height - 1);
         gDPPipeSync(POLY_OPA_DISP++);
 
-        gDPSetColorImage(POLY_OPA_DISP++, G_IM_FMT_RGBA, G_IM_SIZ_16b, width,
-                         play->state.gfxCtx->curFrameBuffer);
+        gDPSetColorImage(POLY_OPA_DISP++, G_IM_FMT_RGBA, G_IM_SIZ_16b, width, play->state.gfxCtx->curFrameBuffer);
         gDPSetCycleType(POLY_OPA_DISP++, G_CYC_FILL);
         gDPSetRenderMode(POLY_OPA_DISP++, G_RM_NOOP, G_RM_NOOP2);
         gDPSetFillColor(POLY_OPA_DISP++, (GPACK_RGBA5551(0, 0, 0, 1) << 16) | GPACK_RGBA5551(0, 0, 0, 1));
@@ -2253,8 +2232,8 @@ u8 Sm64Kaleido_DrawForm(PlayState* play) {
             tintB = hb;
         }
         Sm64Render_DrawMarioMesh(play, &sSm64PuppetBuffers, 0.0f, 0.0f, 0.0f,
-                                 /*translucent*/ 0, /*metalTint*/ 0, /*wingCap*/ 0, /*fireActive*/ 0,
-                                 recolor, tintR, tintG, tintB, /*modelMtx*/ NULL);
+                                 /*translucent*/ 0, /*metalTint*/ 0, /*wingCap*/ 0, /*fireActive*/ 0, recolor, tintR,
+                                 tintG, tintB, /*modelMtx*/ NULL);
     }
 
     // --- Block 2: cap the POLY_OPA sub-list, branch the normal frame-end flow past
@@ -2281,7 +2260,8 @@ u8 Sm64Mario_HasMesh(void) {
     // Lens-of-truth held → hide Mario entirely (mirror of EnPartner.shouldDraw=0
     // in z_en_partner.c:617-622). Sm64Mario_LensActive is set by the Lens
     // item handler in sm64_mario_items.c.
-    if (Sm64Mario_LensActive()) return 0;
+    if (Sm64Mario_LensActive())
+        return 0;
     // First-person (#6 C-Up free-look): the camera sits inside Mario's head, so
     // drawing his mesh just shows the model inside-out. Hide it while looking —
     // ShouldHideLink keeps Link hidden too, so nothing draws (correct first-person).
@@ -2302,13 +2282,14 @@ u8 Sm64Mario_ShouldHideLink(void) {
     // EXCEPTION: when Mario is dead (HP 0) we must SHOW Link so his death /
     // game-over animation is visible instead of an invisible, frozen-looking
     // player (matches the IsActive yield above).
-    if (gSaveContext.health <= 0) return 0;
+    if (gSaveContext.health <= 0)
+        return 0;
     return CVarGetInteger("gSm64Mario", 0) != 0;
 }
 
 void Sm64Mario_Reset(void) {
-    lusprintf(__FILE__, __LINE__, 2, "[SM64] Reset: MarioId=%d surfacesForScene=%d",
-        sSm64MarioId, sSm64SurfacesForScene);
+    lusprintf(__FILE__, __LINE__, 2, "[SM64] Reset: MarioId=%d surfacesForScene=%d", sSm64MarioId,
+              sSm64SurfacesForScene);
     if (sSm64MarioId >= 0 && p_sm64_mario_delete) {
         p_sm64_mario_delete(sSm64MarioId);
         sSm64MarioId = -1;
@@ -2352,7 +2333,7 @@ void Sm64Mario_Reset(void) {
 // Player_ItemAction never tries to "use" the mask as a real item.
 // =============================================================================
 
-#define SM64_CDOWN_BUTTON_INDEX 2  // buttonItems[2] is the C-Down slot
+#define SM64_CDOWN_BUTTON_INDEX 2 // buttonItems[2] is the C-Down slot
 
 void Sm64MarioMask_ForceAndToggle(PlayState* play, Player* player) {
     (void)play;
@@ -2375,7 +2356,8 @@ void Sm64Mario_OnSceneChange(PlayState* play) {
 // z_player.c:11510.
 void Sm64Mario_OnPlayerInit(PlayState* play, Player* player) {
     (void)player;
-    if (!sSm64Initialized) return;
+    if (!sSm64Initialized)
+        return;
 
     // Drop old Mario + mesh buffer. sSm64LastSceneNum = -1 guarantees the
     // scene-change branch in Update re-enters on the first frame it runs,
@@ -2402,7 +2384,7 @@ void Sm64Mario_OnPlayerInit(PlayState* play, Player* player) {
     sSm64SuspendActive = 1;
     sSm64ResumeCountdown = 30;
     lusprintf(__FILE__, __LINE__, 2, "[SM64] OnPlayerInit: nuked Mario + suspended for scene %d",
-        play ? play->sceneNum : -1);
+              play ? play->sceneNum : -1);
 }
 
 // SyncPositionToPlayer removed — position override now happens inside Sm64Mario_Update
@@ -2414,7 +2396,8 @@ void Sm64Mario_OnPlayerInit(PlayState* play, Player* player) {
 
 void Sm64Mario_InterceptDamage(PlayState* play, Player* player) {
     (void)play;
-    if (!Sm64Mario_IsReady()) return;
+    if (!Sm64Mario_IsReady())
+        return;
 
     u8 pendingDamage = player->actor.colChkInfo.damage;
     s32 hadAcHit = (player->cylinder.base.acFlags & AC_HIT) != 0;
@@ -2442,10 +2425,10 @@ void Sm64Mario_InterceptDamage(PlayState* play, Player* player) {
         static u32 sHeartbeat = 0;
         if ((sHeartbeat % 180) == 0) {
             lusprintf(__FILE__, __LINE__, 2,
-                "[SM64] Damage-state: acFlags=0x%02x colInfo.damage=%u invincT=%d flags1=0x%08x cylR=%d cylH=%d csState=%d",
-                player->cylinder.base.acFlags, pendingDamage, player->invincibilityTimer,
-                player->stateFlags1, player->cylinder.dim.radius, player->cylinder.dim.height,
-                play ? (int)play->csCtx.state : -1);
+                      "[SM64] Damage-state: acFlags=0x%02x colInfo.damage=%u invincT=%d flags1=0x%08x cylR=%d cylH=%d "
+                      "csState=%d",
+                      player->cylinder.base.acFlags, pendingDamage, player->invincibilityTimer, player->stateFlags1,
+                      player->cylinder.dim.radius, player->cylinder.dim.height, play ? (int)play->csCtx.state : -1);
         }
         sHeartbeat++;
     }
@@ -2467,10 +2450,8 @@ void Sm64Mario_InterceptDamage(PlayState* play, Player* player) {
         // much OOT damage the source would have dealt. libsm64's own i-frames
         // keep contiguous contact from chewing through multiple segments.
         u32 mDamage = 1;
-        p_sm64_mario_take_damage(sSm64MarioId, mDamage, 0,
-            src.x * SM64_WORLD_SCALE,
-            src.y * SM64_WORLD_SCALE,
-            src.z * SM64_WORLD_SCALE);
+        p_sm64_mario_take_damage(sSm64MarioId, mDamage, 0, src.x * SM64_WORLD_SCALE, src.y * SM64_WORLD_SCALE,
+                                 src.z * SM64_WORLD_SCALE);
 
         // Element-specific reaction. OOT's AC hit effect (colChkInfo.acHitEffect:
         // 1=fire, 2=ice, 3=electric) survives the scrub below, so map it onto
@@ -2480,11 +2461,15 @@ void Sm64Mario_InterceptDamage(PlayState* play, Player* player) {
             u32 react = 0;
             switch (player->actor.colChkInfo.acHitEffect) {
                 case 1: // fire
-                    react = (sSm64OutState.action & SM64_ACT_FLAG_AIR)
-                                ? SM64_ACT_BURNING_JUMP : SM64_ACT_BURNING_GROUND;
+                    react =
+                        (sSm64OutState.action & SM64_ACT_FLAG_AIR) ? SM64_ACT_BURNING_JUMP : SM64_ACT_BURNING_GROUND;
                     break;
-                case 2: react = SM64_ACT_SHIVERING; break; // ice (closest SM64 has to "frozen")
-                case 3: react = SM64_ACT_SHOCKED;   break; // electric
+                case 2:
+                    react = SM64_ACT_SHIVERING;
+                    break; // ice (closest SM64 has to "frozen")
+                case 3:
+                    react = SM64_ACT_SHOCKED;
+                    break; // electric
             }
             if (react != 0) {
                 p_sm64_set_mario_action(sSm64MarioId, react);
@@ -2512,8 +2497,8 @@ void Sm64Mario_InterceptDamage(PlayState* play, Player* player) {
         }
 
         lusprintf(__FILE__, __LINE__, 2,
-            "[SM64] Damage intercepted: hadAcHit=%d oot_dmg=%u → mario_dmg=%u linkHP=%d src=(%.0f,%.0f,%.0f)",
-            hadAcHit, pendingDamage, mDamage, gSaveContext.health, src.x, src.y, src.z);
+                  "[SM64] Damage intercepted: hadAcHit=%d oot_dmg=%u → mario_dmg=%u linkHP=%d src=(%.0f,%.0f,%.0f)",
+                  hadAcHit, pendingDamage, mDamage, gSaveContext.health, src.x, src.y, src.z);
     }
 
     // Scrub every damage input regardless — blocks enemy bumpers, floor
@@ -2526,7 +2511,8 @@ void Sm64Mario_InterceptDamage(PlayState* play, Player* player) {
 
 void Sm64Mario_ScrubDamageState(PlayState* play, Player* player) {
     (void)play;
-    if (!Sm64Mario_IsReady()) return;
+    if (!Sm64Mario_IsReady())
+        return;
     // Defense in depth for non-AC_HIT paths (void-out, script damage).
     player->stateFlags1 &= ~PLAYER_STATE1_DAMAGED;
 
@@ -2548,7 +2534,8 @@ void Sm64Mario_InitAttackCollider(PlayState* play, Player* player) {
     // is "on" from the user's perspective, and during that window we still
     // need to re-bind the collider to the new Player actor so it's ready
     // when suspend lifts.
-    if (play == NULL || player == NULL || !sSm64Initialized) return;
+    if (play == NULL || player == NULL || !sSm64Initialized)
+        return;
     Collider_InitCylinder(play, &sSm64AttackCollider);
     Collider_SetCylinder(play, &sSm64AttackCollider, &player->actor, &sSm64AttackColliderInit);
     sSm64AttackColliderInited = 1;
@@ -2564,7 +2551,8 @@ void Sm64Mario_InitAttackCollider(PlayState* play, Player* player) {
 // and breaks pots/grass/props. No one-hit gate: it's a CONTINUOUS aura (enemy
 // i-frames pace repeat damage; breakables shatter on first contact).
 static void Sm64Mario_UpdateMetalBlast(PlayState* play, Player* player) {
-    if (!Sm64Mario_IsReady()) return;
+    if (!Sm64Mario_IsReady())
+        return;
 
     // Lazy bind (mode toggled on mid-scene, before any Player_Init re-bind).
     if (!sSm64MetalColliderInited) {
@@ -2576,7 +2564,8 @@ static void Sm64Mario_UpdateMetalBlast(PlayState* play, Player* player) {
     sSm64MetalCollider.base.atFlags &= ~(AT_ON | AT_HIT);
 
     // Only while the Metal Cap is actually worn.
-    if (!(sSm64OutState.flags & SM64_MARIO_METAL_CAP)) return;
+    if (!(sSm64OutState.flags & SM64_MARIO_METAL_CAP))
+        return;
 
     f32 mx = sSm64OutState.position[0] / SM64_WORLD_SCALE;
     f32 my = sSm64OutState.position[1] / SM64_WORLD_SCALE;
@@ -2589,7 +2578,8 @@ static void Sm64Mario_UpdateMetalBlast(PlayState* play, Player* player) {
 }
 
 void Sm64Mario_UpdateAttackCollider(PlayState* play, Player* player) {
-    if (!Sm64Mario_IsReady()) return;
+    if (!Sm64Mario_IsReady())
+        return;
 
     // Metal Cap blast aura — independent of the attack-state logic below, which
     // has several early returns. Runs every frame the Metal Cap is worn.
@@ -2605,24 +2595,34 @@ void Sm64Mario_UpdateAttackCollider(PlayState* play, Player* player) {
     }
 
     u32 action = sSm64OutState.action;
-    u32 flags  = sSm64OutState.flags;
+    u32 flags = sSm64OutState.flags;
     f32 fwd = 0.0f, up = 0.0f;
     u8 attacking = 0;
     u8 isGroundPound = 0;
 
     if (flags & SM64_MARIO_PUNCHING) {
-        attacking = 1; fwd = 20.0f; up = 25.0f;
+        attacking = 1;
+        fwd = 20.0f;
+        up = 25.0f;
     } else if (flags & SM64_MARIO_KICKING) {
-        attacking = 1; fwd = 22.0f; up = 15.0f;
+        attacking = 1;
+        fwd = 22.0f;
+        up = 15.0f;
     } else if (action == SM64_ACT_GROUND_POUND_LAND) {
-        attacking = 1; fwd = 0.0f;  up = 5.0f;
+        attacking = 1;
+        fwd = 0.0f;
+        up = 5.0f;
         isGroundPound = 1;
-    } else if (action == SM64_ACT_DIVE || action == SM64_ACT_DIVE_SLIDE ||
-               action == SM64_ACT_SLIDE_KICK || action == SM64_ACT_SLIDE_KICK_SLIDE) {
-        attacking = 1; fwd = 25.0f; up = 10.0f;
+    } else if (action == SM64_ACT_DIVE || action == SM64_ACT_DIVE_SLIDE || action == SM64_ACT_SLIDE_KICK ||
+               action == SM64_ACT_SLIDE_KICK_SLIDE) {
+        attacking = 1;
+        fwd = 25.0f;
+        up = 10.0f;
     } else if (action == SM64_ACT_TWIRLING) {
         // Spin attack (X) — 360° rotation, so the collider sits centered on Mario.
-        attacking = 1; fwd = 0.0f; up = 15.0f;
+        attacking = 1;
+        fwd = 0.0f;
+        up = 15.0f;
     }
 
     // ONE-HIT-PER-ATTACK gate (fix for "sometimes kills in one hit"): the
@@ -2632,12 +2632,12 @@ void Sm64Mario_UpdateAttackCollider(PlayState* play, Player* player) {
     // during an active attack, if AT_HIT fired last frame, stop re-SetAT'ing
     // until Mario leaves this attack.
     static u32 sPrevAttackAction = 0;
-    static u8  sHitThisAttack = 0;
+    static u8 sHitThisAttack = 0;
     if (attacking && action != sPrevAttackAction) {
-        sHitThisAttack = 0;  // fresh attack window
+        sHitThisAttack = 0; // fresh attack window
     }
     if (sSm64AttackCollider.base.atFlags & AT_HIT) {
-        sHitThisAttack = 1;  // the previous frame's SetAT connected
+        sHitThisAttack = 1; // the previous frame's SetAT connected
     }
     sPrevAttackAction = attacking ? action : 0;
 
@@ -2650,22 +2650,21 @@ void Sm64Mario_UpdateAttackCollider(PlayState* play, Player* player) {
     {
         static u8 sWasAttacking = 0;
         if (attacking && !sWasAttacking) {
-            lusprintf(__FILE__, __LINE__, 2, "[SM64] Attack START: action=0x%08x flags=0x%08x",
-                action, flags);
+            lusprintf(__FILE__, __LINE__, 2, "[SM64] Attack START: action=0x%08x flags=0x%08x", action, flags);
         } else if (!attacking && sWasAttacking) {
             lusprintf(__FILE__, __LINE__, 2, "[SM64] Attack END");
         }
         sWasAttacking = attacking;
     }
 
-    if (!attacking || sHitThisAttack) return;
+    if (!attacking || sHitThisAttack)
+        return;
 
     // Swap damage flags per attack type so ground pound breaks hammer-
     // specific props (cracked floor tiles, Dead Hand drop, ReDead stun, etc.)
     // while punches/kicks still behave as Master-Sword slashes.
     sSm64AttackCollider.info.toucher.dmgFlags =
-        isGroundPound ? DMG_HAMMER
-                      : (DMG_SLASH_MASTER | DMG_JUMP_MASTER | DMG_SPIN_MASTER);
+        isGroundPound ? DMG_HAMMER : (DMG_SLASH_MASTER | DMG_JUMP_MASTER | DMG_SPIN_MASTER);
 
     // Mario's libsm64 position is SM64-scale; convert to OOT.
     f32 mx = sSm64OutState.position[0] / SM64_WORLD_SCALE;
@@ -2698,13 +2697,13 @@ void Sm64Mario_UpdateAttackCollider(PlayState* play, Player* player) {
 // 8192 stereo pairs @ 32000 Hz = 256 ms of buffered audio. Plenty of
 // headroom for any blocking the audio thread might hit.
 #define SM64_AUDIO_RING_PAIRS 8192
-#define SM64_AUDIO_RING_MASK  (SM64_AUDIO_RING_PAIRS - 1)
+#define SM64_AUDIO_RING_MASK (SM64_AUDIO_RING_PAIRS - 1)
 _Static_assert((SM64_AUDIO_RING_PAIRS & SM64_AUDIO_RING_MASK) == 0,
                "Audio ring size must be a power of two for mask indexing");
 
 static int16_t sSm64AudioRing[SM64_AUDIO_RING_PAIRS * 2]; // interleaved L,R
-static volatile uint32_t sSm64AudioHead = 0; // write cursor (stereo pairs)
-static volatile uint32_t sSm64AudioTail = 0; // read cursor (stereo pairs)
+static volatile uint32_t sSm64AudioHead = 0;              // write cursor (stereo pairs)
+static volatile uint32_t sSm64AudioTail = 0;              // read cursor (stereo pairs)
 
 static inline uint32_t Sm64Audio_RingFill(void) {
     return (sSm64AudioHead - sSm64AudioTail) & 0xFFFFFFFFu;
@@ -2714,7 +2713,8 @@ static inline uint32_t Sm64Audio_RingFill(void) {
 // Target: ~128 ms of buffered audio (4096 pairs) so the audio thread never
 // starves even if a game frame stalls briefly.
 static void Sm64Audio_RefillRing(void) {
-    if (!p_sm64_audio_tick) return;
+    if (!p_sm64_audio_tick)
+        return;
 
     // Scratch buffer for one audio_tick call. libsm64 writes
     //   2 chunks × SAMPLES_HIGH(544) pairs × 2 s16 per pair = 2176 shorts.
@@ -2726,12 +2726,14 @@ static void Sm64Audio_RefillRing(void) {
     while (Sm64Audio_RingFill() < desired && safety-- > 0) {
         uint32_t queued = Sm64Audio_RingFill();
         uint32_t got = p_sm64_audio_tick(queued, desired, tmp);
-        if (got == 0) break;
+        if (got == 0)
+            break;
         // libsm64 writes 2 chunks, each `got` stereo pairs → 2*got pairs total.
         uint32_t totalPairs = 2u * got;
         // Don't overrun the ring: cap against free space.
         uint32_t freePairs = SM64_AUDIO_RING_PAIRS - Sm64Audio_RingFill();
-        if (totalPairs > freePairs) totalPairs = freePairs;
+        if (totalPairs > freePairs)
+            totalPairs = freePairs;
         for (uint32_t i = 0; i < totalPairs; i++) {
             uint32_t idx = (sSm64AudioHead & SM64_AUDIO_RING_MASK) * 2;
             sSm64AudioRing[idx + 0] = tmp[i * 2 + 0];
@@ -2744,7 +2746,8 @@ static void Sm64Audio_RefillRing(void) {
 // Public hook for code_800E4FE0.c — consumes ring samples and mixes into
 // the output buffer OOT's synth already wrote. numSamples is stereo pairs.
 void Sm64Audio_MixInto(int16_t* outBuf, uint32_t numSamples) {
-    if (!sSm64Initialized || outBuf == NULL || numSamples == 0) return;
+    if (!sSm64Initialized || outBuf == NULL || numSamples == 0)
+        return;
 
     uint32_t available = Sm64Audio_RingFill();
     uint32_t toMix = numSamples < available ? numSamples : available;
@@ -2753,8 +2756,14 @@ void Sm64Audio_MixInto(int16_t* outBuf, uint32_t numSamples) {
         uint32_t idx = (sSm64AudioTail & SM64_AUDIO_RING_MASK) * 2;
         int32_t l = (int32_t)outBuf[i * 2 + 0] + (int32_t)sSm64AudioRing[idx + 0];
         int32_t r = (int32_t)outBuf[i * 2 + 1] + (int32_t)sSm64AudioRing[idx + 1];
-        if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
-        if (r > 32767) r = 32767; else if (r < -32768) r = -32768;
+        if (l > 32767)
+            l = 32767;
+        else if (l < -32768)
+            l = -32768;
+        if (r > 32767)
+            r = 32767;
+        else if (r < -32768)
+            r = -32768;
         outBuf[i * 2 + 0] = (int16_t)l;
         outBuf[i * 2 + 1] = (int16_t)r;
         sSm64AudioTail++;

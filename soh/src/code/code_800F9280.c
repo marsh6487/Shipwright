@@ -391,7 +391,8 @@ extern f32 D_80130F24;
 extern f32 sRelativeOcarinaVolume;
 
 void Audio_PrimeMmSideChannel(u8 playerIdx, u16 fullSeqId) {
-    if (playerIdx >= 4) return;
+    if (playerIdx >= 4)
+        return;
     gAudioContext.seqToPlay[playerIdx] = fullSeqId;
     gAudioContext.seqReplaced[playerIdx] = 1;
     sMmSideChannelPrimed[playerIdx] = 1;

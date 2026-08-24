@@ -78,7 +78,6 @@ constexpr float kStoneZ = -171.0f;
 // without reaching into the next room.
 constexpr float kSongRangeSq = 400.0f * 400.0f;
 
-
 constexpr const char* kMessageTableId = "MarioMaskScene";
 constexpr const char* kSaveSection = "marioMaskScene";
 
@@ -109,8 +108,8 @@ struct State {
     Phase phase = PHASE_IDLE;
     int timer = 0;
     bool paintingBlackened = false;
-    bool talkedOnce = false;  // purely cosmetic: lets the stone change its line afterwards
-    bool textOpened = false;  // dialogue 2 has actually been seen on screen -- see PHASE_SPEAKING
+    bool talkedOnce = false; // purely cosmetic: lets the stone change its line afterwards
+    bool textOpened = false; // dialogue 2 has actually been seen on screen -- see PHASE_SPEAKING
 };
 
 State gState;
@@ -148,7 +147,6 @@ float DistSqToStone(Player* player) {
     const float dz = player->actor.world.pos.z - kStoneZ;
     return dx * dx + dz * dz;
 }
-
 
 // ---------------------------------------------------------------------------
 // The painting going black

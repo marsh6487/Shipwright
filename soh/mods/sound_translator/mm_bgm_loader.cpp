@@ -69,7 +69,8 @@ void RegisterMmFonts() {
     int count = 0;
     char** files = MmAssets_ListMmArchiveFiles("audio/fonts*", &count);
     if (files == nullptr || count == 0) {
-        if (files) free(files);
+        if (files)
+            free(files);
         MMBGM_LOG("[MmBgm] No audio/fonts* found in mm.o2r — skipping font registration");
         return;
     }
@@ -78,7 +79,8 @@ void RegisterMmFonts() {
     int aliased = 0;
     for (int i = 0; i < count; i++) {
         const char* path = files[i];
-        if (path == nullptr) continue;
+        if (path == nullptr)
+            continue;
 
         // CRITICAL: the global ResourceManager cache holds OOT's SoundFont
         // content for paths like `audio/fonts/Soundfont_6` (cached during
@@ -147,19 +149,21 @@ void RegisterMmFonts() {
     }
 
     for (int i = 0; i < count; i++) {
-        if (files[i]) free(files[i]);
+        if (files[i])
+            free(files[i]);
     }
     free(files);
 
-    MMBGM_LOG("[MmBgm] Registered %d new MM soundfonts + %d aliased to existing OOT slots (scanned %d)",
-              registered, aliased, count);
+    MMBGM_LOG("[MmBgm] Registered %d new MM soundfonts + %d aliased to existing OOT slots (scanned %d)", registered,
+              aliased, count);
 }
 
 void RegisterMmSequencesInternal() {
     int count = 0;
     char** files = MmAssets_ListMmArchiveFiles("audio/sequences*", &count);
     if (files == nullptr || count == 0) {
-        if (files) free(files);
+        if (files)
+            free(files);
         MMBGM_LOG("[MmBgm] DIAG: 'audio/sequences*' returned 0 entries. Trying broader patterns...");
 
         // Diagnostic fallbacks — log alt patterns so the user can see what's
@@ -171,10 +175,12 @@ void RegisterMmSequencesInternal() {
             MMBGM_LOG("[MmBgm] DIAG: pattern '%s' -> %d hits", probes[p], n);
             if (files2 != nullptr) {
                 for (int i = 0; i < n && i < 5; i++) {
-                    if (files2[i]) MMBGM_LOG("[MmBgm] DIAG:   [%d] '%s'", i, files2[i]);
+                    if (files2[i])
+                        MMBGM_LOG("[MmBgm] DIAG:   [%d] '%s'", i, files2[i]);
                 }
                 for (int i = 0; i < n; i++) {
-                    if (files2[i]) free(files2[i]);
+                    if (files2[i])
+                        free(files2[i]);
                 }
                 free(files2);
             }
@@ -186,14 +192,17 @@ void RegisterMmSequencesInternal() {
     // expected filenames (Sequence_83 for Bremen March, Sequence_113 for Kamaro).
     MMBGM_LOG("[MmBgm] DIAG: Found %d audio/sequences* entries:", count);
     for (int i = 0; i < count && i < 10; i++) {
-        if (files[i]) MMBGM_LOG("[MmBgm] DIAG:   [%d] '%s'", i, files[i]);
+        if (files[i])
+            MMBGM_LOG("[MmBgm] DIAG:   [%d] '%s'", i, files[i]);
     }
-    if (count > 10) MMBGM_LOG("[MmBgm] DIAG:   ... and %d more", count - 10);
+    if (count > 10)
+        MMBGM_LOG("[MmBgm] DIAG:   ... and %d more", count - 10);
 
     int registered = 0;
     for (int i = 0; i < count; i++) {
         const char* path = files[i];
-        if (path == nullptr) continue;
+        if (path == nullptr)
+            continue;
 
         SequenceData* sDat = ResourceMgr_LoadSeqPtrByName(path);
         if (sDat == nullptr) {
@@ -209,10 +218,9 @@ void RegisterMmSequencesInternal() {
         u8 originalSeqNumber = sDat->seqNumber;
         if (strstr(path, "BremenMarch") != nullptr || strstr(path, "GetSong") != nullptr ||
             strstr(path, "LearnedNewSong") != nullptr || strstr(path, "_52") != nullptr ||
-            strstr(path, "_53") != nullptr || strstr(path, "Kamaro") != nullptr ||
-            strstr(path, "_71") != nullptr) {
-            MMBGM_LOG("[MmBgm] DIAG: '%s' BINARY seqNumber=0x%02X (ROM index this file's binary identifies as)",
-                      path, originalSeqNumber);
+            strstr(path, "_53") != nullptr || strstr(path, "Kamaro") != nullptr || strstr(path, "_71") != nullptr) {
+            MMBGM_LOG("[MmBgm] DIAG: '%s' BINARY seqNumber=0x%02X (ROM index this file's binary identifies as)", path,
+                      originalSeqNumber);
         }
 
         // Two cases produced by OTRExporter::WriteSequenceBinary:
@@ -225,8 +233,8 @@ void RegisterMmSequencesInternal() {
             memcpy(&crc, sDat->fonts, sizeof(uint64_t));
             const char* res = ResourceGetNameByCrc(crc);
             if (res == nullptr) {
-                MMBGM_LOG("[MmBgm] Could not find soundfont (CRC 0x%llx) for sequence '%s'",
-                          (unsigned long long)crc, path);
+                MMBGM_LOG("[MmBgm] Could not find soundfont (CRC 0x%llx) for sequence '%s'", (unsigned long long)crc,
+                          path);
                 continue;
             }
             SoundFont* sf = ResourceMgr_LoadAudioSoundFontByName(res);
@@ -246,8 +254,7 @@ void RegisterMmSequencesInternal() {
                 if (it != sMmFontIndexMap.end()) {
                     u8 oldIdx = sDat->fonts[k];
                     sDat->fonts[k] = it->second;
-                    MMBGM_LOG("[MmBgm] DIAG: '%s' fonts[%d] remap MM_orig=%u -> SoH=%u",
-                              path, k, oldIdx, it->second);
+                    MMBGM_LOG("[MmBgm] DIAG: '%s' fonts[%d] remap MM_orig=%u -> SoH=%u", path, k, oldIdx, it->second);
                 } else {
                     MMBGM_LOG("[MmBgm] WARN: '%s' fonts[%d]=%u — no MM->SoH font remap available; "
                               "playback will use existing fontMap slot which may be wrong",
@@ -263,14 +270,11 @@ void RegisterMmSequencesInternal() {
             // with the wrong instruments → "wrong song" symptom.
             if (strstr(path, "BremenMarch") != nullptr || strstr(path, "GetSong") != nullptr ||
                 strstr(path, "LearnedNewSong") != nullptr || strstr(path, "_52") != nullptr ||
-                strstr(path, "_53") != nullptr || strstr(path, "Kamaro") != nullptr ||
-                strstr(path, "_71") != nullptr) {
+                strstr(path, "_53") != nullptr || strstr(path, "Kamaro") != nullptr || strstr(path, "_71") != nullptr) {
                 u8 finalFont = sDat->fonts[0];
-                const char* fontPath = (finalFont < fontMapSize && fontMap[finalFont] != nullptr)
-                                           ? fontMap[finalFont]
-                                           : "(invalid)";
-                MMBGM_LOG("[MmBgm] DIAG: '%s' will play with fontMap[%u]='%s'",
-                          path, finalFont, fontPath);
+                const char* fontPath =
+                    (finalFont < fontMapSize && fontMap[finalFont] != nullptr) ? fontMap[finalFont] : "(invalid)";
+                MMBGM_LOG("[MmBgm] DIAG: '%s' will play with fontMap[%u]='%s'", path, finalFont, fontPath);
             }
         }
 
@@ -286,7 +290,8 @@ void RegisterMmSequencesInternal() {
     }
 
     for (int i = 0; i < count; i++) {
-        if (files[i]) free(files[i]);
+        if (files[i])
+            free(files[i]);
     }
     free(files);
 
@@ -294,7 +299,8 @@ void RegisterMmSequencesInternal() {
 }
 
 void EnsureRegistered() {
-    if (sRegistered || sRegistrationStarted) return;
+    if (sRegistered || sRegistrationStarted)
+        return;
 
     // Triggers MmAssets_Init() lazily if it hasn't run yet.
     if (!MmAssets_IsAvailable()) {
@@ -305,13 +311,13 @@ void EnsureRegistered() {
         return;
     }
     if (sequenceMap == nullptr || fontMap == nullptr) {
-        MMBGM_LOG("[MmBgm] DIAG: sequenceMap=%p fontMap=%p — audio engine not initialized yet",
-                  (void*)sequenceMap, (void*)fontMap);
+        MMBGM_LOG("[MmBgm] DIAG: sequenceMap=%p fontMap=%p — audio engine not initialized yet", (void*)sequenceMap,
+                  (void*)fontMap);
         return;
     }
 
-    MMBGM_LOG("[MmBgm] DIAG: Starting MM seq registration (sequenceMapSize=%zu, fontMapSize=%zu)",
-              sequenceMapSize, fontMapSize);
+    MMBGM_LOG("[MmBgm] DIAG: Starting MM seq registration (sequenceMapSize=%zu, fontMapSize=%zu)", sequenceMapSize,
+              fontMapSize);
     sRegistrationStarted = true;
     RegisterMmFonts();
     RegisterMmSequencesInternal();
@@ -333,17 +339,16 @@ s32 MmBgm_IsAvailable(void) {
 }
 
 u16 MmBgm_GetSeqId(const char* mmBgmName) {
-    if (mmBgmName == nullptr) return 0xFFFF;
+    if (mmBgmName == nullptr)
+        return 0xFFFF;
     EnsureRegistered();
     if (!sRegistered) {
-        MMBGM_LOG("[MmBgm] GetSeqId('%s'): registry not populated (mm.o2r missing/unmounted?)",
-                  mmBgmName);
+        MMBGM_LOG("[MmBgm] GetSeqId('%s'): registry not populated (mm.o2r missing/unmounted?)", mmBgmName);
         return 0xFFFF;
     }
     auto it = sNameToId.find(std::string(mmBgmName));
     if (it == sNameToId.end()) {
-        MMBGM_LOG("[MmBgm] GetSeqId: no registered sequence named '%s' — check mm.o2r contents",
-                  mmBgmName);
+        MMBGM_LOG("[MmBgm] GetSeqId: no registered sequence named '%s' — check mm.o2r contents", mmBgmName);
         return 0xFFFF;
     }
     return it->second;
@@ -365,17 +370,19 @@ static void MmBgm_PrimeSideChannel(u8 playerIdx, u16 fullSeqId) {
 
 void MmBgm_PlayFanfare(const char* mmBgmName) {
     u16 id = MmBgm_GetSeqId(mmBgmName);
-    if (id == 0xFFFF) return; // GetSeqId already logged the failure
+    if (id == 0xFFFF)
+        return; // GetSeqId already logged the failure
     MMBGM_LOG("[MmBgm] PlayFanfare '%s' (id=0x%04X)", mmBgmName, id);
-    MmBgm_PrimeSideChannel(/*SEQ_PLAYER_FANFARE=*/ 1, id);
+    MmBgm_PrimeSideChannel(/*SEQ_PLAYER_FANFARE=*/1, id);
     Audio_PlayFanfare(id);
 }
 
 void MmBgm_PlayMain(const char* mmBgmName) {
     u16 id = MmBgm_GetSeqId(mmBgmName);
-    if (id == 0xFFFF) return;
+    if (id == 0xFFFF)
+        return;
     MMBGM_LOG("[MmBgm] PlayMain '%s' (id=0x%04X)", mmBgmName, id);
-    MmBgm_PrimeSideChannel(/*SEQ_PLAYER_BGM_MAIN=*/ 0, id);
+    MmBgm_PrimeSideChannel(/*SEQ_PLAYER_BGM_MAIN=*/0, id);
     // SEQ_PLAYER_BGM_MAIN = 0. Format: (op << 28) | (seqPlayer << 24) | (seq & 0xFFFF).
     // The low 8 bits of `id` may be garbage when truncated, but the side-channel
     // primed above carries the full 16-bit ID through.
@@ -399,7 +406,8 @@ static u16 sSavedBgmMainId = NA_BGM_DISABLED;
 
 void MmBgm_PlayLoop(const char* mmBgmName) {
     u16 id = MmBgm_GetSeqId(mmBgmName);
-    if (id == 0xFFFF) return;
+    if (id == 0xFFFF)
+        return;
 
     // Snapshot the current scene BGM BEFORE we queue our own — only update the
     // saved id when it's a sequence we didn't queue ourselves (avoids stomping
@@ -408,10 +416,9 @@ void MmBgm_PlayLoop(const char* mmBgmName) {
     if (prev != id && prev != NA_BGM_DISABLED) {
         sSavedBgmMainId = prev;
     }
-    MMBGM_LOG("[MmBgm] PlayLoop '%s' (id=0x%04X) snapshot prev=0x%04X",
-              mmBgmName, id, sSavedBgmMainId);
+    MMBGM_LOG("[MmBgm] PlayLoop '%s' (id=0x%04X) snapshot prev=0x%04X", mmBgmName, id, sSavedBgmMainId);
 
-    MmBgm_PrimeSideChannel(/*SEQ_PLAYER_BGM_MAIN=*/ 0, id);
+    MmBgm_PrimeSideChannel(/*SEQ_PLAYER_BGM_MAIN=*/0, id);
     Audio_QueueSeqCmd((u32)id & 0xFFFFu);
 }
 

@@ -19,6 +19,7 @@
 // ---------------------------------------------------------------------------
 #define PEGASUS_WINDUP_FRAMES 10
 #define PEGASUS_DASH_SPEED 18.0f
+#define PEGASUS_LEG_PLAYSPEED 3.0f // how fast the run cycle itself plays during the dash
 #define PEGASUS_BONK_FRAMES 20
 #define PEGASUS_BONK_RECOIL -6.0f
 #define PEGASUS_MAGIC_INTERVAL 15 // Drain 1 MP every N frames
@@ -54,6 +55,17 @@ static ColliderCylinderInit sPegasusColInit = { { COLTYPE_NONE, AT_ON | AT_TYPE_
                                                   BUMP_NONE,
                                                   OCELEM_NONE },
                                                 { PEGASUS_COL_RADIUS, PEGASUS_COL_HEIGHT, 0, { 0, 0, 0 } } };
+
+// How much faster the leg cycle turns over than the speed alone would give.
+//
+// Asked for by func_8084029C, in z_player.c, AFTER it clamps the phase rate — that
+// clamp (7.25 a frame) is what the dash saturates, and it is why raising
+// skelAnime.playSpeed changed nothing: the locomotion actions LOAD the joint table
+// from unk_868 and never consult playSpeed at all. 1.0f whenever nobody is dashing.
+// Skijer's NEI
+f32 ExtEquip_LegCycleRateMul(void) {
+    return (gExtEquipBehavior.pegasusState == PEGASUS_RUNNING) ? PEGASUS_LEG_PLAYSPEED : 1.0f;
+}
 
 static void Pegasus_InitCollider(PlayState* play, Player* p) {
     if (gExtEquipBehavior.pegasusColInit)
@@ -111,8 +123,8 @@ static void Pegasus_ResetPlayer(Player* p, PlayState* play) {
 // from the windup cancel (charge action still owns the player and exits itself)
 // and from the cutscene/death path (the cutscene owns the player).
 static void Pegasus_Stop(Player* p, PlayState* play, s32 resetAction) {
-    s32 wasDashing = (gExtEquipBehavior.pegasusState == PEGASUS_RUNNING) ||
-                     (gExtEquipBehavior.pegasusState == PEGASUS_BONK);
+    s32 wasDashing =
+        (gExtEquipBehavior.pegasusState == PEGASUS_RUNNING) || (gExtEquipBehavior.pegasusState == PEGASUS_BONK);
 
     gExtEquipBehavior.pegasusState = PEGASUS_IDLE;
     gExtEquipBehavior.pegasusTimer = 0;
@@ -263,9 +275,23 @@ static void Pegasus_StateRunning(Player* p, PlayState* play) {
     // Force running animation on lower body (legs keep moving)
     // The skeleton plays this animation for ALL limbs, then ApplyPose
     // overrides only the upper body limbs — legs stay running
+    // ⚠️ playSpeed NO mueve estas piernas, y por eso subirlo no hacía nada.
+    //
+    // Mientras corres, Link está en la acción de carga EN MOVIMIENTO, y ésa no
+    // reproduce el clip: CARGA la tabla de joints desde unk_868
+    // (LinkAnimation_BlendToJoint / LoadToJoint). skelAnime.playSpeed no se consulta
+    // en ningún momento de ese camino. La cadencia real es el ritmo de unk_868, que
+    // además satura en 7.25 por frame mucho antes de que el dash llegue a su
+    // velocidad. Quien la sube de verdad es ExtEquip_LegCycleRateMul, un multiplicador
+    // que func_8084029C aplica DESPUÉS del clamp.
+    //
+    // El Change se queda porque es el que deja el clip puesto para los frames en que
+    // Link sí está en la acción de carga QUIETA (esa sí llama LinkAnimation_Update).
     if (p->skelAnime.animation != &gPlayerAnim_link_normal_run_free) {
-        LinkAnimation_Change(play, &p->skelAnime, &gPlayerAnim_link_normal_run_free, 1.5f, 0.0f,
+        LinkAnimation_Change(play, &p->skelAnime, &gPlayerAnim_link_normal_run_free, PEGASUS_LEG_PLAYSPEED, 0.0f,
                              Animation_GetLastFrame(&gPlayerAnim_link_normal_run_free), ANIMMODE_LOOP, -6.0f);
+    } else {
+        p->skelAnime.playSpeed = PEGASUS_LEG_PLAYSPEED;
     }
 
     // Apply stab pose on upper body (lower body keeps running anim)

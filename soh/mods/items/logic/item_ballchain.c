@@ -132,8 +132,7 @@ static void BallChain_UpdateCollider(PlayState* play, Player* p, Vec3f* pos) {
     //   ball overhead (in the air)     -> DMG_HAMMER_SWING
     //   ball at/near player feet level -> DMG_HAMMER_JUMP (hammer floor)
     f32 heightAbovePlayer = pos->y - p->actor.world.pos.y;
-    bcCollider.info.toucher.dmgFlags =
-        (heightAbovePlayer < 30.0f) ? DMG_HAMMER_JUMP : DMG_HAMMER_SWING;
+    bcCollider.info.toucher.dmgFlags = (heightAbovePlayer < 30.0f) ? DMG_HAMMER_JUMP : DMG_HAMMER_SWING;
     bcCollider.info.toucher.damage = BALLCHAIN_DAMAGE;
     bcCollider.info.toucher.effect = 0;
     bcCollider.info.toucherFlags = TOUCH_ON | TOUCH_SFX_NORMAL;
@@ -826,7 +825,8 @@ static void StateThrown(Player* p, PlayState* play) {
     BallChain_CheckHit(&bcBallPos);
     BallChain_ApplyDamageBonus(play);
     if (bcPhase != BALLCHAIN_PHASE_REST) {
-        BallChain_FeedTrail(play, &bcBallPos); // streak while airborne (fly + retract), not while resting — Skijer's NEI
+        BallChain_FeedTrail(play,
+                            &bcBallPos); // streak while airborne (fly + retract), not while resting — Skijer's NEI
     }
 }
 

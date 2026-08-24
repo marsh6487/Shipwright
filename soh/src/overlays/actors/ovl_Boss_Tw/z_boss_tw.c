@@ -2931,8 +2931,7 @@ void BossTw_Update(Actor* thisx, PlayState* play) {
         if (BossSuperDamage_IsFormActive(play) && (this->work[INVINC_TIMER] == 0) &&
             (this->actionFunc != BossTw_MergeCS) &&
             ((this->collider.base.acFlags & AC_HIT) ||
-             BossSuperDamage_FormAttackReaches(play, &twWitchFlat,
-                                               BossSuperDamage_FormAttackRange(play) + 100.0f))) {
+             BossSuperDamage_FormAttackReaches(play, &twWitchFlat, BossSuperDamage_FormAttackRange(play) + 100.0f))) {
             this->collider.base.acFlags &= ~AC_HIT;
             this->actor.colChkInfo.health++;
             this->work[INVINC_TIMER] = 10; // short → you can MASH (hits land during the reel too)
@@ -3012,7 +3011,6 @@ void BossTw_Update(Actor* thisx, PlayState* play) {
             }
         }
     }
-
 }
 
 void BossTw_TwinrovaUpdate(Actor* thisx, PlayState* play2) {
@@ -3149,12 +3147,12 @@ void BossTw_TwinrovaUpdate(Actor* thisx, PlayState* play2) {
         ((s8)this->actor.colChkInfo.health > 0) && (this->actionFunc != BossTw_Wait) &&
         (this->actionFunc != BossTw_TwinrovaMergeCS) &&
         ((this->collider.base.acFlags & AC_HIT) ||
-         BossSuperDamage_FormAttackReaches(play, &twFlat,
-                                           BossSuperDamage_FormAttackRange(play) + 100.0f))) {
+         BossSuperDamage_FormAttackReaches(play, &twFlat, BossSuperDamage_FormAttackRange(play) + 100.0f))) {
         u8 wasStunned = (this->actionFunc == BossTw_TwinrovaStun);
         this->collider.base.acFlags &= ~AC_HIT;
         BossSuperDamage_StartElectricSparks(&this->actor, 90);
-        BossTw_TwinrovaDamage(this, play, BossSuperDamage_FormDamage(play)); // not stunned → stun; stunned → -dmg (death CS at 0)
+        BossTw_TwinrovaDamage(this, play,
+                              BossSuperDamage_FormDamage(play)); // not stunned → stun; stunned → -dmg (death CS at 0)
         if (!wasStunned) {
             this->work[INVINC_TIMER] = 12; // brief gap between the stun and the first damage
         }

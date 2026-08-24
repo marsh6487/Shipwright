@@ -74,6 +74,23 @@ extern "C" {
 #define PLAYER_IA_NET 0x7E
 #define PLAYER_IA_BOTTOMLESS_BOTTLE 0x7F
 
+// Elemental Wand (Skijer's NEI). It has NO item action of its own, and cannot have one: SoH's
+// PlayerItemAction space 0x00-0x7F is completely full (0x5B, the last "unused" slot, is the Mario
+// Mask's), and `heldItemAction` / ExtPlayer_GetItemAction's return are BOTH s8 — so 0x80 does not
+// mean 128, it means -128. A negative action then walks off the front of sActionModelGroups[] and
+// sItemActionUpdateFuncs[] (their bounds check has no lower bound), which is a garbage model group
+// and a garbage function pointer: the bow's hand model vanishes and the game crashes on use.
+//
+// So the wand shares PLAYER_IA_UNUSED_5B with the Mario Mask. That is safe ONLY because both rows
+// resolve identically through ExtPlayer_FindByIA — same model group (DEFAULT), same update func
+// (func_8083485C), same init (Player_InitDefaultIA) — so it does not matter which one the search
+// finds first. Icon, name, slot and RG come from Nei_FindByItem (keyed by ITEM, not IA), so those
+// stay the wand's own.
+//
+// WHEN THE SIX RODS GET REAL BEHAVIOR they will need a distinct action, which means either freeing
+// one of the 128 or widening heldItemAction to s16. That is a decision for that task.
+#define PLAYER_IA_ELEMENTAL_WAND PLAYER_IA_UNUSED_5B
+
 // ============================================================================
 // FUNCTION POINTER TYPES
 // ============================================================================

@@ -336,6 +336,15 @@ typedef enum {
     TEXT_DESC_V_HAMMER,
     TEXT_DESC_V_ARROW_LIGHT,
     TEXT_DESC_V_NAYRUS_LOVE,
+    // Elemental Wand — one slot for the item itself plus one per rod (Skijer's NEI). Placed after
+    // the vanilla block so nothing above needs renumbering.
+    TEXT_DESC_ELEMENTAL_WAND = 0x9470,
+    TEXT_DESC_WAND_SAND,
+    TEXT_DESC_WAND_TORNADO,
+    TEXT_DESC_WAND_WATER,
+    TEXT_DESC_WAND_METEOR,
+    TEXT_DESC_WAND_STORM,
+    TEXT_DESC_WAND_SCEPTER,
 } TextIDs;
 
 #ifdef __cplusplus

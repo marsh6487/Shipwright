@@ -21,8 +21,7 @@ extern f32 gChampionSlowFactor;
 // Categories worth hard-freezing. BG/SWITCH are included so moving platforms and
 // timed switches stop too; PLAYER is deliberately absent (Link always moves).
 static const u8 sTimeCtlFreezeCats[] = {
-    ACTORCAT_SWITCH, ACTORCAT_BG,   ACTORCAT_EXPLOSIVE, ACTORCAT_NPC,
-    ACTORCAT_ENEMY,  ACTORCAT_MISC, ACTORCAT_BOSS,
+    ACTORCAT_SWITCH, ACTORCAT_BG, ACTORCAT_EXPLOSIVE, ACTORCAT_NPC, ACTORCAT_ENEMY, ACTORCAT_MISC, ACTORCAT_BOSS,
 };
 
 typedef struct {
@@ -34,8 +33,8 @@ typedef struct {
 static TimeCtlClaim sTimeCtlClaims[TIMECTL_OWNER_MAX];
 static TimeCtlOwner sTimeCtlActiveOwner = TIMECTL_OWNER_NONE;
 static f32 sTimeCtlWorldSpeed = 1.0f;
-static u8 sTimeCtlClockHeld = 0;     // we are currently holding the clock at 0
-static u16 sTimeCtlClockSaved = 0;   // the value we took over from
+static u8 sTimeCtlClockHeld = 0;      // we are currently holding the clock at 0
+static u16 sTimeCtlClockSaved = 0;    // the value we took over from
 static s16 sTimeCtlLastSceneNum = -1; // auto-reset across scene changes
 static u8 sTimeCtlFrozenLastFrame = 0;
 
@@ -241,6 +240,25 @@ static u8 TimeCtl_ReapplyAc(PlayState* play, Actor* actor) {
     return wasHit;
 }
 
+void TimeCtl_ClearIframes(Actor* actor) {
+    s32 i;
+
+    if ((actor == NULL) || (actor->update == NULL)) {
+        return;
+    }
+    for (i = 0; i < sTimeCtlAcCount; i++) {
+        Collider* col = sTimeCtlAcCache[i].collider;
+
+        if ((sTimeCtlAcCache[i].actor != actor) || (col == NULL) || (col->actor != actor)) {
+            continue;
+        }
+        // Re-arm the collider. NOT AC_HIT — the passes above use it to hand a frozen or
+        // stuttered actor a live frame so the damage it just took is actually processed.
+        col->acFlags |= AC_ON;
+    }
+    actor->colorFilterTimer = 0; // the damage flash some enemies gate invulnerability on
+}
+
 // ---------------------------------------------------------------------------
 // Application
 // ---------------------------------------------------------------------------
@@ -283,6 +301,38 @@ static void TimeCtl_FreezeAll(PlayState* play, u8 frozen) {
     }
 }
 
+/**
+ * Partial-slowdown counterpart of the hittable pass inside TimeCtl_FreezeAll.
+ *
+ * A partial slow is not expressed by scaling motion — z_actor re-freezes each actor for
+ * TimeCtl_GetStutterFrames() after every update, so on most frames the actor does NOT run.
+ * An actor that does not run never calls CollisionCheck_SetAC, so it drops out of the AC
+ * list entirely and arrows, seeds and the sword pass straight through it. At a third speed
+ * that is two frames out of every three with no hitbox at all, which reads in game as
+ * ranged attacks doing nothing. The hard stop already re-registers colliders on the actor's
+ * behalf; the slow has to do exactly the same.
+ *
+ * Only actors that will STILL be frozen after this frame's DECR are re-registered
+ * (freezeTimer > 1). One that is about to wake up registers its own collider moments later,
+ * and doing both would put the same collider into the AC list twice.
+ */
+static void TimeCtl_KeepStutteredHittable(PlayState* play) {
+    u32 i;
+
+    for (i = 0; i < ARRAY_COUNT(sTimeCtlFreezeCats); i++) {
+        Actor* actor = TIMECTL_LIST_HEAD(play->actorCtx.actorLists[sTimeCtlFreezeCats[i]]);
+
+        while (actor != NULL) {
+            if ((actor->freezeTimer > 1) && !TimeCtl_IsActorExempt(actor)) {
+                if (TimeCtl_ReapplyAc(play, actor)) {
+                    actor->freezeTimer = 0; // it was hit: give it a live frame to react
+                }
+            }
+            actor = actor->next;
+        }
+    }
+}
+
 /** Take over / hand back the day-night clock, remembering the original speed. */
 static void TimeCtl_ApplyClock(u8 wantFrozen) {
     if (wantFrozen) {
@@ -312,11 +362,18 @@ static void TimeCtl_ApplyNow(PlayState* play) {
 
     if (frozen) {
         TimeCtl_FreezeAll(play, 1);
-    } else if (sTimeCtlFrozenLastFrame) {
-        // Leaving a hard stop: clear the queued freeze so actors resume on the
-        // very next frame instead of coasting for TIMECTL_FREEZE_REFRESH frames.
-        TimeCtl_FreezeAll(play, 0);
-        sTimeCtlAcCount = 0;
+    } else {
+        if (sTimeCtlFrozenLastFrame) {
+            // Leaving a hard stop: clear the queued freeze so actors resume on the
+            // very next frame instead of coasting for TIMECTL_FREEZE_REFRESH frames.
+            TimeCtl_FreezeAll(play, 0);
+            sTimeCtlAcCount = 0;
+        }
+        if (TimeCtl_IsActive()) {
+            // Slow motion, not a stop: the actors are being stuttered by z_actor, and
+            // stuttered actors are just as absent from the AC list as frozen ones.
+            TimeCtl_KeepStutteredHittable(play);
+        }
     }
     sTimeCtlFrozenLastFrame = frozen;
 

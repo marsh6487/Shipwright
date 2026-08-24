@@ -1235,40 +1235,38 @@ void BossGanondrof_CollisionCheck(BossGanondrof* this, PlayState* play) {
                 {
                     f32 gndDx = this->actor.world.pos.x - GND_BOSSROOM_CENTER_X;
                     f32 gndDz = this->actor.world.pos.z - GND_BOSSROOM_CENTER_Z;
-                    u8 pikaOutOfRing = gPikaGigantamaxMode &&
-                                       (((gndDx * gndDx) + (gndDz * gndDz)) >
-                                        (GND_PIKA_RING_RADIUS * GND_PIKA_RING_RADIUS));
-                if ((this->actor.params == GND_REAL_BOSS) && !pikaOutOfRing &&
-                    BossSuperDamage_IsFormActive(play)) {
-                    BossSuperDamage_StartElectricSparks(&this->actor, 90);
-                    horse->hitTimer = 20;
-                    this->work[GND_INVINC_TIMER] = 10;
-                    Audio_PlayActorSound2(&this->actor, NA_SE_EN_FANTOM_DAMAGE);
+                    u8 pikaOutOfRing = gPikaGigantamaxMode && (((gndDx * gndDx) + (gndDz * gndDz)) >
+                                                               (GND_PIKA_RING_RADIUS * GND_PIKA_RING_RADIUS));
+                    if ((this->actor.params == GND_REAL_BOSS) && !pikaOutOfRing && BossSuperDamage_IsFormActive(play)) {
+                        BossSuperDamage_StartElectricSparks(&this->actor, 90);
+                        horse->hitTimer = 20;
+                        this->work[GND_INVINC_TIMER] = 10;
+                        Audio_PlayActorSound2(&this->actor, NA_SE_EN_FANTOM_DAMAGE);
 
-                    if (this->flyMode == GND_FLY_PAINTING) {
-                        // Phase 1 (painting/horse minigame): end it INSTANTLY — drop
-                        // the painting flyMode so BossGanondrof_Paintings dismounts him
-                        // into the phase-2 neutral stance next frame. No damage; the
-                        // real fight is phase 2.
-                        this->flyMode = GND_FLY_NEUTRAL;
-                    } else if (this->actionFunc == BossGanondrof_Stunned) {
-                        // Phase 2, already paralyzed → damage. Mashing keeps him stunned
-                        // (re-stun below) and kills him fast.
-                        this->actor.colChkInfo.health -= BossSuperDamage_FormDamage(play);
-                        if ((s8)this->actor.colChkInfo.health <= 0) {
-                            this->actor.colChkInfo.health = 0;
-                            BossGanondrof_SetupDeath(this, play);
-                            Enemy_StartFinishingBlow(play, &this->actor);
-                            GameInteractor_ExecuteOnBossDefeat(&this->actor);
-                            return;
+                        if (this->flyMode == GND_FLY_PAINTING) {
+                            // Phase 1 (painting/horse minigame): end it INSTANTLY — drop
+                            // the painting flyMode so BossGanondrof_Paintings dismounts him
+                            // into the phase-2 neutral stance next frame. No damage; the
+                            // real fight is phase 2.
+                            this->flyMode = GND_FLY_NEUTRAL;
+                        } else if (this->actionFunc == BossGanondrof_Stunned) {
+                            // Phase 2, already paralyzed → damage. Mashing keeps him stunned
+                            // (re-stun below) and kills him fast.
+                            this->actor.colChkInfo.health -= BossSuperDamage_FormDamage(play);
+                            if ((s8)this->actor.colChkInfo.health <= 0) {
+                                this->actor.colChkInfo.health = 0;
+                                BossGanondrof_SetupDeath(this, play);
+                                Enemy_StartFinishingBlow(play, &this->actor);
+                                GameInteractor_ExecuteOnBossDefeat(&this->actor);
+                                return;
+                            }
+                            BossGanondrof_SetupStunned(this, play); // refresh the stun for the next mash hit
+                        } else {
+                            // Phase 2, not paralyzed → stun him (skip the energy-ball tennis).
+                            BossGanondrof_SetupStunned(this, play);
                         }
-                        BossGanondrof_SetupStunned(this, play); // refresh the stun for the next mash hit
-                    } else {
-                        // Phase 2, not paralyzed → stun him (skip the energy-ball tennis).
-                        BossGanondrof_SetupStunned(this, play);
+                        return;
                     }
-                    return;
-                }
                 }
             }
             if (this->flyMode != GND_FLY_PAINTING) {

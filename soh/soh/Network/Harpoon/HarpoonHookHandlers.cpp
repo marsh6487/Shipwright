@@ -48,21 +48,33 @@ extern s16 gSw97ActorId_ArrowWind;
 namespace {
 HarpoonCombat::HarpoonWeaponId Sw97ActorIdToWeapon(s16 actorId) {
     using namespace HarpoonCombat;
-    if (actorId == gSw97ActorId_MagicFire)  return W_SW97_MAGIC_FIRE;
-    if (actorId == gSw97ActorId_MagicIce)   return W_SW97_MAGIC_ICE;
-    if (actorId == gSw97ActorId_MagicLight) return W_SW97_MAGIC_LIGHT;
-    if (actorId == gSw97ActorId_MagicDark)  return W_SW97_MAGIC_DARK;
-    if (actorId == gSw97ActorId_MagicSoul)  return W_SW97_MAGIC_SOUL;
-    if (actorId == gSw97ActorId_MagicWind)  return W_SW97_MAGIC_WIND;
-    if (actorId == gSw97ActorId_ArrowFire)  return W_SW97_ARROW_FIRE;
-    if (actorId == gSw97ActorId_ArrowIce)   return W_SW97_ARROW_ICE;
-    if (actorId == gSw97ActorId_ArrowLight) return W_SW97_ARROW_LIGHT;
-    if (actorId == gSw97ActorId_ArrowDark)  return W_SW97_ARROW_DARK;
-    if (actorId == gSw97ActorId_ArrowSoul)  return W_SW97_ARROW_SOUL;
-    if (actorId == gSw97ActorId_ArrowWind)  return W_SW97_ARROW_WIND;
+    if (actorId == gSw97ActorId_MagicFire)
+        return W_SW97_MAGIC_FIRE;
+    if (actorId == gSw97ActorId_MagicIce)
+        return W_SW97_MAGIC_ICE;
+    if (actorId == gSw97ActorId_MagicLight)
+        return W_SW97_MAGIC_LIGHT;
+    if (actorId == gSw97ActorId_MagicDark)
+        return W_SW97_MAGIC_DARK;
+    if (actorId == gSw97ActorId_MagicSoul)
+        return W_SW97_MAGIC_SOUL;
+    if (actorId == gSw97ActorId_MagicWind)
+        return W_SW97_MAGIC_WIND;
+    if (actorId == gSw97ActorId_ArrowFire)
+        return W_SW97_ARROW_FIRE;
+    if (actorId == gSw97ActorId_ArrowIce)
+        return W_SW97_ARROW_ICE;
+    if (actorId == gSw97ActorId_ArrowLight)
+        return W_SW97_ARROW_LIGHT;
+    if (actorId == gSw97ActorId_ArrowDark)
+        return W_SW97_ARROW_DARK;
+    if (actorId == gSw97ActorId_ArrowSoul)
+        return W_SW97_ARROW_SOUL;
+    if (actorId == gSw97ActorId_ArrowWind)
+        return W_SW97_ARROW_WIND;
     return HARPOON_WEAPON_UNKNOWN;
 }
-}  // anon
+} // namespace
 #include <libultraship/libultraship.h>
 #include <imgui.h>
 #include <cmath>
@@ -98,7 +110,7 @@ extern bool sHarpoonAuthorizedTransition;
 // rollback (~1 game tick) — distinct from the old "snap to round-start"
 // approach that caused softlocks when the start pos was inside geometry.
 static Vec3f sHarpoonLastSafePlayerPos = { 0.0f, 0.0f, 0.0f };
-static bool  sHarpoonHasLastSafePos    = false;
+static bool sHarpoonHasLastSafePos = false;
 
 // One-shot guard for the auto-jump recoil when engine forces a load. Set
 // the first frame of a forced-load encounter, cleared when forced state
@@ -255,10 +267,13 @@ void Harpoon::RegisterHooks() {
                 // Helper: iterate connected peers, calling cb(cid, peerClient).
                 auto forEachPeer = [&](auto cb) {
                     for (auto& [cid, c] : clients) {
-                        if (cid == ownClientId) continue;
-                        if (!c.online) continue;
+                        if (cid == ownClientId)
+                            continue;
+                        if (!c.online)
+                            continue;
                         // Same scene only
-                        if (c.sceneNum != (s16)gPlayState->sceneNum) continue;
+                        if (c.sceneNum != (s16)gPlayState->sceneNum)
+                            continue;
                         cb(cid, c);
                     }
                 };
@@ -276,14 +291,13 @@ void Harpoon::RegisterHooks() {
                 {
                     s32 mask = MmMaskWear_GetCurrent();
                     bool isGoron = (mask == ITEM_MM_MASK_GORON);
-                    bool isZora  = (mask == ITEM_MM_MASK_ZORA);
-                    bool isDeku  = (mask == ITEM_MM_MASK_DEKU);
+                    bool isZora = (mask == ITEM_MM_MASK_ZORA);
+                    bool isDeku = (mask == ITEM_MM_MASK_DEKU);
                     // Goron roll contact: detect via mask + high linear vel.
                     if (isGoron && lp->linearVelocity > 8.0f) {
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                             if (distSqToPeer(c) <= 80.0f * 80.0f) {
-                                Harpoon::Instance->SendPacket_Damage(
-                                    cid, HARPOON_HIT_RESPONSE_NORMAL, 2);
+                                Harpoon::Instance->SendPacket_Damage(cid, HARPOON_HIT_RESPONSE_NORMAL, 2);
                             }
                         });
                     }
@@ -291,8 +305,7 @@ void Harpoon::RegisterHooks() {
                     if (isZora && lp->meleeWeaponState > 0) {
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                             if (distSqToPeer(c) <= 50.0f * 50.0f) {
-                                Harpoon::Instance->SendPacket_Damage(
-                                    cid, PLAYER_HIT_RESPONSE_ELECTRIFIED, 2);
+                                Harpoon::Instance->SendPacket_Damage(cid, PLAYER_HIT_RESPONSE_ELECTRIFIED, 2);
                             }
                         });
                     }
@@ -300,8 +313,7 @@ void Harpoon::RegisterHooks() {
                     if (isDeku && lp->meleeWeaponState > 0) {
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                             if (distSqToPeer(c) <= 40.0f * 40.0f) {
-                                Harpoon::Instance->SendPacket_Damage(
-                                    cid, HARPOON_HIT_RESPONSE_NORMAL, 1);
+                                Harpoon::Instance->SendPacket_Damage(cid, HARPOON_HIT_RESPONSE_NORMAL, 1);
                             }
                         });
                     }
@@ -319,16 +331,13 @@ void Harpoon::RegisterHooks() {
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                             if (distSqToPeer(c) <= 60.0f * 60.0f) {
                                 HarpoonCombat::BroadcastUtilityHit(
-                                    ownClientId, cid,
-                                    HarpoonCombat::UTIL_ZORA_BARRIER_SHOCK,
-                                    0, 0, 0,
-                                    lp->actor.world.pos.x,
-                                    lp->actor.world.pos.y,
-                                    lp->actor.world.pos.z);
+                                    ownClientId, cid, HarpoonCombat::UTIL_ZORA_BARRIER_SHOCK, 0, 0, 0,
+                                    lp->actor.world.pos.x, lp->actor.world.pos.y, lp->actor.world.pos.z);
                             }
                         });
                         // Drain magic: 1 unit per second (20 frames)
-                        if (gSaveContext.magic > 0) gSaveContext.magic--;
+                        if (gSaveContext.magic > 0)
+                            gSaveContext.magic--;
                         if (gSaveContext.magic <= 0) {
                             myClient->combatZoraBarrierActive = 0;
                         }
@@ -345,9 +354,7 @@ void Harpoon::RegisterHooks() {
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                             if (distSqToPeer(c) <= 30.0f * 30.0f) {
                                 HarpoonCombat::BroadcastUtilityHit(
-                                    ownClientId, cid,
-                                    HarpoonCombat::UTIL_FAIRY_HEAL_TOUCH,
-                                    0, 0, 0, 0, 0, 0);
+                                    ownClientId, cid, HarpoonCombat::UTIL_FAIRY_HEAL_TOUCH, 0, 0, 0, 0, 0, 0);
                             }
                         });
                     }
@@ -363,33 +370,26 @@ void Harpoon::RegisterHooks() {
                     sLanternTickGate++;
                     if ((sLanternTickGate % 15) == 0) {
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
-                            if (distSqToPeer(c) > 35.0f * 35.0f) return;
+                            if (distSqToPeer(c) > 35.0f * 35.0f)
+                                return;
                             switch (gCustomItemState.lanternFireType) {
-                                case 1:  // regular fire
-                                    Harpoon::Instance->SendPacket_Damage(
-                                        cid, HARPOON_HIT_RESPONSE_FIRE, 1);
-                                    HarpoonCombat::BroadcastApplyStatus(
-                                        cid, HarpoonCombat::STATUS_BURN_DOT,
-                                        1, 60, ownClientId);
+                                case 1: // regular fire
+                                    Harpoon::Instance->SendPacket_Damage(cid, HARPOON_HIT_RESPONSE_FIRE, 1);
+                                    HarpoonCombat::BroadcastApplyStatus(cid, HarpoonCombat::STATUS_BURN_DOT, 1, 60,
+                                                                        ownClientId);
                                     break;
-                                case 2:  // blue fire
-                                    HarpoonCombat::BroadcastApplyStatus(
-                                        cid, HarpoonCombat::STATUS_FREEZE,
-                                        0, 60, ownClientId);
+                                case 2: // blue fire
+                                    HarpoonCombat::BroadcastApplyStatus(cid, HarpoonCombat::STATUS_FREEZE, 0, 60,
+                                                                        ownClientId);
                                     break;
-                                case 3:  // poe fire
-                                    HarpoonCombat::BroadcastApplyStatus(
-                                        cid, HarpoonCombat::STATUS_STUN,
-                                        0, 90, ownClientId);
+                                case 3: // poe fire
+                                    HarpoonCombat::BroadcastApplyStatus(cid, HarpoonCombat::STATUS_STUN, 0, 90,
+                                                                        ownClientId);
                                     break;
                             }
-                            HarpoonCombat::BroadcastUtilityHit(
-                                ownClientId, cid,
-                                HarpoonCombat::UTIL_LANTERN_REVEAL,
-                                0, 0, 0,
-                                lp->actor.world.pos.x,
-                                lp->actor.world.pos.y,
-                                lp->actor.world.pos.z);
+                            HarpoonCombat::BroadcastUtilityHit(ownClientId, cid, HarpoonCombat::UTIL_LANTERN_REVEAL, 0,
+                                                               0, 0, lp->actor.world.pos.x, lp->actor.world.pos.y,
+                                                               lp->actor.world.pos.z);
                         });
                     }
                 }
@@ -408,17 +408,17 @@ void Harpoon::RegisterHooks() {
                             f32 dx = c.posRot.pos.x - lp->actor.world.pos.x;
                             f32 dz = c.posRot.pos.z - lp->actor.world.pos.z;
                             f32 d2 = dx * dx + dz * dz;
-                            if (d2 > 80.0f * 80.0f) return;
+                            if (d2 > 80.0f * 80.0f)
+                                return;
                             f32 d = sqrtf(d2);
-                            if (d < 1.0f) return;
+                            if (d < 1.0f)
+                                return;
                             // In-cone check via dot product (cos(45°) ≈ 0.707)
                             f32 dot = (dx * fwdX + dz * fwdZ) / d;
-                            if (dot < 0.707f) return;
-                            HarpoonCombat::BroadcastUtilityHit(
-                                ownClientId, cid,
-                                HarpoonCombat::UTIL_GUST_BLOW,
-                                0, 0, 0,
-                                fwdX * 25.0f, 8.0f, fwdZ * 25.0f);
+                            if (dot < 0.707f)
+                                return;
+                            HarpoonCombat::BroadcastUtilityHit(ownClientId, cid, HarpoonCombat::UTIL_GUST_BLOW, 0, 0, 0,
+                                                               fwdX * 25.0f, 8.0f, fwdZ * 25.0f);
                         });
                     }
                 }
@@ -437,24 +437,25 @@ void Harpoon::RegisterHooks() {
                         f32 best = 80.0f * 80.0f;
                         uint32_t bestCid = 0;
                         for (auto& [cid, c] : clients) {
-                            if (cid == ownClientId || !c.online) continue;
-                            if (c.sceneNum != (s16)gPlayState->sceneNum) continue;
+                            if (cid == ownClientId || !c.online)
+                                continue;
+                            if (c.sceneNum != (s16)gPlayState->sceneNum)
+                                continue;
                             f32 dx = projPos.x - c.posRot.pos.x;
                             f32 dy = projPos.y - c.posRot.pos.y;
                             f32 dz = projPos.z - c.posRot.pos.z;
-                            f32 d2 = dx*dx + dy*dy + dz*dz;
-                            if (d2 <= best) { best = d2; bestCid = cid; }
+                            f32 d2 = dx * dx + dy * dy + dz * dz;
+                            if (d2 <= best) {
+                                best = d2;
+                                bestCid = cid;
+                            }
                         }
                         if (bestCid != 0) {
                             // Swap: send the peer to our pos, move us to
                             // theirs. Both broadcast via UTIL_SWITCH_HOOK_SWAP.
                             HarpoonCombat::BroadcastUtilityHit(
-                                ownClientId, bestCid,
-                                HarpoonCombat::UTIL_SWITCH_HOOK_SWAP,
-                                0, 0, 0,
-                                lp->actor.world.pos.x,
-                                lp->actor.world.pos.y,
-                                lp->actor.world.pos.z);
+                                ownClientId, bestCid, HarpoonCombat::UTIL_SWITCH_HOOK_SWAP, 0, 0, 0,
+                                lp->actor.world.pos.x, lp->actor.world.pos.y, lp->actor.world.pos.z);
                             // Teleport local to peer's last known pos.
                             auto pit = clients.find(bestCid);
                             if (pit != clients.end()) {
@@ -477,8 +478,7 @@ void Harpoon::RegisterHooks() {
                 // hookshot-flying. So this is effectively automatic.
                 // Just broadcast a notification event so peers know to
                 // play a confused-tug animation on their dummy.
-                if (myClient != nullptr &&
-                    (lp->stateFlags1 & PLAYER_STATE1_HOOKSHOT_FALLING)) {
+                if (myClient != nullptr && (lp->stateFlags1 & PLAYER_STATE1_HOOKSHOT_FALLING)) {
                     static bool sHookBroadcasted = false;
                     if (!sHookBroadcasted) {
                         sHookBroadcasted = true;
@@ -489,18 +489,17 @@ void Harpoon::RegisterHooks() {
                         //                vanilla physics quirk where Link is too heavy
                         //                to drag the target so the rope snaps Link).
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
-                            if (distSqToPeer(c) > 600.0f * 600.0f) return;
-                            HarpoonCombat::BroadcastUtilityHit(
-                                ownClientId, cid,
-                                ironBoots ? HarpoonCombat::UTIL_HOOKSHOT_PULL_SELF
-                                          : HarpoonCombat::UTIL_HOOKSHOT_PULL_TARGET,
-                                0, 0, 0,
-                                lp->actor.world.pos.x,
-                                lp->actor.world.pos.y,
-                                lp->actor.world.pos.z);
+                            if (distSqToPeer(c) > 600.0f * 600.0f)
+                                return;
+                            HarpoonCombat::BroadcastUtilityHit(ownClientId, cid,
+                                                               ironBoots ? HarpoonCombat::UTIL_HOOKSHOT_PULL_SELF
+                                                                         : HarpoonCombat::UTIL_HOOKSHOT_PULL_TARGET,
+                                                               0, 0, 0, lp->actor.world.pos.x, lp->actor.world.pos.y,
+                                                               lp->actor.world.pos.z);
                         });
                     }
-                    if (!(lp->stateFlags1 & PLAYER_STATE1_HOOKSHOT_FALLING)) sHookBroadcasted = false;
+                    if (!(lp->stateFlags1 & PLAYER_STATE1_HOOKSHOT_FALLING))
+                        sHookBroadcasted = false;
                 }
 
                 // --- Bomb Arrow direct + AOE --------------------------
@@ -515,9 +514,9 @@ void Harpoon::RegisterHooks() {
                     u8 baState = gCustomItemState.bombArrowState;
                     if (sBAStatePrev == 2 && baState != 2) {
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
-                            if (distSqToPeer(c) > 90.0f * 90.0f) return;
-                            Harpoon::Instance->SendPacket_Damage(
-                                cid, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE, 2);
+                            if (distSqToPeer(c) > 90.0f * 90.0f)
+                                return;
+                            Harpoon::Instance->SendPacket_Damage(cid, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE, 2);
                         });
                     }
                     sBAStatePrev = baState;
@@ -534,8 +533,7 @@ void Harpoon::RegisterHooks() {
                     sCUpWasDown = cUp;
                     // Only toggle if Adult + Water Dragon Scale equipped
                     // (extEquipBoots == 3 means Water Dragon Scale).
-                    if (risingEdge && gSaveContext.linkAge == 0 &&
-                        Nei_Save()->extEquipBoots == 3) { // Skijer's NEI
+                    if (risingEdge && gSaveContext.linkAge == 0 && Nei_Save()->extEquipBoots == 3) { // Skijer's NEI
                         myClient->combatZoraBarrierActive = !myClient->combatZoraBarrierActive;
                     }
                 }
@@ -544,14 +542,11 @@ void Harpoon::RegisterHooks() {
                 // Local player attacking while wearing Stone Mask cancels
                 // invisibility for 3 s. Detection: meleeWeaponState > 0 or
                 // damageEffect set on a peer.
-                if (myClient != nullptr &&
-                    MmMaskWear_GetCurrent() == ITEM_MM_MASK_STONE &&
-                    myClient->combatInvisSuppressFrames == 0 &&
-                    lp->meleeWeaponState > 0) {
-                    myClient->combatInvisSuppressFrames = 180;  // 3 s @ 60fps
-                    HarpoonCombat::BroadcastApplyStatus(
-                        ownClientId, HarpoonCombat::STATUS_INVISIBILITY,
-                        0, 180, ownClientId);
+                if (myClient != nullptr && MmMaskWear_GetCurrent() == ITEM_MM_MASK_STONE &&
+                    myClient->combatInvisSuppressFrames == 0 && lp->meleeWeaponState > 0) {
+                    myClient->combatInvisSuppressFrames = 180; // 3 s @ 60fps
+                    HarpoonCombat::BroadcastApplyStatus(ownClientId, HarpoonCombat::STATUS_INVISIBILITY, 0, 180,
+                                                        ownClientId);
                 }
                 if (myClient != nullptr && myClient->combatInvisSuppressFrames > 0) {
                     myClient->combatInvisSuppressFrames--;
@@ -572,16 +567,16 @@ void Harpoon::RegisterHooks() {
                         projs[1] = gCustomItemState.iceRodProjPos2;
                         projs[2] = gCustomItemState.iceRodProjPos3;
                         u8 count = gCustomItemState.iceRodProjCount;
-                        if (count > 3) count = 3;
+                        if (count > 3)
+                            count = 3;
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                             for (u8 i = 0; i < count; i++) {
                                 f32 dx = projs[i].x - c.posRot.pos.x;
                                 f32 dy = projs[i].y - c.posRot.pos.y;
                                 f32 dz = projs[i].z - c.posRot.pos.z;
-                                if (dx*dx + dy*dy + dz*dz <= 25.0f * 25.0f) {
-                                    HarpoonCombat::BroadcastApplyStatus(
-                                        cid, HarpoonCombat::STATUS_FREEZE,
-                                        0, 180, ownClientId);
+                                if (dx * dx + dy * dy + dz * dz <= 25.0f * 25.0f) {
+                                    HarpoonCombat::BroadcastApplyStatus(cid, HarpoonCombat::STATUS_FREEZE, 0, 180,
+                                                                        ownClientId);
                                     return;
                                 }
                             }
@@ -599,18 +594,17 @@ void Harpoon::RegisterHooks() {
                         projs[1] = gCustomItemState.fireRodProjPos2;
                         projs[2] = gCustomItemState.fireRodProjPos3;
                         u8 count = gCustomItemState.fireRodProjCount;
-                        if (count > 3) count = 3;
+                        if (count > 3)
+                            count = 3;
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                             for (u8 i = 0; i < count; i++) {
                                 f32 dx = projs[i].x - c.posRot.pos.x;
                                 f32 dy = projs[i].y - c.posRot.pos.y;
                                 f32 dz = projs[i].z - c.posRot.pos.z;
-                                if (dx*dx + dy*dy + dz*dz <= 25.0f * 25.0f) {
-                                    Harpoon::Instance->SendPacket_Damage(
-                                        cid, HARPOON_HIT_RESPONSE_FIRE, 2);
-                                    HarpoonCombat::BroadcastApplyStatus(
-                                        cid, HarpoonCombat::STATUS_BURN_DOT,
-                                        1, 120, ownClientId);
+                                if (dx * dx + dy * dy + dz * dz <= 25.0f * 25.0f) {
+                                    Harpoon::Instance->SendPacket_Damage(cid, HARPOON_HIT_RESPONSE_FIRE, 2);
+                                    HarpoonCombat::BroadcastApplyStatus(cid, HarpoonCombat::STATUS_BURN_DOT, 1, 120,
+                                                                        ownClientId);
                                     return;
                                 }
                             }
@@ -630,15 +624,15 @@ void Harpoon::RegisterHooks() {
                         projs[1] = gCustomItemState.lightRodProjPos2;
                         projs[2] = gCustomItemState.lightRodProjPos3;
                         u8 count = gCustomItemState.lightRodProjCount;
-                        if (count > 3) count = 3;
+                        if (count > 3)
+                            count = 3;
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                             for (u8 i = 0; i < count; i++) {
                                 f32 dx = projs[i].x - c.posRot.pos.x;
                                 f32 dy = projs[i].y - c.posRot.pos.y;
                                 f32 dz = projs[i].z - c.posRot.pos.z;
-                                if (dx*dx + dy*dy + dz*dz <= 25.0f * 25.0f) {
-                                    Harpoon::Instance->SendPacket_Damage(
-                                        cid, HARPOON_HIT_RESPONSE_LIGHT, 2);
+                                if (dx * dx + dy * dy + dz * dz <= 25.0f * 25.0f) {
+                                    Harpoon::Instance->SendPacket_Damage(cid, HARPOON_HIT_RESPONSE_LIGHT, 2);
                                     return;
                                 }
                             }
@@ -656,9 +650,9 @@ void Harpoon::RegisterHooks() {
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                             f32 dx = gCustomItemState.sharedProjectilePos.x - c.posRot.pos.x;
                             f32 dz = gCustomItemState.sharedProjectilePos.z - c.posRot.pos.z;
-                            if (dx*dx + dz*dz > 25.0f * 25.0f) return;
-                            Harpoon::Instance->SendPacket_Damage(
-                                cid, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE, 4);
+                            if (dx * dx + dz * dz > 25.0f * 25.0f)
+                                return;
+                            Harpoon::Instance->SendPacket_Damage(cid, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE, 4);
                         });
                     }
                 }
@@ -673,9 +667,9 @@ void Harpoon::RegisterHooks() {
                             f32 dx = gCustomItemState.beetlePos.x - c.posRot.pos.x;
                             f32 dy = gCustomItemState.beetlePos.y - c.posRot.pos.y;
                             f32 dz = gCustomItemState.beetlePos.z - c.posRot.pos.z;
-                            if (dx*dx + dy*dy + dz*dz > 25.0f * 25.0f) return;
-                            Harpoon::Instance->SendPacket_Damage(
-                                cid, HARPOON_HIT_RESPONSE_STUN, 1);
+                            if (dx * dx + dy * dy + dz * dz > 25.0f * 25.0f)
+                                return;
+                            Harpoon::Instance->SendPacket_Damage(cid, HARPOON_HIT_RESPONSE_STUN, 1);
                         });
                     }
                 }
@@ -687,9 +681,9 @@ void Harpoon::RegisterHooks() {
                     forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                         f32 dx = gCustomItemState.whipTipPos.x - c.posRot.pos.x;
                         f32 dz = gCustomItemState.whipTipPos.z - c.posRot.pos.z;
-                        if (dx*dx + dz*dz > 30.0f * 30.0f) return;
-                        Harpoon::Instance->SendPacket_Damage(
-                            cid, HARPOON_HIT_RESPONSE_NORMAL, 1);
+                        if (dx * dx + dz * dz > 30.0f * 30.0f)
+                            return;
+                        Harpoon::Instance->SendPacket_Damage(cid, HARPOON_HIT_RESPONSE_NORMAL, 1);
                     });
                 }
 
@@ -702,10 +696,10 @@ void Harpoon::RegisterHooks() {
                     if (gCustomItemState.demiseDestructionActive == 1 && sDemisePrev == 0) {
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                             f32 d2 = distSqToPeer(c);
-                            if (d2 > 200.0f * 200.0f) return;
+                            if (d2 > 200.0f * 200.0f)
+                                return;
                             u8 dmg = (d2 <= 40.0f * 40.0f) ? 4 : 2;
-                            Harpoon::Instance->SendPacket_Damage(
-                                cid, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE, dmg);
+                            Harpoon::Instance->SendPacket_Damage(cid, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE, dmg);
                         });
                     }
                     sDemisePrev = gCustomItemState.demiseDestructionActive;
@@ -717,10 +711,9 @@ void Harpoon::RegisterHooks() {
                     static u8 sPermafrostPrev = 0;
                     if (gCustomItemState.zonaiPermafrostActive == 1 && sPermafrostPrev == 0) {
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
-                            if (distSqToPeer(c) > 150.0f * 150.0f) return;
-                            HarpoonCombat::BroadcastApplyStatus(
-                                cid, HarpoonCombat::STATUS_FREEZE,
-                                0, 300, ownClientId);
+                            if (distSqToPeer(c) > 150.0f * 150.0f)
+                                return;
+                            HarpoonCombat::BroadcastApplyStatus(cid, HarpoonCombat::STATUS_FREEZE, 0, 300, ownClientId);
                         });
                     }
                     sPermafrostPrev = gCustomItemState.zonaiPermafrostActive;
@@ -742,9 +735,9 @@ void Harpoon::RegisterHooks() {
                 if (Nei_Save()->extEquipSword == 1 && // Skijer's NEI
                     lp->meleeWeaponState > 0) {
                     forEachPeer([&](uint32_t cid, HarpoonClient& c) {
-                        if (distSqToPeer(c) > 40.0f * 40.0f) return;
-                        Harpoon::Instance->SendPacket_Damage(
-                            cid, HARPOON_HIT_RESPONSE_NORMAL, 1);
+                        if (distSqToPeer(c) > 40.0f * 40.0f)
+                            return;
+                        Harpoon::Instance->SendPacket_Damage(cid, HARPOON_HIT_RESPONSE_NORMAL, 1);
                     });
                 }
 
@@ -752,9 +745,9 @@ void Harpoon::RegisterHooks() {
                 if (Nei_Save()->extEquipSword == 2 && // Skijer's NEI
                     lp->meleeWeaponState > 0) {
                     forEachPeer([&](uint32_t cid, HarpoonClient& c) {
-                        if (distSqToPeer(c) > 60.0f * 60.0f) return;
-                        Harpoon::Instance->SendPacket_Damage(
-                            cid, HARPOON_HIT_RESPONSE_NORMAL, 2);
+                        if (distSqToPeer(c) > 60.0f * 60.0f)
+                            return;
+                        Harpoon::Instance->SendPacket_Damage(cid, HARPOON_HIT_RESPONSE_NORMAL, 2);
                     });
                 }
 
@@ -764,24 +757,23 @@ void Harpoon::RegisterHooks() {
                     static s8 sMortalDrawPrev = 0;
                     if (sMortalDrawPrev == 0 && lp->meleeWeaponState > 5) {
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
-                            if (distSqToPeer(c) > 35.0f * 35.0f) return;
-                            Harpoon::Instance->SendPacket_Damage(
-                                cid, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE, 127);
+                            if (distSqToPeer(c) > 35.0f * 35.0f)
+                                return;
+                            Harpoon::Instance->SendPacket_Damage(cid, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE, 127);
                         });
                     }
                     sMortalDrawPrev = lp->meleeWeaponState;
                 }
 
                 // --- Blast Mask AOE -----------------------------------
-                if (MmMaskWear_GetCurrent() == ITEM_MM_MASK_BLAST &&
-                    lp->meleeWeaponState > 0) {
+                if (MmMaskWear_GetCurrent() == ITEM_MM_MASK_BLAST && lp->meleeWeaponState > 0) {
                     static int sBlastMaskGate = 0;
                     sBlastMaskGate++;
                     if ((sBlastMaskGate % 30) == 0) {
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
-                            if (distSqToPeer(c) > 100.0f * 100.0f) return;
-                            Harpoon::Instance->SendPacket_Damage(
-                                cid, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE, 4);
+                            if (distSqToPeer(c) > 100.0f * 100.0f)
+                                return;
+                            Harpoon::Instance->SendPacket_Damage(cid, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE, 4);
                         });
                     }
                 }
@@ -792,11 +784,10 @@ void Harpoon::RegisterHooks() {
                 // broadcast 4♥ + KNOCKBACK_LARGE.
                 if (myClient != nullptr) {
                     f32 speed = lp->linearVelocity < 0 ? -lp->linearVelocity : lp->linearVelocity;
-                    if (speed >= 16.0f) {  // Pegasus dash speed = 18.0f
+                    if (speed >= 16.0f) { // Pegasus dash speed = 18.0f
                         forEachPeer([&](uint32_t cid, HarpoonClient& c) {
                             if (distSqToPeer(c) <= 40.0f * 40.0f) {
-                                Harpoon::Instance->SendPacket_Damage(
-                                    cid, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE, 4);
+                                Harpoon::Instance->SendPacket_Damage(cid, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE, 4);
                             }
                         });
                     }
@@ -817,8 +808,7 @@ void Harpoon::RegisterHooks() {
                 Player* lp = GET_PLAYER(gPlayState);
                 if (lp != nullptr) {
                     if (myIt->second.restrictNoClimb) {
-                        lp->stateFlags1 &= ~(PLAYER_STATE1_CLIMBING_LADDER |
-                                             PLAYER_STATE1_HANGING_OFF_LEDGE |
+                        lp->stateFlags1 &= ~(PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_HANGING_OFF_LEDGE |
                                              PLAYER_STATE1_CLIMBING_LEDGE);
                     }
                     if (myIt->second.restrictNoGrab) {
@@ -883,8 +873,7 @@ void Harpoon::RegisterHooks() {
         // players can practice disguising. SET_DISGUISE broadcast still fires
         // so peers see the lobby disguise via HarpoonDummyPlayer.
         bool propInputAllowed = HarpoonPropHunt::IsHider() ||
-                                (Harpoon::Instance != nullptr &&
-                                 Harpoon::Instance->gameState == HARPOON_STATE_LOBBY);
+                                (Harpoon::Instance != nullptr && Harpoon::Instance->gameState == HARPOON_STATE_LOBBY);
         if (isPropHuntMode && propInputAllowed && gPlayState != nullptr) {
             Input* input = &gPlayState->state.input[0];
             static u8 sSavedButtonItems[8] = {};
@@ -913,31 +902,38 @@ void Harpoon::RegisterHooks() {
                     s.propIndex = -1;
                     s.propState = 0;
                     if (sSavedBindings) {
-                        for (int i = 0; i < 8; i++) gSaveContext.equips.buttonItems[i] = sSavedButtonItems[i];
-                        for (int i = 0; i < 7; i++) gSaveContext.equips.cButtonSlots[i] = sSavedCButtonSlots[i];
+                        for (int i = 0; i < 8; i++)
+                            gSaveContext.equips.buttonItems[i] = sSavedButtonItems[i];
+                        for (int i = 0; i < 7; i++)
+                            gSaveContext.equips.cButtonSlots[i] = sSavedCButtonSlots[i];
                     }
                     SendJsonToRemote(HarpoonPropHunt::BuildSetDisguisePayload());
                     inPropMode = false;
                 } else {
                     // Enter → first prop in current category.
                     s.propIndex = 0;
-                    if (s.propCategory < 0) s.propCategory = HarpoonPropHunt::CAT_ENVIRONMENT;
+                    if (s.propCategory < 0)
+                        s.propCategory = HarpoonPropHunt::CAT_ENVIRONMENT;
                     if (!sSavedBindings) {
-                        for (int i = 0; i < 8; i++) sSavedButtonItems[i]   = gSaveContext.equips.buttonItems[i];
-                        for (int i = 0; i < 7; i++) sSavedCButtonSlots[i] = gSaveContext.equips.cButtonSlots[i];
+                        for (int i = 0; i < 8; i++)
+                            sSavedButtonItems[i] = gSaveContext.equips.buttonItems[i];
+                        for (int i = 0; i < 7; i++)
+                            sSavedCButtonSlots[i] = gSaveContext.equips.cButtonSlots[i];
                         sSavedBindings = true;
                     }
                     SendJsonToRemote(HarpoonPropHunt::BuildSetDisguisePayload());
                     inPropMode = true;
                 }
                 input->press.button &= ~BTN_R;
-                input->cur.button   &= ~BTN_R;
+                input->cur.button &= ~BTN_R;
             }
 
             // First frame in prop mode this session: snapshot bindings.
             if (inPropMode && !sSavedBindings) {
-                for (int i = 0; i < 8; i++) sSavedButtonItems[i]   = gSaveContext.equips.buttonItems[i];
-                for (int i = 0; i < 7; i++) sSavedCButtonSlots[i] = gSaveContext.equips.cButtonSlots[i];
+                for (int i = 0; i < 8; i++)
+                    sSavedButtonItems[i] = gSaveContext.equips.buttonItems[i];
+                for (int i = 0; i < 7; i++)
+                    sSavedCButtonSlots[i] = gSaveContext.equips.cButtonSlots[i];
                 sSavedBindings = true;
                 // Broadcast initial disguise — joiners need it for the
                 // remote dummy render to pick up the right prop.
@@ -967,19 +963,22 @@ void Harpoon::RegisterHooks() {
                 if (CHECK_BTN_ALL(input->press.button, BTN_DLEFT)) {
                     auto& s = HarpoonPropHunt::GetLocalState();
                     s.propCategory = HarpoonPropHunt::CAT_ENVIRONMENT;
-                    s.propIndex = 0; s.propState = 0;
+                    s.propIndex = 0;
+                    s.propState = 0;
                     changed = true;
                 }
                 if (CHECK_BTN_ALL(input->press.button, BTN_DDOWN)) {
                     auto& s = HarpoonPropHunt::GetLocalState();
                     s.propCategory = HarpoonPropHunt::CAT_ENEMIES;
-                    s.propIndex = 0; s.propState = 0;
+                    s.propIndex = 0;
+                    s.propState = 0;
                     changed = true;
                 }
                 if (CHECK_BTN_ALL(input->press.button, BTN_DRIGHT)) {
                     auto& s = HarpoonPropHunt::GetLocalState();
                     s.propCategory = HarpoonPropHunt::CAT_NPCS;
-                    s.propIndex = 0; s.propState = 0;
+                    s.propIndex = 0;
+                    s.propState = 0;
                     changed = true;
                 }
                 // Prop cycle (C-Left / C-Right).
@@ -988,8 +987,7 @@ void Harpoon::RegisterHooks() {
                 if (CHECK_BTN_ALL(input->press.button, BTN_CLEFT))
                     changed |= HarpoonPropHunt::CyclePropIndex(-1);
                 // State cycle (C-Down / B).
-                if (CHECK_BTN_ALL(input->press.button, BTN_CDOWN) ||
-                    CHECK_BTN_ALL(input->press.button, BTN_B))
+                if (CHECK_BTN_ALL(input->press.button, BTN_CDOWN) || CHECK_BTN_ALL(input->press.button, BTN_B))
                     changed |= HarpoonPropHunt::CyclePropState(+1);
                 // Decoy spawn (D-Up).
                 if (CHECK_BTN_ALL(input->press.button, BTN_DUP)) {
@@ -1000,16 +998,15 @@ void Harpoon::RegisterHooks() {
                 }
                 // Consume the buttons in prop mode so the vanilla actions
                 // don't fire (don't pull out the sword, etc.).
-                input->press.button &= ~(BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT |
-                                          BTN_CLEFT | BTN_CRIGHT | BTN_CDOWN | BTN_CUP |
-                                          BTN_A | BTN_B);
-                input->cur.button   &= ~(BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT |
-                                          BTN_CLEFT | BTN_CRIGHT | BTN_CDOWN | BTN_CUP);
+                input->press.button &= ~(BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT | BTN_CLEFT | BTN_CRIGHT |
+                                         BTN_CDOWN | BTN_CUP | BTN_A | BTN_B);
+                input->cur.button &=
+                    ~(BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT | BTN_CLEFT | BTN_CRIGHT | BTN_CDOWN | BTN_CUP);
             }
 
             // Strip Start presses + safety-close pause if it opened anyway.
             input->press.button &= ~BTN_START;
-            input->cur.button   &= ~BTN_START;
+            input->cur.button &= ~BTN_START;
             if (gPlayState->pauseCtx.state != 0) {
                 gPlayState->pauseCtx.state = 0;
             }
@@ -1023,8 +1020,10 @@ void Harpoon::RegisterHooks() {
         if (HarpoonTriforceThief::IsInMapSelect() && gPlayState != nullptr) {
             Input* input = &gPlayState->state.input[0];
             bool changed = false;
-            if (CHECK_BTN_ALL(input->press.button, BTN_DLEFT))  changed |= HarpoonTriforceThief::CycleHoveredMap(-1);
-            if (CHECK_BTN_ALL(input->press.button, BTN_DRIGHT)) changed |= HarpoonTriforceThief::CycleHoveredMap(+1);
+            if (CHECK_BTN_ALL(input->press.button, BTN_DLEFT))
+                changed |= HarpoonTriforceThief::CycleHoveredMap(-1);
+            if (CHECK_BTN_ALL(input->press.button, BTN_DRIGHT))
+                changed |= HarpoonTriforceThief::CycleHoveredMap(+1);
             if (changed) {
                 s32 hovered = HarpoonTriforceThief::GetLocalState().hoveredMap;
                 SendJsonToRemote(HarpoonTriforceThief::BuildMapHoverPayload(hovered));
@@ -1038,19 +1037,20 @@ void Harpoon::RegisterHooks() {
     // Remote-mirrored spawns (HARPOON_REMOTE_PROJECTILE_BIT in params) are
     // skipped to avoid feedback loops.
     COND_HOOK(OnActorInit, isConnected, [&](void* actorVoid) {
-        if (actorVoid == nullptr) return;
+        if (actorVoid == nullptr)
+            return;
         Actor* actor = (Actor*)actorVoid;
-        if (HarpoonCombat::IsRemoteProjectile(actor)) return;
+        if (HarpoonCombat::IsRemoteProjectile(actor))
+            return;
         HarpoonCombat::HarpoonWeaponId weapon = Sw97ActorIdToWeapon(actor->id);
-        if (weapon == HarpoonCombat::HARPOON_WEAPON_UNKNOWN) return;
+        if (weapon == HarpoonCombat::HARPOON_WEAPON_UNKNOWN)
+            return;
         // Only broadcast if we're connected + in a PvP-enabled gamemode.
-        if (!pvpEnabled) return;
-        HarpoonProjectileMirror::BroadcastSpawn(
-            weapon,
-            actor->world.pos.x, actor->world.pos.y, actor->world.pos.z,
-            actor->velocity.x,  actor->velocity.y,  actor->velocity.z,
-            (f32)actor->shape.rot.y * (3.14159f / 32768.0f),
-            0);
+        if (!pvpEnabled)
+            return;
+        HarpoonProjectileMirror::BroadcastSpawn(weapon, actor->world.pos.x, actor->world.pos.y, actor->world.pos.z,
+                                                actor->velocity.x, actor->velocity.y, actor->velocity.z,
+                                                (f32)actor->shape.rot.y * (3.14159f / 32768.0f), 0);
     });
 
     // Process incoming packets on game thread
@@ -1097,11 +1097,10 @@ void Harpoon::RegisterHooks() {
         // sHarpoonAuthorizedTransition). The scene-exit-poly REDIRECT below
         // is still gated on IsInRound so the lobby only cancels exits
         // (keeps the player in HF) rather than warping them to a stale map.
-        bool inRoundActive  = gPlayState != nullptr &&
-                              ((isPropHuntMode &&
-                                (gameState == HARPOON_STATE_PLAYING ||
-                                 gameState == HARPOON_STATE_HIDING_PHASE)) ||
-                               (currentRoomGameMode == "triforce_thief"));
+        bool inRoundActive =
+            gPlayState != nullptr &&
+            ((isPropHuntMode && (gameState == HARPOON_STATE_PLAYING || gameState == HARPOON_STATE_HIDING_PHASE)) ||
+             (currentRoomGameMode == "triforce_thief"));
         if (inRoundActive) {
             // ----- Mechanism (1): comprehensive door / loading-zone actor kill -----
             //
@@ -1169,21 +1168,17 @@ void Harpoon::RegisterHooks() {
             // category with its own per-mode kill list.
             if (isTT) {
                 killByList(ACTORCAT_ITEMACTION, kHarpoonTtItemActionKill,
-                           (s32)(sizeof(kHarpoonTtItemActionKill) /
-                                 sizeof(kHarpoonTtItemActionKill[0])));
+                           (s32)(sizeof(kHarpoonTtItemActionKill) / sizeof(kHarpoonTtItemActionKill[0])));
                 killByList(ACTORCAT_DOOR, kHarpoonTtDoorKill,
-                           (s32)(sizeof(kHarpoonTtDoorKill) /
-                                 sizeof(kHarpoonTtDoorKill[0])));
+                           (s32)(sizeof(kHarpoonTtDoorKill) / sizeof(kHarpoonTtDoorKill[0])));
                 killByList(ACTORCAT_BG, kHarpoonTtBgKill,
-                           (s32)(sizeof(kHarpoonTtBgKill) /
-                                 sizeof(kHarpoonTtBgKill[0])));
+                           (s32)(sizeof(kHarpoonTtBgKill) / sizeof(kHarpoonTtBgKill[0])));
             } else {
                 // PropHunt: keep normal doors and EnHoll alive (hiders
                 // need to traverse rooms within their assigned scene
                 // cluster). Only kill scene-jumping warp doors.
                 killByList(ACTORCAT_ITEMACTION, kHarpoonPhItemActionKill,
-                           (s32)(sizeof(kHarpoonPhItemActionKill) /
-                                 sizeof(kHarpoonPhItemActionKill[0])));
+                           (s32)(sizeof(kHarpoonPhItemActionKill) / sizeof(kHarpoonPhItemActionKill[0])));
             }
 
             // ----- Mechanism (2) REMOVED -----
@@ -1233,32 +1228,26 @@ void Harpoon::RegisterHooks() {
             {
                 Player* lp = GET_PLAYER(gPlayState);
                 bool engineForcedLoad =
-                    (lp != nullptr) &&
-                    !::sHarpoonAuthorizedTransition &&
-                    (lp->stateFlags1 & PLAYER_STATE1_LOADING);
+                    (lp != nullptr) && !::sHarpoonAuthorizedTransition && (lp->stateFlags1 & PLAYER_STATE1_LOADING);
 
                 if (engineForcedLoad) {
-                    Vec3f basePos = sHarpoonHasLastSafePos
-                                        ? sHarpoonLastSafePlayerPos
-                                        : lp->actor.world.pos;
+                    Vec3f basePos = sHarpoonHasLastSafePos ? sHarpoonLastSafePlayerPos : lp->actor.world.pos;
                     constexpr f32 kBackPushUnits = 40.0f;
-                    f32 yawRad = (f32)lp->actor.world.rot.y *
-                                 (3.14159265f / 32768.0f);
+                    f32 yawRad = (f32)lp->actor.world.rot.y * (3.14159265f / 32768.0f);
                     Vec3f pushed;
                     pushed.x = basePos.x - sinf(yawRad) * kBackPushUnits;
                     pushed.y = basePos.y;
                     pushed.z = basePos.z - cosf(yawRad) * kBackPushUnits;
 
                     lp->actor.world.pos = pushed;
-                    lp->actor.prevPos   = pushed;
+                    lp->actor.prevPos = pushed;
 
                     Camera* cam = Play_GetCamera(gPlayState, 0);
                     if (cam != nullptr) {
                         Camera_RequestSetting(cam, CAM_SET_NORMAL0);
                     }
 
-                    lp->stateFlags1 &= ~(PLAYER_STATE1_LOADING |
-                                         PLAYER_STATE1_IN_CUTSCENE);
+                    lp->stateFlags1 &= ~(PLAYER_STATE1_LOADING | PLAYER_STATE1_IN_CUTSCENE);
 
                     if (!sHarpoonAutoJumpArmed) {
                         // Small auto-hop on first frame of forced load.
@@ -1271,16 +1260,15 @@ void Harpoon::RegisterHooks() {
                         // jump action naturally lands Link and
                         // transitions back to idle/walking, breaking
                         // any animation lock the engine left behind.
-                        func_80838940(lp, NULL, 4.0f, gPlayState,
-                                      NA_SE_VO_LI_AUTO_JUMP);
-                        lp->linearVelocity   = -2.0f;
-                        lp->actor.speedXZ    = -2.0f;
+                        func_80838940(lp, NULL, 4.0f, gPlayState, NA_SE_VO_LI_AUTO_JUMP);
+                        lp->linearVelocity = -2.0f;
+                        lp->actor.speedXZ = -2.0f;
                         sHarpoonAutoJumpArmed = true;
                     }
                     // Don't update the snapshot this frame.
                 } else if (lp != nullptr) {
                     sHarpoonLastSafePlayerPos = lp->actor.world.pos;
-                    sHarpoonHasLastSafePos    = true;
+                    sHarpoonHasLastSafePos = true;
                     // Re-arm the auto-jump for the next encounter.
                     sHarpoonAutoJumpArmed = false;
                 }
@@ -1302,8 +1290,7 @@ void Harpoon::RegisterHooks() {
             // set (player walking off a cliff); after Authorized teleport
             // has consumed it, leave it alone for the engine's post-load
             // bookkeeping.
-            if (gPlayState->transitionTrigger == TRANS_TRIGGER_START &&
-                !::sHarpoonAuthorizedTransition) {
+            if (gPlayState->transitionTrigger == TRANS_TRIGGER_START && !::sHarpoonAuthorizedTransition) {
                 // Full-circle scene-lock (PH only). If the engine's
                 // `nextEntranceIndex` would land us in a scene that's part of
                 // the round's cluster, let the transition happen. Otherwise
@@ -1312,27 +1299,23 @@ void Harpoon::RegisterHooks() {
                 // like walking through a door) but the destination is the
                 // round map, not the out-of-bounds scene.
                 bool redirected = false;
-                s32 destEntr  = gPlayState->nextEntranceIndex;
+                s32 destEntr = gPlayState->nextEntranceIndex;
                 s32 destScene = -1;
                 if (destEntr >= 0 && destEntr < (s32)ARRAY_COUNT(gEntranceTable)) {
                     destScene = (s32)gEntranceTable[destEntr].scene;
                 }
-                s32 mapIdx = (Harpoon::Instance != nullptr)
-                                 ? Harpoon::Instance->confirmedMapIndex : -1;
+                s32 mapIdx = (Harpoon::Instance != nullptr) ? Harpoon::Instance->confirmedMapIndex : -1;
                 if (isPropHuntMode) {
-                    if (mapIdx >= 0 && destScene >= 0 &&
-                        !HarpoonPropHunt::IsSceneInRoundCluster(mapIdx, destScene)) {
-                        s32 returnEntr = HarpoonPropHunt::GetReturnEntranceForInvalidExit(
-                            mapIdx, destScene);
+                    if (mapIdx >= 0 && destScene >= 0 && !HarpoonPropHunt::IsSceneInRoundCluster(mapIdx, destScene)) {
+                        s32 returnEntr = HarpoonPropHunt::GetReturnEntranceForInvalidExit(mapIdx, destScene);
                         if (returnEntr >= 0) {
                             gPlayState->nextEntranceIndex = returnEntr;
-                            gPlayState->transitionType    = TRANS_TYPE_FADE_BLACK;
+                            gPlayState->transitionType = TRANS_TYPE_FADE_BLACK;
                             ::sHarpoonAuthorizedTransition = true;
                             redirected = true;
                         }
                     }
-                } else if (currentRoomGameMode == "triforce_thief" &&
-                           HarpoonTriforceThief::IsInRound()) {
+                } else if (currentRoomGameMode == "triforce_thief" && HarpoonTriforceThief::IsInRound()) {
                     // Same full-circle redirect for TT: when the engine
                     // wants to load us into a scene outside the round's
                     // cluster, swap the entrance to the round map's main
@@ -1343,11 +1326,10 @@ void Harpoon::RegisterHooks() {
                     // of warping them to a stale confirmedMapIndex.
                     if (mapIdx >= 0 && destScene >= 0 &&
                         !HarpoonTriforceThief::IsSceneInRoundClusterTT(mapIdx, destScene)) {
-                        s32 returnEntr = HarpoonTriforceThief::GetReturnEntranceForInvalidExitTT(
-                            mapIdx, destScene);
+                        s32 returnEntr = HarpoonTriforceThief::GetReturnEntranceForInvalidExitTT(mapIdx, destScene);
                         if (returnEntr >= 0) {
                             gPlayState->nextEntranceIndex = returnEntr;
-                            gPlayState->transitionType    = TRANS_TYPE_FADE_BLACK;
+                            gPlayState->transitionType = TRANS_TYPE_FADE_BLACK;
                             ::sHarpoonAuthorizedTransition = true;
                             redirected = true;
                         }
@@ -1365,10 +1347,9 @@ void Harpoon::RegisterHooks() {
                     gPlayState->transitionTrigger = TRANS_TRIGGER_OFF;
                     Player* locked = GET_PLAYER(gPlayState);
                     if (locked != nullptr) {
-                        locked->stateFlags1 &= ~(PLAYER_STATE1_LOADING |
-                                                 PLAYER_STATE1_IN_CUTSCENE);
+                        locked->stateFlags1 &= ~(PLAYER_STATE1_LOADING | PLAYER_STATE1_IN_CUTSCENE);
                         locked->linearVelocity = 0.0f;
-                        locked->actor.speedXZ  = 0.0f;
+                        locked->actor.speedXZ = 0.0f;
                     }
                 }
             }
@@ -1406,8 +1387,7 @@ void Harpoon::RegisterHooks() {
         // never fires for our entry into Hyrule Field and the prop draw
         // path stays broken until a manual scene change. Re-attempt every
         // 5 seconds while we're in prop hunt mode AND the registry is empty.
-        if (isPropHuntMode && gPlayState != nullptr &&
-            !HarpoonPropHunt::AreGhostsReady()) {
+        if (isPropHuntMode && gPlayState != nullptr && !HarpoonPropHunt::AreGhostsReady()) {
             static s64 sLastSpawnRetry = 0;
             s64 nowMs = (s64)(ImGui::GetTime() * 1000.0);
             // 1-second cadence — fast enough that joining a room and entering
@@ -1425,8 +1405,8 @@ void Harpoon::RegisterHooks() {
         //    / jammed-cutscene. The Triforce Thief mid-round reload was
         //    removed per user request — TT now kills loading zones reliably
         //    in every state, so the manual escape hatch is unnecessary.
-        bool inPropHuntRoom    = isPropHuntMode;
-        bool inTriforceRoom    = (currentRoomGameMode == "triforce_thief");
+        bool inPropHuntRoom = isPropHuntMode;
+        bool inTriforceRoom = (currentRoomGameMode == "triforce_thief");
         if ((inPropHuntRoom || inTriforceRoom) && gPlayState != nullptr) {
             Input* input = &gPlayState->state.input[0];
             const u32 combo = BTN_L | BTN_R | BTN_Z;
@@ -1436,17 +1416,15 @@ void Harpoon::RegisterHooks() {
                     sComboFired = true;
                     bool isLobby = (gameState == HARPOON_STATE_LOBBY);
                     // Host is the sole authority (admin concept removed).
-                    bool isHostLocal = (ownClientId != 0 &&
-                                        ownClientId == hostClientId);
+                    bool isHostLocal = (ownClientId != 0 && ownClientId == hostClientId);
 
                     if (isLobby && isHostLocal) {
                         // Lobby + admin → open the map-select overlay.
                         s32 modeInt = (s32)mapSelectMode;
                         nlohmann::json env;
                         env["type"] = "ROOM.BROADCAST_EVENT";
-                        env["event_name"] = inPropHuntRoom
-                            ? "PROP_HUNT.OPEN_MAP_SELECT"
-                            : "TRIFORCE_THIEF.MAP_SELECT_BEGIN";
+                        env["event_name"] =
+                            inPropHuntRoom ? "PROP_HUNT.OPEN_MAP_SELECT" : "TRIFORCE_THIEF.MAP_SELECT_BEGIN";
                         env["data"] = nlohmann::json::object();
                         env["data"]["mapSelectMode"] = modeInt;
                         env["data"]["windowSeconds"] = 15;
@@ -1476,16 +1454,14 @@ void Harpoon::RegisterHooks() {
                         // no longer needed and just risked accidental use.
                         if (gPlayState != nullptr) {
                             s32 reloadEntrance = gSaveContext.entranceIndex;
-                            s32 mapIdx = (ownClientId != 0)
-                                ? confirmedMapIndex : -1;
+                            s32 mapIdx = (ownClientId != 0) ? confirmedMapIndex : -1;
                             if (mapIdx >= 0) {
-                                reloadEntrance =
-                                    HarpoonPropHunt::GetEntranceForMapIndex(mapIdx);
+                                reloadEntrance = HarpoonPropHunt::GetEntranceForMapIndex(mapIdx);
                             }
-                            gPlayState->linkAgeOnLoad     = gSaveContext.linkAge;
+                            gPlayState->linkAgeOnLoad = gSaveContext.linkAge;
                             gPlayState->nextEntranceIndex = reloadEntrance;
                             gPlayState->transitionTrigger = TRANS_TRIGGER_START;
-                            gPlayState->transitionType    = TRANS_TYPE_FADE_BLACK;
+                            gPlayState->transitionType = TRANS_TYPE_FADE_BLACK;
                             ::sHarpoonAuthorizedTransition = true;
                         }
                     }
@@ -1499,15 +1475,14 @@ void Harpoon::RegisterHooks() {
             // user input required — the overlay flashes by then transitions
             // out. Matches Scooter's HarpoonGameState handler at line 1053.
             static HarpoonGameState sPrevMapState = HARPOON_STATE_LOBBY;
-            bool justEnteredMapSelect = (sPrevMapState != HARPOON_STATE_MAP_SELECT &&
-                                          gameState == HARPOON_STATE_MAP_SELECT);
+            bool justEnteredMapSelect =
+                (sPrevMapState != HARPOON_STATE_MAP_SELECT && gameState == HARPOON_STATE_MAP_SELECT);
             sPrevMapState = gameState;
             bool isHost = (ownClientId != 0 && ownClientId == hostClientId);
-            if (justEnteredMapSelect && isHost &&
-                mapSelectMode == MAP_SELECT_RANDOM) {
+            if (justEnteredMapSelect && isHost && mapSelectMode == MAP_SELECT_RANDOM) {
                 if (inPropHuntRoom) {
-                    s32 mapCount = 10; // PROP_HUNT_MAP_SELECT_COUNT incl. RANDOM cell
-                    s32 pick = (s32)(rand() % (mapCount - 1));  // skip the RANDOM cell itself
+                    s32 mapCount = 10;                         // PROP_HUNT_MAP_SELECT_COUNT incl. RANDOM cell
+                    s32 pick = (s32)(rand() % (mapCount - 1)); // skip the RANDOM cell itself
                     // Full round-start: picks seekers, assigns roles, broadcasts,
                     // teleports hiders. Seekers stay in lobby until hide-phase end.
                     HarpoonPropHunt::HostStartRound(pick);
@@ -1529,8 +1504,8 @@ void Harpoon::RegisterHooks() {
         if (HarpoonTriforceThief::IsInRound() && gPlayState != nullptr) {
             Player* p = GET_PLAYER(gPlayState);
             if (p != nullptr) {
-                if (HarpoonTriforceThief::ShouldPickupTriforce(
-                        p->actor.world.pos.x, p->actor.world.pos.y, p->actor.world.pos.z)) {
+                if (HarpoonTriforceThief::ShouldPickupTriforce(p->actor.world.pos.x, p->actor.world.pos.y,
+                                                               p->actor.world.pos.z)) {
                     HarpoonTriforceThief::GetLocalState().carrierClientId = ownClientId;
                     SendJsonToRemote(HarpoonTriforceThief::BuildTriforcePickupPayload(ownClientId));
                     // Seed / resume the rupee countdown and write it to
@@ -1555,40 +1530,39 @@ void Harpoon::RegisterHooks() {
         if (HarpoonTriforceThief::IsInRound() && gPlayState != nullptr) {
             HarpoonTriforceThief::DrawTriforceOnGround(gPlayState);
         }
-        if (isPropHuntMode && gPlayState != nullptr &&
-            HarpoonPropHunt::AreGhostsReady()) {
+        if (isPropHuntMode && gPlayState != nullptr && HarpoonPropHunt::AreGhostsReady()) {
             s32 mapIdx = HarpoonPropHunt::GetLocalState().confirmedMap;
-            if (mapIdx < 0) mapIdx = 0;
+            if (mapIdx < 0)
+                mapIdx = 0;
 
             // Local decoys. NB: braced struct initializers inside a COND_HOOK
             // lambda explode the preprocessor (commas not protected by braces).
             // Assign fields individually.
             auto& locals = HarpoonPropHunt::GetLocalDecoys();
             for (const auto& d : locals) {
-                if (!d.active) continue;
+                if (!d.active)
+                    continue;
                 Actor host;
                 memset(&host, 0, sizeof(host));
                 host.world.pos.x = d.x;
                 host.world.pos.y = d.y;
                 host.world.pos.z = d.z;
                 host.shape.rot.y = d.rotY;
-                HarpoonPropHunt::DrawHiderAsProp(&host, gPlayState,
-                                                  d.propCat, d.propIndex, d.propState, mapIdx);
+                HarpoonPropHunt::DrawHiderAsProp(&host, gPlayState, d.propCat, d.propIndex, d.propState, mapIdx);
             }
             // Remote decoys (every other client's slots).
             for (auto& [cid, c] : clients) {
-                if (c.self) continue;
+                if (c.self)
+                    continue;
                 for (int i = 0; i < 3; i++) {
-                    if (!c.somariaDecoyActive[i]) continue;
+                    if (!c.somariaDecoyActive[i])
+                        continue;
                     Actor host;
                     memset(&host, 0, sizeof(host));
-                    host.world.pos   = c.somariaDecoyPos[i];
+                    host.world.pos = c.somariaDecoyPos[i];
                     host.shape.rot.y = c.somariaDecoyRotY[i];
-                    HarpoonPropHunt::DrawHiderAsProp(&host, gPlayState,
-                                                     c.somariaDecoyPropCat[i],
-                                                     c.somariaDecoyPropIdx[i],
-                                                     c.somariaDecoyPropState[i],
-                                                     mapIdx);
+                    HarpoonPropHunt::DrawHiderAsProp(&host, gPlayState, c.somariaDecoyPropCat[i],
+                                                     c.somariaDecoyPropIdx[i], c.somariaDecoyPropState[i], mapIdx);
                 }
             }
         }
@@ -1621,13 +1595,12 @@ void Harpoon::RegisterHooks() {
         // Triforce knocked loose: pick a random landing 500-800 units away,
         // apply locally first (relay excludes sender), then broadcast. The
         // dropper gets a 90-frame pickup cooldown via HandleTriforceDrop.
-        if (HarpoonTriforceThief::IsInRound() &&
-            HarpoonTriforceThief::GetLocalState().carrierClientId == ownClientId &&
+        if (HarpoonTriforceThief::IsInRound() && HarpoonTriforceThief::GetLocalState().carrierClientId == ownClientId &&
             amount < 0) {
             Player* p = GET_PLAYER(gPlayState);
             if (p != nullptr) {
                 f32 sx = p->actor.world.pos.x;
-                f32 sy = p->actor.world.pos.y + 30.0f;  // launch slightly above feet
+                f32 sy = p->actor.world.pos.y + 30.0f; // launch slightly above feet
                 f32 sz = p->actor.world.pos.z;
                 // Random horizontal direction + strong upward + outward kick.
                 // The receiver's physics integration (gravity + BgCheck wall
@@ -1635,7 +1608,7 @@ void Harpoon::RegisterHooks() {
                 // bounces off walls and settles on real geometry, so it
                 // never leaves the scene.
                 f32 angle = (f32)(rand() % 0x10000) * (3.14159265f / 32768.0f);
-                f32 horizSpeed = 16.0f + (f32)(rand() % 6);  // 16–21 u/frame
+                f32 horizSpeed = 16.0f + (f32)(rand() % 6); // 16–21 u/frame
                 f32 vx = cosf(angle) * horizSpeed;
                 f32 vz = sinf(angle) * horizSpeed;
                 // 25 u/frame upward (was 14). With GRAVITY = -1.5 per tick,
@@ -1650,19 +1623,18 @@ void Harpoon::RegisterHooks() {
                 // expose HandleTriforceDrop, so we rebuild & dispatch the
                 // event through the same path peers use).
                 nlohmann::json env;
-                env["type"]       = "ROOM.BROADCAST_EVENT";
+                env["type"] = "ROOM.BROADCAST_EVENT";
                 env["event_name"] = HarpoonTriforceThief::kEvtTriforceDrop;
-                env["data"]       = nlohmann::json::object();
+                env["data"] = nlohmann::json::object();
                 env["data"]["dropperClientId"] = me;
                 env["data"]["startX"] = sx;
                 env["data"]["startY"] = sy;
                 env["data"]["startZ"] = sz;
-                env["data"]["velX"]   = vx;
-                env["data"]["velY"]   = vy;
-                env["data"]["velZ"]   = vz;
+                env["data"]["velX"] = vx;
+                env["data"]["velY"] = vy;
+                env["data"]["velZ"] = vz;
                 HarpoonTriforceThief::HandleEvent(env);
-                SendJsonToRemote(HarpoonTriforceThief::BuildTriforceDropPayload(
-                    me, sx, sy, sz, vx, vy, vz));
+                SendJsonToRemote(HarpoonTriforceThief::BuildTriforceDropPayload(me, sx, sy, sz, vx, vy, vz));
             }
         }
 
@@ -1701,33 +1673,34 @@ void Harpoon::RegisterHooks() {
                 //      pending init to "converted seeker" so the scene
                 //      reload applies the full seeker inventory.
                 //   6. Teleport to the round map's entrance.
-                gSaveContext.health         = 4 * 16;
+                gSaveContext.health = 4 * 16;
                 gSaveContext.healthCapacity = 4 * 16;
                 Player* pp = GET_PLAYER(gPlayState);
-                if (pp != nullptr) pp->actor.colChkInfo.health = 4 * 16;
-                s.propIndex             = -1;
-                s.propState             = 0;
-                s.propModeLockoutTimer  = 0;
+                if (pp != nullptr)
+                    pp->actor.colChkInfo.health = 4 * 16;
+                s.propIndex = -1;
+                s.propState = 0;
+                s.propModeLockoutTimer = 0;
 
                 // Tell peers we're eliminated (kill feed).
                 {
                     nlohmann::json env;
-                    env["type"]       = "ROOM.BROADCAST_EVENT";
+                    env["type"] = "ROOM.BROADCAST_EVENT";
                     env["event_name"] = "PROP_HUNT.ELIMINATED";
-                    env["data"]       = nlohmann::json::object();
+                    env["data"] = nlohmann::json::object();
                     env["data"]["victimClientId"] = ownClientId;
                     SendJsonToRemote(env);
                 }
                 // Local role swap + role broadcast.
                 HarpoonPropHunt::GetLocalState().role = HarpoonPropHunt::Role::Seeker;
-                SendJsonToRemote(HarpoonPropHunt::BuildRoleAssignPayload(
-                    ownClientId, HarpoonPropHunt::Role::Seeker));
+                SendJsonToRemote(HarpoonPropHunt::BuildRoleAssignPayload(ownClientId, HarpoonPropHunt::Role::Seeker));
 
                 // Teleport to the round map's entrance. PendingInit=3 =
                 // "converted seeker": runs ApplySeekerSave once the new
                 // scene's actors have spawned, so the kit is right.
                 s32 mapIdx = (Harpoon::Instance != nullptr) ? confirmedMapIndex : -1;
-                if (mapIdx < 0) mapIdx = s.confirmedMap;
+                if (mapIdx < 0)
+                    mapIdx = s.confirmedMap;
                 if (mapIdx >= 0) {
                     s32 entr = HarpoonPropHunt::GetEntranceForMapIndex(mapIdx);
                     gSaveContext.linkAge = LINK_AGE_CHILD;
@@ -1807,8 +1780,7 @@ void Harpoon::RegisterHooks() {
 
     // Boss defeat → game complete (from Anchor). Only fires for the final
     // Ganon (ACTOR_BOSS_GANON2 = Ganondorf phase 2).
-    COND_ID_HOOK(OnBossDefeat, ACTOR_BOSS_GANON2, isConnected,
-                 [&](void* refActor) { SendPacket_GameComplete(); });
+    COND_ID_HOOK(OnBossDefeat, ACTOR_BOSS_GANON2, isConnected, [&](void* refActor) { SendPacket_GameComplete(); });
 
     // Apply tunic color from Harpoon client data
     COND_VB_SHOULD(VB_APPLY_TUNIC_COLOR, isConnected, {
@@ -1853,19 +1825,16 @@ void Harpoon::RegisterHooks() {
             return;
         }
         std::vector<HarpoonCompassIcon> icons;
-        bool isInDungeon = gPlayState->sceneNum == SCENE_DEKU_TREE ||
-                           gPlayState->sceneNum == SCENE_DODONGOS_CAVERN ||
-                           gPlayState->sceneNum == SCENE_JABU_JABU ||
-                           gPlayState->sceneNum == SCENE_FOREST_TEMPLE ||
-                           gPlayState->sceneNum == SCENE_FIRE_TEMPLE ||
-                           gPlayState->sceneNum == SCENE_WATER_TEMPLE ||
-                           gPlayState->sceneNum == SCENE_SPIRIT_TEMPLE ||
-                           gPlayState->sceneNum == SCENE_SHADOW_TEMPLE ||
-                           gPlayState->sceneNum == SCENE_BOTTOM_OF_THE_WELL ||
-                           gPlayState->sceneNum == SCENE_ICE_CAVERN;
+        bool isInDungeon = gPlayState->sceneNum == SCENE_DEKU_TREE || gPlayState->sceneNum == SCENE_DODONGOS_CAVERN ||
+                           gPlayState->sceneNum == SCENE_JABU_JABU || gPlayState->sceneNum == SCENE_FOREST_TEMPLE ||
+                           gPlayState->sceneNum == SCENE_FIRE_TEMPLE || gPlayState->sceneNum == SCENE_WATER_TEMPLE ||
+                           gPlayState->sceneNum == SCENE_SPIRIT_TEMPLE || gPlayState->sceneNum == SCENE_SHADOW_TEMPLE ||
+                           gPlayState->sceneNum == SCENE_BOTTOM_OF_THE_WELL || gPlayState->sceneNum == SCENE_ICE_CAVERN;
         for (auto& [clientId, client] : Harpoon::Instance->clients) {
-            if (client.self || !client.online) continue;
-            if (client.sceneNum != gPlayState->sceneNum) continue;
+            if (client.self || !client.online)
+                continue;
+            if (client.sceneNum != gPlayState->sceneNum)
+                continue;
             // Read pos/rot from the broadcast state (`posRot`) instead of
             // dereferencing `client.player`. The dummy actor pointer can be
             // stale across scene transitions / RefreshClientActors cycles
@@ -1891,8 +1860,8 @@ void Harpoon::RegisterHooks() {
         }
 
         // Adapted from Minimap_DrawCompassIcons / Anchor's mirror of it.
-        s16 leftMinimapMargin   = CVarGetInteger(CVAR_COSMETIC("HUD.Margin.L"), 0);
-        s16 rightMinimapMargin  = CVarGetInteger(CVAR_COSMETIC("HUD.Margin.R"), 0);
+        s16 leftMinimapMargin = CVarGetInteger(CVAR_COSMETIC("HUD.Margin.L"), 0);
+        s16 rightMinimapMargin = CVarGetInteger(CVAR_COSMETIC("HUD.Margin.R"), 0);
         s16 bottomMinimapMargin = CVarGetInteger(CVAR_COSMETIC("HUD.Margin.B"), 0);
         s16 xMarginsMinimap = 0;
         s16 yMarginsMinimap = 0;
@@ -1902,7 +1871,7 @@ void Harpoon::RegisterHooks() {
             }
             yMarginsMinimap = bottomMinimapMargin;
         }
-        s16 mapWidth     = isInDungeon ? R_DGN_MINIMAP_X : R_OW_MINIMAP_X;
+        s16 mapWidth = isInDungeon ? R_DGN_MINIMAP_X : R_OW_MINIMAP_X;
         s16 mapStartPosX = isInDungeon ? 96 : gMapData->owMinimapWidth[R_MAP_INDEX];
 
         OPEN_DISPS(gPlayState->state.gfxCtx);
@@ -1962,8 +1931,8 @@ void Harpoon::RegisterHooks() {
             }
             Matrix_Scale(icon.scale, icon.scale, icon.scale, MTXMODE_APPLY);
             Matrix_RotateX(-1.6f, MTXMODE_APPLY);
-            s16 rotation = ((0x7FFF - icon.rot.y) / 0x400) *
-                           (CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0) ? -1 : 1);
+            s16 rotation =
+                ((0x7FFF - icon.rot.y) / 0x400) * (CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0) ? -1 : 1);
             Matrix_RotateY(rotation / 10.0f, MTXMODE_APPLY);
             gSPMatrix(OVERLAY_DISP++, MATRIX_NEWMTX(gPlayState->state.gfxCtx),
                       G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
@@ -1987,11 +1956,14 @@ void Harpoon::RegisterHooks() {
     // ----------------------------------------------------------------
     COND_VB_SHOULD(VB_ACTOR_POST_DRAW, isConnected, {
         PlayState* play = va_arg(args, PlayState*);
-        Actor* actor    = va_arg(args, Actor*);
-        if (play == nullptr || actor == nullptr) return;
-        if (!HarpoonTriforceThief::IsInRound()) return;
+        Actor* actor = va_arg(args, Actor*);
+        if (play == nullptr || actor == nullptr)
+            return;
+        if (!HarpoonTriforceThief::IsInRound())
+            return;
         const auto& s = HarpoonTriforceThief::GetLocalState();
-        if (s.carrierClientId == 0) return;
+        if (s.carrierClientId == 0)
+            return;
 
         // Is this actor the carrier? Local player matches own clientId;
         // remote dummies match via GetDummyPlayerClientId.
@@ -2021,26 +1993,27 @@ void Harpoon::RegisterHooks() {
     // default is false, and we want the timer visible whenever ANY
     // gamemode that opts in says so.
     // ----------------------------------------------------------------
-    COND_HOOK(OnVanillaBehavior, isConnected,
-              [&](GIVanillaBehavior id, bool* should, va_list args) {
+    COND_HOOK(OnVanillaBehavior, isConnected, [&](GIVanillaBehavior id, bool* should, va_list args) {
         switch (id) {
-        case VB_SHOW_GAMEPLAY_TIMER: {
-            // Always-visible timer while in any PropHunt room. Pause is
-            // achieved by NOT advancing the underlying counter (only
-            // increments while local is Hider; see PropHunt.cpp TickFrame).
-            // In lobby / between rounds the timer just freezes at its last
-            // value — visually present but stopped. Total survival time
-            // across the session.
-            if (isPropHuntMode) *should = true;
-            // Triforce Thief now uses the engine timer1 (the underwater /
-            // Death Mountain heat MM:SS HUD) instead of the gameplaystats
-            // digit overlay — see TriforceThief.cpp's (a-0) block. So we
-            // DON'T force the gameplay timer here; if we did, it would
-            // render alongside our MM:SS timer and show the upward-counting
-            // play-time stat.
-            break;
-        }
-        default: break;
+            case VB_SHOW_GAMEPLAY_TIMER: {
+                // Always-visible timer while in any PropHunt room. Pause is
+                // achieved by NOT advancing the underlying counter (only
+                // increments while local is Hider; see PropHunt.cpp TickFrame).
+                // In lobby / between rounds the timer just freezes at its last
+                // value — visually present but stopped. Total survival time
+                // across the session.
+                if (isPropHuntMode)
+                    *should = true;
+                // Triforce Thief now uses the engine timer1 (the underwater /
+                // Death Mountain heat MM:SS HUD) instead of the gameplaystats
+                // digit overlay — see TriforceThief.cpp's (a-0) block. So we
+                // DON'T force the gameplay timer here; if we did, it would
+                // render alongside our MM:SS timer and show the upward-counting
+                // play-time stat.
+                break;
+            }
+            default:
+                break;
         }
     });
 }

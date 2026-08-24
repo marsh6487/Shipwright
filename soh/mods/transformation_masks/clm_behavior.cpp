@@ -41,37 +41,37 @@ extern PlayState* gPlayState;
 // ── Custom text IDs (0x9310–0x933F reserved for CLM) ────────────────────────
 enum CLMTextId : uint16_t {
     // Shooting Gallery
-    CLM_TEXT_SYATEKI_CHILD_FIRST  = 0x9310,
+    CLM_TEXT_SYATEKI_CHILD_FIRST = 0x9310,
     CLM_TEXT_SYATEKI_CHILD_REPEAT = 0x9311,
-    CLM_TEXT_SYATEKI_ADULT_FIRST  = 0x9312,
+    CLM_TEXT_SYATEKI_ADULT_FIRST = 0x9312,
     CLM_TEXT_SYATEKI_ADULT_REPEAT = 0x9313,
     // Bombchu Bowling
-    CLM_TEXT_BOWLING_FIRST        = 0x9314,
-    CLM_TEXT_BOWLING_REPEAT       = 0x9315,
+    CLM_TEXT_BOWLING_FIRST = 0x9314,
+    CLM_TEXT_BOWLING_REPEAT = 0x9315,
     // Ingo
-    CLM_TEXT_INGO_CHILD           = 0x9316,
-    CLM_TEXT_INGO_ADULT_PRETALON  = 0x9317,
+    CLM_TEXT_INGO_CHILD = 0x9316,
+    CLM_TEXT_INGO_ADULT_PRETALON = 0x9317,
     CLM_TEXT_INGO_ADULT_POSTTALON = 0x9318,
-    CLM_TEXT_INGO_ALREADY         = 0x9319,
+    CLM_TEXT_INGO_ALREADY = 0x9319,
     // Talon (cucco game, child)
-    CLM_TEXT_TALON_FIRST          = 0x931A,
-    CLM_TEXT_TALON_ASLEEP         = 0x931B,
+    CLM_TEXT_TALON_FIRST = 0x931A,
+    CLM_TEXT_TALON_ASLEEP = 0x931B,
     // Adult Malon (sells cow)
-    CLM_TEXT_MALON_BUY            = 0x931C,
-    CLM_TEXT_MALON_BROKE          = 0x931D,
-    CLM_TEXT_MALON_REPEAT         = 0x931E,
+    CLM_TEXT_MALON_BUY = 0x931C,
+    CLM_TEXT_MALON_BROKE = 0x931D,
+    CLM_TEXT_MALON_REPEAT = 0x931E,
     // HBA Gerudo
-    CLM_TEXT_HBA_FIRST            = 0x931F,
-    CLM_TEXT_HBA_REPEAT           = 0x9320,
+    CLM_TEXT_HBA_FIRST = 0x931F,
+    CLM_TEXT_HBA_REPEAT = 0x9320,
     // Fishing
-    CLM_TEXT_FISHING_FIRST        = 0x9321,
-    CLM_TEXT_FISHING_REPEAT       = 0x9322,
+    CLM_TEXT_FISHING_FIRST = 0x9321,
+    CLM_TEXT_FISHING_REPEAT = 0x9322,
     // Treasure Chest
-    CLM_TEXT_TAKARA_FIRST         = 0x9323,
-    CLM_TEXT_TAKARA_REPEAT        = 0x9324,
+    CLM_TEXT_TAKARA_FIRST = 0x9323,
+    CLM_TEXT_TAKARA_REPEAT = 0x9324,
     // Diving
-    CLM_TEXT_DIVING_FIRST         = 0x9325,
-    CLM_TEXT_DIVING_REPEAT        = 0x9326,
+    CLM_TEXT_DIVING_FIRST = 0x9325,
+    CLM_TEXT_DIVING_REPEAT = 0x9326,
 };
 
 // HBA discriminator
@@ -80,12 +80,12 @@ enum CLMTextId : uint16_t {
 // Bribe amounts for repeat CLM visits (per plan)
 #define CLM_BRIBE_SYATEKI_CHILD 5
 #define CLM_BRIBE_SYATEKI_ADULT 10
-#define CLM_BRIBE_BOWLING       20
-#define CLM_BRIBE_HBA           10
-#define CLM_BRIBE_FISHING       5
-#define CLM_BRIBE_TAKARA        20
-#define CLM_BRIBE_DIVING        15
-#define CLM_MALON_COW_PRICE     100
+#define CLM_BRIBE_BOWLING 20
+#define CLM_BRIBE_HBA 10
+#define CLM_BRIBE_FISHING 5
+#define CLM_BRIBE_TAKARA 20
+#define CLM_BRIBE_DIVING 15
+#define CLM_MALON_COW_PRICE 100
 
 // ── CLM detection ───────────────────────────────────────────────────────────
 
@@ -96,11 +96,11 @@ static bool CLM_IsWorn() {
 // ── Per-actor interaction state ─────────────────────────────────────────────
 
 enum class CLMPhase : uint8_t {
-    TextShowing,    // CLM textbox visible
+    TextShowing,     // CLM textbox visible
     WaitingForClose, // Player advanced; waiting for textbox to fully close (NONE state)
-    TextClosed,     // Textbox fully gone; safe to grant reward
-    RewardOffered,  // Vanilla Actor_OfferGetItem made; waiting for player to accept
-    Done,           // Cleanup
+    TextClosed,      // Textbox fully gone; safe to grant reward
+    RewardOffered,   // Vanilla Actor_OfferGetItem made; waiting for player to accept
+    Done,            // Cleanup
 };
 
 typedef void (*ActorUpdateFunc)(Actor*, PlayState*);
@@ -138,18 +138,15 @@ static std::unordered_map<Actor*, EnDivingGameActionFunc> gDivingSafeActionFunc;
 static RandomizerCheck CLM_ResolveRandoCheck(const CLMState& s) {
     switch (s.actorId) {
         case ACTOR_EN_SYATEKI_MAN:
-            return s.isChild ? RC_MARKET_SHOOTING_GALLERY_REWARD
-                             : RC_KAK_SHOOTING_GALLERY_REWARD;
+            return s.isChild ? RC_MARKET_SHOOTING_GALLERY_REWARD : RC_KAK_SHOOTING_GALLERY_REWARD;
         case ACTOR_EN_BOM_BOWL_MAN:
             // Progressive: first prize then second prize
-            return Flags_GetItemGetInf(ITEMGETINF_11)
-                       ? RC_MARKET_BOMBCHU_BOWLING_SECOND_PRIZE
-                       : RC_MARKET_BOMBCHU_BOWLING_FIRST_PRIZE;
+            return Flags_GetItemGetInf(ITEMGETINF_11) ? RC_MARKET_BOMBCHU_BOWLING_SECOND_PRIZE
+                                                      : RC_MARKET_BOMBCHU_BOWLING_FIRST_PRIZE;
         case ACTOR_EN_TA:
             return RC_LLR_TALONS_CHICKENS;
         case ACTOR_EN_GE1:
-            return Flags_GetInfTable(INFTABLE_190) ? RC_GF_HBA_1500_POINTS
-                                                    : RC_GF_HBA_1000_POINTS;
+            return Flags_GetInfTable(INFTABLE_190) ? RC_GF_HBA_1500_POINTS : RC_GF_HBA_1000_POINTS;
         case ACTOR_FISHING:
             return s.isChild ? RC_LH_CHILD_FISHING : RC_LH_ADULT_FISHING;
         case ACTOR_EN_TAKARA_MAN:
@@ -163,14 +160,15 @@ static RandomizerCheck CLM_ResolveRandoCheck(const CLMState& s) {
 
 // Returns true if a rando item-get cutscene was started (caller waits for accept).
 static bool CLM_TryDirectRandoDelivery(Actor* actor, PlayState* play, CLMState& s) {
-    if (!IS_RANDO) return false;
+    if (!IS_RANDO)
+        return false;
 
     RandomizerCheck rc = CLM_ResolveRandoCheck(s);
-    if (rc == RC_UNKNOWN_CHECK) return false;
+    if (rc == RC_UNKNOWN_CHECK)
+        return false;
 
     auto loc = Rando::Context::GetInstance()->GetItemLocation(rc);
-    if (loc == nullptr || loc->HasObtained() ||
-        loc->GetPlacedRandomizerGet() == RG_NONE) {
+    if (loc == nullptr || loc->HasObtained() || loc->GetPlacedRandomizerGet() == RG_NONE) {
         SPDLOG_INFO("[CLM] Rando direct: RC 0x{:X} not deliverable (already obtained or no placement)",
                     static_cast<uint32_t>(rc));
         return false;
@@ -180,8 +178,8 @@ static bool CLM_TryDirectRandoDelivery(Actor* actor, PlayState* play, CLMState& 
     GetItemEntry entry = Rando::Context::GetInstance()->GetFinalGIEntry(
         rc, true, (GetItemID)Rando::StaticData::RetrieveItem(vanillaRG).GetItemID());
 
-    SPDLOG_INFO("[CLM] Rando direct delivery: RC 0x{:X}, item mod={} id={}",
-                static_cast<uint32_t>(rc), entry.modIndex, entry.itemId);
+    SPDLOG_INFO("[CLM] Rando direct delivery: RC 0x{:X}, item mod={} id={}", static_cast<uint32_t>(rc), entry.modIndex,
+                entry.itemId);
 
     GiveItemEntryFromActor(actor, play, entry, 2000.0f, 1000.0f);
     // Mark the check as collected so the queue handler doesn't try again
@@ -211,26 +209,36 @@ struct CLMAdapter {
 // 1. Shooting Gallery (En_Syateki_Man) — child & adult
 // ─────────────────────────────────────────────────────────────────────────────
 
-static bool Syateki_ShouldIntercept(Actor* actor) { return true; }
+static bool Syateki_ShouldIntercept(Actor* actor) {
+    return true;
+}
 
 static uint16_t Syateki_ResolveTextId(Actor* actor, CLMState& s) {
     bool isChild = !LINK_IS_ADULT;
-    bool already = isChild ? Flags_GetItemGetInf(ITEMGETINF_0D)
-                           : Flags_GetItemGetInf(ITEMGETINF_0E);
+    bool already = isChild ? Flags_GetItemGetInf(ITEMGETINF_0D) : Flags_GetItemGetInf(ITEMGETINF_0E);
     s.isChild = isChild;
     s.firstTime = !already;
     s.bribeRupees = isChild ? CLM_BRIBE_SYATEKI_CHILD : CLM_BRIBE_SYATEKI_ADULT;
 
     if (isChild) {
-        if (CUR_UPG_VALUE(UPG_BULLET_BAG) == 1)      s.getItemId = GI_BULLET_BAG_40;
-        else if (CUR_UPG_VALUE(UPG_BULLET_BAG) > 1)  s.getItemId = GI_BULLET_BAG_50;
-        else                                          s.getItemId = GI_RUPEE_PURPLE;
+        if (CUR_UPG_VALUE(UPG_BULLET_BAG) == 1)
+            s.getItemId = GI_BULLET_BAG_40;
+        else if (CUR_UPG_VALUE(UPG_BULLET_BAG) > 1)
+            s.getItemId = GI_BULLET_BAG_50;
+        else
+            s.getItemId = GI_RUPEE_PURPLE;
         return already ? CLM_TEXT_SYATEKI_CHILD_REPEAT : CLM_TEXT_SYATEKI_CHILD_FIRST;
     } else {
         switch (CUR_UPG_VALUE(UPG_QUIVER)) {
-            case 1: s.getItemId = GI_QUIVER_40; break;
-            case 2: s.getItemId = GI_QUIVER_50; break;
-            default: s.getItemId = GI_RUPEE_PURPLE; break;
+            case 1:
+                s.getItemId = GI_QUIVER_40;
+                break;
+            case 2:
+                s.getItemId = GI_QUIVER_50;
+                break;
+            default:
+                s.getItemId = GI_RUPEE_PURPLE;
+                break;
         }
         return already ? CLM_TEXT_SYATEKI_ADULT_REPEAT : CLM_TEXT_SYATEKI_ADULT_FIRST;
     }
@@ -256,7 +264,9 @@ static bool Syateki_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
 // 2. Bombchu Bowling (En_Bom_Bowl_Man)
 // ─────────────────────────────────────────────────────────────────────────────
 
-static bool Bowling_ShouldIntercept(Actor* actor) { return true; }
+static bool Bowling_ShouldIntercept(Actor* actor) {
+    return true;
+}
 
 static uint16_t Bowling_ResolveTextId(Actor* actor, CLMState& s) {
     // Vanilla bowling has two distinct rewards:
@@ -265,17 +275,21 @@ static uint16_t Bowling_ResolveTextId(Actor* actor, CLMState& s) {
     // Progressive: first CLM visit grants the bomb bag, second grants the heart piece,
     // subsequent visits give a bribe.
     bool gotBag = Flags_GetItemGetInf(ITEMGETINF_11);
-    bool gotHP  = Flags_GetItemGetInf(ITEMGETINF_12);
+    bool gotHP = Flags_GetItemGetInf(ITEMGETINF_12);
     bool bothDone = gotBag && gotHP;
     s.firstTime = !bothDone;
     s.bribeRupees = CLM_BRIBE_BOWLING;
 
     if (!gotBag) {
         // First reward path: bomb bag upgrade based on current capacity
-        if (CUR_UPG_VALUE(UPG_BOMB_BAG) == 0)      s.getItemId = GI_BOMB_BAG_20;
-        else if (CUR_UPG_VALUE(UPG_BOMB_BAG) == 1) s.getItemId = GI_BOMB_BAG_30;
-        else if (CUR_UPG_VALUE(UPG_BOMB_BAG) == 2) s.getItemId = GI_BOMB_BAG_40;
-        else                                       s.getItemId = GI_RUPEE_PURPLE;
+        if (CUR_UPG_VALUE(UPG_BOMB_BAG) == 0)
+            s.getItemId = GI_BOMB_BAG_20;
+        else if (CUR_UPG_VALUE(UPG_BOMB_BAG) == 1)
+            s.getItemId = GI_BOMB_BAG_30;
+        else if (CUR_UPG_VALUE(UPG_BOMB_BAG) == 2)
+            s.getItemId = GI_BOMB_BAG_40;
+        else
+            s.getItemId = GI_RUPEE_PURPLE;
     } else if (!gotHP) {
         // Second reward path: heart piece
         s.getItemId = GI_HEART_PIECE;
@@ -306,7 +320,9 @@ static bool Bowling_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
 // 3. Ingo (En_In) — special: grants Epona permanently
 // ─────────────────────────────────────────────────────────────────────────────
 
-static bool Ingo_ShouldIntercept(Actor* actor) { return true; }
+static bool Ingo_ShouldIntercept(Actor* actor) {
+    return true;
+}
 
 static uint16_t Ingo_ResolveTextId(Actor* actor, CLMState& s) {
     bool isChild = !LINK_IS_ADULT;
@@ -317,8 +333,10 @@ static uint16_t Ingo_ResolveTextId(Actor* actor, CLMState& s) {
     s.getItemId = 0;
     s.bribeRupees = 0;
 
-    if (isChild)            return CLM_TEXT_INGO_CHILD;
-    if (alreadyHasEpona)    return CLM_TEXT_INGO_ALREADY;
+    if (isChild)
+        return CLM_TEXT_INGO_CHILD;
+    if (alreadyHasEpona)
+        return CLM_TEXT_INGO_ALREADY;
 
     s.firstTime = true; // signal grantReward to set the flag
     return talonReturned ? CLM_TEXT_INGO_ADULT_POSTTALON : CLM_TEXT_INGO_ADULT_PRETALON;
@@ -376,7 +394,8 @@ static uint16_t Talon_ResolveTextId(Actor* actor, CLMState& s) {
 }
 
 static bool Talon_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
-    if (!s.firstTime) return false; // asleep; no reward
+    if (!s.firstTime)
+        return false; // asleep; no reward
     if (IS_RANDO) {
         // Direct rando delivery already calls GiveItemEntryFromActor which sets up
         // the player's item-get cutscene independently. No need to wait in
@@ -392,7 +411,9 @@ static bool Talon_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
 // 5. Adult Malon (En_Ma3) — sells Link's Cow for 100 rupees
 // ─────────────────────────────────────────────────────────────────────────────
 
-static bool Malon_ShouldIntercept(Actor* actor) { return LINK_IS_ADULT; }
+static bool Malon_ShouldIntercept(Actor* actor) {
+    return LINK_IS_ADULT;
+}
 
 static uint16_t Malon_ResolveTextId(Actor* actor, CLMState& s) {
     bool already = Flags_GetEventChkInf(EVENTCHKINF_WON_COW_IN_MALONS_RACE);
@@ -438,7 +459,7 @@ static uint16_t HBA_ResolveTextId(Actor* actor, CLMState& s) {
     //   1500 score → ITEMGETINF_0F (quiver upgrade)
     // Progressive: first CLM visit gives heart piece, second gives quiver,
     // subsequent visits give a bribe.
-    bool gotHP    = Flags_GetInfTable(INFTABLE_190);
+    bool gotHP = Flags_GetInfTable(INFTABLE_190);
     bool gotQuiver = Flags_GetItemGetInf(ITEMGETINF_0F);
     bool bothDone = gotHP && gotQuiver;
     s.firstTime = !bothDone;
@@ -448,9 +469,15 @@ static uint16_t HBA_ResolveTextId(Actor* actor, CLMState& s) {
         s.getItemId = GI_HEART_PIECE;
     } else if (!gotQuiver) {
         switch (CUR_UPG_VALUE(UPG_QUIVER)) {
-            case 1: s.getItemId = GI_QUIVER_40; break;
-            case 2: s.getItemId = GI_QUIVER_50; break;
-            default: s.getItemId = GI_RUPEE_PURPLE; break;
+            case 1:
+                s.getItemId = GI_QUIVER_40;
+                break;
+            case 2:
+                s.getItemId = GI_QUIVER_50;
+                break;
+            default:
+                s.getItemId = GI_RUPEE_PURPLE;
+                break;
         }
     } else {
         s.getItemId = 0;
@@ -514,7 +541,9 @@ static bool Fishing_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
 // 8. Treasure Chest Game (En_Takara_Man) — child only
 // ─────────────────────────────────────────────────────────────────────────────
 
-static bool Takara_ShouldIntercept(Actor* actor) { return !LINK_IS_ADULT; }
+static bool Takara_ShouldIntercept(Actor* actor) {
+    return !LINK_IS_ADULT;
+}
 
 static uint16_t Takara_ResolveTextId(Actor* actor, CLMState& s) {
     // The treasure-chest-game's actual rando check is the heart piece reward
@@ -547,7 +576,9 @@ static bool Takara_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
 // 9. Diving Game (En_Diving_Game) — adult, Zora's Domain
 // ─────────────────────────────────────────────────────────────────────────────
 
-static bool Diving_ShouldIntercept(Actor* actor) { return true; }
+static bool Diving_ShouldIntercept(Actor* actor) {
+    return true;
+}
 
 static uint16_t Diving_ResolveTextId(Actor* actor, CLMState& s) {
     bool already = Flags_GetEventChkInf(EVENTCHKINF_OBTAINED_SILVER_SCALE);
@@ -576,23 +607,24 @@ static bool Diving_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
 // ── Adapter table ───────────────────────────────────────────────────────────
 
 static const CLMAdapter kAdapters[] = {
-    { ACTOR_EN_SYATEKI_MAN,  Syateki_ShouldIntercept, Syateki_ResolveTextId, Syateki_GrantReward, true  },
-    { ACTOR_EN_BOM_BOWL_MAN, Bowling_ShouldIntercept, Bowling_ResolveTextId, Bowling_GrantReward, true  },
-    { ACTOR_EN_IN,           Ingo_ShouldIntercept,    Ingo_ResolveTextId,    Ingo_GrantReward,    true  },
-    { ACTOR_EN_TA,           Talon_ShouldIntercept,   Talon_ResolveTextId,   Talon_GrantReward,   true  },
-    { ACTOR_EN_MA3,          Malon_ShouldIntercept,   Malon_ResolveTextId,   Malon_GrantReward,   true  },
-    { ACTOR_EN_GE1,          HBA_ShouldIntercept,     HBA_ResolveTextId,     HBA_GrantReward,     true  },
-    { ACTOR_FISHING,         Fishing_ShouldIntercept, Fishing_ResolveTextId, Fishing_GrantReward, true  },
-    { ACTOR_EN_TAKARA_MAN,   Takara_ShouldIntercept,  Takara_ResolveTextId,  Takara_GrantReward,  true  },
+    { ACTOR_EN_SYATEKI_MAN, Syateki_ShouldIntercept, Syateki_ResolveTextId, Syateki_GrantReward, true },
+    { ACTOR_EN_BOM_BOWL_MAN, Bowling_ShouldIntercept, Bowling_ResolveTextId, Bowling_GrantReward, true },
+    { ACTOR_EN_IN, Ingo_ShouldIntercept, Ingo_ResolveTextId, Ingo_GrantReward, true },
+    { ACTOR_EN_TA, Talon_ShouldIntercept, Talon_ResolveTextId, Talon_GrantReward, true },
+    { ACTOR_EN_MA3, Malon_ShouldIntercept, Malon_ResolveTextId, Malon_GrantReward, true },
+    { ACTOR_EN_GE1, HBA_ShouldIntercept, HBA_ResolveTextId, HBA_GrantReward, true },
+    { ACTOR_FISHING, Fishing_ShouldIntercept, Fishing_ResolveTextId, Fishing_GrantReward, true },
+    { ACTOR_EN_TAKARA_MAN, Takara_ShouldIntercept, Takara_ResolveTextId, Takara_GrantReward, true },
     // Diving Game: vanilla EnDivingGame_Talk has a CS-locking talk-accept branch
     // and a HandlePlayChoice handler that mismatches our EVENT-type message.
     // Skip vanilla update entirely during CLM dialogue to avoid softlock.
-    { ACTOR_EN_DIVING_GAME,  Diving_ShouldIntercept,  Diving_ResolveTextId,  Diving_GrantReward,  false },
+    { ACTOR_EN_DIVING_GAME, Diving_ShouldIntercept, Diving_ResolveTextId, Diving_GrantReward, false },
 };
 
 static const CLMAdapter* FindAdapter(int16_t actorId) {
     for (const auto& a : kAdapters) {
-        if (a.actorId == actorId) return &a;
+        if (a.actorId == actorId)
+            return &a;
     }
     return nullptr;
 }
@@ -605,8 +637,7 @@ static void CLM_PostAcceptItem(Actor* actor, CLMState& s) {
             if (s.isChild) {
                 Flags_SetItemGetInf(ITEMGETINF_0D);
             } else if (GameInteractor_Should(VB_BE_ELIGIBLE_FOR_ADULT_SHOOTING_GAME_REWARD,
-                                              (s.getItemId == GI_QUIVER_40) || (s.getItemId == GI_QUIVER_50),
-                                              actor)) {
+                                             (s.getItemId == GI_QUIVER_40) || (s.getItemId == GI_QUIVER_50), actor)) {
                 Flags_SetItemGetInf(ITEMGETINF_0E);
             }
             break;
@@ -656,7 +687,8 @@ static void CLM_PostAcceptItem(Actor* actor, CLMState& s) {
 
 static void CLM_HijackedUpdate(Actor* actor, PlayState* play) {
     auto it = gStates.find(actor);
-    if (it == gStates.end()) return;
+    if (it == gStates.end())
+        return;
     auto& state = it->second;
     const CLMAdapter* adapter = FindAdapter(state.actorId);
 
@@ -768,20 +800,26 @@ static void CLM_HijackedUpdate(Actor* actor, PlayState* play) {
 // ── Global OnOpenText hook: the speak-intercept point ───────────────────────
 
 static void CLM_OnAnyTextOpens(uint16_t* textId, bool* loadFromMessageTable) {
-    if (!CLM_IsWorn()) return;
+    if (!CLM_IsWorn())
+        return;
 
     PlayState* play = gPlayState;
-    if (play == nullptr) return;
+    if (play == nullptr)
+        return;
 
     Actor* talkActor = GET_PLAYER(play)->talkActor;
-    if (talkActor == nullptr) return;
+    if (talkActor == nullptr)
+        return;
 
     const CLMAdapter* adapter = FindAdapter(talkActor->id);
-    if (adapter == nullptr) return;
-    if (!adapter->shouldIntercept(talkActor)) return;
+    if (adapter == nullptr)
+        return;
+    if (!adapter->shouldIntercept(talkActor))
+        return;
 
     // Don't double-intercept if already hijacked
-    if (gStates.find(talkActor) != gStates.end()) return;
+    if (gStates.find(talkActor) != gStates.end())
+        return;
 
     SPDLOG_INFO("[CLM] Intercepting talk: actorId=0x{:X}, vanilla textId=0x{:X}", talkActor->id, *textId);
 
@@ -791,7 +829,8 @@ static void CLM_OnAnyTextOpens(uint16_t* textId, bool* loadFromMessageTable) {
     state.savedUpdate = talkActor->update;
 
     *textId = adapter->resolveTextId(talkActor, state);
-    SPDLOG_INFO("[CLM] Swapped to CLM textId=0x{:X} (firstTime={}, item=0x{:X})", *textId, state.firstTime, state.getItemId);
+    SPDLOG_INFO("[CLM] Swapped to CLM textId=0x{:X} (firstTime={}, item=0x{:X})", *textId, state.firstTime,
+                state.getItemId);
 
     // Clear ACTOR_FLAG_TALK so vanilla actor update doesn't see the talk request
     // and enter its talk-accept branch (which for some actors like Diving Game
@@ -815,131 +854,116 @@ static void CLM_OnAnyTextOpens(uint16_t* textId, bool* loadFromMessageTable) {
 
 // ── OnOpenText handlers: build each custom CLM message ──────────────────────
 
-#define CLM_BUILD_MSG(name, body)                                                      \
-    static void name(uint16_t* textId, bool* loadFromMessageTable) {                   \
-        CustomMessage msg = CustomMessage(body);                                       \
-        msg.AutoFormat();                                                              \
-        msg.LoadIntoFont();                                                            \
-        *loadFromMessageTable = false;                                                 \
+#define CLM_BUILD_MSG(name, body)                                    \
+    static void name(uint16_t* textId, bool* loadFromMessageTable) { \
+        CustomMessage msg = CustomMessage(body);                     \
+        msg.AutoFormat();                                            \
+        msg.LoadIntoFont();                                          \
+        *loadFromMessageTable = false;                               \
     }
 
 CLM_BUILD_MSG(BuildSyatekiChildFirst,
-    "Oh! A-a royal inspector?!^"
-    "Kid, you came for the weekly tally?^"
-    "Business has been slow -- only rats and crows want to test their aim these days.^"
-    "Here, take this as tribute. Tell His Majesty I'm behind on... paperwork.")
-CLM_BUILD_MSG(BuildSyatekiChildRepeat,
-    "Oh... back again, inspector?^"
-    "Business is still slow, sir. Here, take a little something for your trouble...")
+              "Oh! A-a royal inspector?!^"
+              "Kid, you came for the weekly tally?^"
+              "Business has been slow -- only rats and crows want to test their aim these days.^"
+              "Here, take this as tribute. Tell His Majesty I'm behind on... paperwork.")
+CLM_BUILD_MSG(BuildSyatekiChildRepeat, "Oh... back again, inspector?^"
+                                       "Business is still slow, sir. Here, take a little something for your trouble...")
 CLM_BUILD_MSG(BuildSyatekiAdultFirst,
-    "Ah! The King's tax man! Welcome, welcome, good sir!^"
-    "Great King Ganondorf's patrols have been so... thorough this moon.^"
-    "Truly, a golden age for commerce!^"
-    "Take this quiver -- no, PLEASE, I insist! A loyal subject is always eager to contribute!^"
-    "L-long may the King reign!")
-CLM_BUILD_MSG(BuildSyatekiAdultRepeat,
-    "Please send the Great King my warmest regards, good sir!^"
-    "Take this humble offering -- a loyal subject's duty!")
+              "Ah! The King's tax man! Welcome, welcome, good sir!^"
+              "Great King Ganondorf's patrols have been so... thorough this moon.^"
+              "Truly, a golden age for commerce!^"
+              "Take this quiver -- no, PLEASE, I insist! A loyal subject is always eager to contribute!^"
+              "L-long may the King reign!")
+CLM_BUILD_MSG(BuildSyatekiAdultRepeat, "Please send the Great King my warmest regards, good sir!^"
+                                       "Take this humble offering -- a loyal subject's duty!")
 
-CLM_BUILD_MSG(BuildBowlingFirst,
-    "Well, WELL... a tax collector? For the KING himself?^"
-    "My, my -- those royal robes must hide a very... generous purse, don't they?^"
-    "Come, sit closer. A man of your means deserves the VIP treatment.^"
-    "Take this little prize -- on the house. Next visit, you bring me something shiny.")
-CLM_BUILD_MSG(BuildBowlingRepeat,
-    "Back again, handsome? Still no jewelry? Tsk, tsk...^"
-    "Here, take a few rupees and run along now. I'm a busy woman.")
+CLM_BUILD_MSG(BuildBowlingFirst, "Well, WELL... a tax collector? For the KING himself?^"
+                                 "My, my -- those royal robes must hide a very... generous purse, don't they?^"
+                                 "Come, sit closer. A man of your means deserves the VIP treatment.^"
+                                 "Take this little prize -- on the house. Next visit, you bring me something shiny.")
+CLM_BUILD_MSG(BuildBowlingRepeat, "Back again, handsome? Still no jewelry? Tsk, tsk...^"
+                                  "Here, take a few rupees and run along now. I'm a busy woman.")
 
-CLM_BUILD_MSG(BuildIngoChild,
-    "That face...^"
-    "It's so familiar to me, in fact, it looks like me, but with a great depression.^"
-    "Like someone who has had dreams, but couldn't reach them because...^"
-    "Kid, take that off, please!^"
-    "I can't focus on work thinking about that!")
-CLM_BUILD_MSG(BuildIngoAdultPreTalon,
-    "That-!^"
-    "That face, it's... it's me! But...^"
-    "...No, it's my inner self.^"
-    "I see it so clearly, I thought taking this ranch would bring me joy, but...^"
-    "Why do I still feel...sad?^"
-    "...Talon, he was a lazy bum, but, he was also a friend.^"
-    "Yes, I can see it all so clearly.^"
-    "Kid, you have shown me the error of my ways, now I must make things right.^"
-    "I can't offer much, but I will allow you to take the red horse.^"
-    "Actually, I was training it for Ganondorf, but Malon spoke highly of you.^"
-    "I entrust you to take good care of her.^"
-    "And if Talon comes back, he can have the ranch, I accept my role.")
-CLM_BUILD_MSG(BuildIngoAdultPostTalon,
-    "That mask...^"
-    "Yes, that was me mere moments ago.^"
-    "Talon made sure I learned my lesson, and not just through words.^"
-    "Though, that's not the entire truth...^"
-    "I was feeling like that mask even before he came back.^"
-    "I can't understand the feeling, but, I must push past it.^"
-    "You don't have Malon's song, do you?^"
-    "She has taken a liking to you, kid, so...^"
-    "With their permission, you can have her horse.^"
-    "You'd just have to find the horse yourself if you lose her.")
-CLM_BUILD_MSG(BuildIngoAlready,
-    "...yes, the horse is yours, kid. Take her.")
+CLM_BUILD_MSG(BuildIngoChild, "That face...^"
+                              "It's so familiar to me, in fact, it looks like me, but with a great depression.^"
+                              "Like someone who has had dreams, but couldn't reach them because...^"
+                              "Kid, take that off, please!^"
+                              "I can't focus on work thinking about that!")
+CLM_BUILD_MSG(BuildIngoAdultPreTalon, "That-!^"
+                                      "That face, it's... it's me! But...^"
+                                      "...No, it's my inner self.^"
+                                      "I see it so clearly, I thought taking this ranch would bring me joy, but...^"
+                                      "Why do I still feel...sad?^"
+                                      "...Talon, he was a lazy bum, but, he was also a friend.^"
+                                      "Yes, I can see it all so clearly.^"
+                                      "Kid, you have shown me the error of my ways, now I must make things right.^"
+                                      "I can't offer much, but I will allow you to take the red horse.^"
+                                      "Actually, I was training it for Ganondorf, but Malon spoke highly of you.^"
+                                      "I entrust you to take good care of her.^"
+                                      "And if Talon comes back, he can have the ranch, I accept my role.")
+CLM_BUILD_MSG(BuildIngoAdultPostTalon, "That mask...^"
+                                       "Yes, that was me mere moments ago.^"
+                                       "Talon made sure I learned my lesson, and not just through words.^"
+                                       "Though, that's not the entire truth...^"
+                                       "I was feeling like that mask even before he came back.^"
+                                       "I can't understand the feeling, but, I must push past it.^"
+                                       "You don't have Malon's song, do you?^"
+                                       "She has taken a liking to you, kid, so...^"
+                                       "With their permission, you can have her horse.^"
+                                       "You'd just have to find the horse yourself if you lose her.")
+CLM_BUILD_MSG(BuildIngoAlready, "...yes, the horse is yours, kid. Take her.")
 
-CLM_BUILD_MSG(BuildTalonFirst,
+CLM_BUILD_MSG(
+    BuildTalonFirst,
     "Hur hur hur... a tax man? For the cuccos?^"
     "Well I'll be -- they're finally regulating poultry. 'Bout time...^"
     "Tell ya what, pardner. Take this bottle o' Lon Lon milk. Call it a... henhouse health fee, or somethin'.^"
     "Now excuse me, I was in the middle of a fine nap...")
-CLM_BUILD_MSG(BuildTalonAsleep,
-    "...zzz... zzz... hur hur... cuccos...")
+CLM_BUILD_MSG(BuildTalonAsleep, "...zzz... zzz... hur hur... cuccos...")
 
-CLM_BUILD_MSG(BuildMalonBuy,
-    "Pffft -- hahahahaha!^"
-    "Fairy boy? Is that YOU under there?!^"
-    "A tax collector? With those skinny arms? Oh goddesses, I'm gonna cry laughing...^"
-    "Okay, okay -- tell you what, 'tax man.' Just for the laughs...^"
-    "...How about I sell you a cow? Yeah, you heard me. A real live cow.^"
-    "100 rupees. And no haggling with that face.^"
-    "Heeheehee. Pleasure doing business with you, 'officer.'")
-CLM_BUILD_MSG(BuildMalonBroke,
-    "Pffft -- hahahaha!^"
-    "Fairy boy, is that YOU?^"
-    "A 'tax collector' who's BROKE? Oh that's the funniest thing I've heard all year.^"
-    "Come back when you've actually got coin, eh?")
-CLM_BUILD_MSG(BuildMalonRepeat,
-    "Already sold you one, fairy boy! Now shoo!")
+CLM_BUILD_MSG(BuildMalonBuy, "Pffft -- hahahahaha!^"
+                             "Fairy boy? Is that YOU under there?!^"
+                             "A tax collector? With those skinny arms? Oh goddesses, I'm gonna cry laughing...^"
+                             "Okay, okay -- tell you what, 'tax man.' Just for the laughs...^"
+                             "...How about I sell you a cow? Yeah, you heard me. A real live cow.^"
+                             "100 rupees. And no haggling with that face.^"
+                             "Heeheehee. Pleasure doing business with you, 'officer.'")
+CLM_BUILD_MSG(BuildMalonBroke, "Pffft -- hahahaha!^"
+                               "Fairy boy, is that YOU?^"
+                               "A 'tax collector' who's BROKE? Oh that's the funniest thing I've heard all year.^"
+                               "Come back when you've actually got coin, eh?")
+CLM_BUILD_MSG(BuildMalonRepeat, "Already sold you one, fairy boy! Now shoo!")
 
-CLM_BUILD_MSG(BuildHBAFirst,
-    "HOW did you get past the guards?!^"
-    "No men are allowed in this fortress -- ESPECIALLY not HYLIAN ones!^"
-    "...Of course. Another tax collector. Lord Ganondorf bleeds his OWN people dry now.^"
-    "His 'archery tariff' is strangling the training program. We used to rule this desert -- now we're just accountants for his crown.^"
-    "FINE. Take the prize. And tell him every sister here curses his name.")
-CLM_BUILD_MSG(BuildHBARepeat,
-    "Still here? Walk out before I change my mind.^"
-    "Take a few rupees. Don't come back.")
+CLM_BUILD_MSG(BuildHBAFirst, "HOW did you get past the guards?!^"
+                             "No men are allowed in this fortress -- ESPECIALLY not HYLIAN ones!^"
+                             "...Of course. Another tax collector. Lord Ganondorf bleeds his OWN people dry now.^"
+                             "His 'archery tariff' is strangling the training program. We used to rule this desert -- "
+                             "now we're just accountants for his crown.^"
+                             "FINE. Take the prize. And tell him every sister here curses his name.")
+CLM_BUILD_MSG(BuildHBARepeat, "Still here? Walk out before I change my mind.^"
+                              "Take a few rupees. Don't come back.")
 
-CLM_BUILD_MSG(BuildFishingFirst,
-    "Eh? A tax man? Out here? You walked ALL this way in those boots?^"
-    "Listen, between you and me, the pond's been pretty dry since the King changed...^"
-    "Take this and say you inspected. Nothin's biting anyway.")
-CLM_BUILD_MSG(BuildFishingRepeat,
-    "Still nothin' bitin'. Beat it.^"
-    "Here -- a few coins. Tell the King I'm cooperatin'.")
+CLM_BUILD_MSG(BuildFishingFirst, "Eh? A tax man? Out here? You walked ALL this way in those boots?^"
+                                 "Listen, between you and me, the pond's been pretty dry since the King changed...^"
+                                 "Take this and say you inspected. Nothin's biting anyway.")
+CLM_BUILD_MSG(BuildFishingRepeat, "Still nothin' bitin'. Beat it.^"
+                                  "Here -- a few coins. Tell the King I'm cooperatin'.")
 
 CLM_BUILD_MSG(BuildTakaraFirst,
-    "Shhh! Shhh! Keep it DOWN! A tax collector?! Here?!^"
-    "Look, officially I run a 'children's entertainment venue.' Off the books it's... less family-friendly.^"
-    "Here -- the prize from my best chest. Consider the paperwork filed. And you never saw me, understood?")
-CLM_BUILD_MSG(BuildTakaraRepeat,
-    "Still clean! Nothin' to audit! Take some coin and GO!")
+              "Shhh! Shhh! Keep it DOWN! A tax collector?! Here?!^"
+              "Look, officially I run a 'children's entertainment venue.' Off the books it's... less family-friendly.^"
+              "Here -- the prize from my best chest. Consider the paperwork filed. And you never saw me, understood?")
+CLM_BUILD_MSG(BuildTakaraRepeat, "Still clean! Nothin' to audit! Take some coin and GO!")
 
-CLM_BUILD_MSG(BuildDivingFirst,
+CLM_BUILD_MSG(
+    BuildDivingFirst,
     "A Hyrulean tax collector? In Zora waters?^"
     "...Our treaty with the surface throne is clear -- Zora's Domain pays in fish, not in rupees.^"
     "But the surface kings always want more coin, don't they?^"
     "Take this scale. Tell your king the fountain was inspected and found compliant. Tell him NOTHING of the rest.")
-CLM_BUILD_MSG(BuildDivingRepeat,
-    "Still compliant. Leave the fountain be.^"
-    "A small token for your troubles, collector.")
+CLM_BUILD_MSG(BuildDivingRepeat, "Still compliant. Leave the fountain be.^"
+                                 "A small token for your troubles, collector.")
 
 // ── Diving Game actionFunc snapshot ─────────────────────────────────────────
 //
@@ -951,15 +975,20 @@ CLM_BUILD_MSG(BuildDivingRepeat,
 static void CLM_OnDivingActorUpdate(void* actorRef) {
     EnDivingGame* dg = static_cast<EnDivingGame*>(actorRef);
     Player* player = (gPlayState != nullptr) ? GET_PLAYER(gPlayState) : nullptr;
-    if (player == nullptr) return;
+    if (player == nullptr)
+        return;
     // Skip if dialog is happening or our CLM is intercepting — actionFunc is
     // probably HandlePlayChoice or a transient state we don't want to capture.
-    if (player->stateFlags1 & PLAYER_STATE1_TALKING) return;
-    if (gStates.find(&dg->actor) != gStates.end()) return;
+    if (player->stateFlags1 & PLAYER_STATE1_TALKING)
+        return;
+    if (gStates.find(&dg->actor) != gStates.end())
+        return;
     // Skip if state isn't NOTPLAYING (could be in minigame)
-    if (dg->state != ENDIVINGGAME_STATE_NOTPLAYING) return;
+    if (dg->state != ENDIVINGGAME_STATE_NOTPLAYING)
+        return;
     // Skip if a talk request is mid-flight
-    if (dg->actor.flags & ACTOR_FLAG_TALK) return;
+    if (dg->actor.flags & ACTOR_FLAG_TALK)
+        return;
 
     gDivingSafeActionFunc[&dg->actor] = dg->actionFunc;
 }
@@ -982,36 +1011,36 @@ static void CLM_RegisterHooks() {
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnOpenText>(CLM_OnAnyTextOpens);
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnSceneInit>(CLM_OnSceneInit);
     // Snapshot Diving Game's safe actionFunc each frame for post-CLM recovery
-    GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnActorUpdate>(
-        ACTOR_EN_DIVING_GAME, CLM_OnDivingActorUpdate);
+    GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnActorUpdate>(ACTOR_EN_DIVING_GAME,
+                                                                                   CLM_OnDivingActorUpdate);
 
     auto reg = [](uint16_t id, void (*fn)(uint16_t*, bool*)) {
         GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnOpenText>(id, fn);
     };
 
-    reg(CLM_TEXT_SYATEKI_CHILD_FIRST,  BuildSyatekiChildFirst);
+    reg(CLM_TEXT_SYATEKI_CHILD_FIRST, BuildSyatekiChildFirst);
     reg(CLM_TEXT_SYATEKI_CHILD_REPEAT, BuildSyatekiChildRepeat);
-    reg(CLM_TEXT_SYATEKI_ADULT_FIRST,  BuildSyatekiAdultFirst);
+    reg(CLM_TEXT_SYATEKI_ADULT_FIRST, BuildSyatekiAdultFirst);
     reg(CLM_TEXT_SYATEKI_ADULT_REPEAT, BuildSyatekiAdultRepeat);
-    reg(CLM_TEXT_BOWLING_FIRST,        BuildBowlingFirst);
-    reg(CLM_TEXT_BOWLING_REPEAT,       BuildBowlingRepeat);
-    reg(CLM_TEXT_INGO_CHILD,           BuildIngoChild);
-    reg(CLM_TEXT_INGO_ADULT_PRETALON,  BuildIngoAdultPreTalon);
+    reg(CLM_TEXT_BOWLING_FIRST, BuildBowlingFirst);
+    reg(CLM_TEXT_BOWLING_REPEAT, BuildBowlingRepeat);
+    reg(CLM_TEXT_INGO_CHILD, BuildIngoChild);
+    reg(CLM_TEXT_INGO_ADULT_PRETALON, BuildIngoAdultPreTalon);
     reg(CLM_TEXT_INGO_ADULT_POSTTALON, BuildIngoAdultPostTalon);
-    reg(CLM_TEXT_INGO_ALREADY,         BuildIngoAlready);
-    reg(CLM_TEXT_TALON_FIRST,          BuildTalonFirst);
-    reg(CLM_TEXT_TALON_ASLEEP,         BuildTalonAsleep);
-    reg(CLM_TEXT_MALON_BUY,            BuildMalonBuy);
-    reg(CLM_TEXT_MALON_BROKE,          BuildMalonBroke);
-    reg(CLM_TEXT_MALON_REPEAT,         BuildMalonRepeat);
-    reg(CLM_TEXT_HBA_FIRST,            BuildHBAFirst);
-    reg(CLM_TEXT_HBA_REPEAT,           BuildHBARepeat);
-    reg(CLM_TEXT_FISHING_FIRST,        BuildFishingFirst);
-    reg(CLM_TEXT_FISHING_REPEAT,       BuildFishingRepeat);
-    reg(CLM_TEXT_TAKARA_FIRST,         BuildTakaraFirst);
-    reg(CLM_TEXT_TAKARA_REPEAT,        BuildTakaraRepeat);
-    reg(CLM_TEXT_DIVING_FIRST,         BuildDivingFirst);
-    reg(CLM_TEXT_DIVING_REPEAT,        BuildDivingRepeat);
+    reg(CLM_TEXT_INGO_ALREADY, BuildIngoAlready);
+    reg(CLM_TEXT_TALON_FIRST, BuildTalonFirst);
+    reg(CLM_TEXT_TALON_ASLEEP, BuildTalonAsleep);
+    reg(CLM_TEXT_MALON_BUY, BuildMalonBuy);
+    reg(CLM_TEXT_MALON_BROKE, BuildMalonBroke);
+    reg(CLM_TEXT_MALON_REPEAT, BuildMalonRepeat);
+    reg(CLM_TEXT_HBA_FIRST, BuildHBAFirst);
+    reg(CLM_TEXT_HBA_REPEAT, BuildHBARepeat);
+    reg(CLM_TEXT_FISHING_FIRST, BuildFishingFirst);
+    reg(CLM_TEXT_FISHING_REPEAT, BuildFishingRepeat);
+    reg(CLM_TEXT_TAKARA_FIRST, BuildTakaraFirst);
+    reg(CLM_TEXT_TAKARA_REPEAT, BuildTakaraRepeat);
+    reg(CLM_TEXT_DIVING_FIRST, BuildDivingFirst);
+    reg(CLM_TEXT_DIVING_REPEAT, BuildDivingRepeat);
 
     SPDLOG_INFO("[CLM] hooks registered OK ({} adapters)", sizeof(kAdapters) / sizeof(kAdapters[0]));
 }

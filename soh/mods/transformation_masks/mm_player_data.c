@@ -23,6 +23,8 @@ u8 sMmPlayerMass[MM_PLAYER_FORM_MAX] = {
     50,  // MM_PLAYER_FORM_PIKACHU (not used by MM physics — placeholder)
     50,  // MM_PLAYER_FORM_GARO (not used by MM physics — placeholder)
     55,  // MM_PLAYER_FORM_GERUDO (agile warrior, slightly above human)
+    50,  // MM_PLAYER_FORM_RITO (human build — hollow-boned, but Link's mass)
+    50,  // MM_PLAYER_FORM_KEATON (fox, human build — same as human)
 };
 
 // =============================================================================
@@ -41,6 +43,8 @@ const char* sMmMaskOffAnims[MM_PLAYER_FORM_MAX] = {
     "__OTR__objects/gameplay_keep/gPlayerAnim_cl_setmask",      // PIKACHU (uses human)
     "__OTR__objects/gameplay_keep/gPlayerAnim_cl_setmask",      // GARO (uses human)
     "__OTR__objects/gameplay_keep/gPlayerAnim_cl_setmask",      // GERUDO (humanoid — uses human)
+    "__OTR__objects/gameplay_keep/gPlayerAnim_cl_setmask",      // RITO (humanoid — uses human)
+    "__OTR__objects/gameplay_keep/gPlayerAnim_cl_setmask",      // KEATON (humanoid — uses human)
 };
 
 // =============================================================================
@@ -57,6 +61,8 @@ const char* sMmOcarinaStartAnims[MM_PLAYER_FORM_MAX] = {
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_okarina_start", // PIKACHU
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_okarina_start", // GARO
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_okarina_start", // GERUDO (human bipedal)
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_okarina_start", // RITO (human bipedal)
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_okarina_start", // KEATON (human bipedal)
 };
 
 // Ocarina play animations (from z_player.c D_8085D190)
@@ -69,6 +75,8 @@ const char* sMmOcarinaPlayAnims[MM_PLAYER_FORM_MAX] = {
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_okarina_swing", // PIKACHU
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_okarina_swing", // GARO
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_okarina_swing", // GERUDO
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_okarina_swing", // RITO
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_okarina_swing", // KEATON
 };
 
 // =============================================================================
@@ -85,6 +93,8 @@ const char* sMmDoorAOpenAnims[MM_PLAYER_FORM_MAX] = {
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_doorA_open",      // PIKACHU
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_doorA_open",      // GARO
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_doorA_open",      // GERUDO
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_doorA_open",      // RITO
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_doorA_open",      // KEATON
 };
 
 // Door B (right) open animations
@@ -97,6 +107,8 @@ const char* sMmDoorBOpenAnims[MM_PLAYER_FORM_MAX] = {
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_doorB_open",      // PIKACHU
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_doorB_open",      // GARO
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_doorB_open",      // GERUDO
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_doorB_open",      // RITO
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_doorB_open",      // KEATON
 };
 
 // =============================================================================
@@ -150,7 +162,7 @@ Vec3f sMmDekuRightHandOffset = { 30.0f, 50.0f, 0.0f };
 const char* sMmGerudoIdleAnim = "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_wait";
 
 // Slash combo hit 1 (R-slash). User chose link_normal_light_bom (has _end recovery variant).
-const char* sMmGerudoSlash1Anim    = "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_light_bom";
+const char* sMmGerudoSlash1Anim = "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_light_bom";
 const char* sMmGerudoSlash1EndAnim = "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_light_bom_end";
 
 // Slash combo hit 2 (L-slash).
@@ -181,6 +193,8 @@ s16 sMmTransformTiming[MM_PLAYER_FORM_MAX][3] = {
     { 0, 14, 20 }, // PIKACHU
     { 0, 14, 20 }, // GARO
     { 0, 14, 20 }, // GERUDO
+    { 0, 14, 20 }, // RITO
+    { 0, 14, 20 }, // KEATON
 };
 
 // Week event flags by mask (D_8085D908)

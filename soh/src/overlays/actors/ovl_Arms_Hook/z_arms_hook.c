@@ -20,15 +20,28 @@ void ArmsHook_Shoot(ArmsHook* this, PlayState* play);
 void ArmsHook_SwitchSwap(ArmsHook* this, PlayState* play); // Skijer's NEI switchhook: OoA swap state
 
 // Skijer's NEI switchhook — Oracle of Ages INSTANT position swap (one hook exists at a time, so module
-// statics are safe). StartSwap teleports both actors into each other's spot; SwitchSwap then HOLDS them
-// there for a couple frames so each actor's collider (repositioned from world.pos in its OWN update)
-// catches up and the aim action can't clobber the teleport, then releases Link. sSwap*Start = each
-// actor's ORIGINAL spot, which is the OTHER actor's destination.
+// statics are safe). StartSwap snapshots both actors' hitboxes and teleports them into each other's
+// spot; SwitchSwap then HOLDS them there for a couple frames so the aim action can't clobber the
+// teleport, then releases Link; ArmsHook_Update re-anchors the hitboxes onto their real position every
+// frame meanwhile. sSwap*Start = each actor's ORIGINAL spot, which is the OTHER actor's destination.
 #define ARMSHOOK_SWAP_HOLD_FRAMES 2
 static Vec3f sSwapLinkStart;
 static Vec3f sSwapTargetStart;
 static Actor* sSwapTarget;
 static s16 sSwapTimer;
+
+// Skijer's NEI switchhook — hitbox re-anchoring (item_switchhook.c). world.pos moves the model, never
+// the colliders, and a one-shot shift by the teleport vector is not enough: after the swap each actor
+// is still moved by its OWN update — shoved back out of a wall it materialised inside, dropped onto
+// the floor below — and the hitbox has to follow every bit of that. So both actors are re-anchored
+// onto their current position each frame until they stop moving. The window is generous because a
+// swapped object can fall for a while; re-anchoring is an absolute reposition, so it costs nothing to
+// keep running and cannot drift.
+#define ARMSHOOK_SWAP_SETTLE_FRAMES 40
+extern void SwitchHook_CaptureSwapColliders(PlayState* play, s32 slot, Actor* actor);
+extern void SwitchHook_ReanchorSwapColliders(PlayState* play);
+extern void SwitchHook_ClearSwapColliders(void);
+static s16 sSwapAnchorTimer = 0;
 
 // Skijer's NEI switchhook — while > 0, the PLAYER's scene collision is fully bypassed, exactly like
 // the NoClip cheat CVar (z_bgcheck.c consults SwitchHook_PlayerNoClip() next to that CVar), so the
@@ -137,11 +150,13 @@ void ArmsHook_Destroy(Actor* thisx, PlayState* play) {
     sSwitchSelection = NULL;
     sSwapTarget = NULL;
     sSwitchNoClipTimer = 0;
+    sSwapAnchorTimer = 0;
+    SwitchHook_ClearSwapColliders();
     Collider_DestroyQuad(play, &this->collider);
 }
 
 void ArmsHook_Wait(ArmsHook* this, PlayState* play) {
-    extern u8 Nei_ArmsHookVariant(Player* player);
+    extern u8 Nei_ArmsHookVariant(Player * player);
 
     // Skijer's NEI switchhook — Ultrahand-style live selection: every frame the hook is IN HAND,
     // pick the swappable actor in Link's look direction (Y ignored, longshot range) and tint it
@@ -181,7 +196,7 @@ void ArmsHook_Wait(ArmsHook* this, PlayState* play) {
         // the shot simply doesn't come out (error beep, hook stays in hand).
         if (variant == 4) {
             extern s32 SwitchHook_ConsumeCharge(void);
-            extern void SwitchHook_OnFired(Player* p);
+            extern void SwitchHook_OnFired(Player * p);
 
             if (!SwitchHook_ConsumeCharge()) {
                 // Should not be reached (func_808350A4 blocks the launch player-side first), but if
@@ -304,17 +319,22 @@ void ArmsHook_AttachHookToActor(ArmsHook* this, Actor* actor) {
 // Skijer's NEI switchhook — begin the position swap with `target`: record start positions, STUN the
 // target if it's an enemy (blue freeze, like the hookshot), SILENCE the flying-hook rattle, play the
 // swap sfx, and hand off to the swap-hold state.
-static void ArmsHook_StartSwap(ArmsHook* this, Player* player, Actor* target) {
-    sSwapLinkStart = player->actor.world.pos;  // Link's original spot = target's destination
-    sSwapTargetStart = target->world.pos;      // target's original spot = Link's destination
+static void ArmsHook_StartSwap(ArmsHook* this, PlayState* play, Player* player, Actor* target) {
+    sSwapLinkStart = player->actor.world.pos; // Link's original spot = target's destination
+    sSwapTargetStart = target->world.pos;     // target's original spot = Link's destination
     sSwapTarget = target;
     sSwapTimer = 0;
     // Full player noclip (the NoClip cheat mechanism) through the swap + a few settle frames.
     sSwitchNoClipTimer = ARMSHOOK_SWAP_HOLD_FRAMES + 6;
 
+    // Snapshot both actors' hitboxes WHILE THEY ARE STILL AT REST — the offsets recorded here are what
+    // "the collider sits here relative to its actor" means for the rest of the swap.
+    SwitchHook_CaptureSwapColliders(play, 0, &player->actor);
+    SwitchHook_CaptureSwapColliders(play, 1, target);
+
     // INSTANT teleport: move BOTH actors (world.pos, prevPos, home.pos) into each other's spot right
-    // away, freezing their physics. Everything — collider, DL, bg checks — moves with world.pos; the
-    // brief hold in ArmsHook_SwitchSwap lets the colliders catch up next frame.
+    // away, freezing their physics. world.pos carries the model, the bg checks and the dyna mesh —
+    // but NOT the colliders, which is what the re-anchor at the end of this function is for.
     player->actor.world.pos = sSwapTargetStart;
     player->actor.prevPos = sSwapTargetStart;
     player->actor.velocity.x = 0.0f;
@@ -335,6 +355,15 @@ static void ArmsHook_StartSwap(ArmsHook* this, Player* player, Actor* target) {
     target->velocity.z = 0.0f;
     target->speedXZ = 0.0f;
     target->bgCheckFlags = 0;
+
+    // Skijer's NEI switchhook — MOVE THE HITBOXES, not just the models (the snapshot above was taken
+    // before the teleport). world.pos alone leaves every collider behind, and a one-shot shift by the
+    // teleport vector is not enough either: both actors keep being moved AFTER this — shoved back out
+    // of a wall they materialised inside, dropped onto the floor below — and the hitbox has to follow
+    // all of that. ArmsHook_Update re-anchors them onto their current position every frame until they
+    // settle; this first pass just gets them right for the swap frame itself.
+    SwitchHook_ReanchorSwapColliders(play);
+    sSwapAnchorTimer = ARMSHOOK_SWAP_SETTLE_FRAMES;
 
     // Recolor the selected actor (highlight — the Ultrahand "recolor your selection" feel). For
     // enemies this doubles as the hookshot stun (blue freeze); props/chests/NPCs just flash to show
@@ -367,7 +396,7 @@ static void ArmsHook_StartSwap(ArmsHook* this, Player* player, Actor* target) {
 void ArmsHook_Shoot(ArmsHook* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
     // Skijer's NEI hookshot overhaul: which variant is in flight (fixed for the duration of the shot).
-    extern u8 Nei_ArmsHookVariant(Player* player);
+    extern u8 Nei_ArmsHookVariant(Player * player);
     u8 hookVariant = Nei_ArmsHookVariant(player);
     u8 clawshot = (hookVariant == 3);   // NEI_HOOK_VARIANT_CLAWSHOT
     u8 switchhook = (hookVariant == 4); // NEI_HOOK_VARIANT_SWITCHHOOK — swaps positions on hit
@@ -409,7 +438,7 @@ void ArmsHook_Shoot(ArmsHook* this, PlayState* play) {
         // hit run the same swap, and never let the switch hook fall through to the vanilla grab/pull.
         if (switchhook) {
             if (ArmsHook_IsSwappable(touchedActor)) {
-                ArmsHook_StartSwap(this, player, touchedActor);
+                ArmsHook_StartSwap(this, play, player, touchedActor);
                 return;
             }
         }
@@ -544,7 +573,7 @@ void ArmsHook_Shoot(ArmsHook* this, PlayState* play) {
                     swapTarget = ArmsHook_FindSwappable(play, &this->actor.world.pos, 45.0f);
                 }
                 if (swapTarget != NULL) {
-                    ArmsHook_StartSwap(this, player, swapTarget);
+                    ArmsHook_StartSwap(this, play, player, swapTarget);
                     return;
                 }
             }
@@ -631,8 +660,8 @@ void ArmsHook_SwitchSwap(ArmsHook* this, PlayState* play) {
         return;
     }
 
-    // Keep BOTH pinned at their (already-swapped) destinations. Nothing MOVES, so the colliders don't
-    // lag — they simply resync to world.pos in each actor's own update.
+    // Keep BOTH pinned at their (already-swapped) destinations. The hitboxes need no attention here:
+    // ArmsHook_Update re-anchors them onto whatever position this leaves behind, every frame.
     player->actor.world.pos = sSwapTargetStart; // Link's destination
     player->actor.prevPos = sSwapTargetStart;
     player->actor.velocity.x = 0.0f;
@@ -675,6 +704,18 @@ void ArmsHook_Update(Actor* thisx, PlayState* play) {
     }
 
     this->actionFunc(this, play);
+
+    // Skijer's NEI switchhook — pin both swapped actors' hitboxes onto wherever they ACTUALLY are now.
+    // This runs after the action func so it sees the final position for the frame, and it keeps running
+    // for a while after the swap releases so wall push-outs and falls carry the colliders with them.
+    if (sSwapAnchorTimer > 0) {
+        sSwapAnchorTimer--;
+        SwitchHook_ReanchorSwapColliders(play);
+        if (sSwapAnchorTimer == 0) {
+            SwitchHook_ClearSwapColliders();
+        }
+    }
+
     this->unk_1F4 = this->unk_1E8;
 }
 
@@ -731,7 +772,7 @@ void ArmsHook_Draw(Actor* thisx, PlayState* play) {
         {
             extern u8 TwilightUpgrade_IsClawshotActive(void);
             extern void* MmAssets_LoadHookshotTipDL(void);
-            extern Gfx* MmDL_Or(Gfx* vanillaDL, Gfx* mmDL);
+            extern Gfx* MmDL_Or(Gfx * vanillaDL, Gfx * mmDL);
             u8 isShooting = (this->actionFunc == ArmsHook_Shoot) && (this->timer > 0);
             if (GameInteractor_Should(VB_DRAW_HOOKSHOT_TIP, true, player, play)) {
                 Gfx* tipDL = gLinkAdultHookshotTipDL;
@@ -768,7 +809,7 @@ void ArmsHook_Draw(Actor* thisx, PlayState* play) {
         {
             extern u8 TwilightUpgrade_IsClawshotActive(void);
             extern void* MmAssets_LoadHookshotChainDL(void);
-            extern Gfx* MmDL_Or(Gfx* vanillaDL, Gfx* mmDL);
+            extern Gfx* MmDL_Or(Gfx * vanillaDL, Gfx * mmDL);
             Gfx* chainDL = gLinkAdultHookshotChainDL;
             if (TwilightUpgrade_IsClawshotActive()) {
                 chainDL = MmDL_Or(chainDL, (Gfx*)MmAssets_LoadHookshotChainDL());

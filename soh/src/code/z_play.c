@@ -684,6 +684,13 @@ void Play_Init(GameState* thisx) {
     gPlayState->nextEntranceIndex = gSaveContext.entranceIndex;
 }
 
+// Generic hold-button box selector (Sheikah Slate runes, ...). Declared locally rather than via a
+// header: mods/*.h is globbed with CONFIGURE_DEPENDS, so a new header there forces a full CMake
+// regeneration. Definitions live in mods/items/helpers/box_menu.c. Skijer's NEI
+u8 BoxMenu_IsOpen(void);
+void BoxMenu_Update(PlayState* play);
+void BoxMenu_Draw(PlayState* play);
+
 void Play_Update(PlayState* play) {
     Input* input = play->state.input;
     s32 isPaused;
@@ -1205,6 +1212,21 @@ void Play_Update(PlayState* play) {
 
                     PLAY_LOG(3637);
 
+                    // PICTOGRAPH BOX (Skijer's NEI): the lens/photo state machine. It runs HERE, and
+                    // specifically BEFORE Actor_UpdateAll, for two reasons:
+                    //   1. The shutter halts every actor exactly like MM (z_parameter.c sets
+                    //      play->haltAllActors at PICTO_BOX_STATE_SETUP_PHOTO). A player-driven tick
+                    //      would freeze with the world and nobody could answer the keep/discard prompt.
+                    //   2. While the lens is up the pictograph OWNS A and B, and it takes them out of
+                    //      the input before Link ever reads them — otherwise his own A handling drops
+                    //      him out of first-person on the very frame we fire, and the picture comes out
+                    //      in third person.
+                    // MM runs its picto logic from the interface update for the same reasons.
+                    {
+                        extern void Picto_Update(PlayState * play);
+                        Picto_Update(play);
+                    }
+
                     if (!play->haltAllActors) {
                         Actor_UpdateAll(play, &play->actorCtx);
                     }
@@ -1272,7 +1294,10 @@ void Play_Update(PlayState* play) {
 
             if ((play->pauseCtx.state != 0) || (play->pauseCtx.debugState != 0)) {
                 PLAY_LOG(3721);
-                if (gCustomItemState.minishCapWarpMode) {
+                if (BoxMenu_IsOpen()) {
+                    // Generic hold-button box selector (Sheikah Slate runes, ...). Skijer's NEI
+                    BoxMenu_Update(play);
+                } else if (gCustomItemState.minishCapWarpMode) {
                     MinishKaleido_Update(play);
                 } else if (gCustomItemState.postmanHatWarpMode) {
                     PostmanKaleido_Update(play);
@@ -1343,7 +1368,7 @@ skip:
 
 void Play_DrawOverlayElements(PlayState* play) {
     if ((play->pauseCtx.state != 0) || (play->pauseCtx.debugState != 0)) {
-        if (!gCustomItemState.minishCapWarpMode && !gCustomItemState.postmanHatWarpMode &&
+        if (!BoxMenu_IsOpen() && !gCustomItemState.minishCapWarpMode && !gCustomItemState.postmanHatWarpMode &&
             !MmMaskWear_IsGreatFairyWarpActive()) {
             KaleidoScopeCall_Draw(play);
         }
@@ -1368,6 +1393,9 @@ void Play_DrawOverlayElements(PlayState* play) {
     } else if (gCustomItemState.postmanHatWarpMode) {
         PostmanKaleido_Draw(play);
     }
+
+    // Generic box selector — drawn after everything else so it sits on top. Skijer's NEI
+    BoxMenu_Draw(play);
 }
 
 void Play_Draw(PlayState* play) {

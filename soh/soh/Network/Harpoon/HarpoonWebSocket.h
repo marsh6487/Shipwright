@@ -31,9 +31,9 @@
 
 class HarpoonWebSocket {
   public:
-    using TextHandler        = std::function<void(const std::string&)>;
-    using ConnectHandler     = std::function<void()>;
-    using DisconnectHandler  = std::function<void()>;
+    using TextHandler = std::function<void(const std::string&)>;
+    using ConnectHandler = std::function<void()>;
+    using DisconnectHandler = std::function<void()>;
 
     HarpoonWebSocket();
     ~HarpoonWebSocket();
@@ -46,12 +46,22 @@ class HarpoonWebSocket {
     void SendText(const std::string& payload);
 
     // Callbacks (set once before Connect).
-    void SetOnText(TextHandler h)            { onText_ = std::move(h); }
-    void SetOnConnected(ConnectHandler h)    { onConnected_ = std::move(h); }
-    void SetOnDisconnected(DisconnectHandler h) { onDisconnected_ = std::move(h); }
+    void SetOnText(TextHandler h) {
+        onText_ = std::move(h);
+    }
+    void SetOnConnected(ConnectHandler h) {
+        onConnected_ = std::move(h);
+    }
+    void SetOnDisconnected(DisconnectHandler h) {
+        onDisconnected_ = std::move(h);
+    }
 
-    bool IsEnabled()   const { return enabled_.load(); }
-    bool IsConnected() const { return connectedAndHandshakeDone_.load(); }
+    bool IsEnabled() const {
+        return enabled_.load();
+    }
+    bool IsConnected() const {
+        return connectedAndHandshakeDone_.load();
+    }
 
   private:
     IPaddress address_{};
@@ -74,9 +84,9 @@ class HarpoonWebSocket {
     std::string rxBuffer_;
     std::string textAccum_;
 
-    TextHandler        onText_;
-    ConnectHandler     onConnected_;
-    DisconnectHandler  onDisconnected_;
+    TextHandler onText_;
+    ConnectHandler onConnected_;
+    DisconnectHandler onDisconnected_;
 
     // Worker.
     void RunLoop();

@@ -8,8 +8,17 @@
 #include "pool_functions.hpp"
 #include "../hint.h"
 #include "../static_data.h"
+#include "soh/FleetShipCombo/FleetComboRando.h"
 
 using namespace Rando;
+
+// Combo rando (OoT+MM): an item placed in Majora's Mask is not in ctx->allLocations, so
+// FindItemsAndMarkHinted returns RC_UNKNOWN_CHECK for it. Without this the hint would have no area
+// and the message would show a raw [[N]] token. We ask the combo for the real area of the MM check it
+// landed in ("Great Bay Temple"). Empty string = the item is not in MM, or no combo is active.
+static std::string ForeignAreaForItem(RandomizerGet item) {
+    return FleetCombo_GetMmAreaForOotItem((int)item);
+}
 
 HintDistributionSetting::HintDistributionSetting(std::string _name, HintType _type, uint32_t _weight, uint8_t _fixed,
                                                  uint8_t _copies, std::function<bool(RandomizerCheck)> _filter,
@@ -734,6 +743,7 @@ static void CreateAltarHint(RandomizerHint hintKey, HintType hintType, std::vect
     }
     std::vector<RandomizerCheck> locs = {};
     std::vector<RandomizerArea> areas = {};
+    std::vector<std::string> foreignAreas = {};
     if (ctx->GetOption(RSK_TOT_ALTAR_HINT)) {
         // force marking the rewards as hinted if they are at the end of dungeons as they can be inferred
         const bool rewardsInferrable =
@@ -741,13 +751,23 @@ static void CreateAltarHint(RandomizerHint hintKey, HintType hintType, std::vect
             ctx->GetOption(RSK_SHUFFLE_DUNGEON_REWARDS).Is(RO_DUNGEON_REWARDS_VANILLA);
         locs = FindItemsAndMarkHinted(rewards, rewardsInferrable ? std::vector<RandomizerCheck>{}
                                                                  : std::vector<RandomizerCheck>{ altarCheck });
-        for (auto loc : locs) {
-            if (loc != RC_UNKNOWN_CHECK) {
-                areas.push_back(ctx->GetItemLocation(loc)->GetRandomArea());
+        // `areas` MUST stay aligned 1:1 with `locs` (and with `rewards`): the altar template has one
+        // [[N]] slot per reward and InsertNames only substitutes up to areas.size(). This used to skip
+        // the ones it could not find, so in the combo (rewards living in MM) the array came out short
+        // and the leftover [[N]] printed literally, on top of shifting the indices of the ones that
+        // were found. Now every slot gets an entry: an OoT area, or MM's real area. Skijer's NEI
+        for (size_t i = 0; i < locs.size(); i++) {
+            if (locs[i] != RC_UNKNOWN_CHECK) {
+                areas.push_back(ctx->GetItemLocation(locs[i])->GetRandomArea());
+                foreignAreas.push_back("");
+            } else {
+                areas.push_back(RA_NONE);
+                foreignAreas.push_back(i < rewards.size() ? ForeignAreaForItem(rewards[i]) : "");
             }
         }
     }
     ctx->AddHint(hintKey, Hint(hintKey, hintType, {}, locs, areas));
+    ctx->GetHint(hintKey)->SetForeignAreas(foreignAreas);
 }
 
 void CreateChildAltarHint() {
@@ -779,13 +799,25 @@ void CreateStaticHintFromData(RandomizerHint hint, StaticHintInfo staticData) {
                 }
             }
             std::vector<RandomizerArea> areas = {};
-            for (auto loc : locations) {
+            std::vector<std::string> foreignAreas = {};
+            for (size_t i = 0; i < locations.size(); i++) {
+                RandomizerCheck loc = locations[i];
+                // In the combo an item placed in MM arrives here as RC_UNKNOWN_CHECK; resolve its
+                // real MM area instead of leaving the slot unnamed. Skijer's NEI
+                std::string foreign;
+                if (loc == RC_UNKNOWN_CHECK && i < staticData.targetItems.size()) {
+                    foreign = ForeignAreaForItem(staticData.targetItems[i]);
+                }
+                foreignAreas.push_back(foreign);
+
                 ctx->GetItemLocation(loc)->SetHintAccesible();
                 if (ctx->GetItemLocation(loc)->GetAreas().empty()) {
                     // If we get to here then it means a location got through with no area assignment, which means
                     // something went wrong elsewhere.
-                    SPDLOG_DEBUG("Attempted to hint location with no areas: ");
-                    SPDLOG_DEBUG(Rando::StaticData::GetLocation(loc)->GetName());
+                    if (foreign.empty()) {
+                        SPDLOG_DEBUG("Attempted to hint location with no areas: ");
+                        SPDLOG_DEBUG(Rando::StaticData::GetLocation(loc)->GetName());
+                    }
                     // assert(false);
                     areas.push_back(RA_NONE);
                 } else {
@@ -795,6 +827,7 @@ void CreateStaticHintFromData(RandomizerHint hint, StaticHintInfo staticData) {
             // hintKeys are defaulted to in the hint object and do not need to be specified
             ctx->AddHint(hint,
                          Hint(hint, staticData.type, {}, locations, areas, {}, staticData.yourPocket, staticData.num));
+            ctx->GetHint(hint)->SetForeignAreas(foreignAreas);
         }
     }
 }
@@ -804,13 +837,31 @@ void CreateStaticItemHint(RandomizerHint hintKey, std::vector<RandomizerHintText
                           bool yourPocket = false) {
     // RANDOTODO choose area in case there are multiple
     auto ctx = Rando::Context::GetInstance();
-    std::vector<RandomizerCheck> locations = FindItemsAndMarkHinted(items, hintChecks);
+    // Combo rando: a hint names a concrete item, but the combo may only carry the chain that grants
+    // it — the Ganondorf hint asks for RG_MASTER_SWORD while the pool holds
+    // RG_PROGRESSIVE_MASTER_SWORD. Searching for the concrete id finds nothing, so the hint said "the
+    // sacred blade from an Isolated Place" even with the sword sitting in Hyrule. Translate first and
+    // the search finds it in whichever world it landed in. No-op outside a combo. Skijer's NEI
+    std::vector<RandomizerGet> searchItems = items;
+    for (RandomizerGet& item : searchItems) {
+        int chain = FleetCombo_ChainForItem((int)item);
+        if (chain != 0) {
+            item = (RandomizerGet)chain;
+        }
+    }
+    std::vector<RandomizerCheck> locations = FindItemsAndMarkHinted(searchItems, hintChecks);
     std::vector<RandomizerArea> areas;
+    std::vector<std::string> foreignAreas;
     areas.reserve(locations.size());
-    for (auto loc : locations) {
-        areas.push_back(loc == RC_UNKNOWN_CHECK ? RA_NONE : ctx->GetItemLocation(loc)->GetRandomArea());
+    foreignAreas.reserve(locations.size());
+    for (size_t i = 0; i < locations.size(); i++) {
+        bool unknown = locations[i] == RC_UNKNOWN_CHECK;
+        areas.push_back(unknown ? RA_NONE : ctx->GetItemLocation(locations[i])->GetRandomArea());
+        // Unknown to OoT usually means "it is in MM" when a combo is active. Skijer's NEI
+        foreignAreas.push_back(unknown && i < searchItems.size() ? ForeignAreaForItem(searchItems[i]) : "");
     }
     ctx->AddHint(hintKey, Hint(hintKey, HINT_TYPE_AREA, hintTextKeys, locations, areas, {}, yourPocket));
+    ctx->GetHint(hintKey)->SetForeignAreas(foreignAreas);
 }
 
 void CreateGanondorfJoke() {

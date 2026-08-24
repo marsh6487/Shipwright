@@ -38,11 +38,22 @@ typedef struct SSBBSkinMesh {
     MtxF f64ToDae;                  // inverse(DaeToF64), pre-computed by converter
     Gfx* displayList;               // single DL, vertices via segment 0x08
     Gfx* materialDL;                // material DL (texture load + combiner), NULL = flat color
+    // Brawl characters use three leading motion bones whose translation must be
+    // discarded because Actor.world.pos owns movement.  Native/custom rigs can
+    // opt out and keep their real root transform (Wolf Link uses this).
+    u8 neutralizeRootMotion;
     // Secondary mesh (eyes, etc.) — drawn after main mesh with different material
     struct SSBBSkinMesh* secondaryMesh; // NULL = no secondary mesh
     // Runtime state (allocated at init, not generated)
     Vtx* vtxBuf[2]; // double-buffered Vtx arrays
     u8 bufIndex;    // current write buffer (0 or 1)
+    // Blend each bone's TRS between the two frames around the fractional
+    // curFrame instead of snapping to the integer one.  Off by default so the
+    // Brawl rigs keep their exact per-frame poses; Wolf Link turns it on
+    // because its 30 fps clips play at 1.5 frames per 20 Hz tick and would
+    // stutter otherwise.  Only safe when consecutive frames have continuous
+    // Euler angles (the wolf exporter guarantees that).
+    u8 interpolateFrames;
 } SSBBSkinMesh;
 
 // Initialize skin mesh runtime buffers (allocate Vtx double buffers)
@@ -53,5 +64,8 @@ void SSBBSkin_Destroy(SSBBSkinMesh* skin);
 
 // Full skinned draw: compute bone matrices, blend vertices, draw DL
 void SSBBSkin_Draw(SSBBCharacterInstance* inst, PlayState* play, Vec3f* pos, Vec3s* rot);
+
+// Model-space bone position from the last draw (see ssbb_skin.c)
+s32 SSBBSkin_GetBoneWorldPos(s32 boneIndex, Vec3f* out);
 
 #endif // SSBB_SKIN_H

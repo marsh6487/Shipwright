@@ -12,6 +12,7 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -28,41 +29,6 @@ extern "C" {
 #include "mods/transformation_masks/transformation_masks.h"
 #include "mods/pak_loader/pak_loader.h"
 #include "mods/voice_pack/voice_pack.h"
-#include "mods/nei_save.h" // Skijer's NEI — ultrashotOwned (Ultrashot toggle)
-void TwilightUpgrade_Grant(void);
-extern unsigned char TwilightUpgrade_HasClawshot(void);
-extern unsigned char TwilightUpgrade_HasBombArrows(void);
-extern unsigned char TwilightUpgrade_HasGaleBoomerang(void);
-void TwilightUpgrade_SetClawshot(unsigned char on);
-void TwilightUpgrade_SetBombArrows(unsigned char on);
-void TwilightUpgrade_SetGaleBoomerang(unsigned char on);
-// NEI Weapon Upgrades (mods/items/logic/weapon_upgrades.c)
-extern unsigned char WeaponUpgrade_HasHammerAxe(void);
-extern unsigned char WeaponUpgrade_HasRazor(void);
-extern unsigned char WeaponUpgrade_HasGilded(void);
-extern unsigned char WeaponUpgrade_HasTrueMaster(void);
-extern unsigned char WeaponUpgrade_HasGreatFairy(void);
-void WeaponUpgrade_SetHammerAxe(unsigned char on);
-void WeaponUpgrade_SetRazor(unsigned char on);
-void WeaponUpgrade_SetGilded(unsigned char on);
-void WeaponUpgrade_SetTrueMaster(unsigned char on);
-void WeaponUpgrade_SetGreatFairy(unsigned char on);
-void WeaponUpgrade_GrantAll(void);
-
-// Pictograph Box (mods/items/logic/picto_box.c)
-extern unsigned char Picto_IsOwned(void);
-void Picto_SetOwned(unsigned char on);
-void Picto_TakePhotoNow(void);
-// Power Keg (mods/items/logic/power_keg.c)
-extern unsigned char PowerKeg_IsOwned(void);
-void PowerKeg_SetOwned(unsigned char on);
-unsigned char PowerKeg_GetCount(void);
-void PowerKeg_SetCount(unsigned char n);
-// MM adult trade-quest items (mods/items/logic/trade_items.c)
-int TradeAdult_Count(void);
-unsigned char TradeAdult_IsOwnedIndex(int index);
-void TradeAdult_GiveIndex(int index);
-int TradeAdult_OwnedCount(void);
 void PikachuControls_OpenWindow(void); // pikachu_hud.cpp — Pikachu mode bindings window
 extern PlayState* gPlayState;
 u8 GerudoForm_IsActive(void); // gerudo_form.cpp
@@ -91,6 +57,49 @@ struct CapeFloatParam {
     const char* tooltip;
 };
 
+// Sheikah Slate: los sliders se retiraron el 2026-08-17 dando la colocacion por
+// buena, y estaba mal -- el pase de ajuste habia quedado PELLIZCADO contra los
+// limites de los propios sliders (OffsetX y OffsetZ acabaron clavados en -20 y 20,
+// que es justo lo que se ve cuando un drag topa). Vuelven aqui, y con rangos muy
+// por encima de esos valores para que el ajuste no se coma el limite otra vez.
+// Cuando la pose este bien, se hornea en SLATE_DEF_* (object_sheikah_slate.c).
+
+// El trident ya NO tiene NADA en el Item Editor (2026-08-18). Las tres colocaciones
+// -- lanza en mano, estela/hitbox y glow de carga -- son constantes en
+// extended_equipment.c (TRIDENT_HELD_* / TRIDENT_TRAIL_* / TRIDENT_THUNDER_*) y ese
+// codigo ya no lee un solo CVar: los gItemEditor.Trident.* estan muertos, ni se
+// escriben ni se leen. Para retocar cualquiera de esos numeros hay que editarlos alli
+// y recompilar.
+
+// Master Cycle: where Link sits on the bike, and how big the bike draws --------
+// The player-side ride code puts Link at riderPos - 27 in Y (Epona's saddle offset), so
+// "Seat Height" is the seat's real height plus 27. These move only the RIDER; the model is
+// four rigid parts and scales as one with "Bike Scale". Live while riding.
+const CapeFloatParam kCycleSeatParams[] = {
+    { "Seat Right/Left", "gItemEditor.Cycle.SeatX", -20.0f, 20.0f, 0.0f, "Slides Link across the seat." },
+    { "Seat Height", "gItemEditor.Cycle.SeatY", 30.0f, 100.0f, 66.0f,
+      "Raises or lowers Link on the bike. Adjust until he sits on the saddle." },
+    { "Seat Fwd/Back", "gItemEditor.Cycle.SeatZ", -40.0f, 40.0f, -8.0f,
+      "Slides Link along the bike. Negative is toward the rear wheel." },
+    { "Bike Scale", "gItemEditor.Cycle.Scale", 0.5f, 2.0f, 1.0f,
+      "Size of the drawn bike. Collision does not follow it." },
+};
+
+// Sheikah Slate: where the tablet sits in Link's fist ------------------------
+// Offsets are applied AFTER the rotations, so each one slides the tablet along its OWN axis
+// rather than along the world. Ranges are deliberately far wider than any sane pose needs:
+// the last tuning pass was silently clamped at +/-20 and the result had to be thrown away.
+const CapeFloatParam kSlateParams[] = {
+    { "Offset X", "gItemEditor.Slate.OffsetX", -80.0f, 80.0f, 20.0f, "Slides the tablet across the palm." },
+    { "Offset Y", "gItemEditor.Slate.OffsetY", -80.0f, 80.0f, -4.571f, "Slides it up and down the tablet's own face." },
+    { "Offset Z", "gItemEditor.Slate.OffsetZ", -80.0f, 80.0f, -20.0f, "Slides it in and out of the fist." },
+    { "Pitch (deg)", "gItemEditor.Slate.RotX", -180.0f, 180.0f, -53.465f,
+      "Tips the top of the tablet toward or away from Link." },
+    { "Yaw (deg)", "gItemEditor.Slate.RotY", -180.0f, 180.0f, -7.129f, "Turns the face of the tablet left and right." },
+    { "Roll (deg)", "gItemEditor.Slate.RotZ", -180.0f, 180.0f, -50.484f, "Rotates it in the plane of its own screen." },
+    { "Scale", "gItemEditor.Slate.Scale", 0.005f, 0.6f, 0.034f, "Size of the drawn tablet. Nothing else follows it." },
+};
+
 // Shape ------------------------------------------------------------------
 const CapeFloatParam kCapeShapeParams[] = {
     { "Scale", "gItemEditor.Cape.Scale", 0.1f, 5.0f, 1.0f,
@@ -108,8 +117,7 @@ const CapeFloatParam kCapeShapeParams[] = {
       "Depth of the parabolic arc the roots trace - how far the middle of the cape\n"
       "bows out behind Link. 0 flattens the arc into a straight line across the\n"
       "shoulders." },
-    { "Arc Spread", "gItemEditor.Cape.ArcSpread", 0.0f, 4.0f, 1.0f,
-      "Width of that same arc along the shoulder line." },
+    { "Arc Spread", "gItemEditor.Cape.ArcSpread", 0.0f, 4.0f, 1.0f, "Width of that same arc along the shoulder line." },
 };
 
 // Placement & rotation ---------------------------------------------------
@@ -123,8 +131,7 @@ const CapeFloatParam kCapePlacementParams[] = {
     { "Yaw (deg)", "gItemEditor.Cape.Yaw", -180.0f, 180.0f, 0.0f,
       "Turns the cape around Link's vertical axis, on top of the angle derived\n"
       "from his shoulders." },
-    { "Pitch (deg)", "gItemEditor.Cape.Pitch", -180.0f, 180.0f, 0.0f,
-      "Tips the cape forwards/backwards." },
+    { "Pitch (deg)", "gItemEditor.Cape.Pitch", -180.0f, 180.0f, 0.0f, "Tips the cape forwards/backwards." },
     { "Roll (deg)", "gItemEditor.Cape.Roll", -180.0f, 180.0f, 0.0f, "Banks the cape sideways." },
 };
 
@@ -175,9 +182,177 @@ void ItemEditorCapeColorWidget(WidgetInfo& info) {
                        "render mode so it actually blends instead of being drawn opaque.");
 }
 
+// Defined below; the popup's "Reset to Defaults" needs it before that point.
+void ItemEditorResetCape();
+
+// One group of cape sliders inside the popup. Kept as a helper so the three groups
+// read the same and the gate is applied in exactly one place.
+void ItemEditorCapePopupGroup(const char* heading, const CapeFloatParam* params, size_t count, float step,
+                              const char* fmt) {
+    bool enabled = CVarGetInteger("gItemEditor.Cape.Custom", 0) != 0;
+
+    ImGui::SeparatorText(heading);
+    ImGui::BeginDisabled(!enabled);
+    for (size_t i = 0; i < count; i++) {
+        const CapeFloatParam& p = params[i];
+        float v = CVarGetFloat(p.cvar, p.def);
+        // ##cvar suffix: two groups can carry the same visible label, and ImGui keys
+        // its state off the whole string — without it they would share one slider.
+        std::string id = std::string(p.label) + "##" + p.cvar;
+        if (ImGui::SliderFloat(id.c_str(), &v, p.min, p.max, fmt)) {
+            CVarSetFloat(p.cvar, v);
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        }
+        UIWidgets::Tooltip(p.tooltip);
+    }
+    ImGui::EndDisabled();
+    (void)step;
+}
+
+// "Configure Master Cycle" — same shape as the cape popup: one button, one modal, so the seat
+// sliders do not take a section of the tab. Summon the bike with the slate's fourth rune, mount
+// it, and drag until Link sits on the saddle.
+void ItemEditorCyclePopupWidget(WidgetInfo& info) {
+    static const char* kPopupId = "Configure Master Cycle";
+
+    if (ImGui::Button("Configure Master Cycle...")) {
+        ImGui::OpenPopup(kPopupId);
+    }
+    UIWidgets::Tooltip("Where Link sits on the Master Cycle, and the bike's drawn size.\n"
+                       "Everything applies live while riding.");
+
+    ImVec2 centre = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(centre, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(520.0f, 300.0f), ImGuiCond_Appearing);
+
+    if (ImGui::BeginPopupModal(kPopupId, NULL, ImGuiWindowFlags_NoSavedSettings)) {
+        if (ImGui::Button("Reset to Defaults")) {
+            for (const auto& p : kCycleSeatParams) {
+                CVarSetFloat(p.cvar, p.def);
+            }
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        }
+        // Not ItemEditorCapePopupGroup: that one is gated on the CAPE's master switch, and the
+        // bike has none — its defaults are its baked values, so every slider is always live.
+        ImGui::SeparatorText("Rider Seat & Scale");
+        for (const auto& p : kCycleSeatParams) {
+            float v = CVarGetFloat(p.cvar, p.def);
+            std::string id = std::string(p.label) + "##" + p.cvar;
+            if (ImGui::SliderFloat(id.c_str(), &v, p.min, p.max, "%.2f")) {
+                CVarSetFloat(p.cvar, v);
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            }
+            UIWidgets::Tooltip(p.tooltip);
+        }
+        if (ImGui::Button("Close")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+// "Configure Sheikah Slate" — same shape as the bike popup. Draw the tablet (equip it to a C
+// button and press it) and drag until it sits in the fist the way the Hookshot does; everything
+// applies live. Bake the result into SLATE_DEF_* when it looks right.
+void ItemEditorSlatePopupWidget(WidgetInfo& info) {
+    static const char* kPopupId = "Configure Sheikah Slate";
+
+    if (ImGui::Button("Configure Sheikah Slate...")) {
+        ImGui::OpenPopup(kPopupId);
+    }
+    UIWidgets::Tooltip("Where the tablet sits in Link's hand.\n"
+                       "Take it out on a C button first — the sliders do nothing while it is stowed.");
+
+    ImVec2 centre = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(centre, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(560.0f, 380.0f), ImGuiCond_Appearing);
+
+    if (ImGui::BeginPopupModal(kPopupId, NULL, ImGuiWindowFlags_NoSavedSettings)) {
+        if (ImGui::Button("Reset to Defaults")) {
+            for (const auto& p : kSlateParams) {
+                CVarSetFloat(p.cvar, p.def);
+            }
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        }
+        UIWidgets::Tooltip("Back to the baked SLATE_DEF_* pose — which is itself known to be off.");
+
+        // No master switch, same as the bike: the defaults ARE the baked values, so every slider
+        // is always live.
+        ImGui::SeparatorText("Position & Rotation");
+        for (const auto& p : kSlateParams) {
+            float v = CVarGetFloat(p.cvar, p.def);
+            std::string id = std::string(p.label) + "##" + p.cvar;
+            // %.3f, not %.2f: the scale slider lives down at 0.034 and two decimals cannot show a
+            // change at all there.
+            if (ImGui::SliderFloat(id.c_str(), &v, p.min, p.max, "%.3f")) {
+                CVarSetFloat(p.cvar, v);
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            }
+            UIWidgets::Tooltip(p.tooltip);
+        }
+        if (ImGui::Button("Close")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+// "Configure Magic Cape Position" — the cape is the ONLY custom item that still has
+// live placement controls (2026-08-17), so instead of a whole Item Editor section it
+// gets one button here that opens everything in a modal. Slate and Trident lost
+// theirs once their placement was dialled in and baked into their own code.
+void ItemEditorCapePopupWidget(WidgetInfo& info) {
+    static const char* kPopupId = "Configure Magic Cape Position";
+
+    if (ImGui::Button("Configure Magic Cape Position...")) {
+        ImGui::OpenPopup(kPopupId);
+    }
+    UIWidgets::Tooltip("Shape, placement, physics and colour of the Magic Cape's cloth.\n"
+                       "Everything applies live while the cape is worn.");
+
+    // Centred, and sized so the three groups fit without the modal growing past the
+    // window — the physics group alone is 10 sliders.
+    ImVec2 centre = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(centre, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(560.0f, 620.0f), ImGuiCond_Appearing);
+
+    if (ImGui::BeginPopupModal(kPopupId, NULL, ImGuiWindowFlags_NoSavedSettings)) {
+        bool custom = CVarGetInteger("gItemEditor.Cape.Custom", 0) != 0;
+        if (ImGui::Checkbox("Enable Custom Cape Settings", &custom)) {
+            CVarSetInteger("gItemEditor.Cape.Custom", custom);
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        }
+        UIWidgets::Tooltip("Master switch. OFF (default) makes the cape use its built-in values and\n"
+                           "ignore everything below, so you can A/B a tune against vanilla without\n"
+                           "resetting anything.");
+
+        ImGui::SameLine();
+        if (ImGui::Button("Reset to Defaults")) {
+            ItemEditorResetCape();
+        }
+
+        ImGui::BeginChild("capeScroll", ImVec2(0.0f, -ImGui::GetFrameHeightWithSpacing() - 4.0f));
+        ItemEditorCapePopupGroup("Shape & Size", kCapeShapeParams,
+                                 sizeof(kCapeShapeParams) / sizeof(kCapeShapeParams[0]), 0.05f, "%.2f");
+        ItemEditorCapePopupGroup("Placement & Rotation", kCapePlacementParams,
+                                 sizeof(kCapePlacementParams) / sizeof(kCapePlacementParams[0]), 0.5f, "%.1f");
+        ItemEditorCapePopupGroup("Physics", kCapePhysicsParams,
+                                 sizeof(kCapePhysicsParams) / sizeof(kCapePhysicsParams[0]), 0.05f, "%.2f");
+
+        ImGui::SeparatorText("Colour");
+        ItemEditorCapeColorWidget(info);
+        ImGui::EndChild();
+
+        if (ImGui::Button("Close")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
 void ItemEditorResetCape() {
-    static const char* kIntCVars[] = { "gItemEditor.Cape.ColorR", "gItemEditor.Cape.ColorG",
-                                       "gItemEditor.Cape.ColorB", "gItemEditor.Cape.ColorA" };
+    static const char* kIntCVars[] = { "gItemEditor.Cape.ColorR", "gItemEditor.Cape.ColorG", "gItemEditor.Cape.ColorB",
+                                       "gItemEditor.Cape.ColorA" };
 
     for (const auto& p : kCapeShapeParams) {
         CVarSetFloat(p.cvar, p.def);
@@ -194,13 +369,130 @@ void ItemEditorResetCape() {
     Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
 }
 
-// Shared PreFunc for every cape slider: greyed out until the section's master
-// switch is on, so the vanilla-vs-tuned A/B is a single click.
-void ItemEditorCapeGate(WidgetInfo& info) {
-    if (!CVarGetInteger("gItemEditor.Cape.Custom", 0)) {
-        info.options->disabled = true;
-        info.options->disabledTooltip = "Enable 'Enable Custom Cape Settings' first.";
+// (El PreFunc ItemEditorCapeGate desapareció con los sliders de la pestaña: dentro
+// del popup el gris lo pone un BeginDisabled, que no necesita el sistema de widgets.)
+
+struct NeiRandoSetting {
+    const char* setting;
+    const char* mirror;
+    int32_t on;
+};
+
+const NeiRandoSetting kNeiRandoSettings[] = {
+    { CVAR_RANDOMIZER_SETTING("SkijerCustomItems"), "gMods.CustomItems.Enabled", 1 },
+    { CVAR_RANDOMIZER_SETTING("MmMasksAll"), "gMods.MmMasks.InventoryEnabled", 1 },
+    { CVAR_RANDOMIZER_SETTING("ExtEquipment"), "gCheats.ExtEquip.Enabled", 1 },
+    { CVAR_RANDOMIZER_SETTING("NeiWeaponUpgrades"), nullptr, 1 },
+    { CVAR_RANDOMIZER_SETTING("SW97Spells"), "gEnhancements.SkijerNEI.SW97Medallions", 1 },
+    { CVAR_RANDOMIZER_SETTING("ShuffleBombArrows"), "gMods.BombArrows.Mode", RO_BOMB_ARROWS_SHUFFLED },
+    { CVAR_RANDOMIZER_SETTING("ElementalWandShuffle"), nullptr, RO_WAND_ELEMENTAL_SHUFFLE },
+};
+
+void NeiRando_MirrorSetting(const NeiRandoSetting& s) {
+    if (s.mirror != nullptr) {
+        CVarSetInteger(s.mirror, CVarGetInteger(s.setting, 0));
     }
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+}
+
+void NeiRando_MirrorSettingByCVar(const char* setting) {
+    for (const auto& s : kNeiRandoSettings) {
+        if (strcmp(s.setting, setting) == 0) {
+            NeiRando_MirrorSetting(s);
+            return;
+        }
+    }
+}
+
+void NeiRando_SetAll(bool on) {
+    for (const auto& s : kNeiRandoSettings) {
+        CVarSetInteger(s.setting, on ? s.on : 0);
+        NeiRando_MirrorSetting(s);
+    }
+    CVarSetInteger(CVAR_RANDOMIZER_SETTING("MmMasksTransform"), 0); // MmMasksAll already covers those 4
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+}
+
+// ---- Fleet Ship Combo: live MM <-> OoT switch ----
+// CVar namespace (matches user's "isFleetShipCombo[X]"):
+//   isFleetShipCombo.Enabled - master toggle for the combo / launcher bootstrap
+//   isPlayerIn2Ship          - persistent "where is the player": 1 = Majora's Mask
+//                              (2ship), 0 = Ocarina of Time (Ship). Single source of
+//                              truth for which game is active; also drives auto-start
+//                              (the host resumes the game the player was last in).
+// For now this button just flips and persists isPlayerIn2Ship. Frente B wires the
+// actual seamless hand-off: pause the inactive game's SESSION (no logic/audio/render,
+// process stays alive) + cross-process shared-texture compositing.
+void AddFleetComboSection(WidgetPath& path) {
+    mSohMenu->AddWidget(path, "Fleet Ship Combo (MM <-> OoT)", WIDGET_SEPARATOR_TEXT);
+
+    mSohMenu->AddWidget(path, "Enable Fleet Ship Combo", WIDGET_CVAR_CHECKBOX)
+        .CVar("isFleetShipCombo.Enabled")
+        .RaceDisable(false)
+        .Options(
+            CheckboxOptions().Tooltip("Master switch for running OoT (Ship) and MM (2ship) together.\n\n"
+                                      "RESTART REQUIRED after toggling: the second game is launched at boot.\n"
+                                      "Place 2ship.exe in a '2ship' folder next to soh.exe (Ship/2ship/2ship.exe)."));
+
+    // Live status so you always know which game you're in (and whether the combo is up).
+    mSohMenu->AddWidget(path, "Combo Status", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
+        int32_t active = FleetShipCombo_GetActiveGame();
+        if (active < 0) {
+            ImGui::TextColored(ImVec4(0.95f, 0.7f, 0.3f, 1.0f), "Combo NOT running (single game).");
+            ImGui::TextWrapped("Enable above + restart, and put 2ship.exe under Ship/2ship/.");
+        } else {
+            ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Active game: %s",
+                               active == 1 ? "Majora's Mask (2ship)" : "Ocarina of Time (Ship)");
+        }
+    });
+
+    mSohMenu->AddWidget(path, "Switch Active Game", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) {
+            // Use shared memory as the source of truth for the CURRENT active game so
+            // the toggle stays correct no matter which process last switched.
+            int32_t cur = FleetShipCombo_GetActiveGame();
+            if (cur < 0) {
+                // No shared region -> the combo isn't actually running two games.
+                Notification::Emit({
+                    .message = "Combo not running - enable it and restart (need 2ship.exe under Ship/2ship/).",
+                });
+                return;
+            }
+            int32_t next = cur ? 0 : 1; // 1 = MM (2ship), 0 = OoT (Ship)
+            CVarSetInteger("isPlayerIn2Ship", next);
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            // Publish to shared memory so BOTH processes freeze/unfreeze + show/hide in sync.
+            FleetShipCombo_SetActiveGame(next);
+            FleetShipCombo_SetUiFocus(next); // front window follows the newly-active game
+            SPDLOG_INFO("[FleetShipCombo] isPlayerIn2Ship -> {}",
+                        next ? "Majora's Mask (2ship)" : "Ocarina of Time (Ship)");
+            Notification::Emit({
+                .message = next ? "Switching to Majora's Mask..." : "Switching to Ocarina of Time...",
+            });
+        })
+        .Options(ButtonOptions().Tooltip(
+            "Toggle the active game between Ocarina of Time and Majora's Mask at any time.\n"
+            "Both games stay loaded and running; the inactive one's session is paused (seamless).\n\n"
+            "Persists 'isPlayerIn2Ship' so the combo remembers which game you're in and can\n"
+            "auto-start there next launch.\n\n"
+            "NOTE: the runtime hand-off (session pause + cross-process compositing) is still\n"
+            "being wired up. For now this just flips and remembers the active game."));
+
+    mSohMenu->AddWidget(path, "Show 2ship UI overlay (trackers)", WIDGET_CVAR_CHECKBOX)
+        .CVar("gFleetCombo.ShowMmUiOverlay")
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "Draws 2ship's floating UI windows (Check Tracker, etc.) on top of the game,\n"
+            "no matter which game is active — so both games' trackers can be open at once.\n\n"
+            "The overlay is view-only (an image): to CLICK 2ship's UI, use the\n"
+            "'2 Ship 2 Harkinian' tab at the top of this menu.\n"
+            "Open/close the windows themselves from 2ship's own menu.\n\n"
+            "2ship-side publishing can be disabled with gFleetShipCombo.UiOverlay = 0\n"
+            "(also restores the full render-skip for the inactive game)."));
+
+    // The "View" game switcher (Ship / 2Ship / Shared) moved to the menu's top tab row
+    // (DrawFleetShipComboTabs in Menu.cpp) so it's the same in both apps.
 }
 
 } // namespace
@@ -217,13 +509,14 @@ void ItemEditorCapeGate(WidgetInfo& info) {
 // Widgets are grouped by SIDEBAR (not file order), so each block below just
 // (re)sets path.sidebarName to land in the right tab.
 // =============================================================================
+
 void RegisterNEIMenu() {
     WidgetPath path = { "Skijer's NEI", "Masks", SECTION_COLUMN_1 };
 
     mSohMenu->AddMenuEntry("Skijer's NEI", CVAR_SETTING("Menu.SkijerNEISidebarSection"));
     // Sidebar order is shared with 2ship's Skijer's NEI menu.
-    mSohMenu->AddSidebarEntry("Skijer's NEI", "Custom Items", 1);
-    mSohMenu->AddSidebarEntry("Skijer's NEI", "Item Editor", 2);
+    mSohMenu->AddSidebarEntry("Skijer's NEI", "Custom Items", 3);
+    mSohMenu->AddSidebarEntry("Skijer's NEI", "Item Editor", 1);
     mSohMenu->AddSidebarEntry("Skijer's NEI", "Masks", 1);
     mSohMenu->AddSidebarEntry("Skijer's NEI", "Spells", 1);
     mSohMenu->AddSidebarEntry("Skijer's NEI", "Modes", 1);
@@ -243,70 +536,25 @@ void RegisterNEIMenu() {
                         "land here as they are made tunable.",
                         WIDGET_TEXT);
 
-    mSohMenu->AddWidget(path, "Magic Cape", WIDGET_SEPARATOR_TEXT);
-    mSohMenu->AddWidget(path, "Enable Custom Cape Settings", WIDGET_CVAR_CHECKBOX)
-        .CVar("gItemEditor.Cape.Custom")
+    // ── Dual Cane wheel shape (user 2026-08-06). Mirror of 2ship's control; the CVar is shared so
+    // the option carries over between games. A base cane only leaves the wheel once its own
+    // end-item is owned (Nei_CaneTypeVisible).
+    mSohMenu->AddWidget(path, "Dual Cane", WIDGET_SEPARATOR_TEXT);
+    std::map<int32_t, const char*> caneWheelModeOptions = {
+        { 0, "Somaria - Trirod - Pacci - Ultrahand" },
+        { 1, "Trirod - Ultrahand" },
+        { 2, "Somaria - Trirod - Ultrahand" },
+        { 3, "Trirod - Pacci - Ultrahand" },
+    };
+    mSohMenu->AddWidget(path, "Cane Wheel Shape", WIDGET_CVAR_COMBOBOX)
+        .CVar("gItemEditor.CaneWheelMode")
         .RaceDisable(false)
-        .Options(CheckboxOptions().Tooltip(
-            "Master switch for this section. OFF (default) makes the cape use its built-in\n"
-            "values and ignore every control below, so you can A/B a tune against vanilla\n"
-            "without resetting anything."));
-    mSohMenu->AddWidget(path, "Reset Cape to Defaults", WIDGET_BUTTON)
-        .RaceDisable(false)
-        .Callback([](WidgetInfo& info) { ItemEditorResetCape(); })
-        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
-            "Puts every cape control below back to the value the cloth ships with."));
-
-    mSohMenu->AddWidget(path, "Cape: Shape & Size", WIDGET_SEPARATOR_TEXT);
-    for (const auto& p : kCapeShapeParams) {
-        mSohMenu->AddWidget(path, p.label, WIDGET_CVAR_SLIDER_FLOAT)
-            .CVar(p.cvar)
-            .RaceDisable(false)
-            .PreFunc(ItemEditorCapeGate)
-            .Options(FloatSliderOptions()
-                         .Min(p.min)
-                         .Max(p.max)
-                         .DefaultValue(p.def)
-                         .Step(0.05f)
-                         .Format("%.2f")
-                         .Tooltip(p.tooltip));
-    }
-
-    mSohMenu->AddWidget(path, "Cape: Placement & Rotation", WIDGET_SEPARATOR_TEXT);
-    for (const auto& p : kCapePlacementParams) {
-        mSohMenu->AddWidget(path, p.label, WIDGET_CVAR_SLIDER_FLOAT)
-            .CVar(p.cvar)
-            .RaceDisable(false)
-            .PreFunc(ItemEditorCapeGate)
-            .Options(FloatSliderOptions()
-                         .Min(p.min)
-                         .Max(p.max)
-                         .DefaultValue(p.def)
-                         .Step(0.5f)
-                         .Format("%.1f")
-                         .Tooltip(p.tooltip));
-    }
-
-    path.column = SECTION_COLUMN_2;
-    mSohMenu->AddWidget(path, "Cape: Physics", WIDGET_SEPARATOR_TEXT);
-    for (const auto& p : kCapePhysicsParams) {
-        mSohMenu->AddWidget(path, p.label, WIDGET_CVAR_SLIDER_FLOAT)
-            .CVar(p.cvar)
-            .RaceDisable(false)
-            .PreFunc(ItemEditorCapeGate)
-            .Options(FloatSliderOptions()
-                         .Min(p.min)
-                         .Max(p.max)
-                         .DefaultValue(p.def)
-                         .Step(0.05f)
-                         .Format("%.2f")
-                         .Tooltip(p.tooltip));
-    }
-
-    mSohMenu->AddWidget(path, "Cape: Color", WIDGET_SEPARATOR_TEXT);
-    mSohMenu->AddWidget(path, "Cape Color", WIDGET_CUSTOM)
-        .CustomFunction(ItemEditorCapeColorWidget)
-        .HideInSearch(true);
+        .Options(ComboboxOptions()
+                     .ComboMap(caneWheelModeOptions)
+                     .DefaultIndex(0)
+                     .Tooltip("Which canes ride the shared wheel. A base cane is only hidden once\n"
+                              "its own end-item (Trirod / Ultrahand) is owned, so the cell can\n"
+                              "never lose the only cane you have."));
 
     // ===================== Tab: Modes =====================
     path.sidebarName = "Modes";
@@ -323,6 +571,24 @@ void RegisterNEIMenu() {
     path.column = SECTION_COLUMN_1;
     mSohMenu->AddWidget(path, "Custom Items", WIDGET_SEPARATOR_TEXT);
 
+    // Magic Cape placement, in a popup so a 25-slider tuning rig does not push the
+    // rest of this tab off screen. It is the only custom item that still has live
+    // placement controls. Skijer's NEI
+    mSohMenu->AddWidget(path, "Magic Cape Position", WIDGET_CUSTOM)
+        .CustomFunction(ItemEditorCapePopupWidget)
+        .HideInSearch(true);
+
+    // Master Cycle rider seat + bike scale, same popup shape. Skijer's NEI
+    mSohMenu->AddWidget(path, "Master Cycle", WIDGET_CUSTOM)
+        .CustomFunction(ItemEditorCyclePopupWidget)
+        .HideInSearch(true);
+
+    // Sheikah Slate in-hand pose. Back after the 2026-08-17 bake turned out to have been
+    // tuned against clamped sliders. Skijer's NEI
+    mSohMenu->AddWidget(path, "Sheikah Slate", WIDGET_CUSTOM)
+        .CustomFunction(ItemEditorSlatePopupWidget)
+        .HideInSearch(true);
+
     // --- MM Quest Page (mirror of the 2ship-side OoT quest page). Skijer's NEI ---
     mSohMenu->AddWidget(path, "MM Quest Page", WIDGET_SEPARATOR_TEXT);
     mSohMenu->AddWidget(path, "Songs: Pause Play (skip minigame)", WIDGET_CVAR_CHECKBOX)
@@ -332,17 +598,8 @@ void RegisterNEIMenu() {
             "On the MM Quest Status page (press L on the quest page to flip), if you hold an "
             "ocarina, pressing A on a learned song closes the menu and instantly plays it in-world "
             "(native success flow) INSTEAD of the learn-it minigame. OFF = the minigame."));
-    mSohMenu->AddWidget(path, "Grant MM Songs + Remains", WIDGET_BUTTON)
-        .RaceDisable(false)
-        .Callback([](WidgetInfo& info) {
-            // FC_MMQ_* bits: remains 0-3; songs Sonata 6, GoronLullaby 7, NewWave 8, Elegy 9,
-            // Oath 10, Time-row(Command) 12, Healing 13, Epona-row(Fugue) 14, Soaring 15,
-            // Storms-row(Ballad) 16. (Saria/Sun rows come from OoT's own quest items.)
-            Nei_Save()->mmQuestItems |= 0x0001FFCF;
-        })
-        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
-            "Grants the 4 boss remains + all MM-page songs (the 7 MM songs and the 3 NEI custom "
-            "songs). Saria's/Sun's rows follow your normal OoT songs. Idempotent."));
+
+    path.column = SECTION_COLUMN_2;
 
     // NEI Weapon Upgrade appearance — pick which model/icon the progressive weapons display
     // for the levels that have two looks (DL + icon load from mm.o2r, with a vanilla fallback).
@@ -380,12 +637,14 @@ void RegisterNEIMenu() {
     // object_net.c (Scale 0.49, Rot -5/-169/64, Offset 3.2/4.3/-1.0; catch radius 30). Skijer's NEI
 
     // Roc's Items MM Animations - requires mm.o2r
+    path.column = SECTION_COLUMN_3;
+    mSohMenu->AddWidget(path, "Roc's Items", WIDGET_SEPARATOR_TEXT);
+
     mSohMenu->AddWidget(path, "Roc's Items Use MM Animations", WIDGET_CVAR_CHECKBOX)
         .CVar("gEnhancements.RocsItemsUseMmAnims")
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
             if (!MmAssets_IsAvailable()) {
-                CVarSetInteger("gEnhancements.RocsItemsUseMmAnims", 0);
                 info.options->disabled = true;
                 info.options->disabledTooltip = "Requires mm.o2r from 2Ship2Harkinian Keiichi Alfa 4.0.0.";
             }
@@ -400,7 +659,6 @@ void RegisterNEIMenu() {
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
             if (!CVarGetInteger("gEnhancements.RocsItemsUseMmAnims", 0)) {
-                CVarSetInteger("gMods.RocsItems.InvertAnims", 0);
                 info.options->disabled = true;
                 info.options->disabledTooltip = "Enable 'Roc's Items Use MM Animations' first.";
             }
@@ -416,260 +674,37 @@ void RegisterNEIMenu() {
     mSohMenu->AddWidget(path, "NEI Aim Cycle (R/L while aiming)", WIDGET_CVAR_CHECKBOX)
         .CVar("gEnhancements.NeiAimCycle")
         .RaceDisable(false)
-        .Options(CheckboxOptions().Tooltip(
-            "Cycle between elements while aiming. R = next, L = previous.\n"
-            "Applies to:\n"
-            "  - Bow & Slingshot: cycles vanilla arrows OR SW97 elemental arrows\n"
-            "    (whichever type is currently equipped on the C-button).\n"
-            "  - Gust Jar (in first-person, IDLE): cycles unlocked elements\n"
-            "    based on owned medallions. Hold C + press L+R together to\n"
-            "    cycle the element AND switch to a stored-blow that fires on\n"
-            "    C release (no auto-discharge).\n"
-            "  - Arrow wheel: now also includes Bombchus when you own any.\n\n"
-            "Extends the vanilla 'Bow Arrow Cycle' cheat — both can be enabled\n"
-            "at the same time without conflict."));
-
-    // Twilight Upgrade — per-bit save flags. Each checkbox sets/clears one bit
-    // of gSaveContext.ship.twilightUpgrade so the player can mix-and-match
-    // which sub-upgrades are unlocked on this save (eventually shuffled by
-    // rando). State is read live from the save each frame via PreFunc → the
-    // shadow bool, and writes go through TwilightUpgrade_Set* on Callback.
-    mSohMenu->AddWidget(path, "Twilight Upgrade Bits", WIDGET_SEPARATOR_TEXT);
-
-    static bool sTwilightClawshotShadow = false;
-    mSohMenu->AddWidget(path, "Clawshot", WIDGET_CHECKBOX)
-        .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            sTwilightClawshotShadow = TwilightUpgrade_HasClawshot() != 0;
-            info.valuePointer = &sTwilightClawshotShadow;
-        })
-        .Callback([](WidgetInfo& info) {
-            TwilightUpgrade_SetClawshot(sTwilightClawshotShadow ? 1 : 0);
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Unlocks the Clawshot mode on hookshot/longshot. Tap L during\n"
-            "gameplay (with hookshot or longshot equipped) to toggle the\n"
-            "reverse-pull behaviour (enemy → Link, pin to grappling point)."));
-
-    static bool sTwilightBombArrowsShadow = false;
-    mSohMenu->AddWidget(path, "Bomb Arrows", WIDGET_CHECKBOX)
-        .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            sTwilightBombArrowsShadow = TwilightUpgrade_HasBombArrows() != 0;
-            info.valuePointer = &sTwilightBombArrowsShadow;
-        })
-        .Callback([](WidgetInfo& info) {
-            TwilightUpgrade_SetBombArrows(sTwilightBombArrowsShadow ? 1 : 0);
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Auto-grants ITEM_BOMB_ARROWS into the inventory once a bomb bag\n"
-            "is owned, and adds bomb arrows as a position in the SW97 R/L\n"
-            "arrow cycle during bow aim."));
-
-    static bool sTwilightGaleBoomerangShadow = false;
-    mSohMenu->AddWidget(path, "Gale Boomerang", WIDGET_CHECKBOX)
-        .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            sTwilightGaleBoomerangShadow = TwilightUpgrade_HasGaleBoomerang() != 0;
-            info.valuePointer = &sTwilightGaleBoomerangShadow;
-        })
-        .Callback([](WidgetInfo& info) {
-            TwilightUpgrade_SetGaleBoomerang(sTwilightGaleBoomerangShadow ? 1 : 0);
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Unlocks the Gale Boomerang multi-target. During boomerang aim,\n"
-            "L tap adds the current Z-target to the route (up to 4 targets,\n"
-            "500 units max between consecutive targets)."));
-
-    // Convenience: still expose the grant-all button as a one-click that
-    // flips all three checkboxes on at once.
-    mSohMenu->AddWidget(path, "Grant All Twilight Bits", WIDGET_BUTTON)
-        .RaceDisable(false)
-        .Callback([](WidgetInfo& info) {
-            TwilightUpgrade_Grant();
-        })
-        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
-            "Sets all three Twilight Upgrade bits at once. Equivalent to\n"
-            "checking the three checkboxes above. Idempotent."));
-
-    // Skijer's NEI hookshot overhaul — Ultrashot ownership (its own unlock, persisted in the
-    // "nei" save section, NOT one of the Twilight bits above). Same live-shadow pattern.
-    mSohMenu->AddWidget(path, "Hookshot Overhaul", WIDGET_SEPARATOR_TEXT);
-
-    static bool sUltrashotShadow = false;
-    mSohMenu->AddWidget(path, "Ultrashot", WIDGET_CHECKBOX)
-        .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            sUltrashotShadow = Nei_Save()->ultrashotOwned != 0;
-            info.valuePointer = &sUltrashotShadow;
-        })
-        .Callback([](WidgetInfo& info) {
-            Nei_Save()->ultrashotOwned = sUltrashotShadow ? 1 : 0;
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Unlocks the Ultrashot: the LONGSHOT fires 4x the hookshot's\n"
-            "distance at double chain speed (Link's reel-in included).\n"
-            "The item keeps the Longshot icon — a small Light Medallion\n"
-            "corner marker and the 'Ultrashot' name tell it apart."));
-
-    // NEI Weapon Upgrades — per-bit save flags (gSaveContext.ship.weaponUpgrades).
-    // Each upgrade requires the BASE weapon to be owned. State is read live from the
-    // save each frame via PreFunc → the shadow bool, and writes go through
-    // WeaponUpgrade_Set* on Callback (same pattern as the Twilight Upgrade bits).
-    // Only the Hammer upgrade has gameplay behavior for now; the sword upgrades are
-    // reachable plumbing (rando give/logic) with behavior TBD.
-    mSohMenu->AddWidget(path, "Weapon Upgrade Bits", WIDGET_SEPARATOR_TEXT);
-
-    static bool sWuHammerShadow = false;
-    mSohMenu->AddWidget(path, "Hammer: Iron Knuckle's Axe", WIDGET_CHECKBOX)
-        .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            sWuHammerShadow = WeaponUpgrade_HasHammerAxe() != 0;
-            info.valuePointer = &sWuHammerShadow;
-        })
-        .Callback([](WidgetInfo& info) {
-            WeaponUpgrade_SetHammerAxe(sWuHammerShadow ? 1 : 0);
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Upgrades the Megaton Hammer into the Iron Knuckle's Axe:\n"
-            "double damage, double reach, chunky heavy swings, and a\n"
-            "tomahawk throw (hold R + B). Only takes effect while the\n"
-            "hammer is actually equipped and wielded."));
-
-    static bool sWuRazorShadow = false;
-    mSohMenu->AddWidget(path, "Kokiri: Razor Sword", WIDGET_CHECKBOX)
-        .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            sWuRazorShadow = WeaponUpgrade_HasRazor() != 0;
-            info.valuePointer = &sWuRazorShadow;
-        })
-        .Callback([](WidgetInfo& info) {
-            WeaponUpgrade_SetRazor(sWuRazorShadow ? 1 : 0);
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Kokiri Sword upgrade, progressive level 1. (Behavior TBD —\n"
-            "reachable rando/save plumbing for now.)"));
-
-    static bool sWuGildedShadow = false;
-    mSohMenu->AddWidget(path, "Kokiri: Gilded Sword", WIDGET_CHECKBOX)
-        .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            sWuGildedShadow = WeaponUpgrade_HasGilded() != 0;
-            info.valuePointer = &sWuGildedShadow;
-        })
-        .Callback([](WidgetInfo& info) {
-            WeaponUpgrade_SetGilded(sWuGildedShadow ? 1 : 0);
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Kokiri Sword upgrade, progressive level 2. (Behavior TBD —\n"
-            "reachable rando/save plumbing for now.)"));
-
-    static bool sWuTrueMasterShadow = false;
-    mSohMenu->AddWidget(path, "Master: True Master Sword", WIDGET_CHECKBOX)
-        .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            sWuTrueMasterShadow = WeaponUpgrade_HasTrueMaster() != 0;
-            info.valuePointer = &sWuTrueMasterShadow;
-        })
-        .Callback([](WidgetInfo& info) {
-            WeaponUpgrade_SetTrueMaster(sWuTrueMasterShadow ? 1 : 0);
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Master Sword upgrade: True Master Sword. (Behavior TBD —\n"
-            "reachable rando/save plumbing for now.)"));
-
-    static bool sWuGreatFairyShadow = false;
-    mSohMenu->AddWidget(path, "Biggoron: Great Fairy's Sword", WIDGET_CHECKBOX)
-        .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            sWuGreatFairyShadow = WeaponUpgrade_HasGreatFairy() != 0;
-            info.valuePointer = &sWuGreatFairyShadow;
-        })
-        .Callback([](WidgetInfo& info) {
-            WeaponUpgrade_SetGreatFairy(sWuGreatFairyShadow ? 1 : 0);
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Biggoron Sword upgrade: Great Fairy's Sword. (Behavior TBD —\n"
-            "reachable rando/save plumbing for now.)"));
-
-    mSohMenu->AddWidget(path, "Grant All Weapon Upgrades", WIDGET_BUTTON)
-        .RaceDisable(false)
-        .Callback([](WidgetInfo& info) {
-            WeaponUpgrade_GrantAll();
-        })
-        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
-            "Sets all weapon-upgrade bits at once. Idempotent."));
+        .Options(CheckboxOptions().Tooltip("Cycle between elements while aiming. R = next, L = previous.\n"
+                                           "Applies to:\n"
+                                           "  - Bow & Slingshot: cycles vanilla arrows OR SW97 elemental arrows\n"
+                                           "    (whichever type is currently equipped on the C-button).\n"
+                                           "  - Gust Jar (in first-person, IDLE): cycles unlocked elements\n"
+                                           "    based on owned medallions. Hold C + press L+R together to\n"
+                                           "    cycle the element AND switch to a stored-blow that fires on\n"
+                                           "    C release (no auto-discharge).\n"
+                                           "  - Arrow wheel: now also includes Bombchus when you own any.\n\n"
+                                           "Extends the vanilla 'Bow Arrow Cycle' cheat — both can be enabled\n"
+                                           "at the same time without conflict."));
 
     // NEI Pictograph Box (MM port). Photographing a mapped OoT actor writes MM's pictoFlags0/1 +
     // the I5 photo into the NEI save in MM's exact layout, for a 2Ship bridge. No in-OoT reward.
     mSohMenu->AddWidget(path, "Pictograph Box", WIDGET_SEPARATOR_TEXT);
-
-    static bool sPictoOwnedShadow = false;
-    mSohMenu->AddWidget(path, "Pictobox: Owned", WIDGET_CHECKBOX)
+    // Both options mirror 2Ship's pictograph enhancements 1:1 — same CVar names, same defaults — so
+    // the Pictograph Box behaves identically in Ocarina of Time and Majora's Mask. Skijer's NEI
+    mSohMenu->AddWidget(path, "Better Picto Message", WIDGET_CVAR_CHECKBOX)
+        .CVar("gEnhancements.Equipment.BetterPictoMessage")
         .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            sPictoOwnedShadow = Picto_IsOwned() != 0;
-            info.valuePointer = &sPictoOwnedShadow;
-        })
-        .Callback([](WidgetInfo& info) {
-            Picto_SetOwned(sPictoOwnedShadow ? 1 : 0);
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Grants the Pictograph Box. Photos are stored in Majora's Mask's\n"
-            "exact save layout (pictoFlags0/1 + pictoPhotoI5) for a 2Ship bridge;\n"
-            "they have no use in OoT itself."));
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "Inform the player what target if any is being captured in the\n"
+            "pictograph (\"Keep this picture of a Pirate?\"). Same option, same\n"
+            "default and same wording as 2Ship's Better Picto Message."));
 
-    mSohMenu->AddWidget(path, "Take Pictograph Now (debug)", WIDGET_BUTTON)
+    mSohMenu->AddWidget(path, "Color Pictograph", WIDGET_CVAR_CHECKBOX)
+        .CVar("gEnhancements.Items.ColorPictograph")
         .RaceDisable(false)
-        .Callback([](WidgetInfo& info) {
-            Picto_TakePhotoNow();
-        })
-        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
-            "Fires the shutter immediately (no aim/wheel) to test capture + subject\n"
-            "validation: sweeps loaded actors, sets the matching PICTO_VALID_* flags,\n"
-            "and captures the I5 photo of the current frame."));
-
-    mSohMenu->AddWidget(path, "Power Keg", WIDGET_SEPARATOR_TEXT);
-
-    static bool sPowerKegOwnedShadow = false;
-    mSohMenu->AddWidget(path, "Power Keg: Owned", WIDGET_CHECKBOX)
-        .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            sPowerKegOwnedShadow = PowerKeg_IsOwned() != 0;
-            info.valuePointer = &sPowerKegOwnedShadow;
-        })
-        .Callback([](WidgetInfo& info) {
-            PowerKeg_SetOwned(sPowerKegOwnedShadow ? 1 : 0);
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Grants the Power Keg (MM Goron's big bomb). Shares the Bomb slot:\n"
-            "press A on Bombs in the kaleido to flip Bomb <-> Power Keg, then equip\n"
-            "to a C-button. Usable only as Fierce Deity / Goron, or Human/Gerudo\n"
-            "with Silver Gauntlets or better. Behavior WIP."));
-
-    mSohMenu->AddWidget(path, "Give 20 Power Kegs", WIDGET_BUTTON)
-        .RaceDisable(false)
-        .Callback([](WidgetInfo& info) {
-            PowerKeg_SetOwned(1);
-            PowerKeg_SetCount(20);
-        })
-        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
-            "Grants the Power Keg + 20 kegs of ammo (its own counter, separate from bombs)."));
-
-    mSohMenu->AddWidget(path, "MM Trade Items", WIDGET_SEPARATOR_TEXT);
-
-    mSohMenu->AddWidget(path, "Grant All Trade Items", WIDGET_BUTTON)
-        .RaceDisable(false)
-        .Callback([](WidgetInfo& info) {
-            int n = TradeAdult_Count();
-            for (int i = 0; i < n; i++) {
-                TradeAdult_GiveIndex(i);
-            }
-        })
-        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
-            "Grants every adult trade-quest item (OoT's plus the 9 Majora's Mask ones)\n"
-            "into the adult-trade slot wheel. The Pendant of Memories also unlocks its\n"
-            "combat moveset (Ext Boots 2) — equip it on the equipment page to a C-button."));
+        .Options(CheckboxOptions().DefaultValue(false).Tooltip(
+            "Display pictographs in color. OFF (the default) shows Majora's Mask's\n"
+            "sepia photo, exactly like the original item."));
 
     // ===================== Tab: Spells =====================
     path.sidebarName = "Spells";
@@ -714,33 +749,51 @@ void RegisterNEIMenu() {
     mSohMenu->AddWidget(path, "Kafei Mask Transform", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.KafeiMaskTransform")
         .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            if (!std::filesystem::exists("nei/N64_Kafei.pak")) {
-                CVarSetInteger("gMods.KafeiMaskTransform", 0);
-                info.options->disabled = true;
-                info.options->disabledTooltip = "Requires N64_Kafei.pak in nei/ folder.";
-            }
-        })
         .Options(CheckboxOptions().Tooltip("Wearing the Kafei Mask transforms Link into Kafei.\n"
                                            "Adult Link becomes Adult Kafei, Child Link becomes Child Kafei.\n"
                                            "Remove the mask to revert.\n\n"
-                                           "REQUIRES: nei/N64_Kafei.pak"));
+                                           "Model ships inside soh.o2r (objects/forms/kafei)."));
+
+    mSohMenu->AddWidget(path, "Keaton Mask Transform", WIDGET_CVAR_CHECKBOX)
+        .CVar("gMods.KeatonMaskTransform")
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "Wearing the Keaton Mask transforms Link into a Keaton (visual form).\n"
+            "Remove the mask to revert. If the Keaton model isn't shipped yet the\n"
+            "mask falls back to plain cosmetic wear.\n\n"
+            "Model ships inside soh.o2r (objects/forms/keaton)."));
 
     mSohMenu->AddWidget(path, "Gerudo Mask Transform", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.GerudoMaskTransform")
         .RaceDisable(false)
-        .Options(CheckboxOptions().Tooltip(
-            "Wearing the vanilla Gerudo Mask transforms Link into a Gerudo — uses a\n"
-            "Link-rigged gerudo mesh, so all of Link's animations and equipment work\n"
-            "exactly as normal. The body just looks gerudo.\n"
-            "Effects while the mask is worn:\n"
-            "  - Haunted Wasteland sandstorm is suppressed (no more getting lost).\n"
-            "  - All Gerudos treat you as a fellow Gerudo (Ge1/Ge2/Ge3 are friendly,\n"
-            "    GTG guard lets you in). Access is TEMPORARY — no Gerudo Card is granted.\n"
-            "Remove the mask to revert.\n\n"
-            "REQUIRES: nei/gerudo.o2r — built by tools/repack_gerudo_player.py from\n"
-            "an artist-authored \"00 - Gerudo Player.o2r\" (Link-21-bone-rigged gerudo skin).\n"
-            "Also ships 11 baked gerudo anims (visible in the anim viewer)."));
+        .Options(
+            CheckboxOptions().Tooltip("Wearing the vanilla Gerudo Mask transforms Link into a Gerudo — uses a\n"
+                                      "Link-rigged gerudo mesh, so all of Link's animations and equipment work\n"
+                                      "exactly as normal. The body just looks gerudo.\n"
+                                      "Effects while the mask is worn:\n"
+                                      "  - Haunted Wasteland sandstorm is suppressed (no more getting lost).\n"
+                                      "  - All Gerudos treat you as a fellow Gerudo (Ge1/Ge2/Ge3 are friendly,\n"
+                                      "    GTG guard lets you in). Access is TEMPORARY — no Gerudo Card is granted.\n"
+                                      "Remove the mask to revert.\n\n"
+                                      "Model ships inside soh.o2r (objects/forms/gerudo, Link-21-bone-rigged\n"
+                                      "gerudo skin + 11 baked gerudo anims, visible in the anim viewer)."));
+
+    // Rito Mask: gated by gMods.RitoForm (default ON). The mask item itself shares
+    // the Farore's Wind cell (press A on it in the pause menu and cycle with the
+    // stick), so this toggle only decides whether using it transforms.
+    mSohMenu->AddWidget(path, "Rito Mask Transform", WIDGET_CVAR_CHECKBOX)
+        .CVar("gMods.RitoForm")
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "Using the Rito Mask transforms Link into a Rito — full transformation\n"
+            "cutscene (freeze, mask SFX, white flash) like the MM masks, then a\n"
+            "Link-rigged bird body. Every gameplay system stays vanilla Link:\n"
+            "sword, shield, items, climbing and swimming all behave normally and\n"
+            "the body just plays Link's own animations.\n"
+            "Use the mask again to change back.\n\n"
+            "The mask shares the Farore's Wind cell: put the cursor on it, press A\n"
+            "and move the stick to swap between the spell and the mask.\n\n"
+            "Model ships inside soh.o2r (objects/forms/rito)."));
 
     // Garo Mask: gated by gMods.GaroMaskTransform (default ON). When OFF, the
     // Garo Mask stays a cosmetic mask (no transformation), matching the Gerudo
@@ -749,33 +802,28 @@ void RegisterNEIMenu() {
         .CVar("gMods.GaroMaskTransform")
         .RaceDisable(false)
         .Options(CheckboxOptions().DefaultValue(true).Tooltip(
-            "Wearing the Garo Mask transforms Link into a Garo (custom garo.o2r skin\n"
+            "Wearing the Garo Mask transforms Link into a Garo (custom skin\n"
             "with a slash-combo + shuriken finisher). Link's normal gameplay still runs\n"
             "1:1 — only the look and the slash combo change.\n"
             "OFF: the Garo Mask draws as a plain cosmetic mask (no transformation).\n\n"
-            "REQUIRES: garo.o2r in the nei/ folder."));
+            "Model ships inside soh.o2r (objects/forms/garo)."));
 
     mSohMenu->AddWidget(path, "MM Masks", WIDGET_SEPARATOR_TEXT);
 
     // Merged option: "Include MM Masks Inventory" + "Extra Mask Effects" are now
     // a single toggle. Enabling the MM masks page also enables the per-mask
-    // visual effects and the transformation system. (ExtraEffects had no runtime
-    // reader other than this menu, so the merge loses nothing.)
+    // visual effects and the transformation system.
     mSohMenu->AddWidget(path, "Include MM Masks (Inventory + Effects)", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.MmMasks.InventoryEnabled")
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
             if (!MmAssets_IsAvailable()) {
-                CVarSetInteger("gMods.MmMasks.InventoryEnabled", 0);
                 info.options->disabled = true;
                 info.options->disabledTooltip = "Requires mm.o2r from 2Ship2Harkinian Keiichi Alfa 4.0.0.";
             }
         })
         .PostFunc([](WidgetInfo& info) {
-            s32 on = CVarGetInteger("gMods.MmMasks.InventoryEnabled", 0);
-            // One toggle drives the whole MM-mask feature set.
-            CVarSetInteger("gMods.TransformMasks.ExtraEffects", on);
-            if (on) {
+            if (CVarGetInteger("gMods.MmMasks.InventoryEnabled", 1)) {
                 CVarSetInteger("gMods.TransformMasks.Enabled", 1);
             }
             Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
@@ -792,7 +840,6 @@ void RegisterNEIMenu() {
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
             if (!MmAssets_IsAvailable()) {
-                CVarSetInteger("gMods.TransformMasks.Enabled", 0);
                 info.options->disabled = true;
                 info.options->disabledTooltip = "Requires mm.o2r from 2Ship2Harkinian Keiichi Alfa 4.0.0.\n"
                                                 "Download 2Ship, extract your MM ROM, then copy mm.o2r here.";
@@ -807,11 +854,9 @@ void RegisterNEIMenu() {
         .RaceDisable(false)
         .PreFunc([](WidgetInfo& info) {
             if (!MmAssets_IsAvailable()) {
-                CVarSetInteger("gMods.TransformMasks.InstantTransform", 0);
                 info.options->disabled = true;
                 info.options->disabledTooltip = "Requires mm.o2r from 2Ship2Harkinian Keiichi Alfa 4.0.0.";
             } else if (!CVarGetInteger("gMods.MmMasks.InventoryEnabled", 1)) {
-                CVarSetInteger("gMods.TransformMasks.InstantTransform", 0);
                 info.options->disabled = true;
                 info.options->disabledTooltip = "Enable 'Include MM Masks' first.";
             }
@@ -832,7 +877,8 @@ void RegisterNEIMenu() {
         .Options(CheckboxOptions().Tooltip(
             "Turns all MM non-transformation masks invisible while still maintaining their effects.\n"
             "Transformation masks (Deku, Goron, Zora, Fierce Deity) remain visible.\n"
-            "Only affects MM masks; vanilla OOT child masks are unaffected (use Invisible Bunny Hood for OOT bunny hood)."));
+            "Only affects MM masks; vanilla OOT child masks are unaffected (use Invisible Bunny Hood for OOT bunny "
+            "hood)."));
 
     // Mute MM Audio (moved here from the Spells tab — it's a mask/MM-assets option).
     mSohMenu->AddWidget(path, "Mute MM Audio", WIDGET_CVAR_CHECKBOX)
@@ -874,7 +920,6 @@ void RegisterNEIMenu() {
             .RaceDisable(false)
             .PreFunc([](WidgetInfo& info) {
                 if (PakLoader_GetModelCount() == 0) {
-                    CVarSetInteger("gMods.PakLoader.Enabled", 0);
                     info.options->disabled = true;
                     info.options->disabledTooltip = "No .pak files found.\n"
                                                     "Place ModLoader64 .pak model files in the mods/ folder.";
@@ -918,9 +963,7 @@ void RegisterNEIMenu() {
                     }
                 }
                 s32 v = CVarGetInteger("gMods.PakLoader.AdultModel", -1);
-                if (v >= 0 && !opt->comboMap.count(v)) {
-                    CVarSetInteger("gMods.PakLoader.AdultModel", -1);
-                }
+                if (v >= 0 && !opt->comboMap.count(v)) {}
             })
             .PostFunc([](WidgetInfo& info) {
                 if (CVarGetInteger("gMods.PakLoader.Enabled", 0)) {
@@ -949,9 +992,7 @@ void RegisterNEIMenu() {
                     }
                 }
                 s32 v = CVarGetInteger("gMods.PakLoader.ChildModel", -1);
-                if (v >= 0 && !opt->comboMap.count(v)) {
-                    CVarSetInteger("gMods.PakLoader.ChildModel", -1);
-                }
+                if (v >= 0 && !opt->comboMap.count(v)) {}
             })
             .PostFunc([](WidgetInfo& info) {
                 if (CVarGetInteger("gMods.PakLoader.Enabled", 0)) {
@@ -991,9 +1032,7 @@ void RegisterNEIMenu() {
                         }
                     }
                     s32 v = CVarGetInteger("gMods.PakLoader.Equipment", -1);
-                    if (v >= 0 && !opt->comboMap.count(v)) {
-                        CVarSetInteger("gMods.PakLoader.Equipment", -1);
-                    }
+                    if (v >= 0 && !opt->comboMap.count(v)) {}
                 })
                 .PostFunc([](WidgetInfo& info) {
                     // Equipment works independently of the body-model toggle —
@@ -1024,7 +1063,6 @@ void RegisterNEIMenu() {
             .RaceDisable(false)
             .PreFunc([](WidgetInfo& info) {
                 if (VoicePack_GetCount() == 0) {
-                    CVarSetInteger("gMods.VoicePack.Enabled", 0);
                     info.options->disabled = true;
                     info.options->disabledTooltip =
                         "No voice packs found.\nPlace Z64Online voice .pak files in the mods/ folder.";
@@ -1037,10 +1075,9 @@ void RegisterNEIMenu() {
                     VoicePack_Select(-1);
                 }
             })
-            .Options(CheckboxOptions().Tooltip(
-                "Replaces Link's voice grunts (sword swings, falls, damage, etc.)\n"
-                "with samples from a Z64Online-format voice pak.\n"
-                "Voice samples play as 2D audio (no positional attenuation)."));
+            .Options(CheckboxOptions().Tooltip("Replaces Link's voice grunts (sword swings, falls, damage, etc.)\n"
+                                               "with samples from a Z64Online-format voice pak.\n"
+                                               "Voice samples play as 2D audio (no positional attenuation)."));
 
         if (voicePackMap.size() > 1) {
             mSohMenu->AddWidget(path, "Voice Pack", WIDGET_CVAR_COMBOBOX)
@@ -1059,9 +1096,7 @@ void RegisterNEIMenu() {
                         opt->comboMap[i] = nm ? nm : "(unnamed)";
                     }
                     s32 v = CVarGetInteger("gMods.VoicePack.Selection", -1);
-                    if (v >= 0 && !opt->comboMap.count(v)) {
-                        CVarSetInteger("gMods.VoicePack.Selection", -1);
-                    }
+                    if (v >= 0 && !opt->comboMap.count(v)) {}
                 })
                 .PostFunc([](WidgetInfo& info) {
                     if (CVarGetInteger("gMods.VoicePack.Enabled", 0)) {
@@ -1091,205 +1126,16 @@ void RegisterNEIMenu() {
         }
     }
 
-    // ===================== Tab: Randomizer =====================
-    path.sidebarName = "Randomizer";
-    path.column = SECTION_COLUMN_1;
-
-    // ---- Fleet Ship Combo: live MM <-> OoT switch ----
-    // CVar namespace (matches user's "isFleetShipCombo[X]"):
-    //   isFleetShipCombo.Enabled - master toggle for the combo / launcher bootstrap
-    //   isPlayerIn2Ship          - persistent "where is the player": 1 = Majora's Mask
-    //                              (2ship), 0 = Ocarina of Time (Ship). Single source of
-    //                              truth for which game is active; also drives auto-start
-    //                              (the host resumes the game the player was last in).
-    // For now this button just flips and persists isPlayerIn2Ship. Frente B wires the
-    // actual seamless hand-off: pause the inactive game's SESSION (no logic/audio/render,
-    // process stays alive) + cross-process shared-texture compositing.
-    mSohMenu->AddWidget(path, "Fleet Ship Combo (MM <-> OoT)", WIDGET_SEPARATOR_TEXT);
-
-    mSohMenu->AddWidget(path, "Enable Fleet Ship Combo", WIDGET_CVAR_CHECKBOX)
-        .CVar("isFleetShipCombo.Enabled")
-        .RaceDisable(false)
-        .Options(CheckboxOptions().Tooltip(
-            "Master switch for running OoT (Ship) and MM (2ship) together.\n\n"
-            "RESTART REQUIRED after toggling: the second game is launched at boot.\n"
-            "Place 2ship.exe in a '2ship' folder next to soh.exe (Ship/2ship/2ship.exe)."));
-
-    // Live status so you always know which game you're in (and whether the combo is up).
-    mSohMenu->AddWidget(path, "Combo Status", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
-        int32_t active = FleetShipCombo_GetActiveGame();
-        if (active < 0) {
-            ImGui::TextColored(ImVec4(0.95f, 0.7f, 0.3f, 1.0f), "Combo NOT running (single game).");
-            ImGui::TextWrapped("Enable above + restart, and put 2ship.exe under Ship/2ship/.");
-        } else {
-            ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Active game: %s",
-                               active == 1 ? "Majora's Mask (2ship)" : "Ocarina of Time (Ship)");
-        }
-    });
-
-    mSohMenu->AddWidget(path, "Switch Active Game", WIDGET_BUTTON)
-        .RaceDisable(false)
-        .Callback([](WidgetInfo& info) {
-            // Use shared memory as the source of truth for the CURRENT active game so
-            // the toggle stays correct no matter which process last switched.
-            int32_t cur = FleetShipCombo_GetActiveGame();
-            if (cur < 0) {
-                // No shared region -> the combo isn't actually running two games.
-                Notification::Emit({
-                    .message = "Combo not running - enable it and restart (need 2ship.exe under Ship/2ship/).",
-                });
-                return;
-            }
-            int32_t next = cur ? 0 : 1; // 1 = MM (2ship), 0 = OoT (Ship)
-            CVarSetInteger("isPlayerIn2Ship", next);
-            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-            // Publish to shared memory so BOTH processes freeze/unfreeze + show/hide in sync.
-            FleetShipCombo_SetActiveGame(next);
-            FleetShipCombo_SetUiFocus(next); // front window follows the newly-active game
-            SPDLOG_INFO("[FleetShipCombo] isPlayerIn2Ship -> {}", next ? "Majora's Mask (2ship)" : "Ocarina of Time (Ship)");
-            Notification::Emit({
-                .message = next ? "Switching to Majora's Mask..." : "Switching to Ocarina of Time...",
-            });
-        })
-        .Options(ButtonOptions().Tooltip(
-            "Toggle the active game between Ocarina of Time and Majora's Mask at any time.\n"
-            "Both games stay loaded and running; the inactive one's session is paused (seamless).\n\n"
-            "Persists 'isPlayerIn2Ship' so the combo remembers which game you're in and can\n"
-            "auto-start there next launch.\n\n"
-            "NOTE: the runtime hand-off (session pause + cross-process compositing) is still\n"
-            "being wired up. For now this just flips and remembers the active game."));
-
-    mSohMenu->AddWidget(path, "Show 2ship UI overlay (trackers)", WIDGET_CVAR_CHECKBOX)
-        .CVar("gFleetCombo.ShowMmUiOverlay")
-        .RaceDisable(false)
-        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
-            "Draws 2ship's floating UI windows (Check Tracker, etc.) on top of the game,\n"
-            "no matter which game is active — so both games' trackers can be open at once.\n\n"
-            "The overlay is view-only (an image): to CLICK 2ship's UI, use the\n"
-            "'2 Ship 2 Harkinian' tab at the top of this menu.\n"
-            "Open/close the windows themselves from 2ship's own menu.\n\n"
-            "2ship-side publishing can be disabled with gFleetShipCombo.UiOverlay = 0\n"
-            "(also restores the full render-skip for the inactive game)."));
-
-    // The "View" game switcher (Ship / 2Ship / Shared) moved to the menu's top tab row
-    // (DrawFleetShipComboTabs in Menu.cpp) so it's the same in both apps.
-
-    mSohMenu->AddWidget(path, "Randomizer (seed-locked)", WIDGET_SEPARATOR_TEXT);
-
-    mSohMenu->AddWidget(path, "Enable Custom Items", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_RANDOMIZER_SETTING("SkijerCustomItems"))
-        .PostFunc([](WidgetInfo& info) {
-            // Mirror to the runtime CVar that gates page-2 visibility in the pause menu.
-            CVarSetInteger("gMods.CustomItems.Enabled",
-                           CVarGetInteger(CVAR_RANDOMIZER_SETTING("SkijerCustomItems"), 0));
-            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-        })
-        .Options(CheckboxOptions().Tooltip("Enables the 24 custom items on the second inventory page (seed-locked rando setting).\n"
-                                           "When enabled, these items are also added to the randomizer pool and gated logic paths.\n"
-                                           "When disabled, page 2 is inaccessible and items are not in rando.\n"
-                                           "Synced with the same setting in the Randomizer menu."));
-
-    mSohMenu->AddWidget(path, "Add All MM Masks to Rando", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_RANDOMIZER_SETTING("MmMasksAll"))
-        .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            if (!MmAssets_IsAvailable()) {
-                CVarSetInteger(CVAR_RANDOMIZER_SETTING("MmMasksAll"), 0);
-                info.options->disabled = true;
-                info.options->disabledTooltip = "Requires mm.o2r from 2Ship2Harkinian Keiichi Alfa 4.0.0.";
-            } else if (!CVarGetInteger("gMods.MmMasks.InventoryEnabled", 0)) {
-                CVarSetInteger(CVAR_RANDOMIZER_SETTING("MmMasksAll"), 0);
-                info.options->disabled = true;
-                info.options->disabledTooltip = "Enable 'Include MM Masks' first.";
-            }
-        })
-        .PostFunc([](WidgetInfo& info) {
-            if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("MmMasksAll"), 0)) {
-                CVarSetInteger(CVAR_RANDOMIZER_SETTING("MmMasksTransform"), 0);
-                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-            }
-        })
-        .Options(CheckboxOptions().Tooltip("Adds all 24 MM masks to the randomizer item pool.\n"
-                                           "Masks can be found at random locations like custom items.\n"
-                                           "Removes OOT Goron/Zora masks from pool.\n\n"
-                                           "Seed-locked rando setting.\n"
-                                           "REQUIRES: 'Include MM Masks' enabled"));
-
-    mSohMenu->AddWidget(path, "Add Transformation Masks to Rando", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_RANDOMIZER_SETTING("MmMasksTransform"))
-        .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            if (!MmAssets_IsAvailable()) {
-                CVarSetInteger(CVAR_RANDOMIZER_SETTING("MmMasksTransform"), 0);
-                info.options->disabled = true;
-                info.options->disabledTooltip = "Requires mm.o2r from 2Ship2Harkinian Keiichi Alfa 4.0.0.";
-            } else if (!CVarGetInteger("gMods.MmMasks.InventoryEnabled", 0)) {
-                CVarSetInteger(CVAR_RANDOMIZER_SETTING("MmMasksTransform"), 0);
-                info.options->disabled = true;
-                info.options->disabledTooltip = "Enable 'Include MM Masks' first.";
-            } else if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("MmMasksAll"), 0)) {
-                CVarSetInteger(CVAR_RANDOMIZER_SETTING("MmMasksTransform"), 0);
-                info.options->disabled = true;
-                info.options->disabledTooltip = "'Add All MM Masks to Rando' already includes transformation masks.";
-            }
-        })
-        .Options(CheckboxOptions().Tooltip("Adds only the 4 transformation masks (Deku, Goron, Zora, Fierce Deity)\n"
-                                           "to the randomizer item pool.\n"
-                                           "Removes OOT Goron/Zora masks from pool.\n\n"
-                                           "Seed-locked rando setting.\n"
-                                           "REQUIRES: 'Include MM Masks' enabled"));
-
-    mSohMenu->AddWidget(path, "Add Extended Equipment to Rando", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_RANDOMIZER_SETTING("ExtEquipment"))
-        .RaceDisable(false)
-        .PostFunc([](WidgetInfo& info) {
-            CVarSetInteger("gCheats.ExtEquip.Enabled",
-                           CVarGetInteger(CVAR_RANDOMIZER_SETTING("ExtEquipment"), 0));
-            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Adds the 12 extended equipment pieces (3 swords, 3 shields, 3 tunics, 3 boots) to the randomizer pool.\n"
-            "Press L on the equipment page to toggle between vanilla and extended equipment.\n\n"
-            "Seed-locked rando setting (also enables the in-game equipment system)."));
-
-    mSohMenu->AddWidget(path, "Add NEI Weapon Upgrades to Rando", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_RANDOMIZER_SETTING("NeiWeaponUpgrades"))
-        .RaceDisable(false)
-        .PostFunc([](WidgetInfo& info) {
-            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Adds NEI weapon upgrades to the randomizer pool. Each requires its base weapon:\n"
-            "  - Hammer Upgrade (Iron Knuckle's Axe): double damage/reach + tomahawk throw\n"
-            "  - Kokiri Sword Upgrade x2: Razor Sword, then Gilded Sword\n"
-            "  - True Master Sword (Master Sword)\n"
-            "  - Great Fairy's Sword (Biggoron Sword)\n\n"
-            "Only the Hammer upgrade has gameplay behavior for now.\n"
-            "Seed-locked rando setting."));
-
-    mSohMenu->AddWidget(path, "Bomb Arrows: Auto-grant with Bomb Bag", WIDGET_CVAR_CHECKBOX)
-        .CVar("gMods.BombArrows.AutoGrantOnBag")
-        .RaceDisable(false)
-        .Options(CheckboxOptions().Tooltip(
-            "Cheat: automatically gives ITEM_BOMB_ARROWS the moment you obtain any bomb bag.\n"
-            "When on, the new bow/slingshot arrow wheel will show a Bomb entry as soon as the\n"
-            "bag is yours. Has no effect on the randomizer item pool."));
-
-    // ----- Equipment Mix (same Pak Loader tab; uses columns 1-3) -----
-    // Per-slot equipment override:
-    //   1. Swords + Shields (6 dropdowns)
-    //   2. Ranged + tools + ocarinas + boots + gauntlets + bracelet (13)
-    //   3. Child masks (8)
-    path.sidebarName = "Pak Loader";
+    // ----- Equipment Mix: swords+shields / ranged+tools+boots / child masks -----
     path.column = SECTION_COLUMN_1;
 
     mSohMenu->AddWidget(path, "Per-slot equipment override", WIDGET_SEPARATOR_TEXT);
     mSohMenu->AddWidget(path,
-              "Each slot can pull from a different pak. 'Default' inherits from the main "
-              "Equipment Pack dropdown (or vanilla if no pack selected). Sheathed and "
-              "unsheathed pieces always come from the same source pak so the look stays "
-              "consistent.",
-              WIDGET_TEXT);
+                        "Each slot can pull from a different pak. 'Default' inherits from the main "
+                        "Equipment Pack dropdown (or vanilla if no pack selected). Sheathed and "
+                        "unsheathed pieces always come from the same source pak so the look stays "
+                        "consistent.",
+                        WIDGET_TEXT);
 
     mSohMenu->AddWidget(path, "Reset all slots to Default", WIDGET_BUTTON)
         .RaceDisable(false)
@@ -1297,15 +1143,13 @@ void RegisterNEIMenu() {
             s32 n = PakLoader_GetSlotCount();
             char cvarName[96];
             for (s32 i = 0; i < n; i++) {
-                snprintf(cvarName, sizeof(cvarName),
-                         "gMods.PakLoader.SlotMix.%s", PakLoader_GetSlotKey(i));
+                snprintf(cvarName, sizeof(cvarName), "gMods.PakLoader.SlotMix.%s", PakLoader_GetSlotKey(i));
                 CVarSetInteger(cvarName, -1);
                 PakLoader_SetSlotMix(i, -1);
             }
             Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
         })
-        .Options(ButtonOptions().Size(Sizes::Inline)
-                                .Tooltip("Clear every per-slot override at once."));
+        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip("Clear every per-slot override at once."));
 
     // Cached CVar-name strings per slot so the widgets get stable c_str() pointers.
     // RegisterNEIMenu is called once at boot, so static storage is fine.
@@ -1315,8 +1159,7 @@ void RegisterNEIMenu() {
         slotCVarNames.clear();
         slotCVarNames.reserve(n);
         for (s32 i = 0; i < n; i++) {
-            slotCVarNames.emplace_back(std::string("gMods.PakLoader.SlotMix.") +
-                                       PakLoader_GetSlotKey(i));
+            slotCVarNames.emplace_back(std::string("gMods.PakLoader.SlotMix.") + PakLoader_GetSlotKey(i));
         }
     }
 
@@ -1355,8 +1198,7 @@ void RegisterNEIMenu() {
                     }
                 }
                 char cvarName[96];
-                snprintf(cvarName, sizeof(cvarName),
-                         "gMods.PakLoader.SlotMix.%s", PakLoader_GetSlotKey(slotIdx));
+                snprintf(cvarName, sizeof(cvarName), "gMods.PakLoader.SlotMix.%s", PakLoader_GetSlotKey(slotIdx));
                 s32 v = CVarGetInteger(cvarName, -1);
                 if (v >= 0 && !opt->comboMap.count(v)) {
                     CVarSetInteger(cvarName, -1);
@@ -1364,26 +1206,26 @@ void RegisterNEIMenu() {
             })
             .PostFunc([slotIdx](WidgetInfo& info) {
                 char cvarName[96];
-                snprintf(cvarName, sizeof(cvarName),
-                         "gMods.PakLoader.SlotMix.%s", PakLoader_GetSlotKey(slotIdx));
+                snprintf(cvarName, sizeof(cvarName), "gMods.PakLoader.SlotMix.%s", PakLoader_GetSlotKey(slotIdx));
                 PakLoader_SetSlotMix(slotIdx, CVarGetInteger(cvarName, -1));
             })
-            .Options(ComboboxOptions()
-                         .DefaultIndex(-1)
-                         .Tooltip("Pak that provides this piece. 'Default' = inherit "
-                                  "from the Equipment Pack dropdown."));
+            .Options(ComboboxOptions().DefaultIndex(-1).Tooltip("Pak that provides this piece. 'Default' = inherit "
+                                                                "from the Equipment Pack dropdown."));
     };
 
     // Column 1 — Swords (0..2) + Shields (3..5)
     mSohMenu->AddWidget(path, "Swords", WIDGET_SEPARATOR_TEXT);
-    for (s32 i = 0; i <= 2; i++) addSlotWidget(i);
+    for (s32 i = 0; i <= 2; i++)
+        addSlotWidget(i);
     mSohMenu->AddWidget(path, "Shields", WIDGET_SEPARATOR_TEXT);
-    for (s32 i = 3; i <= 5; i++) addSlotWidget(i);
+    for (s32 i = 3; i <= 5; i++)
+        addSlotWidget(i);
 
     // Column 2 — Ranged + Tools + Boots + Gauntlets + Bracelet (6..18)
     path.column = SECTION_COLUMN_2;
     mSohMenu->AddWidget(path, "Ranged & Tools", WIDGET_SEPARATOR_TEXT);
-    for (s32 i = 6; i <= 11; i++) addSlotWidget(i);   // Bow..DekuStick
+    for (s32 i = 6; i <= 11; i++)
+        addSlotWidget(i); // Bow..DekuStick
     mSohMenu->AddWidget(path, "Items", WIDGET_SEPARATOR_TEXT);
     addSlotWidget(12); // Bottle
     addSlotWidget(13); // OcarinaFairy
@@ -1397,7 +1239,151 @@ void RegisterNEIMenu() {
     // Column 3 — Child masks (19..26)
     path.column = SECTION_COLUMN_3;
     mSohMenu->AddWidget(path, "Child Masks", WIDGET_SEPARATOR_TEXT);
-    for (s32 i = 19; i < PakLoader_GetSlotCount(); i++) addSlotWidget(i);
+    for (s32 i = 19; i < PakLoader_GetSlotCount(); i++)
+        addSlotWidget(i);
+
+    // ===================== Tab: Randomizer =====================
+    path.sidebarName = "Randomizer";
+    path.column = SECTION_COLUMN_1;
+
+    if (FleetShipCombo_ShowMenuUi()) {
+        AddFleetComboSection(path);
+    }
+
+    mSohMenu->AddWidget(path, "Randomizer (seed-locked)", WIDGET_SEPARATOR_TEXT);
+
+    mSohMenu->AddWidget(path, "Add all NEI content to rando", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) { NeiRando_SetAll(true); })
+        .Options(ButtonOptions().Tooltip("Turns on every setting below at once: custom items, MM masks,\n"
+                                         "extended equipment, weapon upgrades, spells, bomb arrows and the\n"
+                                         "elemental wand — plus the in-game systems they need."));
+
+    mSohMenu->AddWidget(path, "Remove all NEI content from rando", WIDGET_BUTTON)
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) { NeiRando_SetAll(false); })
+        .Options(ButtonOptions().Tooltip("Turns every setting below off."));
+
+    mSohMenu->AddWidget(path, "Enable Custom Items", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_RANDOMIZER_SETTING("SkijerCustomItems"))
+        .PostFunc([](WidgetInfo& info) { NeiRando_MirrorSettingByCVar(CVAR_RANDOMIZER_SETTING("SkijerCustomItems")); })
+        .Options(CheckboxOptions().Tooltip(
+            "Enables the 24 custom items on the second inventory page (seed-locked rando setting).\n"
+            "When enabled, these items are also added to the randomizer pool and gated logic paths.\n"
+            "When disabled, page 2 is inaccessible and items are not in rando.\n"
+            "Synced with the same setting in the Randomizer menu."));
+
+    mSohMenu->AddWidget(path, "Add All MM Masks to Rando", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_RANDOMIZER_SETTING("MmMasksAll"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            if (!MmAssets_IsAvailable()) {
+                info.options->disabled = true;
+                info.options->disabledTooltip = "Requires mm.o2r from 2Ship2Harkinian Keiichi Alfa 4.0.0.";
+            } else if (!CVarGetInteger("gMods.MmMasks.InventoryEnabled", 1)) {
+                info.options->disabled = true;
+                info.options->disabledTooltip = "Enable 'Include MM Masks' first.";
+            }
+        })
+        .PostFunc([](WidgetInfo& info) {
+            if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("MmMasksAll"), 0)) {
+                CVarSetInteger(CVAR_RANDOMIZER_SETTING("MmMasksTransform"), 0);
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            }
+        })
+        .Options(CheckboxOptions().Tooltip("Adds all 24 MM masks to the randomizer item pool.\n"
+                                           "Masks can be found at random locations like custom items.\n"
+                                           "Removes OOT Goron/Zora masks from pool.\n\n"
+                                           "Seed-locked rando setting.\n"
+                                           "REQUIRES: 'Include MM Masks' enabled"));
+
+    mSohMenu->AddWidget(path, "Add Transformation Masks to Rando", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_RANDOMIZER_SETTING("MmMasksTransform"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            if (!MmAssets_IsAvailable()) {
+                info.options->disabled = true;
+                info.options->disabledTooltip = "Requires mm.o2r from 2Ship2Harkinian Keiichi Alfa 4.0.0.";
+            } else if (!CVarGetInteger("gMods.MmMasks.InventoryEnabled", 1)) {
+                info.options->disabled = true;
+                info.options->disabledTooltip = "Enable 'Include MM Masks' first.";
+            } else if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("MmMasksAll"), 0)) {
+                info.options->disabled = true;
+                info.options->disabledTooltip = "'Add All MM Masks to Rando' already includes transformation masks.";
+            }
+        })
+        .Options(CheckboxOptions().Tooltip("Adds only the 4 transformation masks (Deku, Goron, Zora, Fierce Deity)\n"
+                                           "to the randomizer item pool.\n"
+                                           "Removes OOT Goron/Zora masks from pool.\n\n"
+                                           "Seed-locked rando setting.\n"
+                                           "REQUIRES: 'Include MM Masks' enabled"));
+
+    mSohMenu->AddWidget(path, "Add Extended Equipment to Rando", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_RANDOMIZER_SETTING("ExtEquipment"))
+        .RaceDisable(false)
+        .PostFunc([](WidgetInfo& info) { NeiRando_MirrorSettingByCVar(CVAR_RANDOMIZER_SETTING("ExtEquipment")); })
+        .Options(CheckboxOptions().Tooltip(
+            "Adds the 12 extended equipment pieces (3 swords, 3 shields, 3 tunics, 3 boots) to the randomizer pool.\n"
+            "Press L on the equipment page to toggle between vanilla and extended equipment.\n\n"
+            "Seed-locked rando setting (also enables the in-game equipment system)."));
+
+    mSohMenu->AddWidget(path, "Add NEI Weapon Upgrades to Rando", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_RANDOMIZER_SETTING("NeiWeaponUpgrades"))
+        .RaceDisable(false)
+        .PostFunc([](WidgetInfo& info) {
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Adds NEI weapon upgrades to the randomizer pool. Each requires its base weapon:\n"
+            "  - Hammer Upgrade (Iron Knuckle's Axe): double damage/reach + tomahawk throw\n"
+            "  - Kokiri Sword Upgrade x2: Razor Sword, then Gilded Sword\n"
+            "  - True Master Sword (Master Sword)\n"
+            "  - Great Fairy's Sword (Biggoron Sword)\n\n"
+            "Only the Hammer upgrade has gameplay behavior for now.\n"
+            "Seed-locked rando setting."));
+
+    // Bomb Arrows no longer live in the inventory — they are the last entry of the bow's element
+    // wheel. This dropdown replaces the old "Auto-grant with Bomb Bag" checkbox: that behavior is
+    // the middle value now. Like SkijerCustomItems, the seed-locked setting mirrors into a plain
+    // runtime CVar (gMods.BombArrows.Mode) because the in-game grant logic runs outside seeds too.
+    static std::map<int32_t, const char*> bombArrowModeMap = {
+        { RO_BOMB_ARROWS_OFF, "Off" },
+        { RO_BOMB_ARROWS_BOMB_BAG, "Bomb Bag" },
+        { RO_BOMB_ARROWS_SHUFFLED, "Shuffled" },
+    };
+    mSohMenu->AddWidget(path, "Shuffle Bomb Arrows", WIDGET_CVAR_COMBOBOX)
+        .CVar(CVAR_RANDOMIZER_SETTING("ShuffleBombArrows"))
+        .RaceDisable(false)
+        .PostFunc([](WidgetInfo& info) { NeiRando_MirrorSettingByCVar(CVAR_RANDOMIZER_SETTING("ShuffleBombArrows")); })
+        .Options(ComboboxOptions()
+                     .ComboMap(bombArrowModeMap)
+                     .DefaultIndex(RO_BOMB_ARROWS_OFF)
+                     .Tooltip("How Bomb Arrows are obtained. They sit at the end of the bow's element wheel,\n"
+                              "next to the medallion arrows — they have no inventory slot of their own.\n\n"
+                              "Off: never granted on their own (the Twilight Upgrade still unlocks them).\n"
+                              "Bomb Bag: granted the moment you own any bomb bag (the old auto-grant).\n"
+                              "Shuffled: a real randomizer item."));
+
+    static std::map<int32_t, const char*> wandModeMap = {
+        { RO_WAND_MEDALLIONS, "Medallions" },
+        { RO_WAND_SINGLE_ITEM, "Single item" },
+        { RO_WAND_ELEMENTAL_SHUFFLE, "Elemental shuffle" },
+    };
+    mSohMenu->AddWidget(path, "Elemental Wand", WIDGET_CVAR_COMBOBOX)
+        .CVar(CVAR_RANDOMIZER_SETTING("ElementalWandShuffle"))
+        .RaceDisable(false)
+        .PostFunc([](WidgetInfo& info) {
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        })
+        .Options(ComboboxOptions()
+                     .ComboMap(wandModeMap)
+                     .DefaultIndex(RO_WAND_MEDALLIONS)
+                     .Tooltip("Six rods — Sand, Tornado, Water, Meteor, Storm and the Shadow Scepter —\n"
+                              "share ONE inventory cell and one wheel (the cell Bomb Arrows vacated).\n\n"
+                              "Medallions: one wand in the pool; a rod works once you own its medallion.\n"
+                              "Single item: one wand in the pool; finding it unlocks all six rods.\n"
+                              "Elemental shuffle: the six rods are separate items; the first found also\n"
+                              "grants the wand itself."));
 
     // ===================== Tab: Controls =====================
     path.sidebarName = "Controls";
@@ -1442,13 +1428,17 @@ void RegisterNEIMenu() {
         .Options(CheckboxOptions().Tooltip(
             "Enables free camera control (right stick / mouse).\n"
             "Same setting as Settings > Controls > Free Look — surfaced here for convenience."));
+    mSohMenu->AddWidget(path, "Free Camera in Item Cutscenes", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("FreeLook.TurnAroundCam"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Lets free camera take over the scripted \"turn around\" camera: getting an item (both the\n"
+            "animation and its textbox), opening doors, drinking a bottle, playing the ocarina...\n"
+            "The vanilla shot plays as usual until you push the right stick; the camera then follows you\n"
+            "for the rest of the scene, at the Free Look camera distance.\n"
+            "Requires Free Camera to be enabled."));
 
     mSohMenu->AddWidget(path, "Transformation Controls", WIDGET_SEPARATOR_TEXT);
-    mSohMenu->AddWidget(path, "Mario Controls", WIDGET_BUTTON)
-        .RaceDisable(false)
-        .Callback([](WidgetInfo& info) { /* placeholder — SM64 Mario rebinding UI coming soon */ })
-        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
-            "Rebind SM64 Mario mode controls. (Placeholder — per-move bindings coming in a future update.)"));
     // Pikachu Controls — opens a dedicated assignment window (pikachu_hud.cpp):
     // per-move N64 button binds (gPikaBind.*) + the mode UI style. Applies to
     // the SECRET Broken-Modes Pikachu mode only; the pokeball transformation
@@ -1456,11 +1446,12 @@ void RegisterNEIMenu() {
     mSohMenu->AddWidget(path, "Pikachu Controls", WIDGET_BUTTON)
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) { PikachuControls_OpenWindow(); })
-        .Options(ButtonOptions().Size(Sizes::Inline).Tooltip(
-            "Open the Pikachu mode controls window: assign the N64 button for each move\n"
-            "(Jump / Quick Attack / Grass / Gigantamax / Iron Tail / Dark / Sleep) and pick\n"
-            "the mode UI style (icons over OOT buttons, or the corner HUD).\n"
-            "Secret Broken-Modes Pikachu mode only — the pokeball transformation is untouched."));
+        .Options(ButtonOptions()
+                     .Size(Sizes::Inline)
+                     .Tooltip("Open the Pikachu mode controls window: assign the N64 button for each move\n"
+                              "(Jump / Quick Attack / Grass / Gigantamax / Iron Tail / Dark / Sleep) and pick\n"
+                              "the mode UI style (icons over OOT buttons, or the corner HUD).\n"
+                              "Secret Broken-Modes Pikachu mode only — the pokeball transformation is untouched."));
 }
 
 // Self-register the NEI menu via the same RegisterMenuInitFunc path every other

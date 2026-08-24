@@ -16,8 +16,10 @@ namespace HarpoonHud {
 class Window final : public Ship::GuiWindow {
   public:
     using GuiWindow::GuiWindow;
-    void InitElement() override {}
-    void UpdateElement() override {}
+    void InitElement() override {
+    }
+    void UpdateElement() override {
+    }
     void DrawElement() override;
 };
 
@@ -25,7 +27,7 @@ class Window final : public Ship::GuiWindow {
 // call from Harpoon::Enable() on each connect.
 void Register();
 
-}  // namespace HarpoonHud
+} // namespace HarpoonHud
 
-#endif  // __cplusplus
-#endif  // SOH_NETWORK_HARPOON_GAMEMODE_HUD_H
+#endif // __cplusplus
+#endif // SOH_NETWORK_HARPOON_GAMEMODE_HUD_H

@@ -33,20 +33,20 @@
 // type, which conflicts with the actual `void` and `s32` definitions and
 // produces C2371 "redefinition; differing basic types" at the def sites.
 void Player_RequestQuake(PlayState* play, s32 speed, s32 y, s32 countdown);
-s32  spawn_boomerang_ivan(EnPartner* this, PlayState* play);
+s32 spawn_boomerang_ivan(EnPartner* this, PlayState* play);
 
 // Mirror of Ivan's per-arrow-type magic cost (z_en_partner.c:190).
 static u8 sMarioMagicArrowCosts[] = { 0, 4, 4, 8 };
 
 // State machine — direct field equivalents of EnPartner.
-static u8     sMarioUsedItem       = 0xFF;   // 0xFF = none
-static u8     sMarioUsedItemButton = 0xFF;
-static u8     sMarioUsedSpell      = 0;
-static s16    sMarioItemTimer      = 0;
-static s16    sMarioMagicTimer     = 0;
-static s16    sMarioStickDamageTimer = 0;
+static u8 sMarioUsedItem = 0xFF; // 0xFF = none
+static u8 sMarioUsedItemButton = 0xFF;
+static u8 sMarioUsedSpell = 0;
+static s16 sMarioItemTimer = 0;
+static s16 sMarioMagicTimer = 0;
+static s16 sMarioStickDamageTimer = 0;
 static Actor* sMarioHookshotTarget = NULL;
-static u8     sMarioLensActive     = 0;
+static u8 sMarioLensActive = 0;
 
 // Stick flame-position vector (mirrors EnPartner.stickWeaponInfo.tip).
 static Vec3f sMarioStickTipPos;
@@ -64,30 +64,30 @@ static u8 sMarioStickColliderInited = 0;
 // them. yShift 0 → cylinder bottom = collider pos.y, top = pos.y + 40.
 // We position the collider at chest height each frame, so the cylinder
 // spans [chest, chest+40] — covers everything from waist to overhead.
-static ColliderCylinderInit sMarioStickColliderInit = {
-    { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE,
-      OC1_NONE, OC2_TYPE_PLAYER, COLSHAPE_CYLINDER },
-    { ELEMTYPE_UNK0,
-      { DMG_DEKU_STICK | DMG_FIRE, 0x00, 0x08 },
-      { 0x00000000, 0x00, 0x00 },
-      TOUCH_ON | TOUCH_NEAREST, BUMP_NONE, OCELEM_NONE },
-    { 24, 40, 0, { 0, 0, 0 } }
-};
+static ColliderCylinderInit sMarioStickColliderInit = { { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE,
+                                                          OC2_TYPE_PLAYER, COLSHAPE_CYLINDER },
+                                                        { ELEMTYPE_UNK0,
+                                                          { DMG_DEKU_STICK | DMG_FIRE, 0x00, 0x08 },
+                                                          { 0x00000000, 0x00, 0x00 },
+                                                          TOUCH_ON | TOUCH_NEAREST,
+                                                          BUMP_NONE,
+                                                          OCELEM_NONE },
+                                                        { 24, 40, 0, { 0, 0, 0 } } };
 
 // Stick flame visual constants — copied verbatim from z_en_partner.c:314-318.
 static Vec3f sMarioFlameVelocity = { 0.0f, 0.5f, 0.0f };
-static Vec3f sMarioFlameAccel    = { 0.0f, 0.5f, 0.0f };
+static Vec3f sMarioFlameAccel = { 0.0f, 0.5f, 0.0f };
 static Color_RGBA8 sMarioFlamePrim = { 255, 255, 100, 255 };
-static Color_RGBA8 sMarioFlameEnv  = { 255, 50, 0, 0 };
+static Color_RGBA8 sMarioFlameEnv = { 255, 50, 0, 0 };
 
 // Visible-stick-DL state — set true while the user holds the C-button so
 // Sm64Mario_DrawHeldStick (called from Sm64Mario_Draw in sm64_mario.c)
 // renders the gLinkChildLinkDekuStickDL at Mario's hand each frame.
 // "Como con Link" — a freestanding stick model that follows Mario's
 // position + facing instead of floating invisibly.
-static u8    sMarioStickDrawActive = 0;
-static Vec3f sMarioStickDrawPos;     // World pos for stick draw matrix
-static s16   sMarioStickDrawYaw;     // Mario's facing for stick orientation
+static u8 sMarioStickDrawActive = 0;
+static Vec3f sMarioStickDrawPos; // World pos for stick draw matrix
+static s16 sMarioStickDrawYaw;   // Mario's facing for stick orientation
 
 // =============================================================================
 // Public getters
@@ -128,18 +128,24 @@ static void MarioItem_UseBow(PlayState* play, Player* player, u8 started, u8 arr
 
                 s16 spawnParams;
                 switch (arrowType) {
-                    case 1:  spawnParams = ARROW_FIRE;   break;
-                    case 2:  spawnParams = ARROW_ICE;    break;
-                    case 3:  spawnParams = ARROW_LIGHT;  break;
-                    default: spawnParams = ARROW_NORMAL; break;
+                    case 1:
+                        spawnParams = ARROW_FIRE;
+                        break;
+                    case 2:
+                        spawnParams = ARROW_ICE;
+                        break;
+                    case 3:
+                        spawnParams = ARROW_LIGHT;
+                        break;
+                    default:
+                        spawnParams = ARROW_NORMAL;
+                        break;
                 }
 
-                Actor* newarrow = Actor_SpawnAsChild(
-                    &play->actorCtx, &player->actor, play, ACTOR_EN_ARROW,
-                    player->actor.world.pos.x,
-                    player->actor.world.pos.y + 7,
-                    player->actor.world.pos.z,
-                    0, player->actor.shape.rot.y, 0, spawnParams);
+                Actor* newarrow =
+                    Actor_SpawnAsChild(&play->actorCtx, &player->actor, play, ACTOR_EN_ARROW, player->actor.world.pos.x,
+                                       player->actor.world.pos.y + 7, player->actor.world.pos.z, 0,
+                                       player->actor.shape.rot.y, 0, spawnParams);
 
                 if (newarrow != NULL) {
                     player->unk_A73 = 4;
@@ -156,12 +162,10 @@ static void MarioItem_UseSlingshot(PlayState* play, Player* player, u8 started) 
         if (sMarioItemTimer <= 0) {
             if (AMMO(ITEM_SLINGSHOT) > 0) {
                 sMarioItemTimer = 10;
-                Actor* newpellet = Actor_SpawnAsChild(
-                    &play->actorCtx, &player->actor, play, ACTOR_EN_ARROW,
-                    player->actor.world.pos.x,
-                    player->actor.world.pos.y + 7.0f,
-                    player->actor.world.pos.z,
-                    0, player->actor.shape.rot.y, 0, ARROW_SEED);
+                Actor* newpellet =
+                    Actor_SpawnAsChild(&play->actorCtx, &player->actor, play, ACTOR_EN_ARROW, player->actor.world.pos.x,
+                                       player->actor.world.pos.y + 7.0f, player->actor.world.pos.z, 0,
+                                       player->actor.shape.rot.y, 0, ARROW_SEED);
                 if (newpellet != NULL) {
                     player->unk_A73 = 4;
                     newpellet->parent = NULL;
@@ -175,14 +179,14 @@ static void MarioItem_UseSlingshot(PlayState* play, Player* player, u8 started) 
 }
 
 static void MarioItem_UseBombs(PlayState* play, Player* player, u8 started) {
-    if (sMarioItemTimer > 0) return;
-    if (started != 1) return;
+    if (sMarioItemTimer > 0)
+        return;
+    if (started != 1)
+        return;
 
     if (AMMO(ITEM_BOMB) > 0 && play->actorCtx.actorLists[ACTORCAT_EXPLOSIVE].length < 3) {
         sMarioItemTimer = 10;
-        Actor_Spawn(&play->actorCtx, play, ACTOR_EN_BOM,
-                    player->actor.world.pos.x,
-                    player->actor.world.pos.y + 7.0f,
+        Actor_Spawn(&play->actorCtx, play, ACTOR_EN_BOM, player->actor.world.pos.x, player->actor.world.pos.y + 7.0f,
                     player->actor.world.pos.z, 0, 0, 0, 0);
         Inventory_ChangeAmmo(ITEM_BOMB, -1);
     } else {
@@ -191,15 +195,15 @@ static void MarioItem_UseBombs(PlayState* play, Player* player, u8 started) {
 }
 
 static void MarioItem_UseBombchus(PlayState* play, Player* player, u8 started) {
-    if (sMarioItemTimer > 0) return;
-    if (started != 1) return;
+    if (sMarioItemTimer > 0)
+        return;
+    if (started != 1)
+        return;
 
     if (AMMO(ITEM_BOMBCHU) > 0) {
         sMarioItemTimer = 10;
-        EnBom* bomb = (EnBom*)Actor_Spawn(&play->actorCtx, play, ACTOR_EN_BOM,
-                                          player->actor.world.pos.x,
-                                          player->actor.world.pos.y + 7.0f,
-                                          player->actor.world.pos.z, 0, 0, 0, 0);
+        EnBom* bomb = (EnBom*)Actor_Spawn(&play->actorCtx, play, ACTOR_EN_BOM, player->actor.world.pos.x,
+                                          player->actor.world.pos.y + 7.0f, player->actor.world.pos.z, 0, 0, 0, 0);
         if (bomb != NULL) {
             bomb->timer = 0;
         }
@@ -210,8 +214,10 @@ static void MarioItem_UseBombchus(PlayState* play, Player* player, u8 started) {
 }
 
 static void MarioItem_UseHammer(PlayState* play, Player* player, u8 started) {
-    if (sMarioItemTimer > 0) return;
-    if (started != 1) return;
+    if (sMarioItemTimer > 0)
+        return;
+    if (started != 1)
+        return;
 
     static Vec3f zeroVec = { 0.0f, 0.0f, 0.0f };
     sMarioItemTimer = 10;
@@ -229,16 +235,15 @@ static void MarioItem_UseHammer(PlayState* play, Player* player, u8 started) {
 }
 
 static void MarioItem_UseNuts(PlayState* play, Player* player, u8 started) {
-    if (sMarioItemTimer > 0) return;
-    if (started != 1) return;
+    if (sMarioItemTimer > 0)
+        return;
+    if (started != 1)
+        return;
 
     if (AMMO(ITEM_NUT) > 0) {
         sMarioItemTimer = 10;
-        Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ARROW,
-                    player->actor.world.pos.x,
-                    player->actor.world.pos.y + 7.0f,
-                    player->actor.world.pos.z,
-                    0x1000, player->actor.shape.rot.y, 0, ARROW_NUT);
+        Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ARROW, player->actor.world.pos.x, player->actor.world.pos.y + 7.0f,
+                    player->actor.world.pos.z, 0x1000, player->actor.shape.rot.y, 0, ARROW_NUT);
         Inventory_ChangeAmmo(ITEM_NUT, -1);
     } else {
         Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
@@ -246,7 +251,8 @@ static void MarioItem_UseNuts(PlayState* play, Player* player, u8 started) {
 }
 
 static void MarioItem_UseDekuStick(PlayState* play, Player* player, u8 started) {
-    if (sMarioItemTimer > 0) return;
+    if (sMarioItemTimer > 0)
+        return;
 
     if (!sMarioStickColliderInited) {
         Collider_InitCylinder(play, &sMarioStickCollider);
@@ -257,7 +263,7 @@ static void MarioItem_UseDekuStick(PlayState* play, Player* player, u8 started) 
     if (started == 1) {
         if (AMMO(ITEM_STICK) > 0) {
             Player_PlaySfx(&player->actor, NA_SE_EV_FLAME_IGNITION);
-            sMarioStickDrawActive = 1;     // turn on the floating stick render
+            sMarioStickDrawActive = 1; // turn on the floating stick render
         } else {
             Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
         }
@@ -277,8 +283,8 @@ static void MarioItem_UseDekuStick(PlayState* play, Player* player, u8 started) 
         // Flame at the stick tip — slightly above the stick's grip.
         sMarioStickTipPos = sMarioStickDrawPos;
         sMarioStickTipPos.y += 6.0f;
-        func_8002836C(play, &sMarioStickTipPos, &sMarioFlameVelocity, &sMarioFlameAccel,
-                      &sMarioFlamePrim, &sMarioFlameEnv, 200.0f, 0, 8);
+        func_8002836C(play, &sMarioStickTipPos, &sMarioFlameVelocity, &sMarioFlameAccel, &sMarioFlamePrim,
+                      &sMarioFlameEnv, 200.0f, 0, 8);
 
         // AT collider centered on the flame, at chest height — covers
         // from Mario's waist (chest - 0) up to overhead (chest + 40).
@@ -301,7 +307,7 @@ static void MarioItem_UseDekuStick(PlayState* play, Player* player, u8 started) 
     }
 
     if (started == 0) {
-        sMarioStickDrawActive = 0;     // hide the stick when released
+        sMarioStickDrawActive = 0; // hide the stick when released
     }
 }
 
@@ -312,11 +318,14 @@ static void MarioItem_UseDekuStick(PlayState* play, Player* player, u8 started) 
 // matrix, scale to OOT actor scale (0.01), bind segment 0x06 to LINK_CHILD
 // object so the DL's texture/data references resolve, then draw the DL.
 void Sm64Mario_DrawHeldStick(PlayState* play) {
-    if (!sMarioStickDrawActive) return;
-    if (play == NULL) return;
+    if (!sMarioStickDrawActive)
+        return;
+    if (play == NULL)
+        return;
 
     s32 objIdx = Object_GetIndex(&play->objectCtx, OBJECT_LINK_CHILD);
-    if (objIdx < 0) return;     // object isn't loaded in this scene
+    if (objIdx < 0)
+        return; // object isn't loaded in this scene
 
     OPEN_DISPS(play->state.gfxCtx);
 
@@ -324,8 +333,7 @@ void Sm64Mario_DrawHeldStick(PlayState* play) {
     Matrix_Scale(0.01f, 0.01f, 0.01f, MTXMODE_APPLY);
     Matrix_RotateZYX(0, sMarioStickDrawYaw, 0, MTXMODE_APPLY);
 
-    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     gSPSegment(POLY_OPA_DISP++, 0x06, play->objectCtx.status[objIdx].segment);
     gSPSegment(POLY_OPA_DISP++, 0x0C, gCullBackDList);
@@ -335,16 +343,15 @@ void Sm64Mario_DrawHeldStick(PlayState* play) {
 }
 
 static void MarioItem_UseHookshot(PlayState* play, Player* player, u8 started) {
-    if (sMarioItemTimer > 0) return;
+    if (sMarioItemTimer > 0)
+        return;
 
     if (started == 1) {
         Player_PlaySfx(&player->actor, NA_SE_PL_CHANGE_ARMS);
-        sMarioHookshotTarget = Actor_SpawnAsChild(
-            &play->actorCtx, &player->actor, play, ACTOR_OBJ_HSBLOCK,
-            player->actor.world.pos.x,
-            player->actor.world.pos.y + 7.5f,
-            player->actor.world.pos.z,
-            player->actor.world.rot.x, player->actor.world.rot.y, player->actor.world.rot.z, 2);
+        sMarioHookshotTarget =
+            Actor_SpawnAsChild(&play->actorCtx, &player->actor, play, ACTOR_OBJ_HSBLOCK, player->actor.world.pos.x,
+                               player->actor.world.pos.y + 7.5f, player->actor.world.pos.z, player->actor.world.rot.x,
+                               player->actor.world.rot.y, player->actor.world.rot.z, 2);
         if (sMarioHookshotTarget != NULL) {
             sMarioHookshotTarget->scale.x = 0.05f;
             sMarioHookshotTarget->scale.y = 0.05f;
@@ -364,15 +371,18 @@ static void MarioItem_UseHookshot(PlayState* play, Player* player, u8 started) {
 }
 
 static void MarioItem_UseOcarina(PlayState* play, Player* player, u8 started) {
-    if (sMarioItemTimer > 0) return;
+    if (sMarioItemTimer > 0)
+        return;
     if (started == 1) {
         Audio_PlaySoundTransposed(&player->actor.projectedPos, NA_SE_VO_NA_HELLO_2, -6);
     }
 }
 
 static void MarioItem_UseBoomerang(PlayState* play, Player* player, u8 started) {
-    if (sMarioItemTimer > 0) return;
-    if (started != 1) return;
+    if (sMarioItemTimer > 0)
+        return;
+    if (started != 1)
+        return;
     sMarioItemTimer = 20;
     // spawn_boomerang_ivan internally checks IvanCoopModeEnabled || gIvanPossessActive
     // — we extend that gate in z_player.c:407-410 to also accept Sm64Mario_IsReady().
@@ -380,7 +390,8 @@ static void MarioItem_UseBoomerang(PlayState* play, Player* player, u8 started) 
 }
 
 static void MarioItem_UseLens(PlayState* play, Player* player, u8 started) {
-    if (sMarioItemTimer > 0) return;
+    if (sMarioItemTimer > 0)
+        return;
     if (started == 1) {
         Sfx_PlaySfxCentered(NA_SE_SY_GLASSMODE_ON);
         sMarioLensActive = 1;
@@ -391,8 +402,10 @@ static void MarioItem_UseLens(PlayState* play, Player* player, u8 started) {
 }
 
 static void MarioItem_UseBeans(PlayState* play, Player* player, u8 started) {
-    if (sMarioItemTimer > 0) return;
-    if (started != 1) return;
+    if (sMarioItemTimer > 0)
+        return;
+    if (started != 1)
+        return;
 
     GetItemEntry beanEntry = ItemTable_Retrieve(GI_BEAN);
     if (play->actorCtx.titleCtx.alpha <= 0) {
@@ -452,42 +465,43 @@ static void MarioItem_UseSpell(PlayState* play, Player* player, u8 started, u8 s
 // =============================================================================
 
 // Slot / panel order (top→bottom in the corner HUD): Wing, Metal, Vanish, Fire.
-#define SM64_CAP_SLOT_WING   0
-#define SM64_CAP_SLOT_METAL  1
+#define SM64_CAP_SLOT_WING 0
+#define SM64_CAP_SLOT_METAL 1
 #define SM64_CAP_SLOT_VANISH 2
-#define SM64_CAP_SLOT_FIRE   3
-#define SM64_CAP_SLOT_COUNT  4
+#define SM64_CAP_SLOT_FIRE 3
+#define SM64_CAP_SLOT_COUNT 4
 
 typedef struct {
-    u16         btn;         // D-pad bind
-    u32         capFlag;     // libsm64 cap flag; 0 = stub (Fire Flower — timer only, no effect yet)
-    s32         activeDur;   // frames of use at full duration (60 fps)
-    s32         maxCooldown; // frames of cooldown after full use (60 fps)
-    s32         sfx;
+    u16 btn;         // D-pad bind
+    u32 capFlag;     // libsm64 cap flag; 0 = stub (Fire Flower — timer only, no effect yet)
+    s32 activeDur;   // frames of use at full duration (60 fps)
+    s32 maxCooldown; // frames of cooldown after full use (60 fps)
+    s32 sfx;
     const char* name;
 } Sm64CapDef;
 
 // Balance (60 fps): Wing 30s/30s, Metal 60s/180s, Vanish 30s/15s, Fire 60s/90s.
 // Ordered to match SM64_CAP_SLOT_* above (index == slot).
 static const Sm64CapDef kCapDefs[SM64_CAP_SLOT_COUNT] = {
-    { BTN_DDOWN,  SM64_MARIO_WING_CAP,   30 * 60,  30 * 60,  NA_SE_PL_MAGIC_WIND_NORMAL, "Wing" },
-    { BTN_DLEFT,  SM64_MARIO_METAL_CAP,  60 * 60,  180 * 60, NA_SE_PL_MAGIC_SOUL_NORMAL, "Metal" },
-    { BTN_DRIGHT, SM64_MARIO_VANISH_CAP, 30 * 60,  15 * 60,  NA_SE_PL_MAGIC_FIRE,        "Vanish" },
-    { BTN_DUP,    0,                     60 * 60,  90 * 60,  NA_SE_PL_MAGIC_FIRE,        "Fire" },
+    { BTN_DDOWN, SM64_MARIO_WING_CAP, 30 * 60, 30 * 60, NA_SE_PL_MAGIC_WIND_NORMAL, "Wing" },
+    { BTN_DLEFT, SM64_MARIO_METAL_CAP, 60 * 60, 180 * 60, NA_SE_PL_MAGIC_SOUL_NORMAL, "Metal" },
+    { BTN_DRIGHT, SM64_MARIO_VANISH_CAP, 30 * 60, 15 * 60, NA_SE_PL_MAGIC_FIRE, "Vanish" },
+    { BTN_DUP, 0, 60 * 60, 90 * 60, NA_SE_PL_MAGIC_FIRE, "Fire" },
 };
 
 typedef struct {
-    u8  phase;       // SM64_CAP_PHASE_*
+    u8 phase;        // SM64_CAP_PHASE_*
     s32 elapsed;     // frames elapsed in the current phase
     s32 cooldownDur; // proportional cooldown (frames) computed when COOLDOWN entered
 } Sm64CapState;
 
 static Sm64CapState sCapStates[SM64_CAP_SLOT_COUNT];
-static s32          sActiveCap = -1; // index of the ACTIVE cap, or -1
-static u8           sCapStatesInited = 0;
+static s32 sActiveCap = -1; // index of the ACTIVE cap, or -1
+static u8 sCapStatesInited = 0;
 
 static void Sm64Caps_EnsureInit(void) {
-    if (sCapStatesInited) return;
+    if (sCapStatesInited)
+        return;
     for (s32 i = 0; i < SM64_CAP_SLOT_COUNT; i++) {
         sCapStates[i].phase = SM64_CAP_PHASE_READY;
         sCapStates[i].elapsed = 0;
@@ -502,7 +516,8 @@ static void Sm64Caps_EnsureInit(void) {
 // re-call to interact_cap would play. No-op if the Mario instance is gone (a
 // scene change already deleted it; the recreated Mario starts cap-less).
 static void Sm64Caps_ClearLibsm64Cap(void) {
-    if (sSm64MarioId < 0 || !p_sm64_set_mario_state) return;
+    if (sSm64MarioId < 0 || !p_sm64_set_mario_state)
+        return;
     u32 f = sSm64OutState.flags;
     f &= ~(SM64_MARIO_VANISH_CAP | SM64_MARIO_METAL_CAP | SM64_MARIO_WING_CAP);
     f |= SM64_MARIO_NORMAL_CAP | SM64_MARIO_CAP_ON_HEAD;
@@ -512,13 +527,15 @@ static void Sm64Caps_ClearLibsm64Cap(void) {
 // Move the active cap into its proportional cooldown. clearLib removes the
 // libsm64 cap effect (skip it when the Mario instance is being torn down).
 static void Sm64Caps_DeactivateActive(u8 clearLib) {
-    if (sActiveCap < 0) return;
+    if (sActiveCap < 0)
+        return;
     s32 idx = sActiveCap;
     Sm64CapState* s = &sCapStates[idx];
     const Sm64CapDef* d = &kCapDefs[idx];
 
     s32 used = s->elapsed;
-    if (used > d->activeDur) used = d->activeDur;
+    if (used > d->activeDur)
+        used = d->activeDur;
     s32 cd = (s32)(((f32)used / (f32)d->activeDur) * (f32)d->maxCooldown);
 
     if (clearLib && d->capFlag != 0) {
@@ -643,14 +660,16 @@ void Sm64MarioCaps_OnSuspend(void) {
 // --- HUD read accessors -----------------------------------------------------
 
 u8 Sm64MarioCaps_GetPhase(s32 idx) {
-    if (idx < 0 || idx >= SM64_CAP_SLOT_COUNT) return SM64_CAP_PHASE_READY;
+    if (idx < 0 || idx >= SM64_CAP_SLOT_COUNT)
+        return SM64_CAP_PHASE_READY;
     Sm64Caps_EnsureInit();
     return sCapStates[idx].phase;
 }
 
 // Charge 0..1: ACTIVE drains 1→0, COOLDOWN fills 0→1, READY = 1.
 f32 Sm64MarioCaps_GetCharge(s32 idx) {
-    if (idx < 0 || idx >= SM64_CAP_SLOT_COUNT) return 1.0f;
+    if (idx < 0 || idx >= SM64_CAP_SLOT_COUNT)
+        return 1.0f;
     Sm64Caps_EnsureInit();
     Sm64CapState* s = &sCapStates[idx];
     const Sm64CapDef* d = &kCapDefs[idx];
@@ -659,7 +678,8 @@ f32 Sm64MarioCaps_GetCharge(s32 idx) {
         return c < 0.0f ? 0.0f : c;
     }
     if (s->phase == SM64_CAP_PHASE_COOLDOWN) {
-        if (s->cooldownDur <= 0) return 1.0f;
+        if (s->cooldownDur <= 0)
+            return 1.0f;
         f32 c = (f32)s->elapsed / (f32)s->cooldownDur;
         return c > 1.0f ? 1.0f : c;
     }
@@ -668,7 +688,8 @@ f32 Sm64MarioCaps_GetCharge(s32 idx) {
 
 // Whole seconds remaining in the ACTIVE or COOLDOWN phase (0 when READY).
 s32 Sm64MarioCaps_GetRemainingSeconds(s32 idx) {
-    if (idx < 0 || idx >= SM64_CAP_SLOT_COUNT) return 0;
+    if (idx < 0 || idx >= SM64_CAP_SLOT_COUNT)
+        return 0;
     Sm64Caps_EnsureInit();
     Sm64CapState* s = &sCapStates[idx];
     const Sm64CapDef* d = &kCapDefs[idx];
@@ -680,7 +701,8 @@ s32 Sm64MarioCaps_GetRemainingSeconds(s32 idx) {
     } else {
         return 0;
     }
-    if (rem < 0) rem = 0;
+    if (rem < 0)
+        rem = 0;
     return (rem + 59) / 60; // ceil to whole seconds
 }
 
@@ -706,28 +728,28 @@ u8 Sm64MarioCaps_IsFireActive(void) {
 // already in flight finish even after the cap toggles off. B is NOT suppressed at
 // the input level any more — Mario still punches; the fireball is an extra.
 // =============================================================================
-#define MARIO_FB_MAX        6
-#define MARIO_FB_GRAVITY    1.5f   // per-frame downward accel (Triforce-drop feel)
-#define MARIO_FB_FWD_SPEED  10.0f  // forward launch speed
-#define MARIO_FB_UP_SPEED   7.0f   // initial upward kick (gives the first arc)
-#define MARIO_FB_BOUNCE     0.78f  // Y restitution on floor hit — bouncy, keeps popping
-#define MARIO_FB_HFRICTION  0.98f  // horizontal speed kept per bounce (ice-slide → travels far)
-#define MARIO_FB_LIFE       150    // max frames alive (long enough for several bounces)
-#define MARIO_FB_MAX_BOUNCE 8      // despawn after this many floor bounces
+#define MARIO_FB_MAX 6
+#define MARIO_FB_GRAVITY 1.5f    // per-frame downward accel (Triforce-drop feel)
+#define MARIO_FB_FWD_SPEED 10.0f // forward launch speed
+#define MARIO_FB_UP_SPEED 7.0f   // initial upward kick (gives the first arc)
+#define MARIO_FB_BOUNCE 0.78f    // Y restitution on floor hit — bouncy, keeps popping
+#define MARIO_FB_HFRICTION 0.98f // horizontal speed kept per bounce (ice-slide → travels far)
+#define MARIO_FB_LIFE 150        // max frames alive (long enough for several bounces)
+#define MARIO_FB_MAX_BOUNCE 8    // despawn after this many floor bounces
 
 typedef struct {
-    u8                active;
-    u8                colInited;
-    s16               life;
-    u8                bounces;
-    s16               fxScroll;   // flame texture-scroll / flicker phase
-    Vec3f             pos;
-    Vec3f             vel;
-    ColliderCylinder  col;
+    u8 active;
+    u8 colInited;
+    s16 life;
+    u8 bounces;
+    s16 fxScroll; // flame texture-scroll / flicker phase
+    Vec3f pos;
+    Vec3f vel;
+    ColliderCylinder col;
 } MarioFireball;
 
 static MarioFireball sMarioFireballs[MARIO_FB_MAX];
-static s16           sMarioFireballCooldown = 0;
+static s16 sMarioFireballCooldown = 0;
 
 // Boss super-damage GRACE window. Bosses that key off a collider hit (BUMP_HIT,
 // e.g. King Dodongo) read that flag ONE frame after the fireball's AT set it —
@@ -739,7 +761,7 @@ static s16           sMarioFireballCooldown = 0;
 // fix made the hit register. This grace keeps FireballActive()/FireballNear()
 // reporting true for a few frames AT THE IMPACT POINT so the boss's deferred read
 // still sees the fire as active.
-static s16   sFireGraceTimer = 0;
+static s16 sFireGraceTimer = 0;
 static Vec3f sFireGracePos = { 0.0f, 0.0f, 0.0f };
 #define MARIO_FB_GRACE 5
 
@@ -766,7 +788,10 @@ static ColliderCylinderInit sMarioFireballColInit = {
     { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
     { ELEMTYPE_UNK2,
       { DMG_FIRE | DMG_SWORD | DMG_ARROW_LIGHT | DMG_MIR_RAY, 0x01, 8 },
-      { 0, 0, 0 }, TOUCH_ON | TOUCH_SFX_NORMAL, BUMP_NONE, OCELEM_NONE },
+      { 0, 0, 0 },
+      TOUCH_ON | TOUCH_SFX_NORMAL,
+      BUMP_NONE,
+      OCELEM_NONE },
     { 22, 30, -6, { 0, 0, 0 } }
 };
 
@@ -1067,8 +1092,8 @@ void Sm64Mario_DrawFireballs(PlayState* play) {
         gDPSetEnvColor(POLY_XLU_DISP++, 255, 40, 0, 0);
         gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, 255, 220, 0, 255);
         gSPSegment(POLY_XLU_DISP++, 0x08,
-                   Gfx_TwoTexScrollEx(gfxCtx, 0, 0, 0, 0x20, 0x40, 1, 0, (fb->fxScroll * -0x14) & 0x1FF, 0x20,
-                                      0x80, 0, 0, 0, -0x14));
+                   Gfx_TwoTexScrollEx(gfxCtx, 0, 0, 0, 0x20, 0x40, 1, 0, (fb->fxScroll * -0x14) & 0x1FF, 0x20, 0x80, 0,
+                                      0, 0, -0x14));
         gSPDisplayList(POLY_XLU_DISP++, gEffFire1DL);
     }
 
@@ -1079,14 +1104,16 @@ void Sm64Mario_DrawFireballs(PlayState* play) {
 // handler doesn't also fire on the same button), and run the timer state
 // machine. Called from the normal path of Sm64Mario_HandleItems.
 static void Sm64Mario_HandleCapDpad(PlayState* play) {
-    if (play == NULL) return;
+    if (play == NULL)
+        return;
     Input* in = &play->state.input[0];
 
     for (s32 i = 0; i < SM64_CAP_SLOT_COUNT; i++) {
-        if (!CHECK_BTN_ALL(in->press.button, kCapDefs[i].btn)) continue;
+        if (!CHECK_BTN_ALL(in->press.button, kCapDefs[i].btn))
+            continue;
         // Consume the press/cur so the partner-item D-Pad handler skips it.
         in->press.button &= ~kCapDefs[i].btn;
-        in->cur.button   &= ~kCapDefs[i].btn;
+        in->cur.button &= ~kCapDefs[i].btn;
         Sm64Caps_Press(i);
         break;
     }
@@ -1105,33 +1132,33 @@ static void Sm64Mario_HandleCapDpad(PlayState* play) {
 // One cap at a time. Visual is a camera-facing spinning disc placeholder (the
 // real tiara mesh from omm_tiara_geo.bin replaces it once integrated).
 // =============================================================================
-#define CAPPY_OUT_SPEED    12.0f   // short throw → the cap hovers close & reachable
-#define CAPPY_OUT_FRAMES   12      // ≈ 144 units forward, a quick jump away
-#define CAPPY_HOVER_FRAMES 60      // long hover so the cap-jump window is reliable
+#define CAPPY_OUT_SPEED 12.0f // short throw → the cap hovers close & reachable
+#define CAPPY_OUT_FRAMES 12   // ≈ 144 units forward, a quick jump away
+#define CAPPY_HOVER_FRAMES 60 // long hover so the cap-jump window is reliable
 #define CAPPY_RETURN_SPEED 30.0f
-#define CAPPY_CATCH_DIST   26.0f
-#define CAPPY_BOUNCE_XZ    46.0f   // generous landing radius for the cap-bounce
-#define CAPPY_HOMING_RANGE 220.0f  // only nudge toward CLOSE enemies (keeps it reachable)
+#define CAPPY_CATCH_DIST 26.0f
+#define CAPPY_BOUNCE_XZ 46.0f     // generous landing radius for the cap-bounce
+#define CAPPY_HOMING_RANGE 220.0f // only nudge toward CLOSE enemies (keeps it reachable)
 #define CAPPY_ORBIT_FRAMES 30
 #define CAPPY_ORBIT_RADIUS 78.0f
 
 enum { CAPPY_OUT = 0, CAPPY_HOVER, CAPPY_RETURN, CAPPY_ORBIT };
 
 typedef struct {
-    u8                active;
-    u8                phase;
-    u8                mode;       // SM64_CAPPY_*
-    u8                colInited;
-    u8                homing;
-    u8                bounced;    // cap-jump fired this throw (one-shot)
-    s16               timer;
-    s16               fxScroll;
-    s16               yaw;
-    s16               orbitAng;
-    Vec3f             pos;
-    Vec3f             vel;
-    Actor*            target;     // homing target (nearest enemy), or NULL
-    ColliderCylinder  col;
+    u8 active;
+    u8 phase;
+    u8 mode; // SM64_CAPPY_*
+    u8 colInited;
+    u8 homing;
+    u8 bounced; // cap-jump fired this throw (one-shot)
+    s16 timer;
+    s16 fxScroll;
+    s16 yaw;
+    s16 orbitAng;
+    Vec3f pos;
+    Vec3f vel;
+    Actor* target; // homing target (nearest enemy), or NULL
+    ColliderCylinder col;
 } Cappy;
 
 static Cappy sCappy;
@@ -1192,7 +1219,8 @@ static Actor* Sm64Cappy_FindTarget(PlayState* play, Vec3f* from) {
 static u8 Sm64Cappy_TryBounce(PlayState* play, Vec3f* mpos, Player* player) {
     f32 dx, dy, dz;
     (void)player;
-    if (sCappy.bounced || sCappy.fxScroll < 5) return 0;
+    if (sCappy.bounced || sCappy.fxScroll < 5)
+        return 0;
     dx = mpos->x - sCappy.pos.x;
     dy = mpos->y - sCappy.pos.y;
     dz = mpos->z - sCappy.pos.z;
@@ -1212,7 +1240,8 @@ void Sm64Cappy_Throw(PlayState* play, s32 mode, u8 homing) {
     Player* player;
     s16 yaw;
     f32 fwd = CAPPY_OUT_SPEED;
-    if (play == NULL) return;
+    if (play == NULL)
+        return;
     player = GET_PLAYER(play);
 
     if (!sCappy.colInited) {
@@ -1262,7 +1291,8 @@ void Sm64Cappy_Update(PlayState* play) {
     Vec3f mpos;
     f32 dx, dy, dz, dist;
 
-    if (play == NULL || !sCappy.active) return;
+    if (play == NULL || !sCappy.active)
+        return;
     player = GET_PLAYER(play);
     mpos = player->actor.world.pos;
     sCappy.fxScroll++;
@@ -1276,7 +1306,8 @@ void Sm64Cappy_Update(PlayState* play) {
 
     switch (sCappy.phase) {
         case CAPPY_OUT:
-            if (sCappy.mode == SM64_CAPPY_DIVE) sCappy.vel.y -= 1.2f;
+            if (sCappy.mode == SM64_CAPPY_DIVE)
+                sCappy.vel.y -= 1.2f;
             // Homing: GENTLE nudge toward a close enemy — never enough to fling the
             // cap far (so it still hovers near where you threw it, for the cap-jump).
             if (sCappy.homing && sCappy.target != NULL && sCappy.target->update != NULL) {
@@ -1285,9 +1316,10 @@ void Sm64Cappy_Update(PlayState* play) {
                 f32 tz = sCappy.target->world.pos.z - sCappy.pos.z;
                 f32 td = sqrtf(tx * tx + ty * ty + tz * tz);
                 if (td > 1.0f) {
-                    f32 spd = sqrtf(sCappy.vel.x * sCappy.vel.x + sCappy.vel.y * sCappy.vel.y +
-                                    sCappy.vel.z * sCappy.vel.z);
-                    if (spd < 10.0f) spd = 10.0f;
+                    f32 spd =
+                        sqrtf(sCappy.vel.x * sCappy.vel.x + sCappy.vel.y * sCappy.vel.y + sCappy.vel.z * sCappy.vel.z);
+                    if (spd < 10.0f)
+                        spd = 10.0f;
                     sCappy.vel.x += ((tx / td) * spd - sCappy.vel.x) * 0.12f;
                     sCappy.vel.y += ((ty / td) * spd - sCappy.vel.y) * 0.12f;
                     sCappy.vel.z += ((tz / td) * spd - sCappy.vel.z) * 0.12f;
@@ -1296,7 +1328,8 @@ void Sm64Cappy_Update(PlayState* play) {
             sCappy.pos.x += sCappy.vel.x;
             sCappy.pos.y += sCappy.vel.y;
             sCappy.pos.z += sCappy.vel.z;
-            if (Sm64Cappy_TryBounce(play, &mpos, player)) break;
+            if (Sm64Cappy_TryBounce(play, &mpos, player))
+                break;
             if (--sCappy.timer <= 0) {
                 sCappy.phase = CAPPY_HOVER;
                 sCappy.timer = CAPPY_HOVER_FRAMES;
@@ -1309,7 +1342,8 @@ void Sm64Cappy_Update(PlayState* play) {
             sCappy.pos.x += sCappy.vel.x;
             sCappy.pos.y += sCappy.vel.y;
             sCappy.pos.z += sCappy.vel.z;
-            if (Sm64Cappy_TryBounce(play, &mpos, player)) break;
+            if (Sm64Cappy_TryBounce(play, &mpos, player))
+                break;
             if (--sCappy.timer <= 0) {
                 sCappy.phase = CAPPY_RETURN;
             }
@@ -1319,7 +1353,8 @@ void Sm64Cappy_Update(PlayState* play) {
             sCappy.pos.x = mpos.x + Math_SinS(sCappy.orbitAng) * CAPPY_ORBIT_RADIUS;
             sCappy.pos.y = mpos.y + 26.0f;
             sCappy.pos.z = mpos.z + Math_CosS(sCappy.orbitAng) * CAPPY_ORBIT_RADIUS;
-            if (Sm64Cappy_TryBounce(play, &mpos, player)) break;
+            if (Sm64Cappy_TryBounce(play, &mpos, player))
+                break;
             if (--sCappy.timer <= 0) {
                 sCappy.phase = CAPPY_RETURN;
             }
@@ -1351,8 +1386,8 @@ void Sm64Cappy_Update(PlayState* play) {
         fq.z = sCappy.pos.z;
         fy = BgCheck_EntityRaycastFloor1(&play->colCtx, &fpoly, &fq);
         if (fpoly != NULL && fy > BGCHECK_Y_MIN && sCappy.pos.y < fy + 10.0f) {
-            sCappy.pos.y = fy + 10.0f;        // hug the slope
-            if (sCappy.phase == CAPPY_OUT) {  // climbing into terrain -> settle/hover
+            sCappy.pos.y = fy + 10.0f;       // hug the slope
+            if (sCappy.phase == CAPPY_OUT) { // climbing into terrain -> settle/hover
                 sCappy.vel.y = 0.0f;
             }
         }
@@ -1374,7 +1409,8 @@ void Sm64Cappy_Draw(PlayState* play) {
     GraphicsContext* gfxCtx;
     f32 spin;
 
-    if (play == NULL || !sCappy.active) return;
+    if (play == NULL || !sCappy.active)
+        return;
     gfxCtx = play->state.gfxCtx;
     spin = sCappy.fxScroll * 0x800; // spins about its own axis as it flies
 
@@ -1383,14 +1419,14 @@ void Sm64Cappy_Draw(PlayState* play) {
     OPEN_DISPS(gfxCtx);
     Matrix_Translate(sCappy.pos.x, sCappy.pos.y + 4.0f, sCappy.pos.z, MTXMODE_NEW);
     Matrix_RotateY(spin * (M_PI / 0x8000), MTXMODE_APPLY);
-    Matrix_Scale(0.09f, 0.09f, 0.09f, MTXMODE_APPLY); // tune to taste
+    Matrix_Scale(0.09f, 0.09f, 0.09f, MTXMODE_APPLY);      // tune to taste
     Matrix_Translate(0.0f, -72.0f, -12.0f, MTXMODE_APPLY); // recenter
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     Gfx_SetupDL_25Opa(gfxCtx);
-    gDPSetCombineMode(POLY_OPA_DISP++, G_CC_SHADE, G_CC_SHADE);  // lit vertex shade, no texture
+    gDPSetCombineMode(POLY_OPA_DISP++, G_CC_SHADE, G_CC_SHADE); // lit vertex shade, no texture
     gSPSetGeometryMode(POLY_OPA_DISP++, G_LIGHTING);
-    gSPSetLights1(POLY_OPA_DISP++, mario_red_lights_group);      // red for the cap dome
-    gSPDisplayList(POLY_OPA_DISP++, mario_cap_unused_base_dl);   // top (red) + brim (brown)
+    gSPSetLights1(POLY_OPA_DISP++, mario_red_lights_group);    // red for the cap dome
+    gSPDisplayList(POLY_OPA_DISP++, mario_cap_unused_base_dl); // top (red) + brim (brown)
     CLOSE_DISPS(gfxCtx);
 }
 
@@ -1401,29 +1437,65 @@ void Sm64Cappy_Draw(PlayState* play) {
 static void MarioItem_Use(u8 usedItem, u8 started, PlayState* play, Player* player) {
     if (sMarioUsedItem != 0xFF && sMarioItemTimer <= 0) {
         switch (usedItem) {
-            case ITEM_STICK:        MarioItem_UseDekuStick(play, player, started); break;
-            case ITEM_BOMB:         MarioItem_UseBombs(play, player, started);     break;
-            case ITEM_BOMBCHU:      MarioItem_UseBombchus(play, player, started);  break;
-            case ITEM_NUT:          MarioItem_UseNuts(play, player, started);      break;
-            case ITEM_BOW:                MarioItem_UseBow(play, player, started, 0); break;
-            case ITEM_ARROW_FIRE:                                                       /* 0x04 — never appears in buttonItems but kept for completeness */
-            case ITEM_BOW_ARROW_FIRE:     MarioItem_UseBow(play, player, started, 1); break;  /* 0x38 — actual stored value when user equips fire arrows on C-slot */
+            case ITEM_STICK:
+                MarioItem_UseDekuStick(play, player, started);
+                break;
+            case ITEM_BOMB:
+                MarioItem_UseBombs(play, player, started);
+                break;
+            case ITEM_BOMBCHU:
+                MarioItem_UseBombchus(play, player, started);
+                break;
+            case ITEM_NUT:
+                MarioItem_UseNuts(play, player, started);
+                break;
+            case ITEM_BOW:
+                MarioItem_UseBow(play, player, started, 0);
+                break;
+            case ITEM_ARROW_FIRE: /* 0x04 — never appears in buttonItems but kept for completeness */
+            case ITEM_BOW_ARROW_FIRE:
+                MarioItem_UseBow(play, player, started, 1);
+                break; /* 0x38 — actual stored value when user equips fire arrows on C-slot */
             case ITEM_ARROW_ICE:
-            case ITEM_BOW_ARROW_ICE:      MarioItem_UseBow(play, player, started, 2); break;  /* 0x39 */
+            case ITEM_BOW_ARROW_ICE:
+                MarioItem_UseBow(play, player, started, 2);
+                break; /* 0x39 */
             case ITEM_ARROW_LIGHT:
-            case ITEM_BOW_ARROW_LIGHT:    MarioItem_UseBow(play, player, started, 3); break;  /* 0x3A */
-            case ITEM_SLINGSHOT:    MarioItem_UseSlingshot(play, player, started); break;
+            case ITEM_BOW_ARROW_LIGHT:
+                MarioItem_UseBow(play, player, started, 3);
+                break; /* 0x3A */
+            case ITEM_SLINGSHOT:
+                MarioItem_UseSlingshot(play, player, started);
+                break;
             case ITEM_OCARINA_FAIRY:
-            case ITEM_OCARINA_TIME: MarioItem_UseOcarina(play, player, started);   break;
+            case ITEM_OCARINA_TIME:
+                MarioItem_UseOcarina(play, player, started);
+                break;
             case ITEM_HOOKSHOT:
-            case ITEM_LONGSHOT:     MarioItem_UseHookshot(play, player, started);  break;
-            case ITEM_DINS_FIRE:    MarioItem_UseSpell(play, player, started, 1);  break;
-            case ITEM_NAYRUS_LOVE:  MarioItem_UseSpell(play, player, started, 2);  break;
-            case ITEM_FARORES_WIND: MarioItem_UseSpell(play, player, started, 3);  break;
-            case ITEM_HAMMER:       MarioItem_UseHammer(play, player, started);    break;
-            case ITEM_BOOMERANG:    MarioItem_UseBoomerang(play, player, started); break;
-            case ITEM_LENS:         MarioItem_UseLens(play, player, started);      break;
-            case ITEM_BEAN:         MarioItem_UseBeans(play, player, started);     break;
+            case ITEM_LONGSHOT:
+                MarioItem_UseHookshot(play, player, started);
+                break;
+            case ITEM_DINS_FIRE:
+                MarioItem_UseSpell(play, player, started, 1);
+                break;
+            case ITEM_NAYRUS_LOVE:
+                MarioItem_UseSpell(play, player, started, 2);
+                break;
+            case ITEM_FARORES_WIND:
+                MarioItem_UseSpell(play, player, started, 3);
+                break;
+            case ITEM_HAMMER:
+                MarioItem_UseHammer(play, player, started);
+                break;
+            case ITEM_BOOMERANG:
+                MarioItem_UseBoomerang(play, player, started);
+                break;
+            case ITEM_LENS:
+                MarioItem_UseLens(play, player, started);
+                break;
+            case ITEM_BEAN:
+                MarioItem_UseBeans(play, player, started);
+                break;
         }
     }
 
@@ -1437,7 +1509,8 @@ static void MarioItem_Use(u8 usedItem, u8 started, PlayState* play, Player* play
 // =============================================================================
 
 void Sm64Mario_HandleItems(PlayState* play, Player* player) {
-    if (play == NULL || player == NULL) return;
+    if (play == NULL || player == NULL)
+        return;
 
     // Cap-expiry detector — when the SM64 cap (Vanish/Metal/Wing) drops out
     // of sSm64OutState.flags, libsm64's internal cap timer expired. Clear
@@ -1446,7 +1519,7 @@ void Sm64Mario_HandleItems(PlayState* play, Player* player) {
     // by Sm64Mario_ItemsReset on detransform / scene change), which is why
     // the user could only cast one cap per scene.
     {
-        u32 capFlags = (1U << 1) | (1U << 2) | (1U << 3);  // VANISH|METAL|WING
+        u32 capFlags = (1U << 1) | (1U << 2) | (1U << 3); // VANISH|METAL|WING
         if (sMarioUsedSpell != 0 && (sSm64OutState.flags & capFlags) == 0) {
             sMarioUsedSpell = 0;
         }
@@ -1487,8 +1560,8 @@ void Sm64Mario_HandleItems(PlayState* play, Player* player) {
         buttonMax = ARRAY_COUNT(gSaveContext.equips.cButtonSlots);
     }
 
-    u8 pressed  = 0;
-    u8 current  = 0;
+    u8 pressed = 0;
+    u8 current = 0;
     u8 released = 0;
 
     if (sMarioUsedItem == 0xFF && sMarioItemTimer <= 0) {

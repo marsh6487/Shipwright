@@ -20,6 +20,12 @@ extern "C" {
 // (VISIBLE), entrance = ((params>>12)&7) stays 0 — vanilla grotto spawns never set it.
 #define FLEET_HOLE_PARAM 0x0800
 
+// Absolute path of a file in the shared fleet folder (<ShipDir>/fleet/<name>), created on demand.
+// Both exes resolve it to the same physical folder, so it is where the two games keep things they
+// SHARE instead of copy — e.g. the combo pictograph (picture.bin + pictoflags.bin, MM's own byte
+// layout). Returns "" if the exe dir can't be resolved; valid until the next call.
+const char* FleetSync_SharedFilePath(const char* name);
+
 // LEAVING this game (call when the send-fade starts, BEFORE RequestWarp): writes this game's
 // anchor section + regenerates "shared" from live state.
 void FleetSync_WriteDeparture(int slot);
@@ -47,6 +53,14 @@ void FleetSync_ClearHoleFall(void);
 // check consults HoleGrabInert. Decremented every frame inside FleetSync's own tick.
 void FleetSync_SetHoleGrabCooldown(int frames);
 int FleetSync_HoleGrabInert(void);
+
+// ---- SWAP TRACE (diagnostic, temporary) ----
+// The two processes hand the game over to each other, and when one of them stops there is nothing in
+// either log to say which stopped first or how far it got. Both games now carry the same numbered
+// trace: a swap arms a short window, and every step of it announces itself with a flush, so the last
+// line on each side pins down the moment. Silent outside that window.
+void FleetSync_BeginSwapTrace(const char* why);
+void FleetSync_SwapTrace(const char* step);
 
 #ifdef __cplusplus
 }

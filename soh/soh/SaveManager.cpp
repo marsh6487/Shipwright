@@ -366,7 +366,17 @@ void SaveManager::SaveRandomizer(SaveContext* saveContext, int sectionID, bool f
                 });
 
                 std::vector<RandomizerArea> areas = hint->GetHintedAreas();
+                const std::vector<std::string>& foreignAreas = hint->GetForeignAreas();
                 SaveManager::Instance->SaveArray("areas", areas.size(), [&](size_t i) {
+                    // Combo rando: a slot pointing at the OTHER game has no RandomizerArea, so the
+                    // enum here is RA_NONE and this used to write "an Isolated Place" straight into
+                    // the save file. The spoiler was right and the screen was wrong for exactly that
+                    // reason — the save is what the running game reads back. Same rule the spoiler
+                    // writer uses: the foreign name travels as text. Skijer's NEI
+                    if (i < foreignAreas.size() && !foreignAreas[i].empty()) {
+                        SaveManager::Instance->SaveData("", foreignAreas[i]);
+                        return;
+                    }
                     SaveManager::Instance->SaveData(
                         "", Rando::StaticData::hintTextTable[Rando::StaticData::areaNames[areas[i]]]
                                 .GetClear()
@@ -588,9 +598,8 @@ void SaveManager::StartupCheckAndInitMeta(int fileNum) {
         // now. Indexing past its end yields null and get<uint8_t>() throws, which used to take the
         // whole game down on the title screen. Treat missing entries as unset instead.
         auto randoSetting = [&randoSettings](size_t key) -> uint8_t {
-            return (key < randoSettings.size() && !randoSettings[key].is_null())
-                       ? randoSettings[key].get<uint8_t>()
-                       : 0;
+            return (key < randoSettings.size() && !randoSettings[key].is_null()) ? randoSettings[key].get<uint8_t>()
+                                                                                 : 0;
         };
         fileMetaInfo[fileNum].maxTriforcePieces = randoSetting(RSK_TRIFORCE_HUNT_PIECES_TOTAL);
         fileMetaInfo[fileNum].hasFishingRod = (int16_t)baseBlock["randomizerInf"][RAND_INF_FISHING_POLE_FOUND >> 4] &
@@ -732,6 +741,9 @@ void SaveManager::InitFileNormal() {
         gSaveContext.equips.cButtonSlots[button] = SLOT_NONE;
     }
     gSaveContext.equips.equipment = 0x1100;
+    for (int button = 0; button < ARRAY_COUNT(gSaveContext.ship.extButtons.items); button++) {
+        gSaveContext.ship.extButtons.items[button] = 0;
+    }
 
     // Inventory
     for (int item = 0; item < ARRAY_COUNT(gSaveContext.inventory.items); item++) {
@@ -2167,6 +2179,12 @@ void SaveManager::LoadBaseVersion4() {
             SaveManager::Instance->LoadData("", gSaveContext.equips.cButtonSlots[i], static_cast<uint8_t>(SLOT_NONE));
         });
         SaveManager::Instance->LoadData("equipment", gSaveContext.equips.equipment);
+        // Real (u16) ids for buttons whose buttonItems entry is the ITEM_EXT_BUTTON marker. Absent in
+        // saves written before the extended-button infra existed, hence the 0 default.
+        SaveManager::Instance->LoadArray(
+            "extButtonItems", ARRAY_COUNT(gSaveContext.ship.extButtons.items), [](size_t i) {
+                SaveManager::Instance->LoadData("", gSaveContext.ship.extButtons.items[i], static_cast<uint16_t>(0));
+            });
     });
     SaveManager::Instance->LoadStruct("inventory", []() {
         SaveManager::Instance->LoadArray("items", ARRAY_COUNT(gSaveContext.inventory.items), [](size_t i) {
@@ -2335,6 +2353,10 @@ void SaveManager::SaveBase(SaveContext* saveContext, int sectionID, bool fullSav
             SaveManager::Instance->SaveData("", saveContext->equips.cButtonSlots[i]);
         });
         SaveManager::Instance->SaveData("equipment", saveContext->equips.equipment);
+        // Real (u16) ids for buttons whose buttonItems entry is the ITEM_EXT_BUTTON marker.
+        SaveManager::Instance->SaveArray(
+            "extButtonItems", ARRAY_COUNT(saveContext->ship.extButtons.items),
+            [&](size_t i) { SaveManager::Instance->SaveData("", saveContext->ship.extButtons.items[i]); });
     });
     SaveManager::Instance->SaveStruct("inventory", [&]() {
         SaveManager::Instance->SaveArray("items", ARRAY_COUNT(saveContext->inventory.items), [&](size_t i) {
@@ -2704,10 +2726,10 @@ typedef struct {
     /* 0x13E1 */ u8 natureAmbienceId;
     /* 0x13E2 */ u8 buttonStatus[5];
     /* 0x13E7 */ u8 forceRisingButtonAlphas; // alpha related
-    /* 0x13E8 */ u16 nextHudVisibilityMode;               // alpha type?
-    /* 0x13EA */ u16 hudVisibilityMode;               // also alpha type?
-    /* 0x13EC */ u16 hudVisibilityModeTimer;               // alpha type counter?
-    /* 0x13EE */ u16 prevHudVisibilityMode;               // previous alpha type?
+    /* 0x13E8 */ u16 nextHudVisibilityMode;  // alpha type?
+    /* 0x13EA */ u16 hudVisibilityMode;      // also alpha type?
+    /* 0x13EC */ u16 hudVisibilityModeTimer; // alpha type counter?
+    /* 0x13EE */ u16 prevHudVisibilityMode;  // previous alpha type?
     /* 0x13F0 */ s16 unk_13F0;               // magic related
     /* 0x13F2 */ s16 unk_13F2;               // magic related
     /* 0x13F4 */ s16 unk_13F4;               // magic related

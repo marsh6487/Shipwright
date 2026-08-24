@@ -18,6 +18,7 @@ extern "C" {
 #include "variables.h"
 #include "mods/extended_equipment.h"
 #include "expansions/sw97/sw97_config.h"
+#include "mods/extended_inventory.h" // Sw97_EffectiveElement / Wand_GetMode (Skijer's NEI)
 }
 
 // ---------------------------------------------------------------------------
@@ -53,8 +54,10 @@ static const ItemDescEntry sCustomItemDescs[] = {
     { ITEM_DOMINION_ROD, TEXT_DESC_DOMINION_ROD,
       "Fire orb to possess Beamos, Armos&or Anubis. Control them with analog+C." },
     { ITEM_TIME_GATE, TEXT_DESC_TIME_GATE, "Travel through time. Swap between&child and adult. Costs 48 magic." },
-    { ITEM_BOMB_ARROWS, TEXT_DESC_BOMB_ARROWS,
-      "Explosive arrows. Hold C to aim.&Consumes 1 arrow and 1 bomb per shot." },
+    // ITEM_BOMB_ARROWS moved to sSw97ElemDescs — it owns no inventory cell any more, so it can only
+    // be hovered as the bow's primed element.
+    { ITEM_ELEMENTAL_WAND, TEXT_DESC_ELEMENTAL_WAND,
+      "Six rods in one. Press A to cycle&between the modes you have unlocked." },
     { ITEM_ROD_FIRE, TEXT_DESC_FIRE_ROD,
       "Slash=3 fireballs. Stab=long shot.&Jump=flamethrower. Spin=fire AoE.&C-Up to aim." },
     { ITEM_ROD_ICE, TEXT_DESC_ICE_ROD, "Slash=3 iceballs. Stab=long shot.&Jump=ice wave. Spin=ice AoE.&C-Up to aim." },
@@ -90,44 +93,63 @@ static const ItemDescEntry sMaskDescs[] = {
       "Transform into Fierce Deity form.&Full moveset from Majora's Mask." },
 };
 
-static const ItemDescEntry sSw97ArrowDescs[] = {
-    { ITEM_SW97_ARROW_FIRE, TEXT_DESC_SW97_ARROW_FIRE, "Fire elemental arrow. 4 MP per shot." },
-    { ITEM_SW97_ARROW_ICE, TEXT_DESC_SW97_ARROW_ICE, "Ice elemental arrow. 4 MP per shot." },
-    { ITEM_SW97_ARROW_LIGHT, TEXT_DESC_SW97_ARROW_LIGHT, "Light elemental arrow. 8 MP per shot." },
-    { ITEM_SW97_ARROW_DARK, TEXT_DESC_SW97_ARROW_DARK, "Dark elemental arrow. 4 MP per shot." },
-    { ITEM_SW97_ARROW_SOUL, TEXT_DESC_SW97_ARROW_SOUL, "Soul elemental arrow. 4 MP per shot." },
-    { ITEM_SW97_ARROW_WIND, TEXT_DESC_SW97_ARROW_WIND, "Wind elemental arrow. 4 MP per shot." },
+// Keyed by SW97_ELEM_*, NOT by item id — the elemental shot has no item id any more, it is a flag on
+// the bow/slingshot. The old strings advertised a magic cost; medallion shots are free.
+static const ItemDescEntry sSw97ElemDescs[] = {
+    { SW97_ELEM_FIRE, TEXT_DESC_SW97_ARROW_FIRE, "Fire elemental shot. Costs no magic." },
+    { SW97_ELEM_ICE, TEXT_DESC_SW97_ARROW_ICE, "Ice elemental shot. Costs no magic." },
+    { SW97_ELEM_LIGHT, TEXT_DESC_SW97_ARROW_LIGHT, "Light elemental shot. Costs no magic." },
+    { SW97_ELEM_DARK, TEXT_DESC_SW97_ARROW_DARK, "Dark elemental shot. Costs no magic." },
+    { SW97_ELEM_SOUL, TEXT_DESC_SW97_ARROW_SOUL, "Soul elemental shot. Costs no magic." },
+    { SW97_ELEM_WIND, TEXT_DESC_SW97_ARROW_WIND, "Wind elemental shot. Costs no magic." },
+    { SW97_ELEM_BOMB, TEXT_DESC_BOMB_ARROWS, "Explosive arrows. Hold C to aim.&Consumes 1 arrow and 1 bomb per shot." },
 };
 
+// The six rods share one item id, so their descriptions key off the active mode.
+static const ItemDescEntry sWandModeDescs[] = {
+    { WAND_MODE_SAND, TEXT_DESC_WAND_SAND, "Sand Rod. Unlocked by the Spirit&Medallion." },
+    { WAND_MODE_TORNADO, TEXT_DESC_WAND_TORNADO, "Tornado Rod. Unlocked by the Forest&Medallion." },
+    { WAND_MODE_WATER, TEXT_DESC_WAND_WATER, "Water Rod. Unlocked by the Water&Medallion." },
+    { WAND_MODE_METEOR, TEXT_DESC_WAND_METEOR, "Meteor Rod. Unlocked by the Fire&Medallion." },
+    { WAND_MODE_STORM, TEXT_DESC_WAND_STORM, "Storm Rod. Unlocked by the Light&Medallion." },
+    { WAND_MODE_SCEPTER, TEXT_DESC_WAND_SCEPTER, "Shadow Scepter. Unlocked by the&Shadow Medallion." },
+};
+
+// Skijer 2026-07-29 re-layout. The TEXT_DESC_* ids are kept as-is (they are just message slots) even
+// where a slot changed item, so no message table has to be renumbered.
+//   NOTE ITEM_EXT_BOOTS_2 is the one shared id: in the INVENTORY / trade wheel it is the Pendant of
+//   Memories (described here), while the page-2 GRID cell with the same id is the Climb Boots.
 static const ItemDescEntry sExtEquipDescs[] = {
-    { ITEM_EXT_SWORD_1, TEXT_DESC_EXT_BYRNA, "BGS reach. Recover HP+MP on&melee hit." },
+    { ITEM_EXT_SWORD_1, TEXT_DESC_EXT_BYRNA,
+      "Reserved. Its old reach and HP+MP&recovery belong to the Great Fairy's&Sword now." },
     { ITEM_EXT_SWORD_2, TEXT_DESC_EXT_FOUR_SWORD,
       "R+B to charge. Spawns 3 clones&(36 MP). Clones mirror your attacks." },
-    { ITEM_EXT_SWORD_3, TEXT_DESC_EXT_IK_AXE, "Hammer attacks. 2x damage, 2x reach.&Slower walk. Hold B to throw." },
+    { ITEM_EXT_SWORD_3, TEXT_DESC_EXT_IK_AXE, "Trident. (behavior coming soon)" },
     { ITEM_EXT_SHIELD_1, TEXT_DESC_EXT_DIVINE_SHIELD,
       "Fire immune. Block within 10 frames&to stun all nearby enemies." },
-    { ITEM_EXT_SHIELD_2, TEXT_DESC_EXT_GERUDO_SCIMITAR, "Surfing shield. (coming soon)" },
+    { ITEM_EXT_SHIELD_2, TEXT_DESC_EXT_GERUDO_SCIMITAR,
+      "R in mid-air to surf. Downhill&builds speed. A hops, B spins, B+R off." },
     { ITEM_EXT_SHIELD_3, TEXT_DESC_EXT_SHIELD_IKANA,
       "Perfect guard drains enemy HP.&Death save: revive once with 3 hearts." },
-    { ITEM_EXT_TUNIC_1, TEXT_DESC_EXT_MAGIC_CAPE, "Ganondorf's cape. Reduces magic&cost by half." },
+    { ITEM_EXT_TUNIC_1, TEXT_DESC_EXT_CHAMPION_TUNIC,
+      "Flurry Rush on dodge. Bullet Time&when aiming in air. 15% world speed." },
     { ITEM_EXT_TUNIC_2, TEXT_DESC_EXT_BREASTPLATE,
       "Damage immunity. Costs rupees per&hit. No rupees = slow movement." },
-    { ITEM_EXT_TUNIC_3, TEXT_DESC_EXT_CHAMPION_TUNIC,
-      "Flurry Rush on dodge. Bullet Time&when aiming in air. 15% world speed." },
+    { ITEM_EXT_TUNIC_3, TEXT_DESC_EXT_MAGIC_CAPE, "Immune to ice, freezing and&ice traps." },
     { ITEM_EXT_BOOTS_1, TEXT_DESC_EXT_PEGASUS_ANKLET,
       "Hold B to dash with sword. Wind&barrier drains 1 MP/15 frames." },
     { ITEM_EXT_BOOTS_2, TEXT_DESC_EXT_PENDANT_MEMORIES,
       "Mortal Draw near enemies. Ground&Pound in air. Parry Leap after 3&side hops." },
-    { ITEM_EXT_BOOTS_3, TEXT_DESC_EXT_WATER_DRAGON_SCALE, "Zora swim. Barrel roll, dolphin jump.&Adult only." },
+    { ITEM_EXT_BOOTS_3, TEXT_DESC_EXT_WATER_DRAGON_SCALE, "Roc Boots. (behavior coming soon)" },
 };
 
 static const ItemDescEntry sMedallionDescs[] = {
-    { ITEM_MEDALLION_FOREST, TEXT_DESC_MEDALLION_FOREST, "Wind spell. 12 MP.&L to switch to arrow mode." },
-    { ITEM_MEDALLION_FIRE, TEXT_DESC_MEDALLION_FIRE, "Fire spell. 12 MP.&L to switch to arrow mode." },
-    { ITEM_MEDALLION_WATER, TEXT_DESC_MEDALLION_WATER, "Ice spell. 24 MP.&L to switch to arrow mode." },
-    { ITEM_MEDALLION_SPIRIT, TEXT_DESC_MEDALLION_SPIRIT, "Soul spell. 24 MP.&L to switch to arrow mode." },
-    { ITEM_MEDALLION_SHADOW, TEXT_DESC_MEDALLION_SHADOW, "Dark spell. 12 MP.&L to switch to arrow mode." },
-    { ITEM_MEDALLION_LIGHT, TEXT_DESC_MEDALLION_LIGHT, "Light spell. 24 MP.&L to switch to arrow mode." },
+    { ITEM_MEDALLION_FOREST, TEXT_DESC_MEDALLION_FOREST, "Wind spell. 12 MP.&C to equip the spell." },
+    { ITEM_MEDALLION_FIRE, TEXT_DESC_MEDALLION_FIRE, "Fire spell. 12 MP.&C to equip the spell." },
+    { ITEM_MEDALLION_WATER, TEXT_DESC_MEDALLION_WATER, "Ice spell. 24 MP.&C to equip the spell." },
+    { ITEM_MEDALLION_SPIRIT, TEXT_DESC_MEDALLION_SPIRIT, "Soul spell. 24 MP.&C to equip the spell." },
+    { ITEM_MEDALLION_SHADOW, TEXT_DESC_MEDALLION_SHADOW, "Dark spell. 12 MP.&C to equip the spell." },
+    { ITEM_MEDALLION_LIGHT, TEXT_DESC_MEDALLION_LIGHT, "Light spell. 24 MP.&C to equip the spell." },
 };
 
 // Vanilla OOT usable items (shown on the ITEM page when no custom item matches).
@@ -169,9 +191,22 @@ extern "C" u16 PauseItemDesc_GetTextId(u16 cursorItem, s32 pageIndex) {
             if (sMaskDescs[i].itemId == cursorItem)
                 return sMaskDescs[i].textId;
         }
-        for (size_t i = 0; i < ARRAY_COUNT(sSw97ArrowDescs); i++) {
-            if (sSw97ArrowDescs[i].itemId == cursorItem)
-                return sSw97ArrowDescs[i].textId;
+        // SW97 elemental shot: the cursor is on a plain bow/slingshot and the element rides a flag,
+        // so describe whatever is primed on THAT weapon rather than looking the cursor item up.
+        if (SW97_MEDALLIONS_ENABLED() && (Sw97_IsBowItem(cursorItem) || Sw97_IsSlingItem(cursorItem))) {
+            u8 elem = Sw97_EffectiveElement(Sw97_IsSlingItem(cursorItem));
+            for (size_t i = 0; i < ARRAY_COUNT(sSw97ElemDescs); i++) {
+                if (sSw97ElemDescs[i].itemId == elem)
+                    return sSw97ElemDescs[i].textId;
+            }
+        }
+        // Elemental Wand: one id, six descriptions — follow the active mode.
+        if (cursorItem == ITEM_ELEMENTAL_WAND) {
+            u8 mode = Wand_GetMode();
+            for (size_t i = 0; i < ARRAY_COUNT(sWandModeDescs); i++) {
+                if (sWandModeDescs[i].itemId == mode)
+                    return sWandModeDescs[i].textId;
+            }
         }
         for (size_t i = 0; i < ARRAY_COUNT(sVanillaItemDescs); i++) {
             if (sVanillaItemDescs[i].itemId == cursorItem)
@@ -210,12 +245,14 @@ static void BuildDescMessage(const char* desc, uint16_t* textId, bool* loadFromM
 }
 
 // All description tables for single-hook lookup
+// Matched on textId only, so the element/mode-keyed tables slot in here unchanged.
 static const ItemDescEntry* sAllDescs[] = {
-    sCustomItemDescs, sMaskDescs, sSw97ArrowDescs, sExtEquipDescs, sMedallionDescs, sVanillaItemDescs,
+    sCustomItemDescs, sMaskDescs, sSw97ElemDescs, sWandModeDescs, sExtEquipDescs, sMedallionDescs, sVanillaItemDescs,
 };
 static const size_t sAllDescCounts[] = {
-    ARRAY_COUNT(sCustomItemDescs), ARRAY_COUNT(sMaskDescs),      ARRAY_COUNT(sSw97ArrowDescs),
-    ARRAY_COUNT(sExtEquipDescs),   ARRAY_COUNT(sMedallionDescs), ARRAY_COUNT(sVanillaItemDescs),
+    ARRAY_COUNT(sCustomItemDescs),  ARRAY_COUNT(sMaskDescs),     ARRAY_COUNT(sSw97ElemDescs),
+    ARRAY_COUNT(sWandModeDescs),    ARRAY_COUNT(sExtEquipDescs), ARRAY_COUNT(sMedallionDescs),
+    ARRAY_COUNT(sVanillaItemDescs),
 };
 
 // Single hook for all descriptions: fires on ANY OnOpenText, checks if textId matches

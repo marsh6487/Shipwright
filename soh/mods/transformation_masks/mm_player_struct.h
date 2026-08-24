@@ -38,7 +38,9 @@ typedef enum MmPlayerTransformation {
     MM_PLAYER_FORM_PIKACHU = 5,
     MM_PLAYER_FORM_GARO = 6,
     MM_PLAYER_FORM_GERUDO = 7,
-    MM_PLAYER_FORM_MAX = 8
+    MM_PLAYER_FORM_RITO = 8, // keep in sync with transformation_masks.h (same enum, two headers)
+    MM_PLAYER_FORM_KEATON = 9,
+    MM_PLAYER_FORM_MAX = 10
 } MmPlayerTransformation;
 
 // =============================================================================

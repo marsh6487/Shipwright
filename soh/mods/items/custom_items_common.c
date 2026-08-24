@@ -18,8 +18,8 @@
 #include "logic/item_postman_hat.h"
 #include "../extended_inventory.h" // ExtInv_GetItemSlot — custom items must NOT use vanilla SLOT()/INV_CONTENT()
 #include "overlays/actors/ovl_En_Boom/z_en_boom.h" // EnBoom struct for Gale Boomerang multi-target override
-#include "soh/FleetShipCombo/FleetShipCombo.h"      // cross-game world-connector (loading zone)
-#include "soh/FleetShipCombo/FleetSync.h"           // cross-game save cache + fleet-hole registry
+#include "soh/FleetShipCombo/FleetShipCombo.h"     // cross-game world-connector (loading zone)
+#include "soh/FleetShipCombo/FleetSync.h"          // cross-game save cache + fleet-hole registry
 
 extern PlayState* gPlayState;
 
@@ -226,7 +226,8 @@ s32 CustomItems_IsBlocked(Player* p, PlayState* play) {
 
 // Quick check if item is in any C-button slot
 static u8 IsItemEquipped(u8 itemId) {
-    for (u8 i = 1; i <= 8; i++) {
+    // i < 8: buttonItems is u8[8]; `i <= 8` read one past it and could report a false positive.
+    for (u8 i = 1; i < ARRAY_COUNT(gSaveContext.equips.buttonItems); i++) {
         if (gSaveContext.equips.buttonItems[i] == itemId)
             return 1;
     }
@@ -249,8 +250,13 @@ static void CustomItems_CleanupUnequipped(Player* p, PlayState* play) {
         Handle_DekuLeaf(p, play);
     if (gCustomItemState.beetleActive && !IsItemEquipped(ITEM_BEETLE))
         Handle_Beetle(p, play);
-    if (gCustomItemState.bombArrowActive && !IsItemEquipped(ITEM_BOMB_ARROWS))
+    // Skijer's NEI — Bomb Arrows is the bow's element flag, not an item on a button, so the literal
+    // IsItemEquipped(ITEM_BOMB_ARROWS) scan can never hit. Without this it returns false every frame
+    // and cancels the aim immediately, which reads as "bomb arrows do nothing".
+    if (gCustomItemState.bombArrowActive && !Sw97_BombArrowsOnButton())
         Handle_BombArrows(p, play);
+    if (Net_IsActive() && !IsItemEquipped(ITEM_NET))
+        Handle_Net(p, play);
     if ((gCustomItemState.fireRodActive || gCustomItemState.fireRodFirstPerson) && !IsItemEquipped(ITEM_ROD_FIRE))
         Handle_FireRod(p, play);
     if ((gCustomItemState.iceRodActive || gCustomItemState.iceRodFirstPerson) && !IsItemEquipped(ITEM_ROD_ICE))
@@ -287,14 +293,139 @@ static void CustomItems_CleanupUnequipped(Player* p, PlayState* play) {
 //      baked in the binary scene and can't be edited/out-sized) and FLIP to MM instead.
 // ============================================================================
 static u8 sFleetWarpArmed = 0;
-static u8 sTotHoleArmed = 0; // Temple of Time fleet-hole proximity arm (re-arms when Link steps off)
-static u8 sFlipPending = 0; // OoT->MM: a manual fade-out overlay is ramping; flip to MM at full black
-static s16 sSendAlpha = 0;  // 0..255 ramp for the sending fade overlay (drawn by the PiP consumer)
-static s16 sWarpCooldown = 0; // suppress the trigger right after any warp (bridges the scene reload)
+static u8 sTotHoleArmed = 0;     // Temple of Time fleet-hole proximity arm (re-arms when Link steps off)
+static u8 sFlipPending = 0;      // OoT->MM: a manual fade-out overlay is ramping; flip to MM at full black
+static s16 sSendAlpha = 0;       // 0..255 ramp for the sending fade overlay (drawn by the PiP consumer)
+static s16 sWarpCooldown = 0;    // suppress the trigger right after any warp (bridges the scene reload)
+static s16 sGuestWaitFrames = 0; // frames held at full black waiting for a quiet 2ship to come back
 // Destination of the sending fade (set by whichever trigger started it; consumed at full black).
 static int sSendScene = 0x65;
 static float sSendX = 0.0f, sSendY = 0.0f, sSendZ = 0.0f;
 static int sSendRotY = 0;
+
+// One ramp step of the sending fade + the flip at full black. Split out of FleetWarp_Tick because
+// that tick only runs from the PLAYER update: anything that stops the player from updating
+// (cutscene, textbox, death, a paused/stalled state) also stops the fade — leaving the screen
+// permanently black at whatever alpha it reached, with the flip never requested. That is a frozen
+// game. FleetWarp_SendFadeWatchdog below drives this same function from the global per-frame hook
+// when it sees the ramp stall.
+static void FleetWarp_RampSendFade(PlayState* play) {
+    if (!sFlipPending) {
+        return;
+    }
+    if (play != NULL && play->transitionMode == TRANS_MODE_OFF) {
+        play->transitionTrigger = TRANS_TRIGGER_OFF; // squash before the FSM picks it up
+    }
+    sSendAlpha += 9; // ~1.5s ramp at the ~20 Hz game-update rate (tune)
+    if (sSendAlpha < 255) {
+        FleetShipCombo_SetSendFadeAlpha((int)sSendAlpha);
+        return;
+    }
+    sSendAlpha = 255;
+    FleetSync_SwapTrace("A1. OoT fade reached full black — starting handover to MM");
+
+    // LAST CHECK BEFORE A ONE-WAY DOOR. The flip makes MM active and freezes OoT; if 2ship is dead
+    // or hung at that moment the player is left on a window that will never update again — not a
+    // warp bug, but indistinguishable from one, and unrecoverable.
+    //
+    // But we WAIT before we give up, and that distinction is the whole design. 2ship stops turning
+    // frames for entirely normal reasons — a scene load, an oracle turn, a stutter — and the logs
+    // show gaps of several seconds during healthy play. Refusing the warp on the first quiet moment
+    // would break something that works today. Holding at full black costs the player a slightly
+    // longer fade and nothing else, so we hold: if MM comes back (the common case), the warp goes
+    // through as usual. Only when it stays silent past the deadline do we call it gone.
+    if (!FleetShipCombo_IsGuestResponsive()) {
+        // A RESUME hand-off happens seconds after launch, when 2ship may still be reading archives
+        // (a first run can take a minute), so it gets a far longer grace than a portal step: the
+        // player asked to resume in MM, and giving up on them after ten seconds because the other
+        // game is still booting would be the wrong call. A portal step, by contrast, means MM was
+        // alive moments ago.
+        const s16 waitLimit = (sSendScene == FC_WARP_SCENE_RESUME) ? 3600 : 600; // ~60s vs ~10s
+        if (++sGuestWaitFrames < waitLimit) {
+            sSendAlpha = 255 - 9; // stay one step short so we re-test instead of flipping
+            FleetShipCombo_SetSendFadeAlpha(255);
+            return; // sFlipPending stays set: we are still mid-warp, just waiting
+        }
+        // Really gone. Don't travel: clear the fade, re-arm the trigger, say why, leave the player
+        // where they are. The portal works again the moment MM does (and if it is truly dead, the
+        // guest watchdog closes the combo on its own).
+        sGuestWaitFrames = 0;
+        sFlipPending = 0;
+        sSendAlpha = 0;
+        FleetShipCombo_SetSendFadeAlpha(0); // never leave the host painting black
+        FleetShipCombo_ReportGuestUnavailable();
+        sWarpCooldown = 120; // don't re-trigger every frame while standing on the portal
+        sFleetWarpArmed = 1;
+        sTotHoleArmed = 1;
+        return;
+    }
+    sGuestWaitFrames = 0;
+    sFlipPending = 0;
+    FleetSync_SwapTrace("A2. guest responsive — committing");
+
+    // The flip is UNCONDITIONAL: FleetSync_WriteDeparture is best-effort bookkeeping (it is guarded
+    // on its own side and always returns normally), while RequestWarp is the only thing that hands
+    // the player to MM. They must never be able to trade places.
+    FleetSync_SwapTrace("A3. WriteDeparture enter");
+    FleetSync_WriteDeparture(gSaveContext.fileNum); // anchor + shared BEFORE the flip
+    FleetSync_SwapTrace("A4. WriteDeparture done — parking in the waiting room");
+    // Park first, flip once parked. FleetLimbo_DepartToMm walks Link into the sealed waiting room
+    // and FleetWarpBoot_Tick does the RequestWarp the moment he is inside (or after its deadline,
+    // which is the old flip-in-place behaviour). OoT keeps RUNNING in there instead of freezing.
+    FleetLimbo_DepartToMm(sSendScene, sSendX, sSendY, sSendZ, sSendRotY, gSaveContext.fileNum);
+}
+
+// RESUME HAND-OFF: the player loaded a combo file whose last save was made in MM, so OoT is only a
+// doorway this time. Start the same sending fade the portal uses — same code path, same departure
+// write, same flip — but aimed at FC_WARP_SCENE_RESUME, which tells MM to land in ITS OWN save
+// instead of at the Clock Town hole. Called once per file load by FleetWarpBoot.cpp.
+// Refused while a warp is already in flight, so it can never stack with a real portal use.
+void FleetWarp_StartResumeToMm(void) {
+    if (sFlipPending) {
+        return;
+    }
+    sFlipPending = 1;
+    sSendAlpha = 0;
+    sSendScene = FC_WARP_SCENE_RESUME;
+    sSendX = sSendY = sSendZ = 0.0f;
+    sSendRotY = 0;
+    sFleetWarpArmed = 1; // don't let the Lost Woods door re-trigger on top of this
+    sTotHoleArmed = 1;
+}
+
+// WATCHDOG (driven by FleetWarpBoot_Tick, which runs in ALL gamestates every frame): if a fade is
+// pending but its alpha has not moved for a second, the player update is not running it. Drive it
+// from here so the flip still happens. With no PlayState at all there is nothing to fade — flip
+// immediately rather than sit on a black screen.
+void FleetWarp_SendFadeWatchdog(void) {
+    static s16 sLastAlpha = -1;
+    static s16 sStalledFrames = 0;
+
+    if (!sFlipPending) {
+        sLastAlpha = -1;
+        sStalledFrames = 0;
+        return;
+    }
+    if (sSendAlpha != sLastAlpha) {
+        sLastAlpha = sSendAlpha;
+        sStalledFrames = 0;
+        return;
+    }
+    if (++sStalledFrames < 60) {
+        return; // ~1s of no progress before we take over
+    }
+    sStalledFrames = 0;
+    // Don't resume the ramp one step per second — the screen is already dark and whatever the fade
+    // was covering is not updating anyway. Jump to full black and let the flip go through.
+    sSendAlpha = 255 - 9;
+    // While we are the ones driving, a call here stands for a whole second of waiting, not one
+    // frame. Without this the guest-wait deadline inside the ramp (counted in frames) would take ten
+    // MINUTES to expire in the one case where both the player update AND the guest are stopped.
+    if (sGuestWaitFrames > 0) {
+        sGuestWaitFrames += 59;
+    }
+    FleetWarp_RampSendFade(gPlayState); // NULL play is handled: it just skips the trigger squash
+}
 
 // Called by the unified arrival pipeline (FleetWarpBoot.cpp) right before it boots the destination
 // Play_Init: we just arrived -> don't let the Lost Woods trigger instantly ping-pong back.
@@ -318,8 +449,11 @@ static void FleetWarp_Tick(Player* p, PlayState* play) {
     // (0) FROZEN GUARD — while we are the INACTIVE game, squash any freshly-set transition trigger
     // (e.g. the hole-fall completion landing AFTER the flip): a frozen game must never start scene
     // transitions on its own. Only the trigger — never a live transition mode.
+    // EXCEPTION: our own walk into the waiting room. The hand-over happens the same frame that
+    // transition is triggered, so for a frame or two we are inactive with a trigger of our own
+    // pending; squashing it would strand the game in its old scene, frozen.
     if (!FleetShipCombo_IsThisGameActive() && play->transitionTrigger != TRANS_TRIGGER_OFF &&
-        play->transitionMode == TRANS_MODE_OFF) {
+        play->transitionMode == TRANS_MODE_OFF && !FleetLimbo_InFlight()) {
         play->transitionTrigger = TRANS_TRIGGER_OFF;
     }
 
@@ -333,6 +467,7 @@ static void FleetWarp_Tick(Player* p, PlayState* play) {
         FleetSync_ClearHoleFall();
         sFlipPending = 1;
         sSendAlpha = 0;
+        FleetSync_BeginSwapTrace("hole fall: OoT -> MM");
         sSendScene = 0x6F; // MM South Clock Town, popping OUT of MM's paired hole
         sSendX = -527.0f;
         sSendY = 100.0f;
@@ -344,20 +479,7 @@ static void FleetWarp_Tick(Player* p, PlayState* play) {
     // Each frame: squash a freshly-set exit trigger (mode still OFF -> safe), ramp the black
     // overlay drawn by the host PiP consumer, and FLIP at full black.
     if (sFlipPending) {
-        if (play->transitionMode == TRANS_MODE_OFF) {
-            play->transitionTrigger = TRANS_TRIGGER_OFF; // squash before the FSM picks it up
-        }
-        sSendAlpha += 9; // ~1.5s ramp at the ~20 Hz game-update rate (tune)
-        if (sSendAlpha >= 255) {
-            sSendAlpha = 255;
-            sFlipPending = 0;
-            FleetSync_WriteDeparture(gSaveContext.fileNum); // anchor + shared BEFORE the flip
-            FleetShipCombo_SetSendFadeAlpha(0); // MM (now active) owns the black from here
-            FleetShipCombo_RequestWarp(1 /*MM*/, sSendScene, sSendX, sSendY, sSendZ, sSendRotY,
-                                       gSaveContext.fileNum);
-        } else {
-            FleetShipCombo_SetSendFadeAlpha((int)sSendAlpha);
-        }
+        FleetWarp_RampSendFade(play);
         return;
     }
 
@@ -379,6 +501,7 @@ static void FleetWarp_Tick(Player* p, PlayState* play) {
             sFleetWarpArmed = 1;
             sFlipPending = 1;
             sSendAlpha = 0;
+            FleetSync_BeginSwapTrace("Lost Woods door: OoT -> MM");
             sSendScene = 0x65; // MM Lost Woods, landing at the door spot walking out
             sSendX = -1092.578f;
             sSendY = 0.0f;
@@ -415,7 +538,7 @@ void CustomItems_Update(Player* p, PlayState* play) {
     // Minish tiny-mode upkeep runs ALWAYS (scene-load auto-reset, per-frame scale
     // guard, shrink/grow animation) — even while blocked or with the cap unequipped
     {
-        extern void MinishTiny_Update(Player* p, PlayState* play);
+        extern void MinishTiny_Update(Player * p, PlayState * play);
         MinishTiny_Update(p, play);
     }
 
@@ -424,26 +547,21 @@ void CustomItems_Update(Player* p, PlayState* play) {
         extern void Lantern_UpdateFlames(PlayState * play);
         extern void Lantern_UpdateBurning(PlayState * play);
         extern void Lantern_UpdateLens(PlayState * play);
+        extern void Lantern_UpdatePassive(PlayState * play);
         Lantern_UpdateFlames(play);
         Lantern_UpdateBurning(play);
         Lantern_UpdateLens(play);
+        Lantern_UpdatePassive(play); // point light + green-fire regen
     }
 
-    // Bomb-arrows auto-grant: when CVar is on, hand the player ITEM_BOMB_ARROWS
-    // the moment any bomb bag is owned. Idempotent — only writes when needed.
-    // ALSO grants automatically when the Twilight Upgrade has been obtained
-    // (bomb arrows is one of its three unlocks).
+    // Bomb-arrows auto-grant. Ownership is a save flag now (bombArrowsOwned) instead of an item in
+    // page-2 slot 27 — the slot is the Elemental Wand's. "Bomb Bag" mode latches the flag the moment
+    // a bomb bag is owned; the Twilight Upgrade grants it outright. Idempotent.
     {
         extern u8 TwilightUpgrade_HasBombArrows(void);
-        u8 autoGrant = CVarGetInteger("gMods.BombArrows.AutoGrantOnBag", 0) != 0;
-        u8 twilightGrant = TwilightUpgrade_HasBombArrows();
-        // ITEM_BOMB_ARROWS is a NEI custom item (0xAE) and is NOT a valid index into
-        // gItemSlots[56]; INV_CONTENT()/SLOT() would read OOB and corrupt SaveContext.
-        // Resolve the real extended-inventory slot (returns SLOT_BOMB_ARROWS == 27).
-        u8 baSlot = ExtInv_GetItemSlot(ITEM_BOMB_ARROWS);
-        if ((autoGrant || twilightGrant) && CUR_UPG_VALUE(UPG_BOMB_BAG) > 0 && baSlot != 0xFF &&
-            ExtInv_GetSlotItem(baSlot) == ITEM_NONE) { // Skijer's NEI
-            ExtInv_SetSlotItem(baSlot, ITEM_BOMB_ARROWS); // Skijer's NEI
+        u8 bagGrant = (BombArrows_RandoMode() == BOMB_ARROWS_RANDO_BOMB_BAG) && (CUR_UPG_VALUE(UPG_BOMB_BAG) > 0);
+        if ((bagGrant || TwilightUpgrade_HasBombArrows()) && !Nei_Save()->bombArrowsOwned) {
+            Nei_Save()->bombArrowsOwned = 1; // Skijer's NEI
         }
     }
 
@@ -463,8 +581,7 @@ void CustomItems_Update(Player* p, PlayState* play) {
         extern u8 TwilightUpgrade_HasClawshot(void);
         extern u8 TwilightUpgrade_IsClawshotActive(void);
         extern void TwilightUpgrade_SetClawshotActive(u8 active);
-        if (TwilightUpgrade_HasClawshot() &&
-            CHECK_BTN_ALL(play->state.input[0].press.button, BTN_L) &&
+        if (TwilightUpgrade_HasClawshot() && CHECK_BTN_ALL(play->state.input[0].press.button, BTN_L) &&
             !(p->stateFlags1 & PLAYER_STATE1_USING_BOOMERANG)) {
             s8 act = p->heldItemAction;
             s16 itemId = p->heldItemId;
@@ -475,9 +592,8 @@ void CustomItems_Update(Player* p, PlayState* play) {
                 TwilightUpgrade_SetClawshotActive(newMode);
                 // Distinct sound per mode so the player gets audible
                 // confirmation of WHICH direction the toggle went.
-                Audio_PlaySoundGeneral(newMode ? NA_SE_SY_GET_ITEM : NA_SE_SY_DECIDE,
-                                       &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
-                                       &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                Audio_PlaySoundGeneral(newMode ? NA_SE_SY_GET_ITEM : NA_SE_SY_DECIDE, &p->actor.world.pos, 4,
+                                       &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
                 // Swallow L so the gust-jar / shield / boomerang multi-target
                 // block below doesn't also consume the same press.
                 play->state.input[0].cur.button &= ~BTN_L;
@@ -516,9 +632,8 @@ void CustomItems_Update(Player* p, PlayState* play) {
             // isn't Z-targeting — silent failures were confusing.
             if (lJustPressed && !gCustomItemState.galeBoomerangLockHeld &&
                 (p->focusActor == NULL || p->focusActor->update == NULL)) {
-                Audio_PlaySoundGeneral(NA_SE_SY_ERROR, &p->actor.world.pos, 4,
-                                       &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                                       &gSfxDefaultReverb);
+                Audio_PlaySoundGeneral(NA_SE_SY_ERROR, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+                                       &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
                 gCustomItemState.galeBoomerangLockHeld = 1; // debounce
             }
 
@@ -544,8 +659,7 @@ void CustomItems_Update(Player* p, PlayState* play) {
                     if (gCustomItemState.galeBoomerangTargetCount == 0) {
                         prevPos = &p->actor.world.pos;
                     } else {
-                        prevPos = &gCustomItemState
-                                       .galeBoomerangTargets[gCustomItemState.galeBoomerangTargetCount - 1]
+                        prevPos = &gCustomItemState.galeBoomerangTargets[gCustomItemState.galeBoomerangTargetCount - 1]
                                        ->world.pos;
                     }
                     f32 dx = p->focusActor->world.pos.x - prevPos->x;
@@ -553,8 +667,7 @@ void CustomItems_Update(Player* p, PlayState* play) {
                     f32 dz = p->focusActor->world.pos.z - prevPos->z;
                     f32 distSq = dx * dx + dy * dy + dz * dz;
                     if (distSq <= (500.0f * 500.0f)) {
-                        gCustomItemState
-                            .galeBoomerangTargets[gCustomItemState.galeBoomerangTargetCount++] =
+                        gCustomItemState.galeBoomerangTargets[gCustomItemState.galeBoomerangTargetCount++] =
                             p->focusActor;
                         Audio_PlaySoundGeneral(NA_SE_SY_LOCK_ON_HUMAN, &p->actor.world.pos, 4,
                                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
@@ -562,9 +675,8 @@ void CustomItems_Update(Player* p, PlayState* play) {
                     } else {
                         // Out of chain range — error chirp so the user knows
                         // the press registered but the target was rejected.
-                        Audio_PlaySoundGeneral(NA_SE_SY_ERROR, &p->actor.world.pos, 4,
-                                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                                               &gSfxDefaultReverb);
+                        Audio_PlaySoundGeneral(NA_SE_SY_ERROR, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+                                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
                     }
                 }
             } else if (!lHeld) {
@@ -607,10 +719,9 @@ void CustomItems_Update(Player* p, PlayState* play) {
     // chain mobility off thrown boomerangs.
     {
         extern u8 TwilightUpgrade_IsGaleBoomerangActive(void);
-        if (TwilightUpgrade_IsGaleBoomerangActive() &&
-            (p->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN) &&
-            p->boomerangActor != NULL && p->boomerangActor->update != NULL &&
-            Player_IsZTargeting(p) && CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B)) {
+        if (TwilightUpgrade_IsGaleBoomerangActive() && (p->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN) &&
+            p->boomerangActor != NULL && p->boomerangActor->update != NULL && Player_IsZTargeting(p) &&
+            CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B)) {
             // Vector from Link to boomerang
             f32 dx = p->boomerangActor->world.pos.x - p->actor.world.pos.x;
             f32 dy = p->boomerangActor->world.pos.y - p->actor.world.pos.y;
@@ -635,7 +746,7 @@ void CustomItems_Update(Player* p, PlayState* play) {
     // and gravity stays suspended while Link is hanging from the anchor.
     // The state machine itself lives in the ClawshotBT_* block below.
     {
-        extern void ClawshotBT_Update(Player* player, PlayState* play);
+        extern void ClawshotBT_Update(Player * player, PlayState * play);
         ClawshotBT_Update(p, play);
     }
 
@@ -723,6 +834,20 @@ void CustomItems_Update(Player* p, PlayState* play) {
     // i = 0..7 covers B + 3 C-buttons + 4 D-pad slots cleanly.
     for (u8 i = 0; i < 8; i++) {
         u8 item = gSaveContext.equips.buttonItems[i];
+        // Skijer's NEI — Bomb Arrows rides the bow's element flag; the button holds ITEM_BOW, which
+        // the custom-item range guard below would reject. This clause must therefore sit ABOVE it.
+        if (Sw97_IsBowItem(item) && (Sw97_EffectiveElement(0) == SW97_ELEM_BOMB)) {
+            Handle_BombArrows(p, play);
+            continue;
+        }
+        // Skijer's NEI — the Net's id (0xF4) sits ABOVE ITEM_POKEBALL (0xB7), so the
+        // custom-item range guard below rejects it and the switch is never reached.
+        // Same trap as Bomb Arrows above: this clause has to sit before the guard.
+        // Without it Handle_Net never ran and the net could not be put away at all.
+        if (item == ITEM_NET) {
+            Handle_Net(p, play);
+            continue;
+        }
         if (item < ITEM_ROCS_FEATHER_SKIJER || item > ITEM_POKEBALL)
             continue;
 
@@ -754,9 +879,8 @@ void CustomItems_Update(Player* p, PlayState* play) {
             case ITEM_BEETLE:
                 Handle_Beetle(p, play);
                 break;
-            case ITEM_BOMB_ARROWS:
-                Handle_BombArrows(p, play);
-                break;
+            // (ITEM_BOMB_ARROWS case removed — it can no longer sit on a button; see the flag
+            // clause above the range guard.)
             case ITEM_ROD_FIRE:
                 Handle_FireRod(p, play);
                 break;
@@ -808,6 +932,44 @@ void CustomItems_Update(Player* p, PlayState* play) {
                 break;
         }
     }
+
+    // Ultrahand assemblies keep their formation ALWAYS, not just while the mode is open.
+    // The merged collision is registered on the ROOT, so the engine re-transforms it by the
+    // root's SRT every frame no matter what — but the parts' MODELS are drawn at their own
+    // world.pos, and only this drives those. Leaving it inside the mode meant that the moment
+    // you pressed B, or simply put the cane away, the root kept moving (it falls, it can be
+    // pushed) and dragged the whole welded surface with it while every glued piece's model
+    // stayed behind: collision in one place, texture in another. Runs last so it sees wherever
+    // the root ended up this frame. Skijer's NEI
+    {
+        // Declared here rather than by including cane_pacci.h, the way SwitchHook_ChargeTick above
+        // does it: this file does not otherwise depend on the actor headers.
+        extern void Pacci_FuseFollow(PlayState * play);
+        // And the fall, which has to survive the cane being put away - see the note on
+        // Pacci_UltrahandDropTick. Before the transform, so the parts follow where the root
+        // landed this frame rather than where it was last frame.
+        extern void Pacci_UltrahandDropTick(PlayState * play);
+        // And the floor switch a placed body is holding down, which has to be re-asserted every
+        // frame and has to survive the cane being put away - see Pacci_PlacePressTick.
+        extern void Pacci_PlacePressTick(PlayState * play);
+        Pacci_UltrahandDropTick(play);
+        extern void Pacci_BackRiderTick(PlayState * play);
+        Pacci_FuseFollow(play);
+        Pacci_PlacePressTick(play);
+        extern void Pacci_CutTick(PlayState * play);
+        Pacci_BackRiderTick(play);
+        extern void Pacci_ThrowTick(PlayState * play);
+        Pacci_CutTick(play);
+        Pacci_ThrowTick(play);
+    }
+    // The same job for anything the switch magnet put on a plate — Stasis, mostly. Outside the
+    // cane's block on purpose: a switch a frozen block was left standing on has to stay down while
+    // you walk off and use the door, and that has nothing to do with what item is in hand.
+    {
+        extern void SwitchMagnet_PressTick(PlayState * play);
+
+        SwitchMagnet_PressTick(play);
+    }
 }
 
 s32 CustomItems_OverrideDraw(Player* p, PlayState* play) {
@@ -841,6 +1003,15 @@ s32 CustomItems_OverrideDraw(Player* p, PlayState* play) {
     if (gCustomItemState.somariaActive) {
         CustomItems_DrawCaneOfSomaria(p, play);
     }
+    // Sheikah Slate: its own equip flag lives in the item TU (EXT item, no gCustomItemState entry),
+    // so the draw gates itself on Slate_IsDrawn(). Skijer's NEI
+    {
+        extern void CustomItems_DrawSheikahSlate(Player * player, PlayState * play);
+        extern void Stasis_Draw(PlayState * play);
+
+        CustomItems_DrawSheikahSlate(p, play);
+        Stasis_Draw(play); // chains + launch arrow on whatever the Stasis rune is holding
+    }
     if (gCustomItemState.mogmaMittsActive) {
         CustomItems_DrawMogmaMitts(p, play);
     }
@@ -859,7 +1030,7 @@ s32 CustomItems_OverrideDraw(Player* p, PlayState* play) {
     if (gCustomItemState.lanternEquipped || gCustomItemState.lanternSwinging) {
         // Check if lantern is still on any C-button
         u8 lanternOnC = 0;
-        for (u8 btn = 1; btn <= 8; btn++) {
+        for (u8 btn = 1; btn < ARRAY_COUNT(gSaveContext.equips.buttonItems); btn++) { // was <= 8, one past the end
             if (gSaveContext.equips.buttonItems[btn] == ITEM_LANTERN) {
                 lanternOnC = 1;
                 break;
@@ -970,8 +1141,8 @@ typedef enum {
     CLAWSHOT_BT_HIT_OTHER,
 } ClawshotBTHitKind;
 
-static u8  sClawshotBTActive = 0;
-static u8  sClawshotBTLastHitKind = CLAWSHOT_BT_HIT_NONE;
+static u8 sClawshotBTActive = 0;
+static u8 sClawshotBTLastHitKind = CLAWSHOT_BT_HIT_NONE;
 static Vec3f sClawshotBTLastHitNormal = { 0.0f, 0.0f, 0.0f };
 static s16 sClawshotBTLockedYaw = 0;
 static Vec3f sClawshotBTAnchorPos = { 0.0f, 0.0f, 0.0f };
@@ -999,7 +1170,9 @@ void ClawshotBT_NoteHitSurface(f32 nx, f32 ny, f32 nz) {
         sClawshotBTLastHitKind = CLAWSHOT_BT_HIT_OTHER;
     }
 }
-void ClawshotBT_NoteHitActor(void)    { sClawshotBTLastHitKind = CLAWSHOT_BT_HIT_NONE; }
+void ClawshotBT_NoteHitActor(void) {
+    sClawshotBTLastHitKind = CLAWSHOT_BT_HIT_NONE;
+}
 // Called when a new hookshot leaves Link's hand. Cancels any active hang so
 // the new shot's vanilla pull isn't fighting against the pin. Gravity will
 // self-restore via Player_UpdateCommon next frame.
@@ -1008,7 +1181,9 @@ void ClawshotBT_NoteShotFired(void) {
     sClawshotBTActive = 0;
 }
 
-u8 ClawshotBT_IsActive(void) { return sClawshotBTActive; }
+u8 ClawshotBT_IsActive(void) {
+    return sClawshotBTActive;
+}
 
 // Called by z_arms_hook.c at the arrival moment (phi_f16 == 0.0f) so we can
 // suppress the vanilla -20 velocity.y kick AND enter bullet time when the
@@ -1043,8 +1218,7 @@ u8 ClawshotBT_TryStartOnArrival(Player* player, PlayState* play) {
         case CLAWSHOT_BT_HIT_WALL: {
             sClawshotBTAnchorPos.x += 30.0f * sClawshotBTLastHitNormal.x;
             sClawshotBTAnchorPos.z += 30.0f * sClawshotBTLastHitNormal.z;
-            sClawshotBTLockedYaw =
-                Math_Atan2S(sClawshotBTLastHitNormal.z, sClawshotBTLastHitNormal.x);
+            sClawshotBTLockedYaw = Math_Atan2S(sClawshotBTLastHitNormal.z, sClawshotBTLastHitNormal.x);
             break;
         }
         case CLAWSHOT_BT_HIT_CEILING: {
@@ -1063,9 +1237,8 @@ u8 ClawshotBT_TryStartOnArrival(Player* player, PlayState* play) {
     // subsystem (bow/hookshot first-person) only engages from idle-ish actions;
     // FreeFall / HookshotFly etc. refuse to enter aim, which is why pressing
     // the hookshot C-button did nothing while hanging.
-    extern void Player_Action_Idle(Player* this, PlayState* play);
-    extern s32 Player_SetupAction(PlayState* play, Player* this,
-                                  PlayerActionFunc actionFunc, s32 flags);
+    extern void Player_Action_Idle(Player * this, PlayState * play);
+    extern s32 Player_SetupAction(PlayState * play, Player * this, PlayerActionFunc actionFunc, s32 flags);
 
     player->actor.velocity.x = 0.0f;
     player->actor.velocity.y = 0.0f;
@@ -1097,8 +1270,8 @@ u8 ClawshotBT_TryStartOnArrival(Player* player, PlayState* play) {
     // floor at all below Link) aim will still glitch, but at least we don't
     // visually spawn the target actor.
 
-    Audio_PlaySoundGeneral(NA_SE_SY_ATTENTION_ON, &player->actor.world.pos, 4,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySoundGeneral(NA_SE_SY_ATTENTION_ON, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     return 1;
 }
 
@@ -1162,8 +1335,7 @@ void ClawshotBT_Update(Player* player, PlayState* play) {
     // so the player can rotate freely to look at new targets. Otherwise the
     // pin glues the body to the original facing and the user can't sweep
     // the camera during aim.
-    u8 isAiming = (player->stateFlags1 &
-                   (PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_READY_TO_FIRE)) != 0;
+    u8 isAiming = (player->stateFlags1 & (PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_READY_TO_FIRE)) != 0;
     if (sClawshotBTLastHitKind == CLAWSHOT_BT_HIT_WALL && !isAiming) {
         player->actor.shape.rot.y = sClawshotBTLockedYaw;
         player->yaw = sClawshotBTLockedYaw;

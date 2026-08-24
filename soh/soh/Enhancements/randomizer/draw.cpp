@@ -1,5 +1,6 @@
 #include "draw.h"
 #include "soh/OTRGlobals.h"
+#include <vector>          // MmDL_WithScopedVerts keeps patched DL copies alive
 #include <spdlog/spdlog.h> // SPDLOG_INFO (MmSoul debug instrumentation)
 #include "soh/cvar_prefixes.h"
 #include "randomizerTypes.h"
@@ -40,6 +41,7 @@ extern "C" {
 #include "objects/object_gi_shield_1/object_gi_shield_1.h"
 #include "objects/object_gi_shield_3/object_gi_shield_3.h"
 #include "objects/object_gi_hookshot/object_gi_hookshot.h"
+#include "objects/object_gi_bottle/object_gi_bottle.h" // Bottomless Bottle GI (glass + stopper)
 #include "objects/object_tk/object_tk.h"
 
 #include "mods/mm_sources/objects/object_gi_masks_all.h"
@@ -48,6 +50,7 @@ extern "C" {
 #include "mods/transformation_masks/assets/mm_asset_loader.h"
 
 #include "objects/object_poh/object_poh.h"
+#include "mods/equipment/objects/ikaxe_DL/header.h" // gIKAxeInlineDL (Iron Knuckle's Axe GI model)
 #include "mods/items/objects/ball_and_chainDL/header.h"
 #include "mods/items/objects/ball_and_chainDL/model.inc.c"
 #include "mods/items/objects/beetle_giveDL/header.h"
@@ -69,7 +72,9 @@ extern "C" {
 #include "objects/object_gi_longsword/object_gi_longsword.h"
 #include "objects/object_gi_shield_2/object_gi_shield_2.h"
 #include "objects/object_gi_clothes/object_gi_clothes.h"
+#include "objects/object_gi_medal/object_gi_medal.h" // Sage's Tunic medallion ring
 #include "objects/object_gi_hoverboots/object_gi_hoverboots.h"
+#include "objects/object_gi_boots_2/object_gi_boots_2.h" // Climb Boots stand-in (Skijer's NEI)
 
 // Extended equipment models (DLs already compiled in equip_ikaxe.c / equip_breastplate.c)
 #include "mods/equipment/objects/ikaxe_DL/header.h"
@@ -1473,6 +1478,29 @@ static void DrawCustomItemDiamond(PlayState* play, Gfx* displayList, f32 scale) 
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Helper: Opaque body + translucent overlay, both at the same scale. A Fast64 export splits its
+// transparent materials into a second DL (object_nei_ultrahand's aura spheres); drawing that half
+// in POLY_OPA would let it write Z and reject the opaque geometry sitting inside it.
+static void DrawCustomItemDiamondOpaXlu(PlayState* play, Gfx* opaDL, Gfx* xluDL, f32 scale) {
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
+    s16 rotation = play->gameplayFrames * 0x2;
+    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, opaDL);
+
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_XLU_DISP++, xluDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 // Helper: Generic rotating renderer with a grayscale tint (Opaque). Mirrors DrawCustomItemDiamond
 // but wraps the DL(s) in a gSPGrayscale tint pass. Pass scale <= 0 to skip Matrix_Scale entirely,
 // and dl2 = NULL to draw a single DL.
@@ -1515,6 +1543,13 @@ void Randomizer_DrawWhip(PlayState* play, GetItemEntry* getItemEntry) {
 
 void Randomizer_DrawSpinner(PlayState* play, GetItemEntry* getItemEntry) {
     DrawCustomItemDiamond(play, (Gfx*)gNeiSpinnerDL, 0.3f);
+}
+
+// Elemental Wand — all six rods are the same physical wand found in six places, so they share one
+// draw. Stands in with the Dominion Rod mesh until a dedicated model exists (the icon, name and
+// textbox already say which rod it is). Skijer's NEI
+void Randomizer_DrawElementalWand(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawCustomItemDiamond(play, gRandoDominionrodDL, 2.5f);
 }
 
 void Randomizer_DrawBombArrows(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1567,9 +1602,39 @@ void Randomizer_DrawBallAndChain(PlayState* play, GetItemEntry* getItemEntry) {
     DrawCustomItemDiamond(play, gRandoBallandChainDL, 0.25f);
 }
 
+static void DrawWeaponFlameOverlay(PlayState* play, u8 r, u8 g, u8 b); // defined with the sword levels below
+
+// Dual Cane — resolution decides which per-skill row presents (item.cpp), so each draw is static:
+// Somaria roja, Pacci amarilla (same DL, different color); upgrades add the boss-soul flame.
 void Randomizer_DrawCaneOfSomaria(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, (Gfx*)gSomariaCaneGiveDL, 0.25f);
+    // Explicit red rather than trusting the mesh's own materials: Somaria red / Pacci yellow /
+    // Byrna blue must read as three distinct canes from the SAME DL, so both Somaria draws tint
+    // just like the Pacci ones do.
+    DrawCustomItemDiamondTint(play, (Gfx*)gSomariaCaneGiveDL, NULL, 0.25f, 235, 55, 45);
 }
+
+void Randomizer_DrawCanePacci(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawCustomItemDiamondTint(play, (Gfx*)gSomariaCaneGiveDL, NULL, 0.25f, 255, 215, 70);
+}
+
+void Randomizer_DrawCaneSomariaUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawWeaponFlameOverlay(play, 255, 60, 60);
+    DrawCustomItemDiamondTint(play, (Gfx*)gSomariaCaneGiveDL, NULL, 0.25f, 235, 55, 45);
+}
+
+void Randomizer_DrawCanePacciUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawWeaponFlameOverlay(play, 255, 215, 70);
+    DrawCustomItemDiamondTint(play, (Gfx*)gSomariaCaneGiveDL, NULL, 0.25f, 255, 215, 70);
+}
+
+// Ultrahand — the one Pacci skill with a model of its own (the glowing green hand), so it drops the
+// tinted-cane + flame stand-in the other upgrades use. Mesh is 200 units across => 0.17 puts it at
+// the ~34 on-screen size every other custom get-item is calibrated to.
+void Randomizer_DrawCanePacciUltrahand(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawCustomItemDiamondOpaXlu(play, (Gfx*)gNeiUltrahandDL, (Gfx*)gNeiUltrahandXluDL, 0.17f);
+}
+
+// (Randomizer_DrawRocsCape ya existía arriba — la fila nueva de RG_ROCS_CAPE lo reutiliza.)
 
 void Randomizer_DrawDominionRod(PlayState* play, GetItemEntry* getItemEntry) {
     DrawCustomItemDiamond(play, gRandoDominionrodDL, 2.5f);
@@ -1675,7 +1740,7 @@ void Randomizer_DrawNet(PlayState* play, GetItemEntry* getItemEntry) {
     // scale keeps it in get-item presentation range. Same rotation as DrawCustomItemDiamond.
     OPEN_DISPS(play->state.gfxCtx);
 
-    Matrix_Scale(0.3f, 0.3f, 0.3f, MTXMODE_APPLY);
+    Matrix_Scale(0.55f, 0.55f, 0.55f, MTXMODE_APPLY); // 0.3 presentaba demasiado pequeña
     s16 netRotation = play->gameplayFrames * 0x2;
     Matrix_RotateY(netRotation * 0.01f, MTXMODE_APPLY);
 
@@ -1692,9 +1757,21 @@ void Randomizer_DrawNet(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Defined with the per-level sword draws below (upright + 45° hand-local sword presentation).
+static void DrawMmWeaponGi(PlayState* play, Gfx* dl1, Gfx* dl2, f32 scale);
+
 void Randomizer_DrawExtFourSword(PlayState* play, GetItemEntry* getItemEntry) {
-    // Kokiri Sword model with green tint (Four Sword = green Zelda sword)
-    DrawCustomItemDiamondTint(play, (Gfx*)gGiKokiriSwordDL, NULL, 0.55f, 0, 180, 80);
+    // The REAL Four Sword model (soh.o2r object_nei_four_sword, converted out of the old pak).
+    // Blade + hilt are separate DLs, both authored in hand-local space like the MM swords, so they
+    // take the same upright + 45° presentation. Falls back to the tinted Kokiri sword if the
+    // archive is stale.
+    Gfx* blade = ResourceMgr_LoadGfxByName(dgNeiFourSwordBladeDL);
+    Gfx* hilt = ResourceMgr_LoadGfxByName(dgNeiFourSwordHiltDL);
+    if (blade == NULL || ((const char*)blade)[0] == '_') {
+        DrawCustomItemDiamondTint(play, (Gfx*)gGiKokiriSwordDL, NULL, 0.55f, 0, 180, 80);
+        return;
+    }
+    DrawMmWeaponGi(play, blade, hilt, 0.04f);
 }
 
 // NEI Weapon Upgrades — progressive weapons. The get-item model shows the base weapon
@@ -1717,14 +1794,271 @@ void Randomizer_DrawProgressiveBGS(PlayState* play, GetItemEntry* getItemEntry) 
     DrawCustomItemDiamond(play, (Gfx*)gGiBiggoronSwordDL, 0.5f);
 }
 
+// ─── NEI progressive weapon LEVELS ────────────────────────────────────────────────────────────────
+// The progressive GI resolution (item.cpp) lands on these per-level rows, so every give presents
+// the mesh/text of the level actually received. MM sword meshes load archive-scoped from mm.o2r
+// (the same paths WeaponUpgrade_ApplyHeldSwordDL proved in-hand); if mm.o2r is absent they fall
+// back to the tinted base mesh — never invisible.
+
+// MmAssets_LoadResource is ARCHIVE-SCOPED (ResourceIdentifier(path, 0, sMmArchive)), which is what
+// makes it safe for the many paths mm.o2r and oot.o2r share, and for a DisplayList its raw pointer
+// is Instructions.data() — a valid Gfx*. Do NOT swap it for a by-name loader: those go through
+// archive priority and hand back OoT's copy on any colliding path.
+//
+// `tried` only latches on SUCCESS. It used to latch on the first attempt, so a single call made
+// before mm.o2r finished mounting cached NULL forever and the item silently fell back for the rest
+// of the run. When mm.o2r is genuinely absent MmAssets_IsAvailable() is false, so the retry costs
+// nothing. Skijer's NEI
+static Gfx* LoadMmDLOnce(const char* path, Gfx** cache, u8* tried) {
+    if (!*tried && MmAssets_IsAvailable()) {
+        *cache = (Gfx*)MmAssets_LoadResource(path);
+        if (*cache != NULL) {
+            *tried = 1;
+        }
+    }
+    return *cache;
+}
+
+// Private copy of an MM display list with its vertex loads re-pointed at mm.o2r's OWN vertex array.
+//
+// Needed when the vertex array's PATH exists in both archives (object_gi_hookshotVtx_000000 is the
+// case that forced this): a DL asks for vertices by hash, the handler turns that into a name and
+// loads it from the DEFAULT archive, and mm.o2r sits at the LOWEST priority on purpose, so OoT
+// always wins. Upstream 2Ship hit the mirror image of this and solved it the same way — its comment
+// on RI_HOOKSHOT says gGiHookshotDL "is shadowed by MM's same-path mesh", so it direct-loads off the
+// oot.o2r handle.
+//
+// The hook is gfx_vtx_hash_handler_custom: word1 of a G_VTX_OTR_HASH pair is normally a byte offset
+// into the array, but "an offset greater than one million is not a real offset, so it must be a real
+// pointer". Writing the resolved pointer there makes the handler use it and never consult the hash.
+// Textures are left alone — their names are MM-unique, so they already resolve to MM's. Skijer's NEI
+static Gfx* MmDL_WithScopedVerts(const char* dlPath, const char* vtxPath) {
+    // Two-word (expanded) commands: the second word is payload, never an opcode.
+    auto isTwoWord = [](uint8_t op) {
+        return op == 0x20 || op == 0x24 || op == 0x25 || op == 0x27 || op == 0x31 || op == 0x32 || op == 0x33 ||
+               op == 0x35 || op == 0x36 || op == 0x42;
+    };
+
+    Gfx* src = (Gfx*)MmAssets_LoadResourceStrict(dlPath);
+    char* vtx = (char*)MmAssets_LoadResourceStrict(vtxPath);
+    if (src == NULL || vtx == NULL) {
+        // Says WHICH one failed: a typo in either path is otherwise indistinguishable from
+        // "mm.o2r is not mounted", and that ambiguity cost several rounds on the Clawshot.
+        SPDLOG_ERROR("[NEI] MmDL_WithScopedVerts FAILED  dl='{}' -> {}   vtx='{}' -> {}", dlPath,
+                     src != NULL ? "ok" : "NULL", vtxPath, vtx != NULL ? "ok" : "NULL");
+        return NULL;
+    }
+
+    size_t count = 0;
+    while (count < 4096) {
+        uint8_t op = (uint8_t)((src[count].words.w0 >> 24) & 0xFF);
+        count++;
+        if (op == 0xDF) { // G_ENDDL
+            break;
+        }
+        if (isTwoWord(op)) {
+            count++;
+        }
+    }
+
+    // Kept alive for the process: the returned Gfx* is handed straight to the interpreter.
+    static std::vector<std::vector<Gfx>> sPatched;
+    sPatched.emplace_back(src, src + count);
+    Gfx* dl = sPatched.back().data();
+
+    int patched = 0, vtxOps = 0;
+    for (size_t i = 0; i < count; i++) {
+        uint8_t op = (uint8_t)((dl[i].words.w0 >> 24) & 0xFF);
+        if (op == 0xDF) {
+            break;
+        }
+        if (op == 0x32) { // G_VTX_OTR_HASH
+            vtxOps++;
+            uintptr_t offset = (uintptr_t)dl[i].words.w1;
+            if (offset <= 0xFFFFF) { // still an offset, not an already-resolved pointer
+                dl[i].words.w1 = (uintptr_t)(vtx + offset);
+                patched++;
+            }
+            i++; // skip the hash word
+        } else if (isTwoWord(op)) {
+            i++;
+        }
+    }
+    // patched == 0 would mean this DL does NOT reference its vertices by hash (segment addressing
+    // instead), i.e. the whole approach misses and the vertices still come from whatever segment 6
+    // points at — which during a get-item is the OoT object the engine loaded.
+    SPDLOG_ERROR("[NEI] MmDL_WithScopedVerts '{}': {} instr, {} vtx ops, {} patched", dlPath, count, vtxOps, patched);
+    return dl;
+}
+
+// MM's OWN get-item sword models (object_gi_sword_2/3/4), drawn with MM's own draw code:
+// z_draw.c's table gives Razor and Gilded GetItem_DrawOpa01 (both DLs opaque) and the Great
+// Fairy's Sword GetItem_DrawOpa0Xlu1 (blade opaque + hilt emblem translucent). Those routines —
+// like SoH's GetItem_DrawOpa0 — apply NO scale and NO rotation: a GI model is already authored in
+// the get-item pose, and the item-get animation supplies the matrix. That is why the hand-held
+// DLs looked wrong here no matter the angle: they are arm-local meshes, not GI models.
+// For meshes authored in HAND-LOCAL space (they are held-weapon models, not GI models): stand them
+// up and tilt them into a get-item pose by hand. Only the Four Sword needs this now — the MM sword
+// levels moved to their real GI models above. Spin around world-up, then upright, then tilt, then
+// shrink; ~1.8 rad is what makes a hand-local blade read like the Master Sword GI (45° left it
+// nearly horizontal).
+static void DrawMmWeaponGi(PlayState* play, Gfx* dl1, Gfx* dl2, f32 scale) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    s16 rotation = play->gameplayFrames * 0x2;
+    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+    Matrix_RotateX(-M_PI / 2.0f, MTXMODE_APPLY);
+    Matrix_RotateZ(1.8f, MTXMODE_APPLY);
+    Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, dl1);
+    if (dl2 != NULL) {
+        gSPDisplayList(POLY_OPA_DISP++, dl2);
+    }
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static void DrawMmGiModel(PlayState* play, Gfx* dl0, Gfx* dl1, u8 dl1IsXlu) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, dl0);
+    if (dl1 != NULL) {
+        if (dl1IsXlu) {
+            Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+            gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                      G_MTX_MODELVIEW | G_MTX_LOAD);
+            gSPDisplayList(POLY_XLU_DISP++, dl1);
+        } else {
+            gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                      G_MTX_MODELVIEW | G_MTX_LOAD);
+            gSPDisplayList(POLY_OPA_DISP++, dl1);
+        }
+    }
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// Boss-soul style flame behind an awakened weapon (billboarded blue-fire DL, grayscale-tinted) —
+// the visual language for "this is the upgraded form". Push/pop so the weapon draw that follows
+// starts from the untouched GI matrix.
+static void DrawWeaponFlameOverlay(PlayState* play, u8 r, u8 g, u8 b) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPSegment(POLY_XLU_DISP++, 8,
+               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 16, 32, 1, 1 * (play->state.frames * 1),
+                                             -1 * (play->state.frames * 8), 16, 32, 0, 0, 1, -8));
+    Matrix_Push();
+    Matrix_Translate(0.0f, -70.0f, 0.0f, MTXMODE_APPLY);
+    Matrix_Scale(5.0f, 5.0f, 5.0f, MTXMODE_APPLY);
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gDPSetGrayscaleColor(POLY_XLU_DISP++, r, g, b, 255);
+    gSPGrayscale(POLY_XLU_DISP++, true);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gGiBlueFireFlameDL);
+    gSPGrayscale(POLY_XLU_DISP++, false);
+    Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+void Randomizer_DrawRazorSword(PlayState* play, GetItemEntry* getItemEntry) {
+    static Gfx* sMain = NULL;
+    static Gfx* sEmpty = NULL;
+    static u8 sMainTried = 0, sEmptyTried = 0;
+    Gfx* main = LoadMmDLOnce("objects/object_gi_sword_2/gGiRazorSwordDL", &sMain, &sMainTried);
+    Gfx* empty = LoadMmDLOnce("objects/object_gi_sword_2/gGiRazorSwordEmptyDL", &sEmpty, &sEmptyTried);
+    if (main == NULL) {
+        DrawCustomItemDiamondTint(play, (Gfx*)gGiKokiriSwordDL, NULL, 0.55f, 200, 200, 255);
+        return;
+    }
+    DrawMmGiModel(play, main, empty, false);
+}
+
+void Randomizer_DrawGildedSword(PlayState* play, GetItemEntry* getItemEntry) {
+    static Gfx* sMain = NULL;
+    static Gfx* sEmpty = NULL;
+    static u8 sMainTried = 0, sEmptyTried = 0;
+    Gfx* main = LoadMmDLOnce("objects/object_gi_sword_3/gGiGildedSwordDL", &sMain, &sMainTried);
+    Gfx* empty = LoadMmDLOnce("objects/object_gi_sword_3/gGiGildedSwordEmptyDL", &sEmpty, &sEmptyTried);
+    if (main == NULL) {
+        DrawCustomItemDiamondTint(play, (Gfx*)gGiKokiriSwordDL, NULL, 0.55f, 255, 210, 60);
+        return;
+    }
+    DrawMmGiModel(play, main, empty, false);
+}
+
+void Randomizer_DrawGreatFairySword(PlayState* play, GetItemEntry* getItemEntry) {
+    static Gfx* sBlade = NULL;
+    static Gfx* sEmblem = NULL;
+    static u8 sBladeTried = 0, sEmblemTried = 0;
+    Gfx* blade = LoadMmDLOnce("objects/object_gi_sword_4/gGiGreatFairysSwordBladeDL", &sBlade, &sBladeTried);
+    Gfx* emblem = LoadMmDLOnce("objects/object_gi_sword_4/gGiGreatFairysSwordHiltEmblemDL", &sEmblem, &sEmblemTried);
+    if (blade == NULL) {
+        DrawCustomItemDiamondTint(play, (Gfx*)gGiBiggoronSwordDL, NULL, 0.5f, 220, 120, 220);
+        return;
+    }
+    DrawMmGiModel(play, blade, emblem, true); // el emblema del pomo va en XLU (así lo dibuja MM)
+}
+
+void Randomizer_DrawTrueMasterSword(PlayState* play, GetItemEntry* getItemEntry) {
+    // Sacred-blue boss-soul flame + the real Master Sword mesh (pedestal object).
+    DrawWeaponFlameOverlay(play, 120, 180, 255);
+    Randomizer_DrawMasterSword(play, getItemEntry);
+}
+
+void Randomizer_DrawIronKnuckleAxe(PlayState* play, GetItemEntry* getItemEntry) {
+    // The axe has no GI model anywhere: gIKAxeInlineDL is object_ik's ACTOR-scale weapon, measured
+    // at 3624 x 726 x 7550 units, lying along its own +Z. The Cane of Byrna give model (the size
+    // reference asked for) is 181 x 340 x 334 presented at 0.25 — about 85 units of shaft on
+    // screen. Matching that shaft: 85 / 7550 = 0.011 (0.18 was ~16x too big).
+    //   • RotateX(-90°) turns the model's long +Z into world up, so the handle stands like the
+    //     cane's shaft instead of pointing at the camera.
+    //   • Same plain Y spin as the cane — no diagonal tilt, since the cane has none either.
+    //   • The mesh sits off-centre on its long axis (Z -5346..2204, centre -1571), so it is
+    //     recentred in model space or it would orbit well off the presentation point.
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    s16 rotation = play->gameplayFrames * 0x2;
+    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+    Matrix_RotateX(-M_PI / 2.0f, MTXMODE_APPLY);
+    Matrix_Scale(0.011f, 0.011f, 0.011f, MTXMODE_APPLY);
+    Matrix_Translate(0.0f, 0.0f, 1571.0f, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gIKAxeInlineDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// Resolve-then-draw for custom soh.o2r models (defined with the other NEI gem draws below).
+static void DrawCustomItemDiamondByPath(PlayState* play, const char* path, Gfx** cache, u8* tried, f32 scale);
+
+void Randomizer_DrawQuartzOfMotion(PlayState* play, GetItemEntry* getItemEntry) {
+    // Skijer's Blender model, exported to soh.o2r by blend_to_xml.py (textured + lit, 147 tris).
+    // The mesh is 135 units tall and centered on its bounding box, so 0.25 puts it at ~34 units on
+    // screen — the same apparent size as object_nei_divine_shield (68 tall drawn at 0.5). Re-derive
+    // this if the model is re-exported: draw scale = 34 / mesh height.
+    static Gfx* c = NULL;
+    static u8 t = 0;
+    DrawCustomItemDiamondByPath(play, "__OTR__objects/object_nei_quartz_of_motion/gNeiQuartzOfMotionDL", &c, &t, 0.25f);
+}
+
+void Randomizer_DrawUltrashot(PlayState* play, GetItemEntry* getItemEntry) {
+    // Longshot mesh + light-gold flame (its kaleido marker is the Light Medallion).
+    DrawWeaponFlameOverlay(play, 255, 240, 130);
+    DrawCustomItemDiamond(play, (Gfx*)gGiLongshotDL, 0.5f);
+}
+
 void Randomizer_DrawExtDivineShield(PlayState* play, GetItemEntry* getItemEntry) {
-    // Custom Divine Shield model from soh.o2r (object_nei_divine_shield)
-    DrawCustomItemDiamond(play, (Gfx*)gNeiDivineShieldDL, 0.5f);
+    // Custom Divine Shield model from soh.o2r (object_nei_divine_shield). 0.9: at 0.5 it presented
+    // noticeably smaller than the vanilla shield GIs.
+    DrawCustomItemDiamond(play, (Gfx*)gNeiDivineShieldDL, 0.9f);
 }
 
 void Randomizer_DrawExtSheikahShield(PlayState* play, GetItemEntry* getItemEntry) {
-    // Custom Kite Shield model from soh.o2r (object_nei_kite_shield)
-    DrawCustomItemDiamond(play, (Gfx*)gNeiKiteShieldDL, 0.5f);
+    // Custom Kite Shield model from soh.o2r (object_nei_kite_shield). 0.9: same size bump as Divine.
+    DrawCustomItemDiamond(play, (Gfx*)gNeiKiteShieldDL, 0.9f);
 }
 
 extern void* TransformMasks_LoadMmDL(const char* path);
@@ -1748,10 +2082,11 @@ void Randomizer_DrawExtShieldOfIkana(PlayState* play, GetItemEntry* getItemEntry
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     // gLinkHumanMirrorShieldDL is modelled in arm-local space (oriented for Link's left arm
     // joint). Apply order matters: RotateY first so the spin happens around world-up, THEN
-    // tilt -90° X so the shield ends up upright facing the camera, then scale down.
+    // tilt +90° X so the shield stands upright facing the camera like the other shield GIs
+    // (with -90° it presented face-DOWN).
     s16 rotation = play->gameplayFrames * 0x2;
     Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
-    Matrix_RotateX(-M_PI / 2.0f, MTXMODE_APPLY);
+    Matrix_RotateX(M_PI / 2.0f, MTXMODE_APPLY);
     Matrix_Scale(0.035f, 0.035f, 0.035f, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
@@ -1760,8 +2095,22 @@ void Randomizer_DrawExtShieldOfIkana(PlayState* play, GetItemEntry* getItemEntry
 }
 
 void Randomizer_DrawExtMagicCape(PlayState* play, GetItemEntry* getItemEntry) {
-    // Tunic model with red/purple tint (Magic Cape = LTTP magic cape)
-    DrawCustomItemDiamondTint(play, (Gfx*)gGiTunicCollarDL, (Gfx*)gGiTunicDL, -1.0f, 180, 40, 120);
+    // Own hanging-cloth model (object_nei_magic_cape) — no longer the tinted tunic. Two authored
+    // vertex poses alternate every few frames (the same trick the worn cape's gMant1Vtx/gMant2Vtx
+    // swap uses) so the cloth waves while it hangs. Both poses are plain soh.o2r XML DLs resolved
+    // by path — fully self-contained, no shared segments, nothing to crash.
+    const char* dl = ((play->gameplayFrames >> 3) & 1) ? "__OTR__objects/object_nei_magic_cape/gNeiMagicCapeWaveDL"
+                                                       : "__OTR__objects/object_nei_magic_cape/gNeiMagicCapeDL";
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    s16 rotation = play->gameplayFrames * 0x2;
+    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+    Matrix_Translate(0.0f, 22.0f, 0.0f, MTXMODE_APPLY); // colgada desde arriba del cilindro GI
+    Matrix_Scale(0.55f, 0.55f, 0.55f, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)dl);
+    CLOSE_DISPS(play->state.gfxCtx);
 }
 
 void Randomizer_DrawExtSpiritBreastplate(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1770,8 +2119,58 @@ void Randomizer_DrawExtSpiritBreastplate(PlayState* play, GetItemEntry* getItemE
     DrawCustomItemDiamondTint(play, (Gfx*)gGiTunicCollarDL, (Gfx*)gGiTunicDL, -1.0f, 235, 110, 20);
 }
 
-void Randomizer_DrawExtSnowquillTunic(PlayState* play, GetItemEntry* getItemEntry) {
-    // Snowquill Tunic: vanilla tunic model tinted WHITE.
+void Randomizer_DrawExtSagesTunic(PlayState* play, GetItemEntry* getItemEntry) {
+    // Sage's Tunic: vanilla tunic model tinted WHITE, with the 6 medallions that feed it launching
+    // out of it in angled ballistic arcs — the Triforce Thief drop-launch look (angled velocity +
+    // gravity + spin while airborne), staggered into a continuous fountain. Each medallion pops in
+    // at the tunic and shrinks out at the end of its arc so the loop restart never snaps visibly.
+    static Gfx* const sMedallionFaces[6] = {
+        (Gfx*)gGiForestMedallionFaceDL, (Gfx*)gGiFireMedallionFaceDL,   (Gfx*)gGiWaterMedallionFaceDL,
+        (Gfx*)gGiSpiritMedallionFaceDL, (Gfx*)gGiShadowMedallionFaceDL, (Gfx*)gGiLightMedallionFaceDL,
+    };
+    const f32 kV0 = 1.5f;       // outward launch speed (model units/frame)
+    const f32 kUpBias = 1.5f;   // added to every launch's vertical speed (fountain lift)
+    const f32 kGravity = 0.07f; // per-frame² pull on the arcs
+    const s32 kCycle = 40;      // frames airborne per medallion
+    const s32 kStagger = 7;     // launch offset between medallions
+    const f32 kScale = 0.35f;   // per-medallion shrink (medallion mesh spans ±39)
+    const f32 kZOffset = 14.0f; // in front of the tunic plane (its z tops out at 9) so depth never eats them
+    s16 rotation = play->gameplayFrames * 0x2;
+
+    OPEN_DISPS(play->state.gfxCtx);
+    for (s32 i = 0; i < 6; i++) {
+        f32 t = (f32)((play->gameplayFrames + i * kStagger) % kCycle);
+        f32 theta = (M_PI / 2.0f) + i * (f32)(M_PI / 3.0f); // 6 launch directions in the screen plane
+        f32 vx = cosf(theta) * kV0;
+        f32 vy = sinf(theta) * kV0 + kUpBias;
+        f32 scale = kScale;
+
+        if (t < 4.0f) {
+            scale *= t / 4.0f; // pop-in at the tunic
+        } else if (t >= kCycle - 9.0f) {
+            scale *= (kCycle - 1.0f - t) / 8.0f; // shrink-out at the arc's end
+        }
+        if (scale <= 0.001f) {
+            continue;
+        }
+
+        // Exact recipe of GetItem_DrawEggOrMedallion (z_draw.c): the medallion DLs need the
+        // SETUPDL_26 state — under 25 they render nothing.
+        Gfx_SetupDL_26Opa(play->state.gfxCtx);
+        Matrix_Push();
+        Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY); // the same spin DrawCustomItemDiamondTint applies
+        Matrix_Translate(vx * t, vy * t - 0.5f * kGravity * t * t, kZOffset, MTXMODE_APPLY);
+        Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
+        Matrix_RotateY(play->gameplayFrames * 0.09f + i, MTXMODE_APPLY); // spin while flying
+        gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                  G_MTX_MODELVIEW | G_MTX_LOAD);
+        gSPDisplayList(POLY_OPA_DISP++, sMedallionFaces[i]);
+        gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiMedallionDL);
+        Matrix_Pop();
+    }
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    // Drawn last: the tint helper mutates the current matrix without restoring it.
     DrawCustomItemDiamondTint(play, (Gfx*)gGiTunicCollarDL, (Gfx*)gGiTunicDL, -1.0f, 240, 244, 250);
 }
 
@@ -1780,9 +2179,278 @@ void Randomizer_DrawExtChampionsTunic(PlayState* play, GetItemEntry* getItemEntr
     DrawCustomItemDiamondTint(play, (Gfx*)gGiTunicCollarDL, (Gfx*)gGiTunicDL, -1.0f, 0, 120, 215);
 }
 
+// The hover-boots GI colors its i4 textures through per-section prim/env colors (brown leather:
+// cloth prim 80,40,0 / env 40,20,0 ≈ 22% luminance), so a multiplicative grayscale tint can only
+// darken — the cloth went near-black. Remap each prim/env color onto the icon's crimson ramp
+// instead (gItemIconPegasusBootsTex: body ≈ 85,14,23, highlights ≈ 154,58,65) in a one-time local
+// copy of the DL, and draw that untinted at vanilla GI size.
+static uint32_t Pegasus_CrimsonRamp(uint32_t rgba) {
+    uint8_t r = (rgba >> 24) & 0xFF, g = (rgba >> 16) & 0xFF, b = (rgba >> 8) & 0xFF, a = rgba & 0xFF;
+    float lum = 0.299f * r + 0.587f * g + 0.114f * b;
+    float nrF = lum * 1.7f;
+    uint8_t nr = (uint8_t)(nrF > 255.0f ? 255.0f : nrF);
+    uint8_t ng = (uint8_t)(lum * 0.35f);
+    uint8_t nb = (uint8_t)(lum * 0.42f);
+    return ((uint32_t)nr << 24) | ((uint32_t)ng << 16) | ((uint32_t)nb << 8) | a;
+}
+
+static Gfx* Pegasus_GetRecoloredBootsDL() {
+    static std::vector<Gfx> sDL;
+    if (!sDL.empty()) {
+        return sDL.data();
+    }
+    // Same two-word (expanded) command set as MmDL_WithScopedVerts below.
+    auto isTwoWord = [](uint8_t op) {
+        return op == 0x20 || op == 0x24 || op == 0x25 || op == 0x27 || op == 0x31 || op == 0x32 || op == 0x33 ||
+               op == 0x35 || op == 0x36 || op == 0x42;
+    };
+    Gfx* src = (Gfx*)ResourceMgr_LoadGfxByName((char*)gGiHoverBootsDL);
+    if (src == NULL) {
+        return NULL;
+    }
+    size_t count = 0;
+    while (count < 4096) {
+        uint8_t op = (uint8_t)((src[count].words.w0 >> 24) & 0xFF);
+        count++;
+        if (op == 0xDF) { // G_ENDDL
+            break;
+        }
+        if (isTwoWord(op)) {
+            count++;
+        }
+    }
+    sDL.assign(src, src + count);
+    for (size_t i = 0; i < sDL.size(); i++) {
+        uint8_t op = (uint8_t)((sDL[i].words.w0 >> 24) & 0xFF);
+        if (op == 0xDF) {
+            break;
+        }
+        if (op == G_SETPRIMCOLOR || op == G_SETENVCOLOR) {
+            sDL[i].words.w1 = (uintptr_t)Pegasus_CrimsonRamp((uint32_t)sDL[i].words.w1);
+        } else if (isTwoWord(op)) {
+            i++; // payload word, never an opcode
+        }
+    }
+    return sDL.data();
+}
+
 void Randomizer_DrawExtPegasusAnklet(PlayState* play, GetItemEntry* getItemEntry) {
-    // Hover Boots model with red tint (Pegasus = red winged boots)
-    DrawCustomItemDiamondTint(play, (Gfx*)gGiHoverBootsDL, NULL, 0.45f, 220, 40, 40);
+    Gfx* dl = Pegasus_GetRecoloredBootsDL();
+
+    if (dl == NULL) {
+        // Resource not resolvable yet — old grayscale-tinted draw as a stopgap.
+        DrawCustomItemDiamondTint(play, (Gfx*)gGiHoverBootsDL, NULL, -1.0f, 150, 40, 50);
+        return;
+    }
+
+    // Vanilla GetItem_DrawOpa0 recipe (no scale) + the Y-spin the other custom-item draws use.
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    s16 rotation = play->gameplayFrames * 0x2;
+    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, dl);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// The last three page-2 equipment cells. No dedicated mesh exists for any of them, so they follow the
+// same convention as every other ext piece: a VANILLA get-item mesh, tinted. Mirrors the MM side.
+// Skijer's NEI
+void Randomizer_DrawExtTrident(PlayState* play, GetItemEntry* getItemEntry) {
+    // Phantom Ganon's lance, straight out of oot.o2r: limb 9 of gPhantomGanonSkel (the elongated
+    // one — 50 tris, 14070 units along Z, prongs spreading in Y). Its two limb textures are
+    // referenced by hash INSIDE the display list, so they resolve on their own; no segment setup
+    // and nothing copied into soh.o2r (the vanilla-asset rule).
+    //
+    // Authored in limb-local space: shaft along +Z, tip at Z=+8520, and off-center (its bbox
+    // centre is Z=+1485). So: spin around world up, tip the shaft upright (+Z -> +Y), scale, then
+    // translate the centre back to the origin so it spins about its middle instead of orbiting.
+    // 0.00625 puts the 14070-unit lance at ~88 on screen. That is well over the ~34 the other NEI
+    // get-items use, but a lance is a thin silhouette: at the shared size it read as a needle, so
+    // Skijer asked for 2.5x. Skijer's NEI
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    // MANDATORY: this limb DL branches to segment 8 twice (`gsSPDisplayList(0x08000001)`) — the
+    // per-limb hook the boss uses for its glow. Drawing it without pointing segment 8 somewhere
+    // valid makes the interpreter jump into whatever that segment last held and execute it as
+    // opcodes: the ASCII-opcode burst + 0xC0000005. DrawPhantomGanon does exactly this for the same
+    // reason. An empty DL is the right target here — we only want the geometry.
+    gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)GetEmptyDlist(play->state.gfxCtx));
+    s16 rotation = play->gameplayFrames * 0x2;
+    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+    Matrix_RotateX(-M_PI / 2.0f, MTXMODE_APPLY);
+    Matrix_Scale(0.00625f, 0.00625f, 0.00625f, MTXMODE_APPLY);
+    Matrix_Translate(0.0f, 80.0f, -1485.0f, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gPhantomGanonSkelLimbsLimb_00C610DL_009298);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+void Randomizer_DrawExtClimbBoots(PlayState* play, GetItemEntry* getItemEntry) {
+    // Iron Boots GI at vanilla size and composition (GetItem_DrawOpa0Xlu1: main DL Opa + rivets
+    // Xlu), pushed through the pacci-style BRIGHT grayscale (cane_pacci.c): grayscale × color keeps
+    // the mesh's own light and shade, so a near-white multiplier turns the brown leather sections
+    // steel gray too — the whole boot reads as iron.
+    s16 rotation = play->gameplayFrames * 0x2;
+
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gDPSetGrayscaleColor(POLY_OPA_DISP++, 245, 248, 255, 255);
+    gSPGrayscale(POLY_OPA_DISP++, true);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiIronBootsDL);
+    gSPGrayscale(POLY_OPA_DISP++, false);
+
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gDPSetGrayscaleColor(POLY_XLU_DISP++, 245, 248, 255, 255);
+    gSPGrayscale(POLY_XLU_DISP++, true);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gGiIronBootsRivetsDL);
+    gSPGrayscale(POLY_XLU_DISP++, false);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+void Randomizer_DrawExtRocBoots(PlayState* play, GetItemEntry* getItemEntry) {
+    // Hover Boots mesh with gold/metallic filter (spec). Pegasus keeps the red pair.
+    DrawCustomItemDiamondTint(play, (Gfx*)gGiHoverBootsDL, NULL, 0.45f, 255, 195, 60);
+}
+
+void Randomizer_DrawClawshot(PlayState* play, GetItemEntry* getItemEntry) {
+    // MM's own get-item hookshot. Upstream 2Ship's asset XML is the authority:
+    //   <File Name="object_gi_hookshot" Segment="6">
+    //     <DList Name="gGiHookshotDL" Offset="0xA10"/>            <- the model
+    //     <DList Name="gGiHookshotEmptyDL" Offset="0xE48"/>       <- 8 bytes, just an ENDDL
+    //     <Texture gGiHookshot1Tex i8 32x32/> <Texture gGiHookshot2Tex i4 32x32/>
+    // so the get-item is gGiHookshotDL alone (object_link_child holds the HELD model, a different
+    // mesh entirely), and MM's draw table confirms it: gItemDrawTable[GID_HOOKSHOT].
+    //
+    // The one engine-level obstacle: BOTH archives own objects/object_gi_hookshot/, including the
+    // single vertex array object_gi_hookshotVtx_000000. The DL asks for vertices by HASH, which
+    // resolves hash -> name -> load from the DEFAULT archive, so they came back OoT's however the
+    // DL itself was loaded. MmDL_WithScopedVerts loads both strictly from mm.o2r and rewrites each
+    // vertex load to point straight at MM's array (gfx_vtx_hash_handler_custom treats word1 as a
+    // real pointer once it exceeds 0xFFFFF, and then never consults the hash).
+    //
+    // Colour check, so this never needs guessing again: MM's DL sets PRIM 0xC3C300 (yellow), OoT's
+    // sets 0x0A3CA0 / 0x3278D2 (blue). Yellow on screen = MM's. Skijer's NEI
+    static Gfx* sBody = NULL;
+    static u8 sTried = 0;
+    if (!sTried && MmAssets_IsAvailable()) {
+        sBody = MmDL_WithScopedVerts("objects/object_gi_hookshot/gGiHookshotDL",
+                                     "objects/object_gi_hookshot/object_gi_hookshotVtx_000000");
+        if (sBody != NULL) {
+            sTried = 1;
+        }
+    }
+    if (sBody == NULL) {
+        return; // no fallback (Skijer's call): OoT's model here hid the real failure for rounds
+    }
+
+    // No extra Matrix_Scale: Player_DrawGetItemImpl already built the get-item matrix (translate +
+    // spin + Scale 0.2), which is exactly what GetItem_Draw renders a vanilla GI model with, and
+    // MM authors its GI models at the same scale as OoT.
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, sBody);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+void Randomizer_DrawBottomlessBottle(PlayState* play, GetItemEntry* getItemEntry) {
+    // Purple boss-soul flame pouring out of the empty bottle (Ultrashot/True MS language).
+    DrawWeaponFlameOverlay(play, 190, 60, 230);
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    s16 rotation = play->gameplayFrames * 0x2;
+    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiBottleStopperDL);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gGiBottleDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// The four 2026-08-06 page-2 additions. Each draws its OWN placeholder asset from soh.o2r
+// (object_nei_<item>/gNei<Item>DL — a flat-colour gem, per the "every custom item gets its own XML"
+// rule) so a mod can replace the model without touching code. Path-pointer DLs resolve at draw time,
+// exactly like the soh_assets.h symbols do. Skijer's NEI
+// Custom-asset draws must NEVER hand an unresolved path straight to gSPDisplayList. That path only
+// survives if the resource resolves: a missing entry (soh.o2r not regenerated) or one that resolves
+// to a non-DisplayList yields a bogus pointer whose bytes get executed as GBI opcodes — the 0xC0000005
+// crash. Resolve first, skip the draw if it didn't, and say so once in the log. Skijer's NEI
+static void DrawCustomItemDiamondByPath(PlayState* play, const char* path, Gfx** cache, u8* tried, f32 scale) {
+    if (!*tried) {
+        *tried = 1;
+        if (ResourceMgr_FileExists(path)) {
+            *cache = ResourceMgr_LoadGfxByName(path);
+        }
+        if (*cache == NULL) {
+            SPDLOG_ERROR("[NEI] custom get-item model missing: {} — regenerate soh.o2r (GenerateSohOtr)", path);
+        }
+    }
+    if (*cache == NULL) {
+        return; // nothing drawn beats crashing on a bad pointer
+    }
+    DrawCustomItemDiamond(play, *cache, scale);
+}
+
+void Randomizer_DrawNeiSheikahSlate(PlayState* play, GetItemEntry* getItemEntry) {
+    static Gfx* c = NULL;
+    static u8 t = 0;
+    DrawCustomItemDiamondByPath(play, "__OTR__objects/object_nei_sheikah_slate/gNeiSheikahSlateDL", &c, &t, 0.35f);
+}
+
+// Slate runes: the same slate model wrapped in a per-rune boss-soul flame (the cane-upgrade
+// language — the flame color IS the rune's identity, matching its badge/glyph icons).
+static void DrawSlateRuneCommon(PlayState* play, u8 r, u8 g, u8 b) {
+    static Gfx* c = NULL;
+    static u8 t = 0;
+    DrawWeaponFlameOverlay(play, r, g, b);
+    DrawCustomItemDiamondByPath(play, "__OTR__objects/object_nei_sheikah_slate/gNeiSheikahSlateDL", &c, &t, 0.35f);
+}
+
+void Randomizer_DrawSlateRuneBomb(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawSlateRuneCommon(play, 95, 220, 235); // Remote Bomb — sheikah cyan
+}
+
+void Randomizer_DrawSlateRuneMasterCycle(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawSlateRuneCommon(play, 100, 230, 190); // Master Cycle Zero — teal
+}
+
+void Randomizer_DrawSlateRuneStasis(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawSlateRuneCommon(play, 250, 200, 70); // Stasis — gold
+}
+
+void Randomizer_DrawSlateRuneCryonis(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawSlateRuneCommon(play, 150, 215, 255); // Cryonis — ice blue
+}
+
+void Randomizer_DrawNeiPhantomHourglass(PlayState* play, GetItemEntry* getItemEntry) {
+    static Gfx* c = NULL;
+    static u8 t = 0;
+    DrawCustomItemDiamondByPath(play, "__OTR__objects/object_nei_phantom_hourglass/gNeiPhantomHourglassDL", &c, &t,
+                                0.35f);
+}
+
+void Randomizer_DrawNeiShadowCrystal(PlayState* play, GetItemEntry* getItemEntry) {
+    static Gfx* c = NULL;
+    static u8 t = 0;
+    DrawCustomItemDiamondByPath(play, "__OTR__objects/object_nei_shadow_crystal/gNeiShadowCrystalDL", &c, &t, 0.35f);
+}
+
+void Randomizer_DrawNeiRodOfSeasons(PlayState* play, GetItemEntry* getItemEntry) {
+    static Gfx* c = NULL;
+    static u8 t = 0;
+    DrawCustomItemDiamondByPath(play, "__OTR__objects/object_nei_rod_of_seasons/gNeiRodOfSeasonsDL", &c, &t, 0.35f);
 }
 
 void Randomizer_DrawExtPendantOfMemories(PlayState* play, GetItemEntry* getItemEntry) {
@@ -1870,7 +2538,45 @@ static MmMaskDrawEntry sMmMaskDrawTable[] = {
 // the archive — resolution by exact path works, folder overlap with OoT is NOT a problem (only
 // exact duplicate paths go through archive priority). Do NOT gate this with ResourceMgr_FileExists:
 // that check does not see the mm.o2r mount and blanks every MM item.
-#define GSP_MM_DL(disp, path) gSPDisplayList((disp), (Gfx*)(path))
+// ...EXCEPT that five of the 24 mask objects have EXACT path twins in OoT — object_gi_golonmask
+// (Goron), object_gi_zoramask (Zora), object_gi_ki_tan_mask (Keaton), object_gi_rabit_mask (Bunny
+// Hood) and object_gi_truth_mask (Mask of Truth) are all OoT child-trade masks too. For those the
+// "exact duplicate path" case above DOES trigger: plain resolution hands back OoT's mask, so the
+// get-item shows the wrong model with the wrong textures. Resolving archive-scoped against mm.o2r
+// (MmAssets_LoadResource, the same mechanism the Shield of Ikana uses) picks MM's every time, and
+// is harmless for the other 19. Cached per path literal — the loader itself does not cache, and
+// this runs every frame the item is on screen. Skijer's NEI
+static Gfx* MmMaskResolveDL(const char* otrPath) {
+    static const char* sKeys[64];
+    static Gfx* sVals[64];
+    static uint8_t sCount = 0;
+    for (uint8_t i = 0; i < sCount; i++) {
+        if (sKeys[i] == otrPath) {
+            return sVals[i];
+        }
+    }
+    // Strict: five of these mask objects share their path with an OoT child-trade mask, and the
+    // whole point here is "MM's mask".
+    Gfx* dl = (Gfx*)MmAssets_LoadResourceStrict(otrPath);
+    // Logged either way, once per path: the Clawshot round showed that "it looks wrong" cannot
+    // distinguish "resolved to the other game's copy" from "did not resolve at all", and the log
+    // settles it in one line. Skijer's NEI
+    SPDLOG_ERROR("[NEI] MM mask DL '{}' -> {}", otrPath, (void*)dl);
+    if (sCount < ARRAY_COUNT(sKeys)) {
+        sKeys[sCount] = otrPath;
+        sVals[sCount] = dl;
+        sCount++;
+    }
+    return dl;
+}
+
+#define GSP_MM_DL(disp, path)               \
+    do {                                    \
+        Gfx* _mmDL = MmMaskResolveDL(path); \
+        if (_mmDL != NULL) {                \
+            gSPDisplayList((disp), _mmDL);  \
+        }                                   \
+    } while (0)
 
 void Randomizer_DrawMmMask(PlayState* play, GetItemEntry* getItemEntry) {
     if (!MmAssets_IsAvailable())
@@ -1881,23 +2587,47 @@ void Randomizer_DrawMmMask(PlayState* play, GetItemEntry* getItemEntry) {
         return;
 
     MmMaskDrawEntry* entry = &sMmMaskDrawTable[index];
+    // Which mask actually asks to be drawn. The OoT child-trade masks (Goron/Zora/Keaton/Bunny/
+    // Truth) share their object with MM's, so this pins down whether the wrong ROW is selected
+    // before going back to look at textures. Skijer's NEI
+    {
+        static u16 sLast = 0xFFFF;
+        if (index != sLast) {
+            sLast = index;
+            SPDLOG_ERROR("[NEI] DrawMmMask itemId=0x{:X} index={} mode={}", getItemEntry->itemId, index,
+                         (int)entry->mode);
+        }
+    }
 
     OPEN_DISPS(play->state.gfxCtx);
 
+    // Palette mode OFF before every MM mask.
+    //
+    // This is the one structural difference between the OoT mask that renders correctly and the MM
+    // one that renders black, found by diffing their opcode streams:
+    //   OoT: ... SetTimg SetTile LoadBlock SetTile SetTileSize  SetTimg TileSync SetTile LoadTLUT ...
+    //   MM : ... SetTimg SetTile LoadBlock SetTile SetTileSize  (no TLUT at all)
+    // OoT's mask textures are colour-indexed and load a palette; MM's are INTENSITY (I8 / IA8) and
+    // load none. MM's DL never clears the LUT mode either, so whatever the previous draw left set
+    // carries over — and an intensity texture sampled as palette-indexed comes out black, which is
+    // exactly the symptom: right silhouette, no colour. Skijer's NEI
     if (entry->mode == MM_MASK_DRAW_OPA0_XLU1) {
         // DL1: Opaque, DL2: Translucent (like MM GetItem_DrawOpa0Xlu1)
         Gfx_SetupDL_25Opa(play->state.gfxCtx);
+        gDPSetTextureLUT(POLY_OPA_DISP++, G_TT_NONE);
         gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
                   G_MTX_MODELVIEW | G_MTX_LOAD);
         GSP_MM_DL(POLY_OPA_DISP++, entry->dl1);
 
         Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+        gDPSetTextureLUT(POLY_XLU_DISP++, G_TT_NONE);
         gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
                   G_MTX_MODELVIEW | G_MTX_LOAD);
         GSP_MM_DL(POLY_XLU_DISP++, entry->dl2);
     } else {
         // Both DLs: Opaque (like MM GetItem_DrawOpa01)
         Gfx_SetupDL_25Opa(play->state.gfxCtx);
+        gDPSetTextureLUT(POLY_OPA_DISP++, G_TT_NONE);
         gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
                   G_MTX_MODELVIEW | G_MTX_LOAD);
         GSP_MM_DL(POLY_OPA_DISP++, entry->dl1);
@@ -1938,23 +2668,45 @@ void Randomizer_DrawChateauRomani(PlayState* play, GetItemEntry* getItemEntry) {
 // Reuses OOT's Odd Mushroom DL (loaded via OTR path) on a vanilla bottle base.
 // =============================================================================
 void Randomizer_DrawBottleWithMagicMushroom(PlayState* play, GetItemEntry* getItemEntry) {
-    Gfx* mushroomDL = (Gfx*)ResourceMgr_LoadGfxByName("__OTR__objects/object_gi_mushroom/gGiOddMushroomDL");
-    if (mushroomDL == NULL || ((const char*)mushroomDL)[0] == '_') {
-        return;
-    }
+    // MM's REAL Magic Mushroom GI mesh (mm.o2r object_gi_magicmushroom), archive-scoped like the
+    // sword levels. Fallback when mm.o2r is absent: OoT's odd mushroom inside the bottle glass.
+    static Gfx* sMmMushroom = NULL;
+    static u8 sMmMushroomTried = 0;
+    Gfx* mmDL = LoadMmDLOnce("objects/object_gi_magicmushroom/gGiMagicMushroomDL", &sMmMushroom, &sMmMushroomTried);
 
+    // OJO: OPEN_DISPS abre una llave léxica y CLOSE_DISPS la cierra — deben aparecer UNA vez y al
+    // mismo nivel (un CLOSE+return dentro de un if descuadra todo el fichero).
     OPEN_DISPS(play->state.gfxCtx);
-
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
 
     // Subtle rotation (matches DrawCustomItemDiamond pattern).
     s16 rotation = play->gameplayFrames * 0x2;
-    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
-    Matrix_Scale(0.8f, 0.8f, 0.8f, MTXMODE_APPLY);
 
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, mushroomDL);
+    if (mmDL != NULL) {
+        Gfx_SetupDL_25Opa(play->state.gfxCtx);
+        Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+        Matrix_Scale(0.8f, 0.8f, 0.8f, MTXMODE_APPLY);
+        gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_OPA_DISP++, mmDL);
+    } else {
+        Gfx* mushroomDL = (Gfx*)ResourceMgr_LoadGfxByName("__OTR__objects/object_gi_mushroom/gGiOddMushroomDL");
+        if (mushroomDL != NULL && ((const char*)mushroomDL)[0] != '_') {
+            Gfx_SetupDL_25Opa(play->state.gfxCtx);
+            Matrix_Push();
+            Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+            Matrix_Scale(0.55f, 0.55f, 0.55f, MTXMODE_APPLY); // shrunk to sit "inside" the bottle glass
+            gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                      G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+            gSPDisplayList(POLY_OPA_DISP++, mushroomDL);
+            Matrix_Pop();
+        }
+        // The bottle around it (glass on XLU so the mushroom shows through).
+        Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+        Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+        gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gGiBottleDL);
+    }
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -2046,8 +2798,7 @@ void Randomizer_DrawMmStrayFairy(PlayState* play, GetItemEntry* getItemEntry) {
 
     if (!sFairyInitialized) {
         FlexSkeletonHeader* skel = (FlexSkeletonHeader*)MmAssets_LoadSkeleton("objects/gameplay_keep/gStrayFairySkel");
-        AnimationHeader* anim =
-            (AnimationHeader*)MmAssets_LoadAnimation("objects/gameplay_keep/gStrayFairyFlyingAnim");
+        AnimationHeader* anim = (AnimationHeader*)MmAssets_LoadAnimation("objects/gameplay_keep/gStrayFairyFlyingAnim");
         if (skel == NULL || anim == NULL) {
             return; // mm.o2r not ready yet — retry next frame, never latch the failure
         }
@@ -2106,9 +2857,9 @@ void Randomizer_DrawMmStrayFairy(PlayState* play, GetItemEntry* getItemEntry) {
     Matrix_ReplaceRotation(&play->billboardMtxF);
     Matrix_Scale(0.03f, 0.03f, 0.03f, MTXMODE_APPLY);
 
-    POLY_XLU_DISP = SkelAnime_DrawFlex(play, sFairySkelAnime.skeleton, sFairySkelAnime.jointTable,
-                                       sFairySkelAnime.dListCount, Randomizer_OverrideLimbDrawStrayFairy, NULL, NULL,
-                                       POLY_XLU_DISP);
+    POLY_XLU_DISP =
+        SkelAnime_DrawFlex(play, sFairySkelAnime.skeleton, sFairySkelAnime.jointTable, sFairySkelAnime.dListCount,
+                           Randomizer_OverrideLimbDrawStrayFairy, NULL, NULL, POLY_XLU_DISP);
     Matrix_Pop();
 
     CLOSE_DISPS(play->state.gfxCtx);
@@ -2305,8 +3056,12 @@ typedef struct {
     { 155, 155, 155 }
 #define MMSOUL_NOCOL \
     { -1, 0, 0, 0 }
-#define MMSOUL_NOSEG \
-    { 0, MMSOUL_SEG_END, NULL, { 0, 0, 0, 0 }, { 0, 0, 0 } }
+#define MMSOUL_NOSEG                               \
+    {                                              \
+        0, MMSOUL_SEG_END, NULL, { 0, 0, 0, 0 }, { \
+            0, 0, 0                                \
+        }                                          \
+    }
 #define MMSOUL_SEG3_NONE \
     { MMSOUL_NOSEG, MMSOUL_NOSEG, MMSOUL_NOSEG }
 
@@ -2573,9 +3328,8 @@ static bool MmSoul_DrawSkeletonSoul(PlayState* play, MmSoulSpec* spec, MmSoulSta
             case MMSOUL_SEG_SCROLL_EYEGORE:
                 // gEyegoreEyeLaserTexAnim keyframe motion: 16x32 two-layer scroll, y step -7
                 gSPSegment(POLY_OPA_DISP++, ss->seg,
-                           (uintptr_t)Gfx_TwoTexScroll(play->state.gfxCtx, 0, 0,
-                                                       (play->state.frames * -7) & 0x7F, 0x10, 0x20, 1, 0, 0, 0x10,
-                                                       0x20));
+                           (uintptr_t)Gfx_TwoTexScroll(play->state.gfxCtx, 0, 0, (play->state.frames * -7) & 0x7F, 0x10,
+                                                       0x20, 1, 0, 0, 0x10, 0x20));
                 break;
             default:
                 break;
@@ -2724,16 +3478,15 @@ static bool MmSoul_DrawChuchu(PlayState* play) {
 
     OPEN_DISPS(play->state.gfxCtx);
 
-    Matrix_Scale(0.01f,
-                 ((cosf(sTimer * (2.0f * M_PI / 5.0f)) * (0.07f * timerFactor)) + 1.0f) * 0.01f,
-                 0.01f, MTXMODE_APPLY);
+    Matrix_Scale(0.01f, ((cosf(sTimer * (2.0f * M_PI / 5.0f)) * (0.07f * timerFactor)) + 1.0f) * 0.01f, 0.01f,
+                 MTXMODE_APPLY);
     Matrix_Translate(0.0f, -2700.0f, 0.0f, MTXMODE_APPLY);
 
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     // gChuchuSlimeFlowTexAnim: seg 0x0A two-tex scroll (layer1 static 64x64, layer2 y-scroll 32x32)
     gSPSegment(POLY_XLU_DISP++, 0x0A,
-               (uintptr_t)Gfx_TwoTexScroll(play->state.gfxCtx, 0, 0, 0, 0x40, 0x40, 1, 0,
-                                           play->state.frames & 0x7F, 0x20, 0x20));
+               (uintptr_t)Gfx_TwoTexScroll(play->state.gfxCtx, 0, 0, 0, 0x40, 0x40, 1, 0, play->state.frames & 0x7F,
+                                           0x20, 0x20));
     gSPSegment(POLY_XLU_DISP++, 0x0C, (uintptr_t)MmSoul_EmptyDL(play->state.gfxCtx));
     gDPSetPrimColor(POLY_XLU_DISP++, 0, 100, 255, 255, 200, 255);
     gDPSetEnvColor(POLY_XLU_DISP++, 255, 180, 0, 255);
@@ -3113,7 +3866,7 @@ void Randomizer_DrawMmClock(PlayState* play, GetItemEntry* getItemEntry) {
     if (!MmAssets_IsAvailable())
         return;
 
-    f32 clockFaceRotation;   // Z rotation of the clock face
+    f32 clockFaceRotation;    // Z rotation of the clock face
     f32 sunMoonPanelRotation; // Y rotation of the sun/moon panel
     switch ((RandomizerGet)getItemEntry->getItemId) {
         case RG_MM_TIME_DAY_1:
@@ -3370,9 +4123,9 @@ void Randomizer_DrawMmFrog(PlayState* play, GetItemEntry* getItemEntry) {
     gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)object_fr_Tex_0059A0);
     gSPSegment(POLY_OPA_DISP++, 0x09, (uintptr_t)object_fr_Tex_0059A0);
 
-    POLY_OPA_DISP = SkelAnime_DrawFlex(play, sFrogSkelAnime.skeleton, sFrogSkelAnime.jointTable,
-                                       sFrogSkelAnime.dListCount, Randomizer_OverrideLimbDrawMmFrog,
-                                       Randomizer_PostLimbDrawMmFrog, NULL, POLY_OPA_DISP);
+    POLY_OPA_DISP =
+        SkelAnime_DrawFlex(play, sFrogSkelAnime.skeleton, sFrogSkelAnime.jointTable, sFrogSkelAnime.dListCount,
+                           Randomizer_OverrideLimbDrawMmFrog, Randomizer_PostLimbDrawMmFrog, NULL, POLY_OPA_DISP);
     Matrix_Pop();
 
     CLOSE_DISPS(play->state.gfxCtx);

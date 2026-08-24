@@ -26,7 +26,8 @@ static constexpr s16 LIFESTEAL_TICK_FRAMES = 20;
 static constexpr s16 LIFESTEAL_DAMAGE_PER_TICK = 4; // ¼ heart (1 heart = 16 HP)
 
 static bool IsValidLifestealTarget(Actor* actor) {
-    if (actor == NULL || actor->update == NULL) return false;
+    if (actor == NULL || actor->update == NULL)
+        return false;
     return actor->category == ACTORCAT_ENEMY || actor->category == ACTORCAT_BOSS;
 }
 
@@ -42,11 +43,14 @@ void RegisterDarkArrowLifestealHooks() {
     COND_ID_HOOK(OnActorUpdate, ACTOR_EN_ARROW, shouldRegister, [](void* actorPtr) {
         auto* arrow = (EnArrow*)actorPtr;
         s16 p = (s16)arrow->actor.params;
-        if (p != ARROW_SW97_0C && p != ARROW_SEED_0C) return; // bow + slingshot Dark
-        if (!(arrow->hitFlags & 1)) return;                   // not the impact frame
+        if (p != ARROW_SW97_0C && p != ARROW_SEED_0C)
+            return; // bow + slingshot Dark
+        if (!(arrow->hitFlags & 1))
+            return; // not the impact frame
 
         Actor* hit = arrow->collider.base.at;
-        if (!IsValidLifestealTarget(hit)) return;
+        if (!IsValidLifestealTarget(hit))
+            return;
 
         // Re-tag on every hit so repeated hits refresh the duration.
         DarkLifestealData data{};
@@ -59,7 +63,8 @@ void RegisterDarkArrowLifestealHooks() {
     COND_HOOK(OnActorUpdate, shouldRegister, [](void* actorPtr) {
         Actor* actor = (Actor*)actorPtr;
         auto* data = ObjectExtension::GetInstance().Get<DarkLifestealData>(actor);
-        if (data == nullptr) return;
+        if (data == nullptr)
+            return;
 
         if (actor->update == NULL) {
             ObjectExtension::GetInstance().Remove<DarkLifestealData>(actor);

@@ -1912,7 +1912,8 @@ s32 BgCheck_CheckWallImpl(CollisionContext* colCtx, u16 xpFlags, Vec3f* posResul
     if (!GameInteractor_Should(VB_PERFORM_WALL_COLLISION_CHECK, true, actor) ||
         ((Sm64Mario_IsVanishActive() || HGrace_WantsNoClip() ||
           SwitchHook_PlayerNoClip()) && // Skijer's NEI switchhook: post-swap noclip window
-         actor != NULL && actor->id == ACTOR_PLAYER)) {
+         actor != NULL &&
+         actor->id == ACTOR_PLAYER)) {
         return false;
     }
 
@@ -4031,10 +4032,17 @@ u32 func_80041D94(CollisionContext* colCtx, CollisionPoly* poly, s32 bgId) {
  * SurfaceType Get Wall Flags
  */
 extern u8 gMogmaMittsClimbActive;
+// Skijer's NEI — a body held by the Sheikah Slate's Stasis rune becomes climbable, but ONLY that
+// body: the check is against its own bgId, so nothing else in the scene is affected and the surface
+// reverts by itself the moment the stasis ends. This is deliberately done here rather than by
+// editing surfaceTypeList — collision headers are shared, cached resources, so writing to one would
+// make every instance of that collision climbable for the rest of the session.
+extern u8 Stasis_IsClimbableBgId(s32 bgId);
 s32 func_80041DB8(CollisionContext* colCtx, CollisionPoly* poly, s32 bgId) {
     // ClimbEverything now lives behind VB_SURFACE_IS_CLIMBABLE (Enhancements/Cheats/ClimbEverything.cpp);
     // the Mogma Mitts flag is ours and still has to be checked alongside it.
-    if (GameInteractor_Should(VB_SURFACE_IS_CLIMBABLE, false) || gMogmaMittsClimbActive) {
+    if (GameInteractor_Should(VB_SURFACE_IS_CLIMBABLE, false) || gMogmaMittsClimbActive ||
+        Stasis_IsClimbableBgId(bgId)) {
         return (1 << 3) | D_80119D90[func_80041D94(colCtx, poly, bgId)];
     } else {
         return D_80119D90[func_80041D94(colCtx, poly, bgId)];

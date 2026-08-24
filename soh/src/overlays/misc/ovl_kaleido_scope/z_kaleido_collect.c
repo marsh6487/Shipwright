@@ -2,6 +2,7 @@
 #include <string.h> // Skijer's NEI: memcpy/strlen (MM name panel injection)
 #include "textures/parameter_static/parameter_static.h"
 #include "textures/icon_item_static/icon_item_static.h"
+#include "textures/icon_item_24_static/icon_item_24_static.h" // dgQuestIconGoldSkulltulaTex (quad 21)
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
@@ -19,13 +20,14 @@ void KaleidoScope_DrawMmQuestStatus(PlayState* play, GraphicsContext* gfxCtx);
 // warp, Sun's/Storms act) because OoT free-play handles them natively. Defined at the end of this file.
 static void NeiPausePlay_Start(PlayState* play, u8 ocarinaSlot);
 
-extern s32 Sw97_MedallionToArrowItem(s32 medallionItem);
-static s32 sSw97ArrowMode = 0;
+// Skijer 2026-07-29: the old "arrow mode" toggle is GONE. Picking which elemental arrow rides a
+// C button is the job of the SW97 wheel on the item page (z_kaleido_item.c), so the quest page's
+// shoulder button is free for the MM/OoT layout flip and a C press here always equips the medallion
+// itself (the spell).
 
 /**
- * SW97 Medallion equipping: when CVar enabled and cursor is on a medallion
- * the player has, pressing a C-button equips that medallion (or its arrow item)
- * to that C-slot depending on sSw97ArrowMode.
+ * SW97 Medallion equipping: when the CVar is enabled and the cursor is on a medallion the player
+ * has, pressing a C-button equips that medallion (its spell) to that C-slot.
  * Returns true if a medallion was equipped (consume the input).
  */
 static s32 Sw97_TryEquipMedallion(PlayState* play, Input* input) {
@@ -74,14 +76,7 @@ static s32 Sw97_TryEquipMedallion(PlayState* play, Input* input) {
     // 0=Forest(0x66), 1=Fire(0x67), 2=Water(0x68), 3=Spirit(0x69), 4=Shadow(0x6A), 5=Light(0x6B)
     s32 medallionItem = cursorPoint + ITEM_MEDALLION_FOREST;
 
-    // In arrow mode, equip the SW97 arrow item instead of the medallion
     s32 itemToEquip = medallionItem;
-    if (sSw97ArrowMode) {
-        s32 arrowItem = Sw97_MedallionToArrowItem(medallionItem);
-        if (arrowItem != ITEM_NONE) {
-            itemToEquip = arrowItem;
-        }
-    }
 
     // Equip to the target button
     s32 targetButtonIndex = targetCBtn + 1; // buttonItems[0] is B button
@@ -97,7 +92,14 @@ static s32 Sw97_TryEquipMedallion(PlayState* play, Input* input) {
 void KaleidoScope_DrawQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
     // Skijer's NEI: L on the quest page flips to MM's Quest Status layout (mirror of the 2ship-side
     // OoT page). The flip persists via CVar; the MM page fully owns input/draw while active.
-    if ((play->pauseCtx.unk_1E4 == 0) && CHECK_BTN_ALL(play->state.input[0].press.button, BTN_L)) {
+    //
+    // 2026-07-29 FIX: this draw function runs for every kaleido page (the pages are all drawn while
+    // the cube rotates), so an ungated L press flipped the quest layout from the item/map/equipment
+    // pages too. 2ship does the flip inside the INPUT handler gated on PAUSE_QUEST
+    // (z_kaleido_scope_NES.c); gate on the active page here for the same behavior.
+    if ((play->pauseCtx.pageIndex == PAUSE_QUEST) && (play->pauseCtx.cursorSpecialPos == 0) &&
+        (play->pauseCtx.state == 6) && (play->pauseCtx.unk_1E4 == 0) &&
+        CHECK_BTN_ALL(play->state.input[0].press.button, BTN_L)) {
         // Don't flip pages mid-song (unk_1E4 != 0 = a demonstration/prompt is running).
         CVarSetInteger(CVAR_ENHANCEMENT("SkijerNEI.MmQuestPage"),
                        !CVarGetInteger(CVAR_ENHANCEMENT("SkijerNEI.MmQuestPage"), 0));
@@ -292,20 +294,20 @@ void KaleidoScope_DrawQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
 
             KaleidoScope_SetCursorVtx(pauseCtx, sp216 * 4, pauseCtx->questVtx);
 
-            // SW97: the freed shoulder button toggles arrow/slingshot mode; C-button equips in current mode.
-            // (Freed = the shoulder NOT bound to kaleido tab switching — see NGCKaleidoSwitcher.)
+            // C-button equips the hovered medallion. The shoulder button belongs to the MM/OoT layout
+            // flip now (Skijer 2026-07-29) — it no longer toggles an arrow mode here.
             if ((pauseCtx->state == 6) && (pauseCtx->unk_1E4 == 0) && (pauseCtx->cursorSpecialPos == 0)) {
-                bool ngcModeQ = CVarGetInteger(CVAR_ENHANCEMENT("NGCKaleidoSwitcher"), 0) != 0;
-                s16 freedBtnQ = ngcModeQ ? BTN_Z : BTN_L;
-                if (SW97_MEDALLIONS_ENABLED() && CHECK_BTN_ALL(input->press.button, freedBtnQ)) {
-                    sSw97ArrowMode ^= 1;
-                    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-                }
                 Sw97_TryEquipMedallion(play, input);
                 // Spiritual stones: A toggles passive buff, C/DPad equips for warp use.
                 SpiritualStone_TryToggleAtCursor(play, input);
                 SpiritualStone_TryEquipAtCursor(play, input);
+                // Quartz of Motion (Stone of Agony level 2): A opens the
+                // tracking-category list. It takes over pauseCtx->unk_1E4 while
+                // open, so the driving happens in z_kaleido_scope_PAL.c.
+                {
+                    extern s32 Quartz_TryOpenAtCursor(PlayState * play, Input * input);
+                    Quartz_TryOpenAtCursor(play, input);
+                }
             }
 
             if ((pauseCtx->state == 6) && (pauseCtx->unk_1E4 == 0) && (pauseCtx->cursorSpecialPos == 0)) {
@@ -475,37 +477,8 @@ void KaleidoScope_DrawQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
             gDPSetEnvColor(POLY_OPA_DISP++, D_8082A0D8[sp218], D_8082A0E4[sp218], D_8082A0F0[sp218], 0);
             gSPVertex(POLY_OPA_DISP++, &pauseCtx->questVtx[sp21A], 4, 0);
 
-            if (SW97_MEDALLIONS_ENABLED() && sSw97ArrowMode) {
-                // Arrow/slingshot mode: medallion at 50% alpha
-                gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha >> 1);
-                KaleidoScope_DrawQuadTextureRGBA32(gfxCtx, ExtInv_GetItemIcon(ITEM_MEDALLION_FOREST + sp218), 24, 24,
-                                                   0);
-                // Weapon overlay at full alpha. gSPVertex stores a POINTER — data is read
-                // at render time, so we must allocate a temp copy with S/T for 32x32.
-                void* weaponTex = LINK_IS_ADULT ? ExtInv_GetItemIcon(ITEM_BOW) : ExtInv_GetItemIcon(ITEM_SLINGSHOT);
-                Vtx* weaponVtx = (Vtx*)Graph_Alloc(gfxCtx, 4 * sizeof(Vtx));
-                for (s32 vi = 0; vi < 4; vi++) {
-                    weaponVtx[vi] = pauseCtx->questVtx[sp21A + vi];
-                }
-                // Map full 32x32 texture to the 24-pixel quad → weapon scaled to 75%
-                weaponVtx[0].v.tc[0] = 0;
-                weaponVtx[0].v.tc[1] = 0;
-                weaponVtx[1].v.tc[0] = 32 << 5;
-                weaponVtx[1].v.tc[1] = 0;
-                weaponVtx[2].v.tc[0] = 0;
-                weaponVtx[2].v.tc[1] = 32 << 5;
-                weaponVtx[3].v.tc[0] = 32 << 5;
-                weaponVtx[3].v.tc[1] = 32 << 5;
-                gDPPipeSync(POLY_OPA_DISP++);
-                gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
-                gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
-                gSPVertex(POLY_OPA_DISP++, weaponVtx, 4, 0);
-                KaleidoScope_DrawQuadTextureRGBA32(gfxCtx, weaponTex, 32, 32, 0);
-            } else {
-                gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
-                KaleidoScope_DrawQuadTextureRGBA32(gfxCtx, ExtInv_GetItemIcon(ITEM_MEDALLION_FOREST + sp218), 24, 24,
-                                                   0);
-            }
+            gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
+            KaleidoScope_DrawQuadTextureRGBA32(gfxCtx, ExtInv_GetItemIcon(ITEM_MEDALLION_FOREST + sp218), 24, 24, 0);
         }
     }
 
@@ -1005,9 +978,10 @@ static const MmPageSongDef sMmPageSongs[12] = {
     { OCARINA_SONG_SUNS, -1, QUEST_SONG_SUN },     // Sun's Song (OoT native)
 };
 
-// MM name textures (mm.o2r item_name_static, IA4 128x16). NULL = no name yet (customs pending).
 // Song-name textures fed to OoT's own bottom name panel (nameSegment path strings, IA4 128x16).
-// MM names come from mm.o2r; Saria/Sun rows use OoT's native name textures. Customs pending.
+// MM names come from mm.o2r; Saria/Sun rows use OoT's native name textures; the three NEI custom
+// songs come from soh/assets/custom/textures/item_name_custom (generate_names.py, same three names
+// the 2ship OoT quest page uses — keep both repos in sync).
 static const char* sMmPageSongNames[12] = {
     "__OTR__item_name_static/gItemNameSonataOfAwakeningENGTex",
     "__OTR__item_name_static/gItemNameGoronLullabyENGTex",
@@ -1015,12 +989,45 @@ static const char* sMmPageSongNames[12] = {
     "__OTR__item_name_static/gItemNameElegyOfEmptynessENGTex",
     "__OTR__item_name_static/gItemNameOathToOrderENGTex",
     "__OTR__textures/item_name_static/gSariasSongItemNameENGTex",
-    NULL, // Command Melody (custom name tex pending on soh side)
+    "__OTR__textures/item_name_custom/gCommandMelodyNameTex",
     "__OTR__item_name_static/gItemNameSongOfHealingENGTex",
-    NULL, // Fugue of Home (pending)
+    "__OTR__textures/item_name_custom/gFugueOfHomeNameTex",
     "__OTR__item_name_static/gItemNameSongOfSoaringENGTex",
-    NULL, // Ballad of Hero (pending)
+    "__OTR__textures/item_name_custom/gBalladOfHeroNameTex",
     "__OTR__textures/item_name_static/gSunsSongItemNameENGTex",
+};
+
+// Name texture per CURSOR POINT (not per song), so the bottom name box works on the whole page and
+// not only on the 12 song notes — a cursor sitting on a boss remains or the notebook used to force
+// namedItem = PAUSE_ITEM_NONE and show nothing at all. NULL = intentionally unnamed.
+// Points: 0-3 remains, 4 strength, 5 swim, 6-17 songs (see sMmPageSongNames), 18 notebook,
+// 19 quiver/bullet bag, 20 bomb bag, 21 skull token (cursor never lands there), 22 heart piece.
+// 4/5/19/20 are the OoT capacity upgrades whose name changes with the level; they stay unnamed until
+// their per-level textures are wired, exactly like the equipment page's left column was.
+static const char* sMmPagePointNames[23] = {
+    "__OTR__item_name_static/gItemNameOdolwasRemainsENGTex",   // 0  Odolwa's Remains
+    "__OTR__item_name_static/gItemNameGohtsRemainsENGTex",     // 1  Goht's Remains
+    "__OTR__item_name_static/gItemNameGyorgsRemainsENGTex",    // 2  Gyorg's Remains
+    "__OTR__item_name_static/gItemNameTwinmoldsRemainsENGTex", // 3  Twinmold's Remains
+    NULL,                                                      // 4  strength upgrade
+    NULL,                                                      // 5  swim upgrade
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL, // 6-11  songs
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,                                                     // 12-17 songs
+    "__OTR__item_name_static/gItemNameBombersNotebookENGTex", // 18 Bombers' Notebook
+    NULL,                                                     // 19 quiver / bullet bag
+    NULL,                                                     // 20 bomb bag
+    NULL,                                                     // 21 skull token (unused quad)
+    "__OTR__item_name_static/gItemNamePieceOfHeartENGTex",    // 22 Heart Piece
 };
 
 static const char* sMmPageRemainsIcons[4] = {
@@ -1060,12 +1067,12 @@ static u8 MmPage_SongOwned(s16 songIdx) {
 // song row, 12-17 upper song row, 18 notebook, 19 quiver, 20 bomb bag, 21 skull token (unused),
 // 22 heart piece) + 8 played-note staff quads (23-30).
 static const s16 sMmQuestQuadX[31] = {
-    45, 78, 10, 45, 80, 11, -109, -87, -65, -41, -19, -18, -109, -87, -65, -41,
-    -19, -18, -103, 7, 82, -110, -54, -98, -86, -74, -62, -50, -38, -26, -14,
+    45,  78,  10,   45, 80, 11,   -109, -87, -65, -41, -19, -18, -109, -87, -65, -41,
+    -19, -18, -103, 7,  82, -110, -54,  -98, -86, -74, -62, -50, -38,  -26, -14,
 };
 static const s16 sMmQuestQuadY[31] = {
-    62, 42, 42, 20, -9, -9, -20, -20, -20, -20, -20, -20, 2, 2, 2, 2,
-    2, 2, 54, -44, -44, 34, 58, -52, -52, -52, -52, -52, -52, -52, -52,
+    62, 42, 42, 20,  -9,  -9, -20, -20, -20, -20, -20, -20, 2,   2,   2,   2,
+    2,  2,  54, -44, -44, 34, 58,  -52, -52, -52, -52, -52, -52, -52, -52,
 };
 static const s16 sMmQuestQuadW[31] = {
     32, 32, 32, 32, 32, 32, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
@@ -1121,7 +1128,7 @@ static const u8 sMmQuestSongRGB[12][3] = {
 };
 
 // Song-row order on the page: point 6..17 maps 1:1 onto sMmPageSongs[] (already in MM row order).
-#define MMQ_POINT_TO_SONG(point) ((point) - 6)
+#define MMQ_POINT_TO_SONG(point) ((point)-6)
 
 // AudioOcarina_Start song-flag encoding: vanilla songs = bit N; slots 14+ = param bits N+2 (the 16-bit
 // mode flags 0x4000/0x8000 sit between).
@@ -1231,16 +1238,17 @@ static void MmPage_DrawQuadTex(GraphicsContext* gfxCtx, s16 quad, const char* te
     gDPSetCombineLERP(POLY_OPA_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0, PRIMITIVE,
                       ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
     gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
-    v = MmPage_AllocQuadRect(gfxCtx, sMmQuestQuadX[quad], sMmQuestQuadY[quad], sMmQuestQuadW[quad],
-                             sMmQuestQuadH[quad], texW, texH, grow);
+    v = MmPage_AllocQuadRect(gfxCtx, sMmQuestQuadX[quad], sMmQuestQuadY[quad], sMmQuestQuadW[quad], sMmQuestQuadH[quad],
+                             texW, texH, grow);
     gSPVertex(POLY_OPA_DISP++, v, 4, 0);
     if (fmt == 0) {
         gDPLoadTextureBlock(POLY_OPA_DISP++, texPath, G_IM_FMT_RGBA, G_IM_SIZ_32b, texW, texH, 0,
-                            G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK,
-                            G_TX_NOLOD, G_TX_NOLOD);
+                            G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD,
+                            G_TX_NOLOD);
     } else {
-        gDPLoadTextureBlock(POLY_OPA_DISP++, texPath, G_IM_FMT_IA, G_IM_SIZ_8b, texW, texH, 0, G_TX_NOMIRROR | G_TX_WRAP,
-                            G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+        gDPLoadTextureBlock(POLY_OPA_DISP++, texPath, G_IM_FMT_IA, G_IM_SIZ_8b, texW, texH, 0,
+                            G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD,
+                            G_TX_NOLOD);
     }
     gSP1Quadrangle(POLY_OPA_DISP++, 0, 2, 3, 1, 0);
     CLOSE_DISPS(gfxCtx);
@@ -1258,11 +1266,11 @@ static void MmPage_DrawQuadTex(GraphicsContext* gfxCtx, s16 quad, const char* te
 // 16x16, piece j drawn as gSP1Quadrangle(j, j+2, j+3, j+1). (left, top) is the quad's top-left.
 static void MmPage_FrameCursor(PauseContext* pauseCtx, s16 left, s16 top, s16 w, s16 h) {
     Vtx* cv = pauseCtx->cursorVtx;
-    s16 m = 2;                  // outward margin around the item
-    s16 L = left - m;           // frame top-left x
-    s16 T = top + m;            // frame top-left y (+y is up)
-    s16 tX = w + 2 * m - 16;    // gap between the left and right corner pieces
-    s16 tY = h + 2 * m - 16;    // gap between the top and bottom corner pieces
+    s16 m = 2;               // outward margin around the item
+    s16 L = left - m;        // frame top-left x
+    s16 T = top + m;         // frame top-left y (+y is up)
+    s16 tX = w + 2 * m - 16; // gap between the left and right corner pieces
+    s16 tY = h + 2 * m - 16; // gap between the top and bottom corner pieces
 
     if (tX < 2) {
         tX = 2;
@@ -1306,6 +1314,28 @@ void KaleidoScope_DrawMmQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
     Input* input = &play->state.input[0];
     s16 i;
 
+    // Skijer 2026-07-31 FIX — the single worst bug on this page.
+    //
+    // KaleidoScope_DrawPages calls KaleidoScope_DrawQuestStatus TWICE: once for the quest page as an
+    // *adjacent* page whenever pageIndex != PAUSE_QUEST (z_kaleido_scope_PAL.c:1341), and once in the
+    // switch when it IS the active page (:1436). So this function runs once per frame no matter which
+    // page the player is looking at — and nothing here checked pageIndex. Everything below that
+    // touches shared PauseContext state was therefore firing from the item/equipment/map pages:
+    //
+    //   * the cursor nav wrote pauseCtx->cursorSpecialPos, which is global, not per page — the active
+    //     page's cursor jumped to its page-scroll arrow out of nowhere ("no puedo mover el kaleido");
+    //   * pressing A anywhere set pauseCtx->unk_1E4 = 2 (song demonstration), and every page's update
+    //     is gated on unk_1E4 == 0, so the whole kaleido froze. Same for the boss-remains equip and
+    //     the strength toggle (which parks unk_1E4 = 7);
+    //   * the name block wrote pauseCtx->namedItem and memcpy'd into pauseCtx->nameSegment every
+    //     frame, and DrawPages runs BEFORE DrawInfoPanel (:3342 then :3351), so it always won: the
+    //     item page showed either this page's song name instead of the item's, or no name at all when
+    //     sMmPagePoint was parked on a cell without one.
+    //
+    // Drawing the page itself is fine from anywhere (that is the point of the adjacent-page pass);
+    // input and shared state are not.
+    u8 isActivePage = (pauseCtx->pageIndex == PAUSE_QUEST);
+
     MmBgm_RegisterSequences(); // idempotent - makes the MM fanfare sequences resolvable
 
     OPEN_DISPS(gfxCtx);
@@ -1321,11 +1351,40 @@ void KaleidoScope_DrawMmQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
         }
     }
 
-    // --- Shield / Sword (MM icons at MM positions; decorative base equipment) ---
-    MmPage_DrawQuadTex(gfxCtx, 4, "__OTR__icon_item_static_yar/gItemIconHerosShieldTex", 32, 32, 0, 0);
-    MmPage_DrawQuadTex(gfxCtx, 5, "__OTR__icon_item_static_yar/gItemIconKokiriSwordTex", 32, 32, 0, 0);
+    // --- STRENGTH / SWIM upgrades (Skijer 2026-07-29) ---
+    // These two quads used to hold decorative copies of the equipped sword and shield. Both live on
+    // the equipment page, so the quads now carry the two capacity upgrades that moved OFF that page's
+    // left column: quad 4 = strength (bracelet/gauntlets), quad 5 = swim (silver/golden scale).
+    {
+        static const char* sStrengthTexs[3] = {
+            dgItemIconGoronsBraceletTex,
+            dgItemIconSilverGauntletsTex,
+            dgItemIconGoldenGauntletsTex,
+        };
+        static const char* sScaleTexs[2] = {
+            dgItemIconScaleSilverTex,
+            dgItemIconScaleGoldenTex,
+        };
+        s32 upg = CUR_UPG_VALUE(UPG_STRENGTH);
 
-    // --- Bombers' Notebook / Quiver / Bomb Bag (MM positions; quiver+bag follow OoT's upgrades) ---
+        if (upg > 0) {
+            // The ToggleStrength enhancement greys the icon out while strength is disabled — same
+            // visual rule the equipment page used before the move.
+            u8 strengthOff = CVarGetInteger(CVAR_ENHANCEMENT("ToggleStrength"), 0) &&
+                             CVarGetInteger(CVAR_ENHANCEMENT("StrengthDisabled"), 0);
+            gDPPipeSync(POLY_OPA_DISP++);
+            gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255,
+                            strengthOff ? (pauseCtx->alpha >> 1) : pauseCtx->alpha);
+            MmPage_DrawQuadTex(gfxCtx, 4, sStrengthTexs[((upg > 3) ? 3 : upg) - 1], 32, 32, 0, 0);
+            gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
+        }
+        upg = CUR_UPG_VALUE(UPG_SCALE);
+        if (upg > 0) {
+            MmPage_DrawQuadTex(gfxCtx, 5, sScaleTexs[((upg > 2) ? 2 : upg) - 1], 32, 32, 0, 0);
+        }
+    }
+
+    // --- Bombers' Notebook / Quiver-or-Bullet-Bag / Bomb Bag (MM positions, OoT upgrade values) ---
     if (Nei_Save()->mmQuestItems & FC_MMQ_BOMBERS_NOTEBOOK) {
         MmPage_DrawQuadTex(gfxCtx, 18, "__OTR__icon_item_static_yar/gItemIconBombersNotebookTex", 32, 32, 0, 0);
     }
@@ -1333,18 +1392,35 @@ void KaleidoScope_DrawMmQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
         static const char* sQuiverTexs[3] = { "__OTR__icon_item_static_yar/gItemIconQuiver30Tex",
                                               "__OTR__icon_item_static_yar/gItemIconQuiver40Tex",
                                               "__OTR__icon_item_static_yar/gItemIconQuiver50Tex" };
+        static const char* sBulletBagTexs[3] = { dgItemIconBulletBag30Tex, dgItemIconBulletBag40Tex,
+                                                 dgItemIconBulletBag50Tex };
         static const char* sBombBagTexs[3] = { "__OTR__icon_item_static_yar/gItemIconBombBag20Tex",
                                                "__OTR__icon_item_static_yar/gItemIconBombBag30Tex",
                                                "__OTR__icon_item_static_yar/gItemIconBombBag40Tex" };
+        // As child (or with no bow yet) this cell is the slingshot's BULLET BAG, exactly like OoT's
+        // own upgrade column did — that is the "Quiver / Bullet as child" cell.
         s32 upg = CUR_UPG_VALUE(UPG_QUIVER);
 
         if (upg > 0) {
             MmPage_DrawQuadTex(gfxCtx, 19, sQuiverTexs[((upg > 3) ? 3 : upg) - 1], 32, 32, 0, 0);
+        } else {
+            upg = CUR_UPG_VALUE(UPG_BULLET_BAG);
+            if (upg > 0) {
+                MmPage_DrawQuadTex(gfxCtx, 19, sBulletBagTexs[((upg > 3) ? 3 : upg) - 1], 32, 32, 0, 0);
+            }
         }
         upg = CUR_UPG_VALUE(UPG_BOMB_BAG);
         if (upg > 0) {
             MmPage_DrawQuadTex(gfxCtx, 20, sBombBagTexs[((upg > 3) ? 3 : upg) - 1], 32, 32, 0, 0);
         }
+    }
+
+    // --- Gold Skulltula token (quad 21) ---
+    // The quad has always been in MM's layout table and the cursor could land on it, but nothing was
+    // ever drawn here, so the slot read as broken. OoT's token count lives in gsTokens; the icon is
+    // OoT's own 24x24 quest icon (the count itself is shown by the name/counter box). Skijer 2026-07-29
+    if (gSaveContext.inventory.gsTokens > 0) {
+        MmPage_DrawQuadTex(gfxCtx, 21, dgQuestIconGoldSkulltulaTex, 24, 24, 0, 0);
     }
 
     // --- Heart piece count (MM 48x48 IA8 pie icons; OoT stores the count in questItems bits 28+) ---
@@ -1397,9 +1473,10 @@ void KaleidoScope_DrawMmQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
     //   play-it-yourself (state 2)   -> the full fingering DIMMED (the target) + the notes you have
     //                                    played lit on top. A = blue, C = yellow (MM colors).
     {
-        s16 hoverSong = ((sMmPagePoint >= 6) && (sMmPagePoint <= 17) && MmPage_SongOwned(MMQ_POINT_TO_SONG(sMmPagePoint)))
-                            ? (s16)sMmPageSongs[MMQ_POINT_TO_SONG(sMmPagePoint)].ocarinaSlot
-                            : -1;
+        s16 hoverSong =
+            ((sMmPagePoint >= 6) && (sMmPagePoint <= 17) && MmPage_SongOwned(MMQ_POINT_TO_SONG(sMmPagePoint)))
+                ? (s16)sMmPageSongs[MMQ_POINT_TO_SONG(sMmPagePoint)].ocarinaSlot
+                : -1;
         u8 playing = (pauseCtx->unk_1E4 == 2) || (pauseCtx->unk_1E4 == 5);
         s16 staffSong = playing ? (s16)pauseCtx->ocarinaSongIdx : hoverSong;
 
@@ -1476,17 +1553,46 @@ void KaleidoScope_DrawMmQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
     // --- Song name via OoT's OWN bottom name panel (1:1 UX): feed nameSegment with the MM name
     // texture path and keep namedItem == cursorItem so KaleidoScope_UpdateNamePanel never overwrites
     // it; when not on a named song, force PAUSE_ITEM_NONE so no stale OoT name bleeds through. ---
-    {
+    if (isActivePage) {
         static s16 sLastNamedPoint = -100;
         s16 songIdx = ((sMmPagePoint >= 6) && (sMmPagePoint <= 17)) ? MMQ_POINT_TO_SONG(sMmPagePoint) : -1;
+        const char* nameTex = NULL;
 
-        if ((songIdx >= 0) && (sMmPageSongNames[songIdx] != NULL) && MmPage_SongOwned(songIdx)) {
+        // Songs name themselves only when learned (vanilla shows nothing for an unlearned slot);
+        // every other cell takes its name straight from the point table.
+        if (songIdx >= 0) {
+            if (MmPage_SongOwned(songIdx)) {
+                nameTex = sMmPageSongNames[songIdx];
+            }
+        } else if ((sMmPagePoint >= 0) && (sMmPagePoint < (s16)ARRAY_COUNT(sMmPagePointNames))) {
+            nameTex = sMmPagePointNames[sMmPagePoint];
+        }
+
+        // The draw path (KaleidoScope_QuadTextureIA4 on nameSegment) hands the OTR path straight to
+        // the resource manager with no null check, so an archive that does not carry the texture is a
+        // crash, not a blank box. Probe first, exactly like the equipment page's own name lookups.
+        if ((nameTex != NULL) && !ResourceMgr_FileExists(nameTex)) {
+            nameTex = NULL;
+        }
+
+        // Keep the shared cursor slot in step with our own point. Vanilla's DrawQuestStatus returns
+        // before it can do this, so cursorSlot[PAUSE_QUEST] stayed frozen at whatever the OoT layout
+        // last hovered — and the info panel still decides by it: the "A - Play Melody" prompt
+        // (z_kaleido_scope_PAL.c:2129), the name blink (:2324) and KaleidoScope_UpdateCursorSize
+        // (:3439) all read cursorSlot[PAUSE_QUEST]. That is why the prompt appeared and disappeared
+        // with no relation to where the cursor actually was.
+        pauseCtx->cursorPoint[PAUSE_QUEST] = sMmPagePoint;
+        pauseCtx->cursorSlot[PAUSE_QUEST] = sMmPagePoint;
+
+        if (nameTex != NULL) {
             if (sLastNamedPoint != sMmPagePoint) {
-                memcpy(pauseCtx->nameSegment, sMmPageSongNames[songIdx], strlen(sMmPageSongNames[songIdx]) + 1);
+                memcpy(pauseCtx->nameSegment, nameTex, strlen(nameTex) + 1);
                 sLastNamedPoint = sMmPagePoint;
             }
             pauseCtx->nameDisplayTimer = 0;
-            pauseCtx->namedItem = pauseCtx->cursorItem[PAUSE_QUEST] = 0x100 + songIdx; // sentinel != NONE
+            // Sentinel above the vanilla item range: keeps namedItem == cursorItem so
+            // KaleidoScope_UpdateNamePanel leaves our nameSegment alone next update.
+            pauseCtx->namedItem = pauseCtx->cursorItem[PAUSE_QUEST] = 0x100 + sMmPagePoint;
         } else {
             pauseCtx->namedItem = pauseCtx->cursorItem[PAUSE_QUEST] = PAUSE_ITEM_NONE;
             sLastNamedPoint = -100;
@@ -1497,7 +1603,18 @@ void KaleidoScope_DrawMmQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
     // and the 2ship MM page: state 2 = demonstration (the melody plays note-by-note, driven by the
     // top-level pause switch in z_kaleido_scope_PAL.c), state 5 = "play it yourself" prompt. We start
     // the demonstration (A-press below) and hand it to the prompt once it finishes (native 2 -> 4). ---
-    if (pauseCtx->unk_1E4 == 4) {
+    if (isActivePage && (pauseCtx->unk_1E4 == 5)) {
+        // Skijer 2026-07-31 FIX: the "play it yourself" prompt had no way out. Vanilla's quest page
+        // aborts it the moment the stick moves (see the unk_1E4 == 5 arm of KaleidoScope_DrawQuestStatus
+        // above); this page only ever handled states 4 and 0, so once A started a song the player was
+        // pinned — no cursor, and no page change either, since KaleidoScope_HandlePageToggles only runs
+        // while the menu is idle. Worse for the NEI custom songs, whose recognition may never report
+        // back at all. Same abort as vanilla.
+        if ((pauseCtx->stickRelX != 0) || (pauseCtx->stickRelY != 0)) {
+            pauseCtx->unk_1E4 = 0;
+            AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_OFF);
+        }
+    } else if (isActivePage && (pauseCtx->unk_1E4 == 4)) {
         // Demonstration finished (native driver set 2 -> 4). Start the play-it-yourself prompt (mirror
         // of vanilla collect.c's unk_1E4 == 4 handler). Custom songs (slots 21-23) recognize through
         // the widened AudioOcarina_Start param encoding (MmPage_SongFlag).
@@ -1511,9 +1628,11 @@ void KaleidoScope_DrawMmQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
         pauseCtx->ocarinaStaff->pos = 0;
         pauseCtx->ocarinaStaff->state = 0xFE;
         pauseCtx->unk_1E4 = 5;
-    } else if (pauseCtx->unk_1E4 == 0) {
+    } else if (isActivePage && (pauseCtx->unk_1E4 == 0) && (pauseCtx->state == 6)) {
         // --- Cursor navigation via MM's exact link table (idle only; the ocarina owns input during
         // states 2/5/6, so nav + A must not run then) ---
+        // The `state == 6` (PAUSE_STATE_MAIN) check mirrors vanilla, which refuses to move the cursor
+        // outside it — without it the cursor moved during the open/close animation and the save prompt.
         s16 point = sMmPagePoint;
         s16 next = point;
 
@@ -1590,12 +1709,39 @@ void KaleidoScope_DrawMmQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
                 pauseCtx->ocarinaStaff->pos = 0;
             }
         }
+
+        // --- C/D press on an owned boss remains (points 0..3): equip it to that button (Skijer's NEI
+        //     boss_remains — sentinel equip, same idiom as Sw97_TryEquipMedallion above). The module
+        //     gates on ownership (mmQuestItems bit) and plays the decide sfx itself. ---
+        if ((pauseCtx->state == 6) && (pauseCtx->cursorSpecialPos == 0) && (sMmPagePoint >= 0) && (sMmPagePoint <= 3)) {
+            extern s32 BossRemains_TryEquipAtCursor(PlayState * play, Input * input, s16 item);
+            static const s16 sMmRemainsItems[4] = { ITEM_MM_REMAINS_ODOLWA, ITEM_MM_REMAINS_GOHT, ITEM_MM_REMAINS_GYORG,
+                                                    ITEM_MM_REMAINS_TWINMOLD };
+            BossRemains_TryEquipAtCursor(play, input, sMmRemainsItems[sMmPagePoint]);
+        }
+
+        // --- A on the STRENGTH cell (quad 4) toggles strength, the interaction that came over with
+        //     the cell from the equipment page's left column (ToggleStrength enhancement). The icon
+        //     draws at half alpha while disabled. Skijer 2026-07-29 ---
+        if ((pauseCtx->state == 6) && (pauseCtx->cursorSpecialPos == 0) && (sMmPagePoint == 4) &&
+            (pauseCtx->unk_1E4 == 0) && CHECK_BTN_ALL(input->press.button, BTN_A) &&
+            CVarGetInteger(CVAR_ENHANCEMENT("ToggleStrength"), 0) && (CUR_UPG_VALUE(UPG_STRENGTH) > 0)) {
+            CVarSetInteger(CVAR_ENHANCEMENT("StrengthDisabled"),
+                           !CVarGetInteger(CVAR_ENHANCEMENT("StrengthDisabled"), 0));
+            Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            pauseCtx->unk_1E4 = 7; // same input cooldown the equipment page used
+        }
     }
 
     // --- Cursor: frame the hovered quad at its real size (fixes the tiny/offset cursor; see
-    //     MmPage_FrameCursor). Runs after the update-pass UpdateCursorSize, so this wins. ---
-    MmPage_FrameCursor(pauseCtx, sMmQuestQuadX[sMmPagePoint], sMmQuestQuadY[sMmPagePoint],
-                       sMmQuestQuadW[sMmPagePoint], sMmQuestQuadH[sMmPagePoint]);
+    //     MmPage_FrameCursor). Runs after the update-pass UpdateCursorSize, so this wins.
+    //     Only on the active page: pauseCtx->cursorVtx is the ONE cursor shared by every page, and
+    //     from the adjacent-page pass this was spreading it over the item/equipment page's cursor. ---
+    if (isActivePage && (pauseCtx->cursorSpecialPos == 0)) {
+        MmPage_FrameCursor(pauseCtx, sMmQuestQuadX[sMmPagePoint], sMmQuestQuadY[sMmPagePoint],
+                           sMmQuestQuadW[sMmPagePoint], sMmQuestQuadH[sMmPagePoint]);
+    }
 
     CLOSE_DISPS(gfxCtx);
 }

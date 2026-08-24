@@ -10,6 +10,8 @@
 #include "mods/transformation_masks/gerudo_form.h"
 #include "mods/transformation_masks/boss_super_damage.h"
 #include "mods/items/logic/weapon_upgrades.h" // NEI Real Master Sword super-damage
+#include "mods/actors/trident_charge_ball.h"  // Trident charged ball super-damage claim
+#include "mods/actors/byrna_orb.h"            // Byrna orb (Insect Glaive Kinsect) super-damage claim
 #include "mods/o2r_loader/o2r_loader.h"
 #include "overlays/effects/ovl_Effect_Ss_Fhg_Flash/z_eff_ss_fhg_flash.h"
 #include "functions.h"
@@ -86,10 +88,15 @@ extern void GaroForm_DrawProjectiles(PlayState* play);
 // FilterB uses it to decide whether to strip A for the Garo moveset.
 extern u8 GaroForm_VanillaWantsAButton(Player* player);
 
-// gerudo_form.cpp combat state machine (slash combo + block-mirror).
-// Internal IsActive check makes this a no-op when Gerudo Form isn't the
-// current MM form.
-extern void GerudoForm_Update(PlayState* play, Player* player);
+// gerudo_mhr_combat.inc.c: 1 while the scimitars are actually in her hands (i.e.
+// Link is holding a melee weapon). FilterB uses it to tell "draw" from "swing".
+extern u8 GerudoMhr_SwordsOut(void);
+extern u8 GerudoMhr_LOwnsB(void);
+extern u8 MmForm_RitoBowOwnsB(void);
+
+// (GerudoForm_Update is gone — see the tombstone at the bottom of
+// gerudo_form.cpp. Gerudo combat is dispatched by MmForm_GerudoMhrUpdate from
+// MmForm_UpdateActive, the same single-owner rule Garo got in v9.)
 
 // =============================================================================
 // No-op Action Function (replaces OOT actionFunc while transformed)
@@ -199,14 +206,44 @@ u8 TransformMasks_TryPlayMmVoice(u16 ootVoiceSfxId, Vec3f* pos) {
             // sampled NPC), assign an unused 0x20-wide block (e.g. 0x40 or 0x60)
             // and ship the samples in mm.o2r.
             return 0;
-        case MM_PLAYER_FORM_GARO:
-            // Garo Master MM voice samples bundled at mm.o2r SFX bank
-            // 0x6800+0x60+action. Block layout: FD=0x00, Gerudo=0x40, Garo=0x60,
-            // Deku=0x80, Zora=0xA0, Goron=0xC0. Each form gets a 0x20-wide
-            // action range (0x00..0x1F). If a sample is missing in mm.o2r the
-            // MmSfx_PlayAtPos call no-ops silently.
-            mmOffset = 0x60;
-            break;
+        case MM_PLAYER_FORM_GARO: {
+            // Garo does NOT get a voice-bank offset, and the 0x60 one it used to carry was
+            // simply wrong. The "each form owns a 0x20-wide block" rule is real only for the
+            // forms MM actually has: 0x6800 Link (FD), 0x6880 Deku, 0x68A0 Zora, 0x68C0
+            // Goron — the three DUMMY-named blocks. 0x6860 is not a player block at all, it
+            // holds real NPC voices (RT/ST/Z0/SK/NA), so the Garo was asking for samples that
+            // were never his. Nothing played, which is what "Garo sigue sin voice" was.
+            //
+            // MM has no Garo transformation, so there is no player bank to point at. His
+            // voice is the one the user asked for: Igos du Ikana's, from En_Osk — the enemy
+            // bank's NA_SE_EN_BOSU_* set. That needs an explicit per-action map rather than
+            // an offset, because these ids are scattered, not contiguous.
+            //
+            // Unmapped actions return 0 so the caller falls back to Link's OOT voice, which
+            // is the current behaviour for them anyway. Fill rows in as they are heard.
+            static const u16 sGaroVoiceByAction[0x20] = {
+                [0x00] = 0x3A30, // SWORD_N      -> BOSU_ATTACK
+                [0x01] = 0x3A4C, // SWORD_L      -> BOSU_ATTACK_K
+                [0x02] = 0x3A4A, // LASH         -> BOSU_ATTACK_W
+                [0x04] = 0x3A2A, // CLIMB_END    -> BOSU_STAND
+                [0x05] = 0x3A3A, // DAMAGE_S     -> BOSU_DAMAGE
+                [0x06] = 0x3A2E, // FREEZE       -> BOSU_SHOCK
+                [0x07] = 0x3A90, // FALL_S       -> BOSU_TALK
+                [0x08] = 0x3A3A, // FALL_L       -> BOSU_DAMAGE
+                [0x0B] = 0x3A5B, // DOWN         -> BOSU_DEAD_VOICE
+                [0x13] = 0x3A31, // GROAN        -> BOSU_CYNICAL
+                [0x16] = 0x3A2E, // SURPRISE     -> BOSU_SHOCK
+                [0x1A] = 0x3A3A, // LAND_DAMAGE_S-> BOSU_DAMAGE
+            };
+            u16 garoSfx = sGaroVoiceByAction[action];
+            if (garoSfx == 0) {
+                return 0; // no Igos sample for this action — let OOT's voice play
+            }
+            lusprintf(__FILE__, __LINE__, LUSLOG_LEVEL_INFO, "[MmVoice] GARO oot=0x%04X action=0x%X -> BOSU 0x%04X",
+                      (u32)ootVoiceSfxId, (u32)action, (u32)garoSfx);
+            MmSfx_PlayAtPos(garoSfx, pos);
+            return 1;
+        }
         default:
             return 0;
     }
@@ -218,8 +255,8 @@ u8 TransformMasks_TryPlayMmVoice(u16 ootVoiceSfxId, Vec3f* pos) {
     // soundEffects index out of range, or volume=0). If the line does NOT
     // appear, the upstream Player_PlayVoiceSfx hook never reached us.
     lusprintf(__FILE__, __LINE__, LUSLOG_LEVEL_INFO,
-              "[MmVoice] form=%d oot=0x%04X offset=0x%X action=0x%X -> mmSfxId=0x%04X",
-              (s32)form, (u32)ootVoiceSfxId, (u32)mmOffset, (u32)action, (u32)mmSfxId);
+              "[MmVoice] form=%d oot=0x%04X offset=0x%X action=0x%X -> mmSfxId=0x%04X", (s32)form, (u32)ootVoiceSfxId,
+              (u32)mmOffset, (u32)action, (u32)mmSfxId);
     MmSfx_PlayAtPos(mmSfxId, pos);
     return 1;
 }
@@ -255,10 +292,18 @@ u8 TransformMasks_TryPlayMmStepSfx(u16 ootStepSfxId, Vec3f* pos) {
 
     u16 mmOffset = 0;
     switch (MmForm_GetCurrentForm()) {
-        case MM_PLAYER_FORM_FIERCE_DEITY: mmOffset = 0x80;  break;
-        case MM_PLAYER_FORM_GORON:        mmOffset = 0x150; break;
-        case MM_PLAYER_FORM_ZORA:         mmOffset = 0x120; break;
-        case MM_PLAYER_FORM_DEKU:         mmOffset = 0xF0;  break;
+        case MM_PLAYER_FORM_FIERCE_DEITY:
+            mmOffset = 0x80;
+            break;
+        case MM_PLAYER_FORM_GORON:
+            mmOffset = 0x150;
+            break;
+        case MM_PLAYER_FORM_ZORA:
+            mmOffset = 0x120;
+            break;
+        case MM_PLAYER_FORM_DEKU:
+            mmOffset = 0xF0;
+            break;
         default:
             // Garo/Gerudo/Human/Pikachu: no MM step SFX override — use OOT.
             return 0;
@@ -297,8 +342,34 @@ void TransformMasks_Init(PlayState* play, Player* player) {
 // and before Player_UpdateCommon. Replaces the inline blocks for Blast Mask /
 // Great Fairy Mask / Garo skin that used to live in z_player.c.
 // =============================================================================
+// True while a textbox or the ocarina owns the buttons. Forms that read the RAW
+// play->state.input[0] (Garo's moveset dispatcher, Pikachu's bindings) bypass the filtered
+// copy below, so they must consult this before acting on a press — otherwise they fire
+// their moveset while the player is playing notes.
+u8 MmForm_InputOwnedByMessage(void) {
+    return (gPlayState != NULL) && (gPlayState->msgCtx.msgMode != MSGMODE_NONE);
+}
+
 void TransformMasks_FilterB(Input* input) {
-    if (input == NULL) return;
+    if (input == NULL)
+        return;
+
+    // ── One rule for every form: while a message or the ocarina is up, NO form eats input ──
+    // Those buttons belong to the textbox/ocarina — OoT suppresses its own item pipeline in
+    // that state on purpose. Each form below only ever stripped the buttons IT cared about
+    // (Garo B/A, Gerudo B, masks B), so everything they did not strip leaked through and
+    // kept firing movesets and equipped items while the player was playing notes. Filtering
+    // here covers every form at once, including future ones, instead of each of them having
+    // to remember the rule.
+    //
+    // This is the FORMS' filtered copy (sp44), not the raw play->state.input[0] that the
+    // ocarina itself reads, so the notes still get their input.
+    if (gPlayState != NULL && gPlayState->msgCtx.msgMode != MSGMODE_NONE) {
+        const u16 owned = BTN_A | BTN_B | BTN_CUP | BTN_CDOWN | BTN_CLEFT | BTN_CRIGHT;
+        input->cur.button &= ~owned;
+        input->press.button &= ~owned;
+        return;
+    }
 
     // Blast Mask + Great Fairy Mask: B handled by MmMaskWear_Update on raw input.
     s32 wornMask = MmMaskWear_GetCurrent();
@@ -320,31 +391,32 @@ void TransformMasks_FilterB(Input* input) {
     // so its A dispatcher still sees the press when we strip it here; it gates
     // on the SAME predicate so it doesn't double-fire while vanilla owns A.
     if (MmForm_GetCurrentForm() == MM_PLAYER_FORM_GARO) {
-        input->cur.button   &= ~BTN_B;
+        input->cur.button &= ~BTN_B;
         input->press.button &= ~BTN_B;
 
         Player* p = (gPlayState != NULL) ? GET_PLAYER(gPlayState) : NULL;
         if (!GaroForm_VanillaWantsAButton(p)) {
-            input->cur.button   &= ~BTN_A;
+            input->cur.button &= ~BTN_A;
             input->press.button &= ~BTN_A;
         }
     }
 
-    // Gerudo Form: by default every action falls back to OoT vanilla — the only
-    // explicit Gerudo override is the dual-scimitar combo on B-press from idle/
-    // walk/run. We strip B so OoT's normal sword-draw / actionFunc don't fight
-    // the combo. BUT during SHIELDING B = vanilla shield-thrust attack, which
-    // is exactly what we want — so let B through to vanilla while the shield
-    // is up. Also R is never stripped: vanilla Player_ActionHandler_11 fires
-    // the real Mirror Shield action and GerudoForm_Update pins heldItemAction
-    // to one-handed Master/Kokiri so the pipeline works 1:1.
-    if (GerudoForm_IsActive()) {
-        Player* p = (gPlayState != NULL) ? GET_PLAYER(gPlayState) : NULL;
-        u8 shielding = (p != NULL) && ((p->stateFlags1 & PLAYER_STATE1_SHIELDING) != 0);
-        if (!shielding) {
-            input->cur.button &= ~BTN_B;
-            input->press.button &= ~BTN_B;
-        }
+    // Gerudo Form: B is OOT's own sword pipeline wearing the dual-blade clips, and
+    // the draw out of free hands is taken over inside Player_UseItem
+    // (GerudoMhr_InterceptUseItem) — so B must reach OOT to get there. The ONE case
+    // it must not: L held. L is the modifier (L+B = front slash, L+R = rage), and
+    // without this strip OOT started a normal swing on the same press.
+    if (GerudoMhr_LOwnsB()) {
+        input->cur.button &= ~BTN_B;
+        input->press.button &= ~BTN_B;
+    }
+
+    // Rito: B is the bow, always. There is no bow item and no C-slot involved, so
+    // unlike the Gerudo nothing of OOT's own B pipeline is wanted — without this
+    // strip the sword swings on the same press that draws the bow.
+    if (MmForm_RitoBowOwnsB()) {
+        input->cur.button &= ~BTN_B;
+        input->press.button &= ~BTN_B;
     }
 }
 
@@ -365,7 +437,16 @@ void TransformMasks_Update(PlayState* play, Player* player) {
     u8 isTransformed = MmForm_IsTransformedAny();
     u8 isInWater = (player->stateFlags1 & PLAYER_STATE1_IN_WATER) != 0;
 
-    if ((isTransformed || isInWater) && sControlInput != NULL) {
+    // ...but NEVER while a message or the ocarina is on screen. OOT suppresses its item
+    // pipeline in that state ON PURPOSE: the C buttons belong to the ocarina/textbox, not to
+    // the equipped items. This fallback bypassed that rule, so playing the ocarina while
+    // transformed fired the mask equipped on that C button instead of the note — using the
+    // item AND interrupting the ocarina action. MM has no such problem because it never
+    // hand-scans the C buttons: it opens the normal ocarina and only swaps the instrument
+    // (AudioOcarina_SetInstrument, z_message.c:4719).
+    u8 msgActive = play->msgCtx.msgMode != MSGMODE_NONE;
+
+    if ((isTransformed || isInWater) && sControlInput != NULL && !msgActive) {
         static const u16 sBtns[] = { BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT };
         for (s32 i = 0; i < 3; i++) {
             if (CHECK_BTN_ALL(sControlInput->press.button, sBtns[i])) {
@@ -408,8 +489,11 @@ void TransformMasks_Update(PlayState* play, Player* player) {
     //
     // GaroForm_Update(play, player);  // intentionally removed in v9
 
-    // Gerudo dual-scimitar combo + block-mirror. Same no-op pattern.
-    GerudoForm_Update(play, player);
+    // Gerudo: same story, removed 2026-08-07. The MHR moveset is dispatched from
+    // MmForm_UpdateActive (MmForm_GerudoMhrUpdate); this call ticked the retired
+    // pre-MHR state machine on player->skelAnime in parallel with it.
+    //
+    // GerudoForm_Update(play, player);  // intentionally removed
 }
 
 void TransformMasks_Draw(PlayState* play, Player* player) {
@@ -452,12 +536,80 @@ u8 TransformMasks_IsTransformedAny(void) {
     return MmForm_IsTransformedAny();
 }
 
+// NOTE: this is a STATE flag ("the Zora swim is currently active"), NOT a capability gate — the
+// Dragon-Scale driver reads it as "am I already swimming" to decide between Enter/Update/Exit. Do NOT
+// OR extra "can swim" conditions in here: doing that makes the `if (!IsZoraSwimEnabled())` enter-branch
+// unreachable, so the swim never starts. Gyorg's remains instead extends the ACTIVATION gate in
+// DragonScale_Behavior (equip_dragonscale.c).
 u8 TransformMasks_IsZoraSwimEnabled(void) {
     return MmForm_IsZoraSwimEnabled();
 }
 
 void TransformMasks_SetZoraSwimEnabled(u8 enabled) {
     MmForm_SetZoraSwimEnabled(enabled);
+}
+
+u8 TransformMasks_HasFireResistance(void) {
+    return MmForm_HasFireResistance();
+}
+
+u8 TransformMasks_HasWaterBreathing(void) {
+    return MmForm_HasWaterBreathing();
+}
+
+u8 TransformMasks_GetShieldMode(void) {
+    return MmForm_GetShieldMode();
+}
+
+u8 TransformMasks_GetWaterMode(void) {
+    return MmForm_GetWaterMode();
+}
+
+// =============================================================================
+// "Is vanilla already offering something on A?" (Skijer 2026-07-28)
+//
+// Broader sibling of GaroForm_VanillaWantsAButton: that one deliberately EXCLUDES
+// grab (Garo can't lift), this one includes everything the A button can mean so a
+// form's custom A move only fires when the button is genuinely free.
+//
+// Mirrors the arms of Player_UpdateInterface's doAction chain that we can read from
+// outside z_player.c: open/enter door, speak/check/read, grab (both the in-range
+// actor and the DO_ACTION_GRAB flag), climb, enter, drop/throw while carrying, and
+// down (ledge hang / ladder). Deliberately does NOT include roll — callers that also
+// need to yield to the roll check movement themselves, since "moving" is what
+// distinguishes roll from putaway.
+//
+// Used by the Zora sea-floor fast-swim gate in MmForm_Action_SwimIdle.
+// =============================================================================
+u8 TransformMasks_AButtonIsOffered(Player* player) {
+    if (player == NULL) {
+        return 0;
+    }
+    if (player->doorType != PLAYER_DOORTYPE_NONE) {
+        return 1; // open / enter door
+    }
+    if ((player->stateFlags2 & PLAYER_STATE2_CAN_ACCEPT_TALK_OFFER) && (player->talkActor != NULL)) {
+        return 1; // speak / check / read
+    }
+    if (player->interactRangeActor != NULL) {
+        return 1; // grab / open chest / pick up
+    }
+    if (player->stateFlags2 & PLAYER_STATE2_DO_ACTION_GRAB) {
+        return 1; // grab (wall / ledge / pushable)
+    }
+    if (player->stateFlags2 & PLAYER_STATE2_DO_ACTION_CLIMB) {
+        return 1; // climb wall / vine / ladder
+    }
+    if (player->stateFlags2 & PLAYER_STATE2_DO_ACTION_ENTER) {
+        return 1; // enter crawlspace / transition
+    }
+    if ((player->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) && (player->heldActor != NULL)) {
+        return 1; // drop / throw what we're holding
+    }
+    if (player->stateFlags1 & (PLAYER_STATE1_HANGING_OFF_LEDGE | PLAYER_STATE1_CLIMBING_LADDER)) {
+        return 1; // down / let go
+    }
+    return 0;
 }
 
 void* TransformMasks_LoadMmDL(const char* path) {
@@ -515,7 +667,7 @@ extern u8 gPikaThunderActive;
 
 // Tunable reach distances (world units, before the boss adds its own body slack).
 #define BSD_REACH_RANGED 70.0f // FD beam / Pika Thunder — can be farther
-#define BSD_REACH_MELEE  30.0f // FD sword swing / Pika melee — must be near
+#define BSD_REACH_MELEE 30.0f  // FD sword swing / Pika melee — must be near
 
 // SM64 Mario's spin (ACT_TWIRLING) is his boss-room super attack — defined in
 // sm64_mario.c (#included into z_player.c). extern'd here to avoid pulling the
@@ -559,6 +711,22 @@ u8 BossSuperDamage_IsActive(PlayState* play) {
     if (Sm64Mario_FireballActive()) {
         return 1;
     }
+    // Trident (ext sword 3) charged energy ball: same shape as the fireball above —
+    // the PROJECTILE carries the super-attack claim, never Link, so nothing about
+    // the player's state can make an ordinary trident swing paralyze a boss. The
+    // accessor includes a post-impact grace window (bosses read BUMP_HIT one frame
+    // late, after the ball has already died). Skijer's NEI
+    if (TridentChargeBall_IsActive()) {
+        return 1;
+    }
+    // Byrna orb (ext sword 1) LAUNCHED at a target: identical shape to the ball
+    // above — the orb carries the claim and it is only true while it is actually
+    // flying (plus its grace window). An ORBITING orb deliberately does not count,
+    // or simply standing next to a boss with the barrier up would paralyze it
+    // every frame. Skijer's NEI
+    if (ByrnaOrb_IsActive()) {
+        return 1;
+    }
     // AND the gPika* mirror with the authoritative form-state check so a latched
     // flag (left over from a previous Pika session) can never fire in normal play.
     if (MmForm_IsPikachuActive() && gPikaGigantamaxActive) {
@@ -588,8 +756,11 @@ u8 BossSuperDamage_IsFormActive(PlayState* play) {
     // it can stay latched at 1 after leaving Pika form (e.g. if Cleanup didn't run).
     // Without this AND, normal play (boomerang/bow) would be treated as a super
     // attack and skip the bosses' real phases — breaking the regression.
-    return (Sm64Mario_IsSuperAttacking() || Sm64Mario_FireballActive() ||
-            (MmForm_IsPikachuActive() && gPikaGigantamaxMode) || MmForm_IsFDSkinMode())
+    // Trident charge ball counts here too: contact-based boss triggers read the
+    // hit a frame late, which is exactly what its grace window covers. The Byrna
+    // orb joins for the same reason.
+    return (Sm64Mario_IsSuperAttacking() || Sm64Mario_FireballActive() || TridentChargeBall_IsActive() ||
+            ByrnaOrb_IsActive() || (MmForm_IsPikachuActive() && gPikaGigantamaxMode) || MmForm_IsFDSkinMode())
                ? 1
                : 0;
 }
@@ -660,8 +831,7 @@ u8 BossSuperDamage_FormAttackReaches(PlayState* play, Vec3f* targetPos, f32 rang
     // whether the boss's bumper accepts FD's toucher dmgFlags.
     if (MmForm_IsFDSkinMode() && player->meleeWeaponState != 0) {
         for (k = 0; k < 3; k++) {
-            if (BsdSegmentWithin(targetPos, &player->meleeWeaponInfo[k].base, &player->meleeWeaponInfo[k].tip,
-                                 range)) {
+            if (BsdSegmentWithin(targetPos, &player->meleeWeaponInfo[k].base, &player->meleeWeaponInfo[k].tip, range)) {
                 return 1;
             }
         }
@@ -755,7 +925,7 @@ void BossSuperDamage_SpawnVfx(PlayState* play, Actor* boss, Vec3f* limbWorldPos,
 
 #define BSD_SPARK_SLOTS 8
 #define BSD_ORB_MATERIAL_DL "__OTR__overlays/ovl_Boss_Ganon2/gGanonLightOrbMaterialDL"
-#define BSD_ORB_MODEL_DL    "__OTR__overlays/ovl_Boss_Ganon2/gGanonLightOrbModelDL"
+#define BSD_ORB_MODEL_DL "__OTR__overlays/ovl_Boss_Ganon2/gGanonLightOrbModelDL"
 
 typedef struct {
     Actor* actor;
@@ -838,7 +1008,7 @@ void BossSuperDamage_DrawElectricSparks(Actor* boss, PlayState* play, Vec3f* lim
     // Set the orb color ONCE (white core + light-blue glow), then run the material
     // DL ONCE to bind the I8 glow texture + combiner — exactly as func_80904D88.
     gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 255, 255, 255, (u8)alpha); // white core
-    gDPSetEnvColor(POLY_XLU_DISP++, 100, 200, 255, 0);               // light-blue glow
+    gDPSetEnvColor(POLY_XLU_DISP++, 100, 200, 255, 0);                // light-blue glow
     gSPDisplayList(POLY_XLU_DISP++, (Gfx*)BSD_ORB_MATERIAL_DL);
 
     // One big orb per limb. STABLE: positions are the exact joint world-pos (no

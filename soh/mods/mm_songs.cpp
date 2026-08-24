@@ -27,9 +27,9 @@ extern PlayState* gPlayState;
 namespace {
 
 struct MmSong {
-    uint32_t ownedBit;      // FC_MMQ_* gate in NeiSaveData.mmQuestItems
+    uint32_t ownedBit; // FC_MMQ_* gate in NeiSaveData.mmQuestItems
     uint8_t len;
-    uint8_t pitches[8];     // OoT ocarina pitch values in play order
+    uint8_t pitches[8]; // OoT ocarina pitch values in play order
     const char* name;
 };
 

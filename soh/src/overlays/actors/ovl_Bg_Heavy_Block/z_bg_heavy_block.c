@@ -486,8 +486,8 @@ void BgHeavyBlock_Update(Actor* thisx, PlayState* play) {
 
     // NEI: the Iron Knuckle's Axe smashes the heavy (Golden Gauntlets) block after 5 hits, with a
     // reward and a quake — only the resting full block, never the flying debris pieces.
-    if (type != HEAVYBLOCK_BIG_PIECE && type != HEAVYBLOCK_SMALL_PIECE &&
-        this->actionFunc == BgHeavyBlock_Wait && WeaponUpgrade_IKAxeStrike(thisx, play, 5, 130.0f)) {
+    if (type != HEAVYBLOCK_BIG_PIECE && type != HEAVYBLOCK_SMALL_PIECE && this->actionFunc == BgHeavyBlock_Wait &&
+        WeaponUpgrade_IKAxeStrike(thisx, play, 5, 130.0f)) {
         s32 quakeIndex;
         BgHeavyBlock_SpawnPieces(this, play);
         Item_DropCollectibleRandom(play, thisx, &thisx->world.pos, 0);

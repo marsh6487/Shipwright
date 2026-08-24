@@ -40,8 +40,8 @@
 #define BALLCHAIN_WALL_BOUNCE_FACTOR 0.55f // XZ speed kept after reflecting off a wall normal
 
 // Chain / safety
-#define BALLCHAIN_CHAIN_MAX 380.0f    // Chain length — the ball can never fly past this
-#define BALLCHAIN_THROWN_TIMEOUT 200  // Hard safety: force the ball back after ~10s
+#define BALLCHAIN_CHAIN_MAX 380.0f   // Chain length — the ball can never fly past this
+#define BALLCHAIN_THROWN_TIMEOUT 200 // Hard safety: force the ball back after ~10s
 
 // Ballistic thrown sub-phases (bcPhase) — TP arc lifecycle. Skijer's NEI
 #define BALLCHAIN_PHASE_FLY 0     // Ballistic flight (gravity + bounces)
@@ -111,22 +111,22 @@
 // =============================================================================
 // State Aliases (mapped to gCustomItemState fields)
 // =============================================================================
-#define bcActive gCustomItemState.ballAndChainThrown     // u8: Item is active
-#define bcState gCustomItemState.timer2                  // s16: Current state (INACTIVE/EQUIP/SPINNING/THROWN)
-#define bcCharge gCustomItemState.timer1                 // s16: Charge frames (0 to CHARGE_MAX)
-#define bcSpinAngle gCustomItemState.somariaCooldown     // s16: Current spin angle (binary angle)
-#define bcThrowDist gCustomItemState.globalCooldownTimer // s32: Remaining throw distance
-#define bcThrowYaw gCustomItemState.sharedYaw            // s16: Throw direction yaw
-#define bcThrowPitch gCustomItemState.sharedPitch        // s16: Throw direction pitch
-#define bcBallPos gCustomItemState.sharedProjectilePos   // Vec3f: Ball world position
-#define bcBallVel gCustomItemState.ballAndChainVel       // Vec3f: Ball velocity (thrown) — Skijer's NEI
-#define bcPhase gCustomItemState.ballAndChainPhase       // u8: Thrown sub-phase — Skijer's NEI
-#define bcBounces gCustomItemState.ballAndChainBounces   // u8: Floor bounces this throw — Skijer's NEI
+#define bcActive gCustomItemState.ballAndChainThrown       // u8: Item is active
+#define bcState gCustomItemState.timer2                    // s16: Current state (INACTIVE/EQUIP/SPINNING/THROWN)
+#define bcCharge gCustomItemState.timer1                   // s16: Charge frames (0 to CHARGE_MAX)
+#define bcSpinAngle gCustomItemState.somariaCooldown       // s16: Current spin angle (binary angle)
+#define bcThrowDist gCustomItemState.globalCooldownTimer   // s32: Remaining throw distance
+#define bcThrowYaw gCustomItemState.sharedYaw              // s16: Throw direction yaw
+#define bcThrowPitch gCustomItemState.sharedPitch          // s16: Throw direction pitch
+#define bcBallPos gCustomItemState.sharedProjectilePos     // Vec3f: Ball world position
+#define bcBallVel gCustomItemState.ballAndChainVel         // Vec3f: Ball velocity (thrown) — Skijer's NEI
+#define bcPhase gCustomItemState.ballAndChainPhase         // u8: Thrown sub-phase — Skijer's NEI
+#define bcBounces gCustomItemState.ballAndChainBounces     // u8: Floor bounces this throw — Skijer's NEI
 #define bcRestTimer gCustomItemState.ballAndChainRestTimer // s16: Rest beat / retract clink counter — Skijer's NEI
-#define bcCollider gCustomItemState.ballAndChainCollider // ColliderCylinder: Damage collider
+#define bcCollider gCustomItemState.ballAndChainCollider   // ColliderCylinder: Damage collider
 #define bcFirstPerson gCustomItemState.ballAndChainFirstPersonActive // u8: First person aim mode
-#define bcTrailIndex gCustomItemState.ballAndChainTrailIndex   // s32: EffectBlure trail index — Skijer's NEI
-#define bcTrailActive gCustomItemState.ballAndChainTrailActive // u8: trail allocated
-#define bcTrailTick gCustomItemState.ballAndChainTrailTick     // u8: sparse-feed frame counter
+#define bcTrailIndex gCustomItemState.ballAndChainTrailIndex         // s32: EffectBlure trail index — Skijer's NEI
+#define bcTrailActive gCustomItemState.ballAndChainTrailActive       // u8: trail allocated
+#define bcTrailTick gCustomItemState.ballAndChainTrailTick           // u8: sparse-feed frame counter
 
 #endif

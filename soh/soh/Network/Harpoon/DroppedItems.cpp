@@ -38,11 +38,11 @@ extern PlayState* gPlayState;
 // definition (OTRGlobals.cpp:1443). GetItemEntry_Draw lives in C
 // source (z_draw.c). func_8002EBCC / func_8002ED80 are the matrix +
 // billboard setup helpers we mirror from EnItem00_DrawRandomizedItem.
-GetItemID    RetrieveGetItemIDFromItemID(ItemID itemID);
+GetItemID RetrieveGetItemIDFromItemID(ItemID itemID);
 GetItemEntry ItemTable_Retrieve(int16_t getItemID);
-void         GetItemEntry_Draw(PlayState* play, GetItemEntry entry);
-void         func_8002EBCC(Actor* actor, PlayState* play, s32 flag);
-void         func_8002ED80(Actor* actor, PlayState* play, s32 flag);
+void GetItemEntry_Draw(PlayState* play, GetItemEntry entry);
+void func_8002EBCC(Actor* actor, PlayState* play, s32 flag);
+void func_8002ED80(Actor* actor, PlayState* play, s32 flag);
 }
 
 namespace HarpoonDroppedItems {
@@ -57,29 +57,29 @@ std::vector<DropEntry> sLedger;
 // CLAIM packet can kill the right ground actor.
 struct SpawnedActorKey {
     uint64_t dropId;
-    int32_t  itemIndex;
-    Actor*   actor;
+    int32_t itemIndex;
+    Actor* actor;
 };
 std::vector<SpawnedActorKey> sSpawned;
 
 DropEntry* FindEntry(uint64_t dropId) {
     for (auto& e : sLedger) {
-        if (e.dropId == dropId) return &e;
+        if (e.dropId == dropId)
+            return &e;
     }
     return nullptr;
 }
 
 int64_t NowMs() {
     using namespace std::chrono;
-    return duration_cast<milliseconds>(
-        steady_clock::now().time_since_epoch()).count();
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
 void RemoveSpawnedFor(uint64_t dropId, int32_t itemIndex) {
-    for (auto it = sSpawned.begin(); it != sSpawned.end(); ) {
-        if (it->dropId == dropId &&
-            (itemIndex < 0 || it->itemIndex == itemIndex)) {
-            if (it->actor != nullptr) Actor_Kill(it->actor);
+    for (auto it = sSpawned.begin(); it != sSpawned.end();) {
+        if (it->dropId == dropId && (itemIndex < 0 || it->itemIndex == itemIndex)) {
+            if (it->actor != nullptr)
+                Actor_Kill(it->actor);
             it = sSpawned.erase(it);
         } else {
             ++it;
@@ -87,32 +87,35 @@ void RemoveSpawnedFor(uint64_t dropId, int32_t itemIndex) {
     }
 }
 
-}  // anonymous namespace
+} // anonymous namespace
 
 // ----------------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------------
 
-const std::vector<DropEntry>& GetLedger() { return sLedger; }
+const std::vector<DropEntry>& GetLedger() {
+    return sLedger;
+}
 
 void ClearLedger() {
     for (auto& s : sSpawned) {
-        if (s.actor != nullptr) Actor_Kill(s.actor);
+        if (s.actor != nullptr)
+            Actor_Kill(s.actor);
     }
     sSpawned.clear();
     sLedger.clear();
 }
 
-uint64_t AddLocalDrop(uint32_t sourceCid, int16_t sceneNum,
-                      float x, float y, float z,
-                      std::vector<DroppedItem> items) {
-    if (items.empty() || Harpoon::Instance == nullptr) return 0;
+uint64_t AddLocalDrop(uint32_t sourceCid, int16_t sceneNum, float x, float y, float z, std::vector<DroppedItem> items) {
+    if (items.empty() || Harpoon::Instance == nullptr)
+        return 0;
     DropEntry e;
-    e.dropId         = ((uint64_t)sourceCid << 32) |
-                       (Harpoon::Instance->nextLocalDropId++);
+    e.dropId = ((uint64_t)sourceCid << 32) | (Harpoon::Instance->nextLocalDropId++);
     e.sourceClientId = sourceCid;
-    e.sceneNum       = sceneNum;
-    e.x = x; e.y = y; e.z = z;
+    e.sceneNum = sceneNum;
+    e.x = x;
+    e.y = y;
+    e.z = z;
     e.elapsedMs = 0.0f;
     e.createdAtMs = NowMs();
     e.allClaimed = false;
@@ -123,27 +126,29 @@ uint64_t AddLocalDrop(uint32_t sourceCid, int16_t sceneNum,
 
 void IngestDrop(const nlohmann::json& payload) {
     uint64_t dropId = payload.value("dropId", (uint64_t)0);
-    if (dropId == 0) return;
-    if (FindEntry(dropId) != nullptr) return;  // dup
+    if (dropId == 0)
+        return;
+    if (FindEntry(dropId) != nullptr)
+        return; // dup
     DropEntry e;
-    e.dropId         = dropId;
+    e.dropId = dropId;
     e.sourceClientId = payload.value("sourceClientId", 0u);
-    e.sceneNum       = payload.value("sceneNum", (int16_t)-1);
-    e.x              = payload.value("x", 0.0f);
-    e.y              = payload.value("y", 0.0f);
-    e.z              = payload.value("z", 0.0f);
-    e.elapsedMs      = payload.value("elapsedMs", 0.0f);
+    e.sceneNum = payload.value("sceneNum", (int16_t)-1);
+    e.x = payload.value("x", 0.0f);
+    e.y = payload.value("y", 0.0f);
+    e.z = payload.value("z", 0.0f);
+    e.elapsedMs = payload.value("elapsedMs", 0.0f);
     // createdAtMs is a local wall-clock anchor — we don't trust the peer's
     // clock. Stamp on ingest; in practice the drop just happened across the
     // network, so this is within network-RTT of the true creation time.
-    e.createdAtMs    = NowMs();
-    e.allClaimed     = false;
+    e.createdAtMs = NowMs();
+    e.allClaimed = false;
     if (payload.contains("items") && payload["items"].is_array()) {
         for (const auto& it : payload["items"]) {
             DroppedItem di;
-            di.itemId  = it.value("itemId", 0);
-            di.count   = it.value("count", 1);
-            di.kind    = it.value("kind", (int)KIND_INVENTORY);
+            di.itemId = it.value("itemId", 0);
+            di.count = it.value("count", 1);
+            di.kind = it.value("kind", (int)KIND_INVENTORY);
             di.claimed = it.value("claimed", false);
             e.items.push_back(di);
         }
@@ -159,29 +164,39 @@ void IngestDrop(const nlohmann::json& payload) {
 
 bool ClaimItem(uint64_t dropId, int32_t itemIndex) {
     DropEntry* e = FindEntry(dropId);
-    if (e == nullptr) return false;
-    if (itemIndex < 0 || itemIndex >= (int32_t)e->items.size()) return false;
-    if (e->items[itemIndex].claimed) return false;
+    if (e == nullptr)
+        return false;
+    if (itemIndex < 0 || itemIndex >= (int32_t)e->items.size())
+        return false;
+    if (e->items[itemIndex].claimed)
+        return false;
     e->items[itemIndex].claimed = true;
     // Kill the ground actor if one was spawned.
     RemoveSpawnedFor(dropId, itemIndex);
     // Mark the entire entry claimed if all items are.
     bool allClaimed = true;
-    for (const auto& di : e->items) if (!di.claimed) { allClaimed = false; break; }
+    for (const auto& di : e->items)
+        if (!di.claimed) {
+            allClaimed = false;
+            break;
+        }
     e->allClaimed = allClaimed;
     return true;
 }
 
 void TickPickupPoll() {
-    if (gPlayState == nullptr || Harpoon::Instance == nullptr) return;
+    if (gPlayState == nullptr || Harpoon::Instance == nullptr)
+        return;
     // Skip pickup while dying / on game-over screen. Without this, the
     // dying player's actor is still at the death position when our
     // death-drop spawns the pile right under them — the very next tick
     // sees N items in radius and the dying player auto-grabs everything
     // before the game-over UI appears.
-    if (gPlayState->gameOverCtx.state != GAMEOVER_INACTIVE) return;
+    if (gPlayState->gameOverCtx.state != GAMEOVER_INACTIVE)
+        return;
     Player* lp = GET_PLAYER(gPlayState);
-    if (lp == nullptr) return;
+    if (lp == nullptr)
+        return;
     constexpr f32 kPickupRadiusSq = 30.0f * 30.0f;
     // Grace window so the dropper can walk away from their own pile
     // after a respawn without instantly re-absorbing it.
@@ -199,22 +214,22 @@ void TickPickupPoll() {
     //
     // Find the CLOSEST in-range item so the visually-nearest one gets
     // grabbed first (better feel than first-in-iteration order).
-    uint64_t bestDropId   = 0;
-    int32_t  bestItemIdx  = -1;
-    f32      bestDistSq   = kPickupRadiusSq;
+    uint64_t bestDropId = 0;
+    int32_t bestItemIdx = -1;
+    f32 bestDistSq = kPickupRadiusSq;
     for (const auto& s : sSpawned) {
-        if (s.actor == nullptr) continue;
+        if (s.actor == nullptr)
+            continue;
         const DropEntry* e = FindEntry(s.dropId);
-        if (e != nullptr && e->sourceClientId == ownCid &&
-            e->elapsedMs < kSelfPickupCooldownMs) {
-            continue;  // dropper self-cooldown
+        if (e != nullptr && e->sourceClientId == ownCid && e->elapsedMs < kSelfPickupCooldownMs) {
+            continue; // dropper self-cooldown
         }
         f32 dx = pos.x - s.actor->world.pos.x;
         f32 dz = pos.z - s.actor->world.pos.z;
         f32 d2 = dx * dx + dz * dz;
         if (d2 <= bestDistSq) {
-            bestDistSq  = d2;
-            bestDropId  = s.dropId;
+            bestDistSq = d2;
+            bestDropId = s.dropId;
             bestItemIdx = s.itemIndex;
         }
     }
@@ -224,13 +239,14 @@ void TickPickupPoll() {
 }
 
 void TickExpiry() {
-    if (gPlayState == nullptr) return;
+    if (gPlayState == nullptr)
+        return;
 
     // Wall-clock hard expiry — runs unconditionally so entries in scenes
     // no one ever visits still get pruned. Without this, the ledger grows
     // by one entry per death-pile across a 24h+ session.
     int64_t nowMs = NowMs();
-    for (auto it = sLedger.begin(); it != sLedger.end(); ) {
+    for (auto it = sLedger.begin(); it != sLedger.end();) {
         if (nowMs - it->createdAtMs >= kLedgerMaxAgeMs) {
             RemoveSpawnedFor(it->dropId, -1);
             it = sLedger.erase(it);
@@ -245,14 +261,22 @@ void TickExpiry() {
     s32 localScene = gPlayState->sceneNum;
     bool sceneOccupied = false;
     for (const auto& e : sLedger) {
-        if (e.allClaimed) continue;
-        if (e.sceneNum == localScene) { sceneOccupied = true; break; }
+        if (e.allClaimed)
+            continue;
+        if (e.sceneNum == localScene) {
+            sceneOccupied = true;
+            break;
+        }
     }
-    if (!sceneOccupied) return;
+    if (!sceneOccupied)
+        return;
 
-    constexpr float kFrameMs = 1000.0f / 20.0f;  // game logic 20 fps
-    for (auto it = sLedger.begin(); it != sLedger.end(); ) {
-        if (it->sceneNum != localScene) { ++it; continue; }
+    constexpr float kFrameMs = 1000.0f / 20.0f; // game logic 20 fps
+    for (auto it = sLedger.begin(); it != sLedger.end();) {
+        if (it->sceneNum != localScene) {
+            ++it;
+            continue;
+        }
         it->elapsedMs += kFrameMs;
         if (it->elapsedMs >= kDespawnMs) {
             RemoveSpawnedFor(it->dropId, -1);
@@ -269,7 +293,7 @@ void TickExpiry() {
 // We do a slow Y-rotation here so the item visibly spins like a
 // get-item cutscene model.
 extern "C" void HarpoonGroundItem_Update(Actor* thisx, PlayState* play) {
-    thisx->shape.rot.y += 0x400;  // ~4.5° per game tick
+    thisx->shape.rot.y += 0x400; // ~4.5° per game tick
     (void)play;
 }
 
@@ -298,26 +322,37 @@ static s16 PickEnItem00Params(const DroppedItem& di) {
     switch (di.kind) {
         case KIND_AMMO:
             switch (di.itemId) {
-                case SLOT_STICK:     return 0x0D;  // ITEM00_STICK
-                case SLOT_NUT:       return 0x0C;  // ITEM00_NUTS
-                case SLOT_BOMB:      return 0x04;  // ITEM00_BOMBS_A
-                case SLOT_BOW:       return 0x0A;  // ITEM00_ARROWS_LARGE
-                case SLOT_SLINGSHOT: return 0x10;  // ITEM00_SEEDS
-                case SLOT_BOMBCHU:   return 0x1A;  // ITEM00_BOMBCHU
-                default:             return 0x12;  // ITEM00_FLEXIBLE
+                case SLOT_STICK:
+                    return 0x0D; // ITEM00_STICK
+                case SLOT_NUT:
+                    return 0x0C; // ITEM00_NUTS
+                case SLOT_BOMB:
+                    return 0x04; // ITEM00_BOMBS_A
+                case SLOT_BOW:
+                    return 0x0A; // ITEM00_ARROWS_LARGE
+                case SLOT_SLINGSHOT:
+                    return 0x10; // ITEM00_SEEDS
+                case SLOT_BOMBCHU:
+                    return 0x1A; // ITEM00_BOMBCHU
+                default:
+                    return 0x12; // ITEM00_FLEXIBLE
             }
-        case KIND_EQUIPMENT: return 0x16;  // ITEM00_SHIELD_HYLIAN (placeholder)
+        case KIND_EQUIPMENT:
+            return 0x16; // ITEM00_SHIELD_HYLIAN (placeholder)
         case KIND_QUEST_ITEM:
-        case KIND_DUNGEON_ITEM: return 0x06;  // ITEM00_HEART_PIECE (placeholder)
+        case KIND_DUNGEON_ITEM:
+            return 0x06; // ITEM00_HEART_PIECE (placeholder)
         // KIND_RUPEES + KIND_INVENTORY are handled separately via the
         // GetItemEntry override path (proper wallet / hookshot / etc.
         // 3D models). They should never reach this helper.
-        default:             return 0x12;  // ITEM00_FLEXIBLE fallback
+        default:
+            return 0x12; // ITEM00_FLEXIBLE fallback
     }
 }
 
 void SpawnInScene(PlayState* play) {
-    if (play == nullptr) return;
+    if (play == nullptr)
+        return;
     s32 sceneNum = play->sceneNum;
 
     // When the scene reloads (game-over Continue, normal transition,
@@ -335,24 +370,29 @@ void SpawnInScene(PlayState* play) {
     }
 
     for (auto& e : sLedger) {
-        if (e.allClaimed) continue;
-        if (e.sceneNum != sceneNum) continue;
+        if (e.allClaimed)
+            continue;
+        if (e.sceneNum != sceneNum)
+            continue;
         for (int32_t i = 0; i < (int32_t)e.items.size(); i++) {
             DroppedItem& di = e.items[i];
-            if (di.claimed) continue;
+            if (di.claimed)
+                continue;
             // Skip if already spawned this scene-load.
             bool alreadySpawned = false;
             for (const auto& s : sSpawned) {
                 if (s.dropId == e.dropId && s.itemIndex == i) {
-                    alreadySpawned = true; break;
+                    alreadySpawned = true;
+                    break;
                 }
             }
-            if (alreadySpawned) continue;
+            if (alreadySpawned)
+                continue;
             // Short-distance random spread — OoT items z-fight when
             // stacked at the same XZ. Each drop gets an 8-20u offset in
             // a random direction so the pile is visibly distinct.
             f32 angle = (f32)(rand() % 0x10000) * (3.14159265f / 32768.0f);
-            f32 rad   = 8.0f + (f32)(rand() % 13);
+            f32 rad = 8.0f + (f32)(rand() % 13);
             f32 ox = cosf(angle) * rad;
             f32 oz = sinf(angle) * rad;
             Vec3f spawnPos = { e.x + ox, e.y + 10.0f, e.z + oz };
@@ -394,27 +434,24 @@ void SpawnInScene(PlayState* play) {
             }
 
             if (useGiEntry) {
-                EnItem00* item00 = Item_DropCollectible2(play, &spawnPos,
-                                                         ITEM00_SOH_DUMMY);
+                EnItem00* item00 = Item_DropCollectible2(play, &spawnPos, ITEM00_SOH_DUMMY);
                 if (item00 != nullptr) {
-                    item00->itemEntry      = ItemTable_Retrieve(giId);
-                    item00->actor.draw     = HarpoonGroundItem_Draw;
-                    item00->actor.update   = HarpoonGroundItem_Update;
+                    item00->itemEntry = ItemTable_Retrieve(giId);
+                    item00->actor.draw = HarpoonGroundItem_Draw;
+                    item00->actor.update = HarpoonGroundItem_Update;
                     item00->actor.velocity = { 0.0f, 0.0f, 0.0f };
                     a = &item00->actor;
                 }
             } else {
                 s16 params = PickEnItem00Params(di);
-                a = Actor_Spawn(&play->actorCtx, play,
-                                ACTOR_EN_ITEM00,
-                                spawnPos.x, spawnPos.y, spawnPos.z,
-                                0, 0, 0, params);
+                a = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ITEM00, spawnPos.x, spawnPos.y, spawnPos.z, 0, 0, 0,
+                                params);
             }
             if (a != nullptr) {
                 SpawnedActorKey k;
-                k.dropId    = e.dropId;
+                k.dropId = e.dropId;
                 k.itemIndex = i;
-                k.actor     = a;
+                k.actor = a;
                 sSpawned.push_back(k);
             } else {
                 SPDLOG_WARN("[Harpoon][Drops] spawn FAILED kind={} itemId=0x{:X} "
@@ -431,37 +468,37 @@ void SpawnInScene(PlayState* play) {
 
 static nlohmann::json _Envelope(const char* evt, nlohmann::json data) {
     nlohmann::json p;
-    p["type"]       = "ROOM.BROADCAST_EVENT";
+    p["type"] = "ROOM.BROADCAST_EVENT";
     p["event_name"] = evt;
-    p["data"]       = std::move(data);
+    p["data"] = std::move(data);
     return p;
 }
 
-nlohmann::json BuildDeathDropPayload(uint64_t dropId, uint32_t sourceCid,
-                                      int16_t sceneNum, float x, float y, float z,
-                                      const std::vector<DroppedItem>& items) {
+nlohmann::json BuildDeathDropPayload(uint64_t dropId, uint32_t sourceCid, int16_t sceneNum, float x, float y, float z,
+                                     const std::vector<DroppedItem>& items) {
     nlohmann::json d;
-    d["dropId"]         = dropId;
+    d["dropId"] = dropId;
     d["sourceClientId"] = sourceCid;
-    d["sceneNum"]       = sceneNum;
-    d["x"] = x; d["y"] = y; d["z"] = z;
+    d["sceneNum"] = sceneNum;
+    d["x"] = x;
+    d["y"] = y;
+    d["z"] = z;
     nlohmann::json arr = nlohmann::json::array();
     for (const auto& di : items) {
         nlohmann::json o;
-        o["itemId"]  = di.itemId;
-        o["count"]   = di.count;
-        o["kind"]    = di.kind;
+        o["itemId"] = di.itemId;
+        o["count"] = di.count;
+        o["kind"] = di.kind;
         arr.push_back(o);
     }
     d["items"] = arr;
     return _Envelope("HARPOON.DEATH_DROP", std::move(d));
 }
 
-nlohmann::json BuildDropClaimPayload(uint64_t dropId, int32_t itemIndex,
-                                      uint32_t claimerCid) {
+nlohmann::json BuildDropClaimPayload(uint64_t dropId, int32_t itemIndex, uint32_t claimerCid) {
     nlohmann::json d;
-    d["dropId"]          = dropId;
-    d["itemIndex"]       = itemIndex;
+    d["dropId"] = dropId;
+    d["itemIndex"] = itemIndex;
     d["claimerClientId"] = claimerCid;
     return _Envelope("HARPOON.DROP_CLAIM", std::move(d));
 }
@@ -473,19 +510,22 @@ nlohmann::json BuildLedgerRequestPayload() {
 nlohmann::json BuildLedgerSnapshotPayload() {
     nlohmann::json arr = nlohmann::json::array();
     for (const auto& e : sLedger) {
-        if (e.allClaimed) continue;
+        if (e.allClaimed)
+            continue;
         nlohmann::json o;
-        o["dropId"]         = e.dropId;
+        o["dropId"] = e.dropId;
         o["sourceClientId"] = e.sourceClientId;
-        o["sceneNum"]       = e.sceneNum;
-        o["x"] = e.x; o["y"] = e.y; o["z"] = e.z;
-        o["elapsedMs"]      = e.elapsedMs;
+        o["sceneNum"] = e.sceneNum;
+        o["x"] = e.x;
+        o["y"] = e.y;
+        o["z"] = e.z;
+        o["elapsedMs"] = e.elapsedMs;
         nlohmann::json items = nlohmann::json::array();
         for (const auto& di : e.items) {
             nlohmann::json io;
-            io["itemId"]  = di.itemId;
-            io["count"]   = di.count;
-            io["kind"]    = di.kind;
+            io["itemId"] = di.itemId;
+            io["count"] = di.count;
+            io["kind"] = di.kind;
             io["claimed"] = di.claimed;
             items.push_back(io);
         }
@@ -506,27 +546,29 @@ void HandleDeathDrop(const nlohmann::json& payload) {
 }
 
 void HandleDropClaim(const nlohmann::json& payload) {
-    uint64_t dropId    = payload.value("dropId", (uint64_t)0);
-    int32_t  itemIndex = payload.value("itemIndex", -1);
+    uint64_t dropId = payload.value("dropId", (uint64_t)0);
+    int32_t itemIndex = payload.value("itemIndex", -1);
     ClaimItem(dropId, itemIndex);
 }
 
 void HandleLedgerRequest(const nlohmann::json& /*envelope*/) {
     // Only host responds (avoid every peer flooding the requester).
-    if (Harpoon::Instance == nullptr) return;
-    bool isHost = (Harpoon::Instance->ownClientId != 0 &&
-                   Harpoon::Instance->ownClientId == Harpoon::Instance->hostClientId);
-    if (!isHost) return;
+    if (Harpoon::Instance == nullptr)
+        return;
+    bool isHost =
+        (Harpoon::Instance->ownClientId != 0 && Harpoon::Instance->ownClientId == Harpoon::Instance->hostClientId);
+    if (!isHost)
+        return;
     Harpoon::Instance->SendJsonToRemote(BuildLedgerSnapshotPayload());
 }
 
 void HandleLedgerSnapshot(const nlohmann::json& payload) {
-    if (!payload.contains("entries") || !payload["entries"].is_array()) return;
+    if (!payload.contains("entries") || !payload["entries"].is_array())
+        return;
     for (const auto& entry : payload["entries"]) {
         IngestDrop(entry);
     }
-    SPDLOG_INFO("[Harpoon][Drops] ingested {} ledger entries from snapshot",
-                (int)payload["entries"].size());
+    SPDLOG_INFO("[Harpoon][Drops] ingested {} ledger entries from snapshot", (int)payload["entries"].size());
 }
 
 // ----------------------------------------------------------------------------
@@ -560,8 +602,7 @@ bool ApplyItemToLocalSave(const DroppedItem& di) {
             return true;
         }
         case KIND_AMMO: {
-            if (di.itemId >= 0 &&
-                di.itemId < (int32_t)ARRAY_COUNT(gSaveContext.inventory.ammo)) {
+            if (di.itemId >= 0 && di.itemId < (int32_t)ARRAY_COUNT(gSaveContext.inventory.ammo)) {
                 gSaveContext.inventory.ammo[di.itemId] += di.count;
             }
             return true;
@@ -575,22 +616,25 @@ bool ApplyItemToLocalSave(const DroppedItem& di) {
             return true;
         }
         case KIND_DUNGEON_ITEM: {
-            if (di.itemId >= 0 &&
-                di.itemId < (int32_t)ARRAY_COUNT(gSaveContext.inventory.dungeonItems)) {
+            if (di.itemId >= 0 && di.itemId < (int32_t)ARRAY_COUNT(gSaveContext.inventory.dungeonItems)) {
                 gSaveContext.inventory.dungeonItems[di.itemId] = 1;
             }
             return true;
         }
-        default: return false;
+        default:
+            return false;
     }
 }
-}  // anon
+} // namespace
 
 void OnLocalPickup(uint64_t dropId, int32_t itemIndex) {
     DropEntry* e = FindEntry(dropId);
-    if (e == nullptr) return;
-    if (itemIndex < 0 || itemIndex >= (int32_t)e->items.size()) return;
-    if (e->items[itemIndex].claimed) return;
+    if (e == nullptr)
+        return;
+    if (itemIndex < 0 || itemIndex >= (int32_t)e->items.size())
+        return;
+    if (e->items[itemIndex].claimed)
+        return;
 
     DroppedItem& di = e->items[itemIndex];
     ApplyItemToLocalSave(di);
@@ -598,9 +642,7 @@ void OnLocalPickup(uint64_t dropId, int32_t itemIndex) {
     // Mark claimed locally and broadcast so peers stop spawning it.
     ClaimItem(dropId, itemIndex);
     if (Harpoon::Instance != nullptr) {
-        Harpoon::Instance->SendJsonToRemote(
-            BuildDropClaimPayload(dropId, itemIndex,
-                                   Harpoon::Instance->ownClientId));
+        Harpoon::Instance->SendJsonToRemote(BuildDropClaimPayload(dropId, itemIndex, Harpoon::Instance->ownClientId));
     }
 }
 
@@ -614,11 +656,12 @@ bool HasFairyInBottle() {
     // Bottle slots: gSaveContext.inventory.items[SLOT_BOTTLE_1..4]. In
     // OoT, the values at those slots are the bottle contents (ITEM_FAIRY,
     // ITEM_POTION_RED, etc.).
-    constexpr s32 BOTTLE_SLOTS[4] = { SLOT_BOTTLE_1, SLOT_BOTTLE_2,
-                                      SLOT_BOTTLE_3, SLOT_BOTTLE_4 };
+    constexpr s32 BOTTLE_SLOTS[4] = { SLOT_BOTTLE_1, SLOT_BOTTLE_2, SLOT_BOTTLE_3, SLOT_BOTTLE_4 };
     for (s32 s : BOTTLE_SLOTS) {
-        if (s < 0 || s >= (s32)ARRAY_COUNT(gSaveContext.inventory.items)) continue;
-        if (gSaveContext.inventory.items[s] == ITEM_FAIRY) return true;
+        if (s < 0 || s >= (s32)ARRAY_COUNT(gSaveContext.inventory.items))
+            continue;
+        if (gSaveContext.inventory.items[s] == ITEM_FAIRY)
+            return true;
     }
     return false;
 }
@@ -627,10 +670,10 @@ bool HasFairyInBottle() {
 // back to "empty bottle" (ITEM_BOTTLE). Used by the soft-death path so
 // the fairy is actually spent — vanilla behaviour.
 void ConsumeFirstFairyBottle() {
-    constexpr s32 BOTTLE_SLOTS[4] = { SLOT_BOTTLE_1, SLOT_BOTTLE_2,
-                                      SLOT_BOTTLE_3, SLOT_BOTTLE_4 };
+    constexpr s32 BOTTLE_SLOTS[4] = { SLOT_BOTTLE_1, SLOT_BOTTLE_2, SLOT_BOTTLE_3, SLOT_BOTTLE_4 };
     for (s32 s : BOTTLE_SLOTS) {
-        if (s < 0 || s >= (s32)ARRAY_COUNT(gSaveContext.inventory.items)) continue;
+        if (s < 0 || s >= (s32)ARRAY_COUNT(gSaveContext.inventory.items))
+            continue;
         if (gSaveContext.inventory.items[s] == ITEM_FAIRY) {
             gSaveContext.inventory.items[s] = ITEM_BOTTLE;
             return;
@@ -638,7 +681,7 @@ void ConsumeFirstFairyBottle() {
     }
 }
 
-}  // anon
+} // namespace
 
 std::vector<DroppedItem> BuildSoftDeathDrop() {
     std::vector<DroppedItem> out;
@@ -646,7 +689,8 @@ std::vector<DroppedItem> BuildSoftDeathDrop() {
     // Collect all non-empty inventory item slots.
     std::vector<s32> ownedSlots;
     for (s32 i = 0; i < (s32)ARRAY_COUNT(gSaveContext.inventory.items); i++) {
-        if (gSaveContext.inventory.items[i] != ITEM_NONE) ownedSlots.push_back(i);
+        if (gSaveContext.inventory.items[i] != ITEM_NONE)
+            ownedSlots.push_back(i);
     }
     // Shuffle (Fisher-Yates with rand) and take 2.
     for (s32 i = (s32)ownedSlots.size() - 1; i > 0; i--) {
@@ -654,12 +698,13 @@ std::vector<DroppedItem> BuildSoftDeathDrop() {
         std::swap(ownedSlots[i], ownedSlots[j]);
     }
     s32 picks = (s32)ownedSlots.size();
-    if (picks > 2) picks = 2;
+    if (picks > 2)
+        picks = 2;
     for (s32 i = 0; i < picks; i++) {
         DroppedItem di;
         di.itemId = gSaveContext.inventory.items[ownedSlots[i]];
-        di.count  = 1;
-        di.kind   = KIND_INVENTORY;
+        di.count = 1;
+        di.kind = KIND_INVENTORY;
         out.push_back(di);
     }
 
@@ -668,8 +713,8 @@ std::vector<DroppedItem> BuildSoftDeathDrop() {
     if (rupeeDrop > 0) {
         DroppedItem di;
         di.itemId = ITEM_RUPEE_GREEN;
-        di.count  = rupeeDrop;
-        di.kind   = KIND_RUPEES;
+        di.count = rupeeDrop;
+        di.kind = KIND_RUPEES;
         out.push_back(di);
     }
     return out;
@@ -681,11 +726,12 @@ std::vector<DroppedItem> BuildGameOverDrop() {
     // All inventory items.
     for (s32 i = 0; i < (s32)ARRAY_COUNT(gSaveContext.inventory.items); i++) {
         u8 it = gSaveContext.inventory.items[i];
-        if (it == ITEM_NONE) continue;
+        if (it == ITEM_NONE)
+            continue;
         DroppedItem di;
         di.itemId = it;
-        di.count  = 1;
-        di.kind   = KIND_INVENTORY;
+        di.count = 1;
+        di.kind = KIND_INVENTORY;
         out.push_back(di);
     }
 
@@ -693,11 +739,12 @@ std::vector<DroppedItem> BuildGameOverDrop() {
     // because there's no shared item-id for "ammo of type X".
     for (s32 i = 0; i < (s32)ARRAY_COUNT(gSaveContext.inventory.ammo); i++) {
         s32 cnt = gSaveContext.inventory.ammo[i];
-        if (cnt <= 0) continue;
+        if (cnt <= 0)
+            continue;
         DroppedItem di;
         di.itemId = i;
-        di.count  = cnt;
-        di.kind   = KIND_AMMO;
+        di.count = cnt;
+        di.kind = KIND_AMMO;
         out.push_back(di);
     }
 
@@ -705,8 +752,8 @@ std::vector<DroppedItem> BuildGameOverDrop() {
     if (gSaveContext.rupees > 0) {
         DroppedItem di;
         di.itemId = ITEM_RUPEE_GREEN;
-        di.count  = gSaveContext.rupees;
-        di.kind   = KIND_RUPEES;
+        di.count = gSaveContext.rupees;
+        di.kind = KIND_RUPEES;
         out.push_back(di);
     }
 
@@ -715,8 +762,8 @@ std::vector<DroppedItem> BuildGameOverDrop() {
     if (gSaveContext.inventory.equipment != 0) {
         DroppedItem di;
         di.itemId = (s32)gSaveContext.inventory.equipment;
-        di.count  = 1;
-        di.kind   = KIND_EQUIPMENT;
+        di.count = 1;
+        di.kind = KIND_EQUIPMENT;
         out.push_back(di);
     }
 
@@ -725,18 +772,19 @@ std::vector<DroppedItem> BuildGameOverDrop() {
     if (gSaveContext.inventory.questItems != 0) {
         DroppedItem di;
         di.itemId = (s32)gSaveContext.inventory.questItems;
-        di.count  = 1;
-        di.kind   = KIND_QUEST_ITEM;
+        di.count = 1;
+        di.kind = KIND_QUEST_ITEM;
         out.push_back(di);
     }
 
     // Dungeon items per-dungeon (boss key, compass, map, etc.).
     for (s32 i = 0; i < (s32)ARRAY_COUNT(gSaveContext.inventory.dungeonItems); i++) {
-        if (gSaveContext.inventory.dungeonItems[i] == 0) continue;
+        if (gSaveContext.inventory.dungeonItems[i] == 0)
+            continue;
         DroppedItem di;
         di.itemId = i;
-        di.count  = gSaveContext.inventory.dungeonItems[i];
-        di.kind   = KIND_DUNGEON_ITEM;
+        di.count = gSaveContext.inventory.dungeonItems[i];
+        di.kind = KIND_DUNGEON_ITEM;
         out.push_back(di);
     }
 
@@ -756,73 +804,77 @@ void StripDroppedFromSave(const std::vector<DroppedItem>& items, bool isGameOver
                 break;
             }
             case KIND_AMMO: {
-                if (di.itemId >= 0 &&
-                    di.itemId < (s32)ARRAY_COUNT(gSaveContext.inventory.ammo)) {
+                if (di.itemId >= 0 && di.itemId < (s32)ARRAY_COUNT(gSaveContext.inventory.ammo)) {
                     gSaveContext.inventory.ammo[di.itemId] = 0;
                 }
                 break;
             }
             case KIND_RUPEES: {
                 gSaveContext.rupees -= di.count;
-                if (gSaveContext.rupees < 0) gSaveContext.rupees = 0;
+                if (gSaveContext.rupees < 0)
+                    gSaveContext.rupees = 0;
                 break;
             }
             case KIND_EQUIPMENT: {
-                if (isGameOver) gSaveContext.inventory.equipment = 0;
+                if (isGameOver)
+                    gSaveContext.inventory.equipment = 0;
                 break;
             }
             case KIND_QUEST_ITEM: {
-                if (isGameOver) gSaveContext.inventory.questItems = 0;
+                if (isGameOver)
+                    gSaveContext.inventory.questItems = 0;
                 break;
             }
             case KIND_DUNGEON_ITEM: {
-                if (di.itemId >= 0 &&
-                    di.itemId < (s32)ARRAY_COUNT(gSaveContext.inventory.dungeonItems)) {
+                if (di.itemId >= 0 && di.itemId < (s32)ARRAY_COUNT(gSaveContext.inventory.dungeonItems)) {
                     gSaveContext.inventory.dungeonItems[di.itemId] = 0;
                 }
                 break;
             }
-            default: break;
+            default:
+                break;
         }
     }
 }
 
 bool TriggerLocalDeathDrop() {
-    if (Harpoon::Instance == nullptr || gPlayState == nullptr) return false;
+    if (Harpoon::Instance == nullptr || gPlayState == nullptr)
+        return false;
     Player* lp = GET_PLAYER(gPlayState);
-    if (lp == nullptr) return false;
+    if (lp == nullptr)
+        return false;
 
     // Fairy revive: do NOTHING — the engine handles vanilla fairy revive
     // (consume fairy, restore HP to full). No drops, no capacity reset,
     // nothing for us to do.
-    if (HasFairyInBottle()) return false;
+    if (HasFairyInBottle())
+        return false;
 
     // Real game-over (no fairy). Build the full drop list. The engine
     // will fire the game-over screen on its own because gSaveContext.health
     // is already 0 (we don't touch it).
     std::vector<DroppedItem> drop = BuildGameOverDrop();
-    if (drop.empty()) return false;
+    if (drop.empty())
+        return false;
     const bool isGameOver = true;
 
     // Diagnostic: log every item in the drop list so we can see in the
     // log whether ammo / custom items / etc. are being built. (User
     // reported ammo + some inventory items not dropping.)
     for (const auto& di : drop) {
-        SPDLOG_INFO("[Harpoon][Drops]   build entry: kind={} itemId=0x{:X} count={}",
-                    di.kind, (u32)di.itemId, di.count);
+        SPDLOG_INFO("[Harpoon][Drops]   build entry: kind={} itemId=0x{:X} count={}", di.kind, (u32)di.itemId,
+                    di.count);
     }
 
     Vec3f pos = lp->actor.world.pos;
-    uint64_t dropId = AddLocalDrop(Harpoon::Instance->ownClientId,
-                                    (int16_t)gPlayState->sceneNum,
-                                    pos.x, pos.y, pos.z, drop);
-    if (dropId == 0) return false;
+    uint64_t dropId =
+        AddLocalDrop(Harpoon::Instance->ownClientId, (int16_t)gPlayState->sceneNum, pos.x, pos.y, pos.z, drop);
+    if (dropId == 0)
+        return false;
 
     // Broadcast.
-    Harpoon::Instance->SendJsonToRemote(
-        BuildDeathDropPayload(dropId, Harpoon::Instance->ownClientId,
-                              (int16_t)gPlayState->sceneNum,
-                              pos.x, pos.y, pos.z, drop));
+    Harpoon::Instance->SendJsonToRemote(BuildDeathDropPayload(
+        dropId, Harpoon::Instance->ownClientId, (int16_t)gPlayState->sceneNum, pos.x, pos.y, pos.z, drop));
 
     // Strip from local save.
     StripDroppedFromSave(drop, isGameOver);
@@ -846,12 +898,11 @@ bool TriggerLocalDeathDrop() {
     SpawnInScene(gPlayState);
 
     SPDLOG_INFO("[Harpoon][Drops] death-drop fired: cid={} scene={} items={} game_over={}",
-                Harpoon::Instance->ownClientId, gPlayState->sceneNum,
-                (int)drop.size(), isGameOver);
+                Harpoon::Instance->ownClientId, gPlayState->sceneNum, (int)drop.size(), isGameOver);
     return true;
 }
 
-}  // namespace HarpoonDroppedItems
+} // namespace HarpoonDroppedItems
 
 // ----------------------------------------------------------------------------
 // C bridges (called from z_kaleido_item.c when the player presses C-Up
@@ -860,46 +911,54 @@ bool TriggerLocalDeathDrop() {
 
 extern "C" void HarpoonDrops_RequestDropFromPause(int tabId, int slot) {
     using namespace HarpoonDroppedItems;
-    if (Harpoon::Instance == nullptr || gPlayState == nullptr) return;
-    if (!Harpoon::Instance->isConnected) return;
+    if (Harpoon::Instance == nullptr || gPlayState == nullptr)
+        return;
+    if (!Harpoon::Instance->isConnected)
+        return;
     // RPG-mode only — other gamemodes use vanilla inventory.
-    if (Harpoon::Instance->currentRoomGameMode != "rpg") return;
+    if (Harpoon::Instance->currentRoomGameMode != "rpg")
+        return;
 
     Player* lp = GET_PLAYER(gPlayState);
-    if (lp == nullptr) return;
+    if (lp == nullptr)
+        return;
     Vec3f pos = lp->actor.world.pos;
 
     std::vector<DroppedItem> drop;
     if (tabId == 0) {
         // Items tab.
-        if (slot < 0 || slot >= (int)ARRAY_COUNT(gSaveContext.inventory.items)) return;
+        if (slot < 0 || slot >= (int)ARRAY_COUNT(gSaveContext.inventory.items))
+            return;
         u8 it = gSaveContext.inventory.items[slot];
-        if (it == ITEM_NONE) return;
+        if (it == ITEM_NONE)
+            return;
         DroppedItem di;
         di.itemId = it;
-        di.count  = 1;
-        di.kind   = KIND_INVENTORY;
+        di.count = 1;
+        di.kind = KIND_INVENTORY;
         drop.push_back(di);
         gSaveContext.inventory.items[slot] = ITEM_NONE;
     } else if (tabId == 1) {
         // Equipment tab — drop the entire equipment bitmask. Slot acts
         // as a "which equipment-type bit-block" hint (0=sword, 1=shield,
         // 2=tunic, 3=boots); for v1 we drop everything as one entry.
-        if (gSaveContext.inventory.equipment == 0) return;
+        if (gSaveContext.inventory.equipment == 0)
+            return;
         DroppedItem di;
         di.itemId = (int)gSaveContext.inventory.equipment;
-        di.count  = 1;
-        di.kind   = KIND_EQUIPMENT;
+        di.count = 1;
+        di.kind = KIND_EQUIPMENT;
         drop.push_back(di);
         gSaveContext.inventory.equipment = 0;
         (void)slot;
     } else if (tabId == 2) {
         // Quest items tab — same approach: drop the whole bitmask.
-        if (gSaveContext.inventory.questItems == 0) return;
+        if (gSaveContext.inventory.questItems == 0)
+            return;
         DroppedItem di;
         di.itemId = (int)gSaveContext.inventory.questItems;
-        di.count  = 1;
-        di.kind   = KIND_QUEST_ITEM;
+        di.count = 1;
+        di.kind = KIND_QUEST_ITEM;
         drop.push_back(di);
         gSaveContext.inventory.questItems = 0;
         (void)slot;
@@ -907,43 +966,46 @@ extern "C" void HarpoonDrops_RequestDropFromPause(int tabId, int slot) {
         return;
     }
 
-    uint64_t dropId = AddLocalDrop(Harpoon::Instance->ownClientId,
-                                    (int16_t)gPlayState->sceneNum,
-                                    pos.x, pos.y, pos.z, drop);
-    if (dropId == 0) return;
-    Harpoon::Instance->SendJsonToRemote(
-        BuildDeathDropPayload(dropId, Harpoon::Instance->ownClientId,
-                              (int16_t)gPlayState->sceneNum,
-                              pos.x, pos.y, pos.z, drop));
+    uint64_t dropId =
+        AddLocalDrop(Harpoon::Instance->ownClientId, (int16_t)gPlayState->sceneNum, pos.x, pos.y, pos.z, drop);
+    if (dropId == 0)
+        return;
+    Harpoon::Instance->SendJsonToRemote(BuildDeathDropPayload(
+        dropId, Harpoon::Instance->ownClientId, (int16_t)gPlayState->sceneNum, pos.x, pos.y, pos.z, drop));
 }
 
 extern "C" void HarpoonDrops_RequestDropRupees(int amount) {
     using namespace HarpoonDroppedItems;
-    if (amount <= 0) return;
-    if (Harpoon::Instance == nullptr || gPlayState == nullptr) return;
-    if (!Harpoon::Instance->isConnected) return;
-    if (Harpoon::Instance->currentRoomGameMode != "rpg") return;
-    if (amount > gSaveContext.rupees) amount = gSaveContext.rupees;
-    if (amount <= 0) return;
+    if (amount <= 0)
+        return;
+    if (Harpoon::Instance == nullptr || gPlayState == nullptr)
+        return;
+    if (!Harpoon::Instance->isConnected)
+        return;
+    if (Harpoon::Instance->currentRoomGameMode != "rpg")
+        return;
+    if (amount > gSaveContext.rupees)
+        amount = gSaveContext.rupees;
+    if (amount <= 0)
+        return;
 
     Player* lp = GET_PLAYER(gPlayState);
-    if (lp == nullptr) return;
+    if (lp == nullptr)
+        return;
     Vec3f pos = lp->actor.world.pos;
 
     std::vector<DroppedItem> drop;
     DroppedItem di;
     di.itemId = ITEM_RUPEE_GREEN;
-    di.count  = amount;
-    di.kind   = KIND_RUPEES;
+    di.count = amount;
+    di.kind = KIND_RUPEES;
     drop.push_back(di);
     gSaveContext.rupees -= amount;
 
-    uint64_t dropId = AddLocalDrop(Harpoon::Instance->ownClientId,
-                                    (int16_t)gPlayState->sceneNum,
-                                    pos.x, pos.y, pos.z, drop);
-    if (dropId == 0) return;
-    Harpoon::Instance->SendJsonToRemote(
-        BuildDeathDropPayload(dropId, Harpoon::Instance->ownClientId,
-                              (int16_t)gPlayState->sceneNum,
-                              pos.x, pos.y, pos.z, drop));
+    uint64_t dropId =
+        AddLocalDrop(Harpoon::Instance->ownClientId, (int16_t)gPlayState->sceneNum, pos.x, pos.y, pos.z, drop);
+    if (dropId == 0)
+        return;
+    Harpoon::Instance->SendJsonToRemote(BuildDeathDropPayload(
+        dropId, Harpoon::Instance->ownClientId, (int16_t)gPlayState->sceneNum, pos.x, pos.y, pos.z, drop));
 }

@@ -11,6 +11,8 @@ extern "C" {
 #include "mods/items/custom_items.h"
 #include "mods/items/logic/item_bombarrows.h"
 #include "mods/items/logic/twilight_upgrade.h"
+#include "mods/extended_inventory.h" // Sw97_Element* — shared ordering/ownership (Skijer's NEI)
+#include "mods/extended_player.h"    // ExtPlayer_GetItemAction — element -> PLAYER_IA_*
 
 s32 func_808351D4(Player* thisx, PlayState* play); // Arrow nocked
 void EnArrow_Init(Actor* thisx, PlayState* play);
@@ -245,80 +247,23 @@ static bool ArrowCycleMainPrev() {
     return false;
 }
 
-// SW97 elemental arrow set + bomb arrows (in cycle order). Wind is the
-// no-magic baseline; bomb arrows tail on at the end so consecutive cycles
-// through SW97 eventually reach bomb arrows and then wrap back to wind.
-static const s32 sSW97CycleOrder[] = {
-    ITEM_SW97_ARROW_WIND, ITEM_SW97_ARROW_FIRE, ITEM_SW97_ARROW_ICE,
-    ITEM_SW97_ARROW_LIGHT, ITEM_SW97_ARROW_DARK, ITEM_SW97_ARROW_SOUL,
-    ITEM_BOMB_ARROWS,
-};
+// Skijer's NEI: this file used to carry a FOURTH private copy of "which elemental arrow is this"
+// — its own cycle-order array, its own CHECK_QUEST_ITEM ownership table and its own item→IA switch,
+// all keyed on the six ITEM_SW97_ARROW_* ids. The element is a flag now, and ordering/ownership come
+// from the shared Sw97_Element* helpers, so the kaleido wheel and this R/L cycle can no longer drift
+// apart. Bomb Arrows is SW97_ELEM_BOMB, the last entry, exactly as before.
 
-// SW97 arrows DO NOT have valid inventory slots — ITEM_SW97_ARROW_* IDs (0xD0..0xD5)
-// are outside the range of gItemSlots[] (which only covers vanilla items 0x00..0x5A).
-// The old INV_CONTENT(item) read random out-of-bounds memory and "worked" by accident
-// for some arrows (whichever happened to read back a matching value) and silently
-// failed for the rest — which is why cycle skipped 3 of 6.
-//
-// SW97 arrow ownership is gated by quest medallions. The mapping (from
-// sw97_player_behavior.inc.c:115-132) is parallel to ITEM_SW97_ARROW_FIRE..WIND:
-//   FIRE  → QUEST_MEDALLION_FIRE
-//   ICE   → QUEST_MEDALLION_WATER
-//   LIGHT → QUEST_MEDALLION_LIGHT
-//   DARK  → QUEST_MEDALLION_SHADOW
-//   SOUL  → QUEST_MEDALLION_SPIRIT
-//   WIND  → QUEST_MEDALLION_FOREST
-static bool HasSW97ArrowItem(s32 item) {
-    // Bomb arrows tail entry — ownership = Twilight Upgrade granted OR auto-grant CVar.
-    if (item == ITEM_BOMB_ARROWS) {
-        return TwilightUpgrade_BombArrowsAvailable() != 0;
-    }
-    if (!SW97_MEDALLIONS_ENABLED()) {
-        return false;
-    }
-    switch (item) {
-        case ITEM_SW97_ARROW_FIRE:  return CHECK_QUEST_ITEM(QUEST_MEDALLION_FIRE);
-        case ITEM_SW97_ARROW_ICE:   return CHECK_QUEST_ITEM(QUEST_MEDALLION_WATER);
-        case ITEM_SW97_ARROW_LIGHT: return CHECK_QUEST_ITEM(QUEST_MEDALLION_LIGHT);
-        case ITEM_SW97_ARROW_DARK:  return CHECK_QUEST_ITEM(QUEST_MEDALLION_SHADOW);
-        case ITEM_SW97_ARROW_SOUL:  return CHECK_QUEST_ITEM(QUEST_MEDALLION_SPIRIT);
-        case ITEM_SW97_ARROW_WIND:  return CHECK_QUEST_ITEM(QUEST_MEDALLION_FOREST);
-        default:                    return false;
-    }
-}
-
-// Returns the cycle item currently on the held C-button. Recognizes SW97
-// arrows AND bomb arrows. Returns -1 if the held item isn't part of the
-// cycle (vanilla arrow, no arrow, or anything else).
-static s32 GetSW97CurrentItem(Player* player) {
-    if (player->heldItemButton < 0 ||
-        player->heldItemButton >= (s32)ARRAY_COUNT(gSaveContext.equips.buttonItems)) {
+// Which weapon the held button is, for the flag lookup: 0 bow, 1 slingshot, -1 neither.
+static s32 GetHeldWeaponIsSling(Player* player) {
+    if (player->heldItemButton < 0 || player->heldItemButton >= (s32)ARRAY_COUNT(gSaveContext.equips.buttonItems)) {
         return -1;
     }
-    s32 item = gSaveContext.equips.buttonItems[player->heldItemButton];
-    if (item == ITEM_BOMB_ARROWS) {
-        return item;
+    u8 item = gSaveContext.equips.buttonItems[player->heldItemButton];
+    if (Sw97_IsBowItem(item)) {
+        return 0;
     }
-    if (item < ITEM_SW97_ARROW_FIRE || item > ITEM_SW97_ARROW_WIND) {
-        return -1;
-    }
-    return item;
-}
-
-static s32 GetNextSW97Item(s32 currentItem, s32 direction) {
-    int count = (int)ARRAY_COUNT(sSW97CycleOrder);
-    int currentIndex = 0;
-    for (int i = 0; i < count; i++) {
-        if (sSW97CycleOrder[i] == currentItem) {
-            currentIndex = i;
-            break;
-        }
-    }
-    for (int offset = 1; offset <= count; offset++) {
-        int nextIndex = ((currentIndex + (direction * offset)) % count + count) % count;
-        if (HasSW97ArrowItem(sSW97CycleOrder[nextIndex])) {
-            return sSW97CycleOrder[nextIndex];
-        }
+    if (Sw97_IsSlingItem(item)) {
+        return 1;
     }
     return -1;
 }
@@ -333,8 +278,7 @@ static bool IsHoldingBowOrSlingshot(Player* player) {
 }
 
 static bool IsAimingBowOrSlingshot(Player* player) {
-    return IsHoldingBowOrSlingshot(player) &&
-           ((player->unk_6AD == 2) || (player->upperActionFunc == func_808351D4));
+    return IsHoldingBowOrSlingshot(player) && ((player->unk_6AD == 2) || (player->upperActionFunc == func_808351D4));
 }
 
 // Bomb arrows is a custom item with its own aim flow — it's NOT in the
@@ -360,8 +304,7 @@ static bool NeiVanillaArrowCycle(s32 direction) {
     if (!LINK_IS_ADULT || INV_CONTENT(SLOT_BOW) != ITEM_BOW) {
         return false;
     }
-    bool hasAny = INV_CONTENT(ITEM_ARROW_FIRE) == ITEM_ARROW_FIRE ||
-                  INV_CONTENT(ITEM_ARROW_ICE) == ITEM_ARROW_ICE ||
+    bool hasAny = INV_CONTENT(ITEM_ARROW_FIRE) == ITEM_ARROW_FIRE || INV_CONTENT(ITEM_ARROW_ICE) == ITEM_ARROW_ICE ||
                   INV_CONTENT(ITEM_ARROW_LIGHT) == ITEM_ARROW_LIGHT;
     if (!hasAny) {
         return false;
@@ -386,21 +329,15 @@ static bool NeiVanillaArrowCycle(s32 direction) {
     return true;
 }
 
-// Map SW97 arrow ITEM_* → corresponding PlayerItemAction. Without updating
-// heldItemAction after a cycle, the player exits bow-holding state because
-// Player_HoldsBow no longer matches the old heldItemAction (the equipped
-// item changed but the action didn't follow) — that was the "cycle
-// unequips the bow" bug.
-static s8 GetSW97PlayerItemAction(s32 sw97Item) {
-    switch (sw97Item) {
-        case ITEM_SW97_ARROW_FIRE:  return PLAYER_IA_BOW_FIRE;
-        case ITEM_SW97_ARROW_ICE:   return PLAYER_IA_BOW_ICE;
-        case ITEM_SW97_ARROW_LIGHT: return PLAYER_IA_BOW_LIGHT;
-        case ITEM_SW97_ARROW_DARK:  return PLAYER_IA_BOW_0C;
-        case ITEM_SW97_ARROW_SOUL:  return PLAYER_IA_BOW_0D;
-        case ITEM_SW97_ARROW_WIND:  return PLAYER_IA_BOW_0E;
-        default:                    return PLAYER_IA_BOW;
+// heldItemAction still has to follow the element after a cycle, or Player_HoldsBow stops matching
+// and the bow visually unequips. It is no longer computed here though: ExtPlayer_GetItemAction reads
+// the flag we just set, so asking IT is what keeps this in step with the pause menu and the shot
+// decode. (The bow's element -> PLAYER_IA_BOW_FIRE..0E mapping lives there, once.)
+static s8 GetSw97PlayerItemAction(Player* player) {
+    if (player->heldItemButton < 0 || player->heldItemButton >= (s32)ARRAY_COUNT(gSaveContext.equips.buttonItems)) {
+        return PLAYER_IA_BOW;
     }
+    return (s8)ExtPlayer_GetItemAction(gSaveContext.equips.buttonItems[player->heldItemButton]);
 }
 
 // Cycle SW97 arrows AND bomb arrows on the held C-button. The active aim is
@@ -419,28 +356,34 @@ static bool NeiSW97ArrowCycle(s32 direction) {
     Player* player = GET_PLAYER(gPlayState);
 
     // Aim state — either vanilla bow with SW97 OR custom bomb arrows.
-    bool inBowAim = IsAimingBowOrSlingshot(player) && player->heldActor != NULL &&
-                    player->heldActor->id == ACTOR_EN_ARROW;
+    bool inBowAim =
+        IsAimingBowOrSlingshot(player) && player->heldActor != NULL && player->heldActor->id == ACTOR_EN_ARROW;
     bool inBombAim = IsAimingBombArrows(player);
     if (!inBowAim && !inBombAim) {
         return false;
     }
 
-    s32 currentItem = GetSW97CurrentItem(player);
-    if (currentItem < 0) {
-        return false; // not holding a cycle item (vanilla bow or other)
+    s32 isSling = GetHeldWeaponIsSling(player);
+    if (isSling < 0) {
+        return false; // the held button is not a bow/slingshot
     }
-    s32 nextItem = GetNextSW97Item(currentItem, direction);
-    if (nextItem < 0 || nextItem == currentItem) {
-        return false; // no other cycle items owned
+    if (!SW97_MEDALLIONS_ENABLED()) {
+        return false;
     }
 
-    bool nextIsBomb = (nextItem == ITEM_BOMB_ARROWS);
-    bool currIsBomb = (currentItem == ITEM_BOMB_ARROWS);
+    u8 currentElem = Sw97_GetElement((u8)isSling);
+    u8 nextElem = Sw97_ElementNeighbor((u8)isSling, currentElem, direction);
+    if (nextElem == currentElem) {
+        return false; // nothing else owned to cycle to
+    }
 
-    // Common equip update — buttonItems + icon + status.
+    bool nextIsBomb = (nextElem == SW97_ELEM_BOMB);
+    bool currIsBomb = (currentElem == SW97_ELEM_BOMB);
+
+    // Common update — the FLAG plus the icon refresh. Note what is gone: the buttonItems[] write.
+    // The button keeps its weapon; only the primed element changes.
     s32 button = player->heldItemButton;
-    gSaveContext.equips.buttonItems[button] = nextItem;
+    Sw97_SetElement((u8)isSling, nextElem);
     if (button <= 3) {
         Interface_LoadItemIcon1(gPlayState, button);
     }
@@ -454,7 +397,7 @@ static bool NeiSW97ArrowCycle(s32 direction) {
         // return false → the slingshot model disappears (this was the user's
         // "cycling unequips slingshot" report).
         if (player->heldItemAction != PLAYER_IA_SLINGSHOT) {
-            s8 newAction = GetSW97PlayerItemAction(nextItem);
+            s8 newAction = GetSw97PlayerItemAction(player);
             player->heldItemAction = newAction;
             player->itemAction = newAction;
         }
@@ -464,7 +407,9 @@ static bool NeiSW97ArrowCycle(s32 direction) {
             Actor_Kill(arrow->child);
             arrow->child = NULL;
         }
-        arrow->params = ARROW_SW97_FIRE + (nextItem - ITEM_SW97_ARROW_FIRE);
+        arrow->params = (nextElem == SW97_ELEM_NONE)
+                            ? (isSling ? ARROW_SEED : ARROW_NORMAL)
+                            : ((isSling ? ARROW_SEED_FIRE : ARROW_SW97_FIRE) + (nextElem - SW97_ELEM_FIRE));
         EnArrow_Init(arrow, gPlayState);
         return true;
     }
@@ -498,7 +443,9 @@ static bool NeiSW97ArrowCycle(s32 direction) {
         // For child, the underlying weapon is the slingshot — keep that as
         // heldItemAction so Player_HoldsSlingshot stays true. Only adult Link
         // uses the bow action with SW97 arrows.
-        s8 newAction = LINK_IS_ADULT ? GetSW97PlayerItemAction(nextItem) : (s8)PLAYER_IA_SLINGSHOT;
+        // GetSw97PlayerItemAction already returns PLAYER_IA_SLINGSHOT when the button holds one, so
+        // the old LINK_IS_ADULT branch is redundant — the button is the source of truth.
+        s8 newAction = GetSw97PlayerItemAction(player);
         player->heldItemAction = newAction;
         player->itemAction = newAction;
         // Restore vanilla bow/slingshot's upper action (arrow-nocked handler).
@@ -506,10 +453,12 @@ static bool NeiSW97ArrowCycle(s32 direction) {
 
         // Vanilla aim wants an EnArrow as the held actor. Spawn one now
         // so the bow/slingshot code sees a valid arrow on the very next frame.
-        Actor* arrow = Actor_SpawnAsChild(
-            &gPlayState->actorCtx, &player->actor, gPlayState, ACTOR_EN_ARROW,
-            player->actor.world.pos.x, player->actor.world.pos.y, player->actor.world.pos.z,
-            0, 0, 0, ARROW_SW97_FIRE + (nextItem - ITEM_SW97_ARROW_FIRE));
+        s32 spawnParams = (nextElem == SW97_ELEM_NONE)
+                              ? (isSling ? ARROW_SEED : ARROW_NORMAL)
+                              : ((isSling ? ARROW_SEED_FIRE : ARROW_SW97_FIRE) + (nextElem - SW97_ELEM_FIRE));
+        Actor* arrow = Actor_SpawnAsChild(&gPlayState->actorCtx, &player->actor, gPlayState, ACTOR_EN_ARROW,
+                                          player->actor.world.pos.x, player->actor.world.pos.y,
+                                          player->actor.world.pos.z, 0, 0, 0, spawnParams);
         if (arrow != NULL) {
             player->heldActor = arrow;
             arrow->parent = &player->actor;
@@ -534,8 +483,7 @@ void RegisterArrowCycle() {
         bool nei = CVAR_NEI_AIM_CYCLE_VALUE;
         // NEI mode: also let the cycle fire while aiming custom bomb arrows,
         // so R/L can rotate bombs → SW97 (and vice-versa).
-        bool aiming = nei ? (IsAimingBowOrSlingshot(player) || IsAimingBombArrows(player))
-                          : IsAimingBow(player);
+        bool aiming = nei ? (IsAimingBowOrSlingshot(player) || IsAimingBombArrows(player)) : IsAimingBow(player);
         if (!aiming) {
             return;
         }

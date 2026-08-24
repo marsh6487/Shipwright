@@ -25,11 +25,14 @@ namespace HarpoonCombat {
 // frame-end). Reads combatBlindnessFrames on the LOCAL player's
 // HarpoonClient entry and draws the overlay accordingly.
 void BlindnessEffect_Draw() {
-    if (Harpoon::Instance == nullptr) return;
+    if (Harpoon::Instance == nullptr)
+        return;
     auto it = Harpoon::Instance->clients.find(Harpoon::Instance->ownClientId);
-    if (it == Harpoon::Instance->clients.end()) return;
+    if (it == Harpoon::Instance->clients.end())
+        return;
     uint16_t fr = it->second.combatBlindnessFrames;
-    if (fr == 0) return;
+    if (fr == 0)
+        return;
 
     // Alpha envelope — peak near-opaque (0.985) so the player literally
     // cannot see. Ramps out over the last 45 frames so the recovery isn't
@@ -42,10 +45,12 @@ void BlindnessEffect_Draw() {
     } else {
         alpha = kPeakAlpha;
     }
-    if (alpha < 0.02f) return;
+    if (alpha < 0.02f)
+        return;
 
     ImDrawList* dl = ImGui::GetForegroundDrawList();
-    if (dl == nullptr) return;
+    if (dl == nullptr)
+        return;
     ImVec2 size = ImGui::GetIO().DisplaySize;
     // Slight purple bias so the darkness reads as magical (R=8, G=0, B=14 / 255).
     ImU32 col = ImColor(0.031f, 0.0f, 0.055f, alpha);
@@ -62,4 +67,4 @@ void BlindnessEffect_Draw() {
     }
 }
 
-}  // namespace HarpoonCombat
+} // namespace HarpoonCombat

@@ -148,6 +148,13 @@ static const ALIGN_ASSET(2) char gNeiDesireSensorDL[] = dgNeiDesireSensorDL;
 static const ALIGN_ASSET(2) char gNeiDivineShieldDL[] = dgNeiDivineShieldDL;
 #define dgNeiKiteShieldDL "__OTR__objects/object_nei_kite_shield/g_kite_shield_dl"
 static const ALIGN_ASSET(2) char gNeiKiteShieldDL[] = dgNeiKiteShieldDL;
+// Four Sword (Bird of Light's Minish Cap model). Converted out of the ModLoader64
+// .pak into normal soh.o2r resources by apps/zobj_dl_to_xml.py, so the sword renders
+// through the same archive every other NEI model uses — no loose pak, no pak_loader.
+#define dgNeiFourSwordBladeDL "__OTR__objects/object_nei_four_sword/gNeiFourSwordBladeDL"
+static const ALIGN_ASSET(2) char gNeiFourSwordBladeDL[] = dgNeiFourSwordBladeDL;
+#define dgNeiFourSwordHiltDL "__OTR__objects/object_nei_four_sword/gNeiFourSwordHiltDL"
+static const ALIGN_ASSET(2) char gNeiFourSwordHiltDL[] = dgNeiFourSwordHiltDL;
 #define dgNeiFireRodDL "__OTR__objects/object_nei_fire_rod/Cylinder_001_opaque_dl"
 static const ALIGN_ASSET(2) char gNeiFireRodDL[] = dgNeiFireRodDL;
 #define dgNeiGustJarDL "__OTR__objects/object_nei_gust_jar/jar_model_dl"
@@ -170,6 +177,12 @@ static const ALIGN_ASSET(2) char gNeiRocsFeatherDL[] = dgNeiRocsFeatherDL;
 static const ALIGN_ASSET(2) char gNeiSwitchHookDL[] = dgNeiSwitchHookDL;
 #define dgNeiTimeGateDL "__OTR__objects/object_nei_time_gate/g_timegate_dl"
 static const ALIGN_ASSET(2) char gNeiTimeGateDL[] = dgNeiTimeGateDL;
+// Ultrahand (Cane of Pacci's 6th skill): the glowing hand is opaque, its two aura spheres are
+// translucent and live in their own DL — draw that one into POLY_XLU or it z-rejects the hand.
+#define dgNeiUltrahandDL "__OTR__objects/object_nei_ultrahand/gUltrahandGiveDL"
+static const ALIGN_ASSET(2) char gNeiUltrahandDL[] = dgNeiUltrahandDL;
+#define dgNeiUltrahandXluDL "__OTR__objects/object_nei_ultrahand/gUltrahandGiveXluDL"
+static const ALIGN_ASSET(2) char gNeiUltrahandXluDL[] = dgNeiUltrahandXluDL;
 #define dgNeiWhipDL "__OTR__objects/object_nei_whip/whip_give_opaque_dl"
 static const ALIGN_ASSET(2) char gNeiWhipDL[] = dgNeiWhipDL;
 #define dgNeiSpinnerDL "__OTR__objects/object_nei_spinner/n0b0_opaque_dl"
@@ -735,6 +748,25 @@ static const ALIGN_ASSET(2) char gItemIconPropHuntNextTex[]   = dgItemIconPropHu
 #define dgItemIconBombArrowsTex "__OTR__textures/icon_item_custom/gItemIconBombArrowsTex"
 static const ALIGN_ASSET(2) char gItemIconBombArrowsTex[] = dgItemIconBombArrowsTex;
 
+// Elemental Wand — one icon per rod; the page-2 cell shows whichever mode is active.
+#define dgItemIconSandRodTex "__OTR__textures/icon_item_custom/gItemIconSandRodTex"
+static const ALIGN_ASSET(2) char gItemIconSandRodTex[] = dgItemIconSandRodTex;
+
+#define dgItemIconTornadoRodTex "__OTR__textures/icon_item_custom/gItemIconTornadoRodTex"
+static const ALIGN_ASSET(2) char gItemIconTornadoRodTex[] = dgItemIconTornadoRodTex;
+
+#define dgItemIconWaterRodTex "__OTR__textures/icon_item_custom/gItemIconWaterRodTex"
+static const ALIGN_ASSET(2) char gItemIconWaterRodTex[] = dgItemIconWaterRodTex;
+
+#define dgItemIconMeteorRodTex "__OTR__textures/icon_item_custom/gItemIconMeteorRodTex"
+static const ALIGN_ASSET(2) char gItemIconMeteorRodTex[] = dgItemIconMeteorRodTex;
+
+#define dgItemIconStormRodTex "__OTR__textures/icon_item_custom/gItemIconStormRodTex"
+static const ALIGN_ASSET(2) char gItemIconStormRodTex[] = dgItemIconStormRodTex;
+
+#define dgItemIconShadowScepterTex "__OTR__textures/icon_item_custom/gItemIconShadowScepterTex"
+static const ALIGN_ASSET(2) char gItemIconShadowScepterTex[] = dgItemIconShadowScepterTex;
+
 #define dgItemIconFireRodTex "__OTR__textures/icon_item_custom/gItemIconFireRodTex"
 static const ALIGN_ASSET(2) char gItemIconFireRodTex[] = dgItemIconFireRodTex;
 
@@ -759,6 +791,9 @@ static const ALIGN_ASSET(2) char gItemIconPecoriTex[] = dgItemIconPecoriTex;
 #define dgItemIconPending2Tex "__OTR__textures/icon_item_custom/gItemIconPending2Tex"
 static const ALIGN_ASSET(2) char gItemIconPending2Tex[] = dgItemIconPending2Tex;
 
+#define dgItemIconPending3Tex "__OTR__textures/icon_item_custom/gItemIconPending3Tex"
+static const ALIGN_ASSET(2) char gItemIconPending3Tex[] = dgItemIconPending3Tex;
+
 // SM64 Mario mode — mask + 3 cap icons. Mask is the "Mario mode toggle"
 // item that locks to C-Down. Caps replace Din's / Nayru's / Farore's
 // spell icons while Mario mode is on (since the spells map to the SM64
@@ -767,6 +802,9 @@ static const ALIGN_ASSET(2) char gItemIconPending2Tex[] = dgItemIconPending2Tex;
 static const ALIGN_ASSET(2) char gItemIconMarioMaskTex[] = dgItemIconMarioMaskTex;
 #define dgItemIconVanishCapTex "__OTR__textures/icon_item_custom/gItemIconVanishCapTex"
 static const ALIGN_ASSET(2) char gItemIconVanishCapTex[] = dgItemIconVanishCapTex;
+// Rito Mask — trigger for the Rito skin form; shares the Farore's Wind cell.
+#define dgItemIconRitoMaskTex "__OTR__textures/icon_item_custom/gItemIconRitoMaskTex"
+static const ALIGN_ASSET(2) char gItemIconRitoMaskTex[] = dgItemIconRitoMaskTex;
 #define dgItemIconMetalCapTex "__OTR__textures/icon_item_custom/gItemIconMetalCapTex"
 static const ALIGN_ASSET(2) char gItemIconMetalCapTex[] = dgItemIconMetalCapTex;
 #define dgItemIconWingCapTex "__OTR__textures/icon_item_custom/gItemIconWingCapTex"
@@ -872,6 +910,25 @@ static const ALIGN_ASSET(2) char gTimeGateNameTex[] = dgTimeGateNameTex;
 #define dgBombArrowsNameTex "__OTR__textures/item_name_custom/gBombArrowsNameTex"
 static const ALIGN_ASSET(2) char gBombArrowsNameTex[] = dgBombArrowsNameTex;
 
+// Elemental Wand — one name banner per rod.
+#define dgSandRodNameTex "__OTR__textures/item_name_custom/gSandRodNameTex"
+static const ALIGN_ASSET(2) char gSandRodNameTex[] = dgSandRodNameTex;
+
+#define dgTornadoRodNameTex "__OTR__textures/item_name_custom/gTornadoRodNameTex"
+static const ALIGN_ASSET(2) char gTornadoRodNameTex[] = dgTornadoRodNameTex;
+
+#define dgWaterRodNameTex "__OTR__textures/item_name_custom/gWaterRodNameTex"
+static const ALIGN_ASSET(2) char gWaterRodNameTex[] = dgWaterRodNameTex;
+
+#define dgMeteorRodNameTex "__OTR__textures/item_name_custom/gMeteorRodNameTex"
+static const ALIGN_ASSET(2) char gMeteorRodNameTex[] = dgMeteorRodNameTex;
+
+#define dgStormRodNameTex "__OTR__textures/item_name_custom/gStormRodNameTex"
+static const ALIGN_ASSET(2) char gStormRodNameTex[] = dgStormRodNameTex;
+
+#define dgShadowScepterNameTex "__OTR__textures/item_name_custom/gShadowScepterNameTex"
+static const ALIGN_ASSET(2) char gShadowScepterNameTex[] = dgShadowScepterNameTex;
+
 #define dgFireRodNameTex "__OTR__textures/item_name_custom/gFireRodNameTex"
 static const ALIGN_ASSET(2) char gFireRodNameTex[] = dgFireRodNameTex;
 
@@ -898,6 +955,9 @@ static const ALIGN_ASSET(2) char gPokeballNameTex[] = dgPokeballNameTex;
 
 #define dgMarioMaskNameTex "__OTR__textures/item_name_custom/gMarioMaskNameTex"
 static const ALIGN_ASSET(2) char gMarioMaskNameTex[] = dgMarioMaskNameTex;
+
+#define dgRitoMaskNameTex "__OTR__textures/item_name_custom/gRitoMaskNameTex"
+static const ALIGN_ASSET(2) char gRitoMaskNameTex[] = dgRitoMaskNameTex;
 
 // Extended equipment names (from item_name_custom/ in soh.o2r)
 #define dgCaneOfByrnaNameTex "__OTR__textures/item_name_custom/gCaneOfByrnaNameTex"
@@ -976,14 +1036,50 @@ static const ALIGN_ASSET(2) char gItemIconChampionsTunicTex[] = dgItemIconChampi
 #define dgItemIconSpiritTunicTex "__OTR__textures/icon_item_custom/gItemIconSpiritTunicTex"
 static const ALIGN_ASSET(2) char gItemIconSpiritTunicTex[] = dgItemIconSpiritTunicTex;
 
-#define dgItemIconSnowquillTunicTex "__OTR__textures/icon_item_custom/gItemIconSnowquillTunicTex"
-static const ALIGN_ASSET(2) char gItemIconSnowquillTunicTex[] = dgItemIconSnowquillTunicTex;
+#define dgItemIconSagesTunicTex "__OTR__textures/icon_item_custom/gItemIconSagesTunicTex"
+static const ALIGN_ASSET(2) char gItemIconSagesTunicTex[] = dgItemIconSagesTunicTex;
 
 #define dgItemIconPegasusAnkletTex "__OTR__textures/icon_item_custom/gItemIconPegasusAnkletTex"
 static const ALIGN_ASSET(2) char gItemIconPegasusAnkletTex[] = dgItemIconPegasusAnkletTex;
 
 #define dgItemIconPending4Tex "__OTR__textures/icon_item_custom/gItemIconPending4Tex"
 static const ALIGN_ASSET(2) char gItemIconPending4Tex[] = dgItemIconPending4Tex;
+
+// Skijer 2026-07-29 (kaleido re-layout): FINAL asset names for the reworked equipment pages. The
+// PNGs behind them are stand-in art for now — replacing the file replaces the icon/label, no code
+// change. The two RESERVED cells of the left column (rows 2/3, freed when strength/scale moved to
+// the quest page) share one icon: same "slot reserved" semantics.
+#define dgItemIconReservedSlotTex "__OTR__textures/icon_item_custom/gItemIconReservedSlotTex"
+static const ALIGN_ASSET(2) char gItemIconReservedSlotTex[] = dgItemIconReservedSlotTex;
+
+#define dgItemIconTridentTex "__OTR__textures/icon_item_custom/gItemIconTridentTex"
+static const ALIGN_ASSET(2) char gItemIconTridentTex[] = dgItemIconTridentTex;
+#define dgItemIconGoddessShieldTex "__OTR__textures/icon_item_custom/gItemIconGoddessShieldTex"
+static const ALIGN_ASSET(2) char gItemIconGoddessShieldTex[] = dgItemIconGoddessShieldTex;
+#define dgItemIconKiteShieldTex "__OTR__textures/icon_item_custom/gItemIconKiteShieldTex"
+static const ALIGN_ASSET(2) char gItemIconKiteShieldTex[] = dgItemIconKiteShieldTex;
+#define dgItemIconMagicTunicTex "__OTR__textures/icon_item_custom/gItemIconMagicTunicTex"
+static const ALIGN_ASSET(2) char gItemIconMagicTunicTex[] = dgItemIconMagicTunicTex;
+#define dgItemIconPegasusBootsTex "__OTR__textures/icon_item_custom/gItemIconPegasusBootsTex"
+static const ALIGN_ASSET(2) char gItemIconPegasusBootsTex[] = dgItemIconPegasusBootsTex;
+#define dgItemIconClimbBootsTex "__OTR__textures/icon_item_custom/gItemIconClimbBootsTex"
+static const ALIGN_ASSET(2) char gItemIconClimbBootsTex[] = dgItemIconClimbBootsTex;
+#define dgItemIconRocBootsTex "__OTR__textures/icon_item_custom/gItemIconRocBootsTex"
+static const ALIGN_ASSET(2) char gItemIconRocBootsTex[] = dgItemIconRocBootsTex;
+#define dgTridentNameTex "__OTR__textures/item_name_custom/gTridentNameTex"
+static const ALIGN_ASSET(2) char gTridentNameTex[] = dgTridentNameTex;
+#define dgGoddessShieldNameTex "__OTR__textures/item_name_custom/gGoddessShieldNameTex"
+static const ALIGN_ASSET(2) char gGoddessShieldNameTex[] = dgGoddessShieldNameTex;
+#define dgMagicTunicNameTex "__OTR__textures/item_name_custom/gMagicTunicNameTex"
+static const ALIGN_ASSET(2) char gMagicTunicNameTex[] = dgMagicTunicNameTex;
+#define dgPegasusBootsNameTex "__OTR__textures/item_name_custom/gPegasusBootsNameTex"
+static const ALIGN_ASSET(2) char gPegasusBootsNameTex[] = dgPegasusBootsNameTex;
+#define dgClimbBootsNameTex "__OTR__textures/item_name_custom/gClimbBootsNameTex"
+static const ALIGN_ASSET(2) char gClimbBootsNameTex[] = dgClimbBootsNameTex;
+#define dgRocBootsNameTex "__OTR__textures/item_name_custom/gRocBootsNameTex"
+static const ALIGN_ASSET(2) char gRocBootsNameTex[] = dgRocBootsNameTex;
+#define dgSagesTunicNameTex "__OTR__textures/item_name_custom/gSagesTunicNameTex"
+static const ALIGN_ASSET(2) char gSagesTunicNameTex[] = dgSagesTunicNameTex;
 
 #define dgItemIconWaterDragonScaleTex "__OTR__textures/icon_item_custom/gItemIconWaterDragonScaleTex"
 static const ALIGN_ASSET(2) char gItemIconWaterDragonScaleTex[] = dgItemIconWaterDragonScaleTex;

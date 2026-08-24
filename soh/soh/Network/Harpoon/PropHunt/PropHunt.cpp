@@ -28,8 +28,8 @@ extern "C" void Save_InitFile(int isDebug);
 // Redeclaring them ourselves with explicit `extern "C"` linkage at file scope
 // forces the linker to look up the C symbol.
 extern "C" {
-    void FrameInterpolation_RecordOpenChild(const void* a, int b);
-    void FrameInterpolation_RecordCloseChild(void);
+void FrameInterpolation_RecordOpenChild(const void* a, int b);
+void FrameInterpolation_RecordCloseChild(void);
 }
 
 extern "C" {
@@ -108,17 +108,17 @@ bool sHarpoonAuthorizedTransition = false;
 
 namespace {
 
-HarpoonPropHunt::PropTables       sTables;
+HarpoonPropHunt::PropTables sTables;
 std::vector<HarpoonPropHunt::MapDef> sMaps;
-HarpoonPropHunt::LocalState       sLocal;
-nlohmann::json                    sSavePresetRaw;   // presets/save.json contents
-bool                              sLoaded = false;
+HarpoonPropHunt::LocalState sLocal;
+nlohmann::json sSavePresetRaw; // presets/save.json contents
+bool sLoaded = false;
 
 // EVERYONE_CHOOSES vote window — counted in PropHunt TickFrame frames
 // (~60 fps). sMapVoteArmed = "we're inside an active vote window";
 // sMapVoteDeadline = frames left before the timeout fires.
-s32  sMapVoteDeadline = 0;
-bool sMapVoteArmed    = false;
+s32 sMapVoteDeadline = 0;
+bool sMapVoteArmed = false;
 
 // Path resolution — <appdir>/harpoon/gamemodes/prop_hunt/
 std::string ResolvePackRoot() {
@@ -130,7 +130,8 @@ std::string ResolvePackRoot() {
             harpoonRoot = "harpoon";
         }
     }
-    if (harpoonRoot.empty()) return {};
+    if (harpoonRoot.empty())
+        return {};
     auto packPath = std::filesystem::path(harpoonRoot) / "gamemodes" / "prop_hunt";
     if (!std::filesystem::exists(packPath, ec) || !std::filesystem::is_directory(packPath, ec)) {
         return {};
@@ -140,7 +141,8 @@ std::string ResolvePackRoot() {
 
 bool ReadJsonFile(const std::filesystem::path& path, nlohmann::json& out) {
     std::ifstream f(path);
-    if (!f.is_open()) return false;
+    if (!f.is_open())
+        return false;
     try {
         f >> out;
     } catch (const std::exception& e) {
@@ -157,58 +159,62 @@ bool ReadJsonFile(const std::filesystem::path& path, nlohmann::json& out) {
 // fall back to 0 (which the engine treats as ACTOR_PLAYER and will misbehave —
 // the warning is the developer's signal to extend the table).
 // ---------------------------------------------------------------------------
-struct NamedId { const char* name; s16 id; };
+struct NamedId {
+    const char* name;
+    s16 id;
+};
 
 constexpr NamedId kActorIdTable[] = {
     // Environment props
-    { "OBJ_TSUBO",     ACTOR_OBJ_TSUBO     },
-    { "OBJ_KIBAKO",    ACTOR_OBJ_KIBAKO    },
-    { "OBJ_KIBAKO2",   ACTOR_OBJ_KIBAKO2   },
-    { "OBJ_SYOKUDAI",  ACTOR_OBJ_SYOKUDAI  },
-    { "OBJ_BOMBIWA",   ACTOR_OBJ_BOMBIWA   },
-    { "OBJ_HAMISHI",   ACTOR_OBJ_HAMISHI   },
-    { "EN_ISHI",       ACTOR_EN_ISHI       },
-    { "EN_KUSA",       ACTOR_EN_KUSA       },
-    { "EN_ITEM00",     ACTOR_EN_ITEM00     },
-    { "EN_BOX",        ACTOR_EN_BOX        },
-    { "EN_KANBAN",     ACTOR_EN_KANBAN     },
-    { "EN_GS",         ACTOR_EN_GS         },
+    { "OBJ_TSUBO", ACTOR_OBJ_TSUBO },
+    { "OBJ_KIBAKO", ACTOR_OBJ_KIBAKO },
+    { "OBJ_KIBAKO2", ACTOR_OBJ_KIBAKO2 },
+    { "OBJ_SYOKUDAI", ACTOR_OBJ_SYOKUDAI },
+    { "OBJ_BOMBIWA", ACTOR_OBJ_BOMBIWA },
+    { "OBJ_HAMISHI", ACTOR_OBJ_HAMISHI },
+    { "EN_ISHI", ACTOR_EN_ISHI },
+    { "EN_KUSA", ACTOR_EN_KUSA },
+    { "EN_ITEM00", ACTOR_EN_ITEM00 },
+    { "EN_BOX", ACTOR_EN_BOX },
+    { "EN_KANBAN", ACTOR_EN_KANBAN },
+    { "EN_GS", ACTOR_EN_GS },
 
     // Enemies
-    { "EN_RD",         ACTOR_EN_RD         },
-    { "EN_FIREFLY",    ACTOR_EN_FIREFLY    },
-    { "EN_TEST",       ACTOR_EN_TEST       },
-    { "EN_SKB",        ACTOR_EN_SKB        },
-    { "EN_WALLMAS",    ACTOR_EN_WALLMAS    },
-    { "EN_FLOORMAS",   ACTOR_EN_FLOORMAS   },
-    { "EN_CROW",       ACTOR_EN_CROW       },
-    { "EN_WF",         ACTOR_EN_WF         },
-    { "EN_TITE",       ACTOR_EN_TITE       },
-    { "EN_AM",         ACTOR_EN_AM         },
-    { "EN_DODONGO",    ACTOR_EN_DODONGO    },
-    { "EN_DEKUNUTS",   ACTOR_EN_DEKUNUTS   },
-    { "EN_NIW",        ACTOR_EN_NIW        },
-    { "EN_DEKUBABA",   ACTOR_EN_DEKUBABA   },
-    { "EN_OKUTA",      ACTOR_EN_OKUTA      },
-    { "EN_ZF",         ACTOR_EN_ZF         },
-    { "EN_MB",         ACTOR_EN_MB         },
+    { "EN_RD", ACTOR_EN_RD },
+    { "EN_FIREFLY", ACTOR_EN_FIREFLY },
+    { "EN_TEST", ACTOR_EN_TEST },
+    { "EN_SKB", ACTOR_EN_SKB },
+    { "EN_WALLMAS", ACTOR_EN_WALLMAS },
+    { "EN_FLOORMAS", ACTOR_EN_FLOORMAS },
+    { "EN_CROW", ACTOR_EN_CROW },
+    { "EN_WF", ACTOR_EN_WF },
+    { "EN_TITE", ACTOR_EN_TITE },
+    { "EN_AM", ACTOR_EN_AM },
+    { "EN_DODONGO", ACTOR_EN_DODONGO },
+    { "EN_DEKUNUTS", ACTOR_EN_DEKUNUTS },
+    { "EN_NIW", ACTOR_EN_NIW },
+    { "EN_DEKUBABA", ACTOR_EN_DEKUBABA },
+    { "EN_OKUTA", ACTOR_EN_OKUTA },
+    { "EN_ZF", ACTOR_EN_ZF },
+    { "EN_MB", ACTOR_EN_MB },
 
     // NPCs
-    { "EN_HEISHI1",    ACTOR_EN_HEISHI1    },
-    { "EN_GO2",        ACTOR_EN_GO2        },
-    { "EN_DOG",        ACTOR_EN_DOG        },
-    { "EN_DAIKU",      ACTOR_EN_DAIKU      },
-    { "EN_TK",         ACTOR_EN_TK         },
-    { "EN_COW",        ACTOR_EN_COW        },
-    { "EN_MA1",        ACTOR_EN_MA1        },
-    { "EN_DNS",        ACTOR_EN_DNS        },
-    { "EN_SA",         ACTOR_EN_SA         },
-    { "EN_TA",         ACTOR_EN_TA         },
+    { "EN_HEISHI1", ACTOR_EN_HEISHI1 },
+    { "EN_GO2", ACTOR_EN_GO2 },
+    { "EN_DOG", ACTOR_EN_DOG },
+    { "EN_DAIKU", ACTOR_EN_DAIKU },
+    { "EN_TK", ACTOR_EN_TK },
+    { "EN_COW", ACTOR_EN_COW },
+    { "EN_MA1", ACTOR_EN_MA1 },
+    { "EN_DNS", ACTOR_EN_DNS },
+    { "EN_SA", ACTOR_EN_SA },
+    { "EN_TA", ACTOR_EN_TA },
 };
 
 s16 ResolveActorName(const std::string& name) {
     for (const auto& row : kActorIdTable) {
-        if (name == row.name) return row.id;
+        if (name == row.name)
+            return row.id;
     }
     SPDLOG_WARN("[Harpoon][PropHunt] unknown actor name '{}' — extend kActorIdTable in HarpoonPropHunt.cpp", name);
     return 0;
@@ -220,8 +226,8 @@ s16 ResolveActorName(const std::string& name) {
 HarpoonPropHunt::PropVariant ParseVariant(const nlohmann::json& j) {
     HarpoonPropHunt::PropVariant v{};
     v.actorId = ResolveActorName(j.value("actor", std::string()));
-    v.params  = (s16)j.value("params", 0);
-    v.scale   = j.value("scale", 0.01f);
+    v.params = (s16)j.value("params", 0);
+    v.scale = j.value("scale", 0.01f);
     v.yOffset = j.value("y_offset", 0.0f);
     return v;
 }
@@ -248,14 +254,16 @@ HarpoonPropHunt::PropEntry ParseEntry(const nlohmann::json& j) {
 bool LoadEnvironmentJson(const std::filesystem::path& packRoot) {
     auto p = packRoot / "props" / "environment.json";
     nlohmann::json j;
-    if (!ReadJsonFile(p, j)) return false;
+    if (!ReadJsonFile(p, j))
+        return false;
     if (!j.contains("props") || !j["props"].is_array()) {
         SPDLOG_WARN("[Harpoon][PropHunt] environment.json missing 'props' array");
         return false;
     }
     s32 i = 0;
     for (const auto& entry : j["props"]) {
-        if (i >= HarpoonPropHunt::kPropsPerCategory) break;
+        if (i >= HarpoonPropHunt::kPropsPerCategory)
+            break;
         sTables.environment[i++] = ParseEntry(entry);
     }
     return true;
@@ -265,13 +273,17 @@ bool LoadPerMapJson(const std::filesystem::path& path,
                     std::array<std::array<HarpoonPropHunt::PropEntry, HarpoonPropHunt::kPropsPerCategory>,
                                HarpoonPropHunt::kMapCount>& dest) {
     nlohmann::json j;
-    if (!ReadJsonFile(path, j)) return false;
-    if (!j.contains("by_map") || !j["by_map"].is_object()) return false;
-    if (!j.contains("map_order") || !j["map_order"].is_array()) return false;
+    if (!ReadJsonFile(path, j))
+        return false;
+    if (!j.contains("by_map") || !j["by_map"].is_object())
+        return false;
+    if (!j.contains("map_order") || !j["map_order"].is_array())
+        return false;
 
     s32 mapIdx = 0;
     for (const auto& mapName : j["map_order"]) {
-        if (mapIdx >= HarpoonPropHunt::kMapCount) break;
+        if (mapIdx >= HarpoonPropHunt::kMapCount)
+            break;
         std::string key = mapName.get<std::string>();
         if (!j["by_map"].contains(key)) {
             mapIdx++;
@@ -279,7 +291,8 @@ bool LoadPerMapJson(const std::filesystem::path& path,
         }
         s32 i = 0;
         for (const auto& entry : j["by_map"][key]) {
-            if (i >= HarpoonPropHunt::kPropsPerCategory) break;
+            if (i >= HarpoonPropHunt::kPropsPerCategory)
+                break;
             dest[mapIdx][i++] = ParseEntry(entry);
         }
         mapIdx++;
@@ -299,20 +312,20 @@ bool LoadGamemodeYaml(const std::filesystem::path& packRoot) {
     // while the names + entrance indices match.
     (void)packRoot;
     sMaps = {
-        {"kakariko_village", "Kakariko Village", 0x0DB, "Mountain village with rooftops and alleys."},
-        {"death_mountain",   "Death Mountain",   0x013E,"Volcanic mountain with switchbacks and lava."},
-        {"clock_town",       "Clock Town",       0x0129,"OoT-actor-compatible Termina hub."},
-        {"gerudo_fortress",  "Gerudo Fortress",  0x0129,"Desert compound with rooftops and corridors."},
-        {"forest_temple",    "Forest Temple",    0x0169,"Twisted temple with shifting rooms."},
-        {"zora_river",       "Zora's River",     0x0EA, "Winding river with cliffs and waterfalls."},
-        {"dodongo_cavern",   "Dodongo's Cavern", 0x0152,"Volcanic dungeon with multi-level chambers."},
-        {"ganon_castle",     "Ganon's Castle",   0x0467,"Final dungeon with trials and corridors."},
-        {"kokiri_forest",    "Kokiri Forest",    0x0EE, "Peaceful village with bridges and trees."},
+        { "kakariko_village", "Kakariko Village", 0x0DB, "Mountain village with rooftops and alleys." },
+        { "death_mountain", "Death Mountain", 0x013E, "Volcanic mountain with switchbacks and lava." },
+        { "clock_town", "Clock Town", 0x0129, "OoT-actor-compatible Termina hub." },
+        { "gerudo_fortress", "Gerudo Fortress", 0x0129, "Desert compound with rooftops and corridors." },
+        { "forest_temple", "Forest Temple", 0x0169, "Twisted temple with shifting rooms." },
+        { "zora_river", "Zora's River", 0x0EA, "Winding river with cliffs and waterfalls." },
+        { "dodongo_cavern", "Dodongo's Cavern", 0x0152, "Volcanic dungeon with multi-level chambers." },
+        { "ganon_castle", "Ganon's Castle", 0x0467, "Final dungeon with trials and corridors." },
+        { "kokiri_forest", "Kokiri Forest", 0x0EE, "Peaceful village with bridges and trees." },
     };
     return true;
 }
 
-}  // anon namespace
+} // namespace
 
 // =============================================================================
 // Public API
@@ -321,7 +334,8 @@ bool LoadGamemodeYaml(const std::filesystem::path& packRoot) {
 namespace HarpoonPropHunt {
 
 bool Init() {
-    if (sLoaded) return true;
+    if (sLoaded)
+        return true;
 
     std::string packRoot = ResolvePackRoot();
     if (packRoot.empty()) {
@@ -334,7 +348,7 @@ bool Init() {
     ok &= LoadGamemodeYaml(root);
     ok &= LoadEnvironmentJson(root);
     ok &= LoadPerMapJson(root / "props" / "enemies.json", sTables.enemiesByMap);
-    ok &= LoadPerMapJson(root / "props" / "npcs.json",    sTables.npcsByMap);
+    ok &= LoadPerMapJson(root / "props" / "npcs.json", sTables.npcsByMap);
     ok &= LoadSavePresetJson(root);
 
     sTables.loaded = ok;
@@ -347,19 +361,31 @@ bool Init() {
     return ok;
 }
 
-bool IsLoaded() { return sLoaded; }
+bool IsLoaded() {
+    return sLoaded;
+}
 
-const PropTables& GetTables() { return sTables; }
-const std::vector<MapDef>& GetMaps() { return sMaps; }
+const PropTables& GetTables() {
+    return sTables;
+}
+const std::vector<MapDef>& GetMaps() {
+    return sMaps;
+}
 
 const PropEntry* GetPropEntry(s32 category, s32 propIndex, s32 mapIdx) {
-    if (propIndex < 0 || propIndex >= kPropsPerCategory) return nullptr;
-    if (mapIdx < 0 || mapIdx >= kMapCount) mapIdx = 0;
+    if (propIndex < 0 || propIndex >= kPropsPerCategory)
+        return nullptr;
+    if (mapIdx < 0 || mapIdx >= kMapCount)
+        mapIdx = 0;
     switch (category) {
-        case CAT_ENVIRONMENT: return &sTables.environment[propIndex];
-        case CAT_ENEMIES:     return &sTables.enemiesByMap[mapIdx][propIndex];
-        case CAT_NPCS:        return &sTables.npcsByMap[mapIdx][propIndex];
-        default:              return nullptr;
+        case CAT_ENVIRONMENT:
+            return &sTables.environment[propIndex];
+        case CAT_ENEMIES:
+            return &sTables.enemiesByMap[mapIdx][propIndex];
+        case CAT_NPCS:
+            return &sTables.npcsByMap[mapIdx][propIndex];
+        default:
+            return nullptr;
     }
 }
 
@@ -377,7 +403,8 @@ const PropEntry* GetPropEntry(s32 category, s32 propIndex, s32 mapIdx) {
 namespace {
 
 void ApplyCommonProgressionFlags(const nlohmann::json& common) {
-    if (!common.is_object()) return;
+    if (!common.is_object())
+        return;
     auto flags = common.value("progression_flags", nlohmann::json::object());
     gSaveContext.cutsceneIndex = (s32)common.value("cutscene_index", 0x8000);
 
@@ -398,29 +425,37 @@ void ApplyCommonProgressionFlags(const nlohmann::json& common) {
 }
 
 void ApplyBaseHealthMagic(const nlohmann::json& role) {
-    gSaveContext.linkAge          = role.value("link_age", 1);
-    gSaveContext.entranceIndex    = (s32)role.value("entrance_index",
-                                       sSavePresetRaw["common"].value("entrance_index", 205));
-    gSaveContext.healthCapacity   = (s16)role.value("health_capacity", 64);
-    gSaveContext.health           = (s16)role.value("health", 64);
-    gSaveContext.isMagicAcquired       = role.value("magic_acquired", true) ? 1 : 0;
+    gSaveContext.linkAge = role.value("link_age", 1);
+    gSaveContext.entranceIndex =
+        (s32)role.value("entrance_index", sSavePresetRaw["common"].value("entrance_index", 205));
+    gSaveContext.healthCapacity = (s16)role.value("health_capacity", 64);
+    gSaveContext.health = (s16)role.value("health", 64);
+    gSaveContext.isMagicAcquired = role.value("magic_acquired", true) ? 1 : 0;
     gSaveContext.isDoubleMagicAcquired = role.value("double_magic_acquired", true) ? 1 : 0;
-    gSaveContext.magicLevel       = (s8)role.value("magic_level", 2);
-    gSaveContext.magicCapacity    = (s16)role.value("magic_capacity", 96);
-    gSaveContext.magic            = (s16)role.value("magic", 96);
-    gSaveContext.magicState       = MAGIC_STATE_IDLE;
+    gSaveContext.magicLevel = (s8)role.value("magic_level", 2);
+    gSaveContext.magicCapacity = (s16)role.value("magic_capacity", 96);
+    gSaveContext.magic = (s16)role.value("magic", 96);
+    gSaveContext.magicState = MAGIC_STATE_IDLE;
 }
 
 // Resolve UPG_* upgrade names — small lookup, ~8 entries.
 s32 ResolveUpgradeId(const std::string& name) {
-    if (name == "STRENGTH")   return UPG_STRENGTH;
-    if (name == "QUIVER")     return UPG_QUIVER;
-    if (name == "BOMB_BAG")   return UPG_BOMB_BAG;
-    if (name == "BULLET_BAG") return UPG_BULLET_BAG;
-    if (name == "NUTS")       return UPG_NUTS;
-    if (name == "STICKS")     return UPG_STICKS;
-    if (name == "SCALE")      return UPG_SCALE;
-    if (name == "WALLET")     return UPG_WALLET;
+    if (name == "STRENGTH")
+        return UPG_STRENGTH;
+    if (name == "QUIVER")
+        return UPG_QUIVER;
+    if (name == "BOMB_BAG")
+        return UPG_BOMB_BAG;
+    if (name == "BULLET_BAG")
+        return UPG_BULLET_BAG;
+    if (name == "NUTS")
+        return UPG_NUTS;
+    if (name == "STICKS")
+        return UPG_STICKS;
+    if (name == "SCALE")
+        return UPG_SCALE;
+    if (name == "WALLET")
+        return UPG_WALLET;
     SPDLOG_WARN("[Harpoon][PropHunt] unknown upgrade '{}'", name);
     return -1;
 }
@@ -428,117 +463,202 @@ s32 ResolveUpgradeId(const std::string& name) {
 // Resolve ITEM_* / SLOT_* names. JSON keys / values may also be raw integers,
 // in which case the caller handles that path before calling these.
 s32 ResolveItemName(const std::string& n) {
-    if (n == "ITEM_NONE")              return ITEM_NONE;
-    if (n == "ITEM_STICK")             return ITEM_STICK;
-    if (n == "ITEM_NUT")               return ITEM_NUT;
-    if (n == "ITEM_BOMB")              return ITEM_BOMB;
-    if (n == "ITEM_BOW")               return ITEM_BOW;
-    if (n == "ITEM_ARROW_FIRE")        return ITEM_ARROW_FIRE;
-    if (n == "ITEM_DINS_FIRE")         return ITEM_DINS_FIRE;
-    if (n == "ITEM_SLINGSHOT")         return ITEM_SLINGSHOT;
-    if (n == "ITEM_OCARINA_TIME")      return ITEM_OCARINA_TIME;
-    if (n == "ITEM_BOMBCHU")           return ITEM_BOMBCHU;
-    if (n == "ITEM_LONGSHOT")          return ITEM_LONGSHOT;
-    if (n == "ITEM_HOOKSHOT")          return ITEM_HOOKSHOT;
-    if (n == "ITEM_ARROW_ICE")         return ITEM_ARROW_ICE;
-    if (n == "ITEM_FARORES_WIND")      return ITEM_FARORES_WIND;
-    if (n == "ITEM_BOOMERANG")         return ITEM_BOOMERANG;
-    if (n == "ITEM_LENS")              return ITEM_LENS;
-    if (n == "ITEM_BEAN")              return ITEM_BEAN;
-    if (n == "ITEM_HAMMER")            return ITEM_HAMMER;
-    if (n == "ITEM_ARROW_LIGHT")       return ITEM_ARROW_LIGHT;
-    if (n == "ITEM_NAYRUS_LOVE")       return ITEM_NAYRUS_LOVE;
-    if (n == "ITEM_BOTTLE")            return ITEM_BOTTLE;
-    if (n == "ITEM_MASK_BUNNY")        return ITEM_MASK_BUNNY;
-    if (n == "ITEM_SWORD_KOKIRI")      return ITEM_SWORD_KOKIRI;
-    if (n == "ITEM_SWORD_MASTER")      return ITEM_SWORD_MASTER;
-    if (n == "ITEM_BOOTS_HOVER")       return ITEM_BOOTS_HOVER;
+    if (n == "ITEM_NONE")
+        return ITEM_NONE;
+    if (n == "ITEM_STICK")
+        return ITEM_STICK;
+    if (n == "ITEM_NUT")
+        return ITEM_NUT;
+    if (n == "ITEM_BOMB")
+        return ITEM_BOMB;
+    if (n == "ITEM_BOW")
+        return ITEM_BOW;
+    if (n == "ITEM_ARROW_FIRE")
+        return ITEM_ARROW_FIRE;
+    if (n == "ITEM_DINS_FIRE")
+        return ITEM_DINS_FIRE;
+    if (n == "ITEM_SLINGSHOT")
+        return ITEM_SLINGSHOT;
+    if (n == "ITEM_OCARINA_TIME")
+        return ITEM_OCARINA_TIME;
+    if (n == "ITEM_BOMBCHU")
+        return ITEM_BOMBCHU;
+    if (n == "ITEM_LONGSHOT")
+        return ITEM_LONGSHOT;
+    if (n == "ITEM_HOOKSHOT")
+        return ITEM_HOOKSHOT;
+    if (n == "ITEM_ARROW_ICE")
+        return ITEM_ARROW_ICE;
+    if (n == "ITEM_FARORES_WIND")
+        return ITEM_FARORES_WIND;
+    if (n == "ITEM_BOOMERANG")
+        return ITEM_BOOMERANG;
+    if (n == "ITEM_LENS")
+        return ITEM_LENS;
+    if (n == "ITEM_BEAN")
+        return ITEM_BEAN;
+    if (n == "ITEM_HAMMER")
+        return ITEM_HAMMER;
+    if (n == "ITEM_ARROW_LIGHT")
+        return ITEM_ARROW_LIGHT;
+    if (n == "ITEM_NAYRUS_LOVE")
+        return ITEM_NAYRUS_LOVE;
+    if (n == "ITEM_BOTTLE")
+        return ITEM_BOTTLE;
+    if (n == "ITEM_MASK_BUNNY")
+        return ITEM_MASK_BUNNY;
+    if (n == "ITEM_SWORD_KOKIRI")
+        return ITEM_SWORD_KOKIRI;
+    if (n == "ITEM_SWORD_MASTER")
+        return ITEM_SWORD_MASTER;
+    if (n == "ITEM_BOOTS_HOVER")
+        return ITEM_BOOTS_HOVER;
     // Custom items (enum values in z64item.h, behaviour in mods/items/).
-    if (n == "ITEM_ROCS_FEATHER_SKIJER") return ITEM_ROCS_FEATHER_SKIJER;
-    if (n == "ITEM_ROCS_CAPE")         return ITEM_ROCS_CAPE;
-    if (n == "ITEM_DEKU_LEAF")         return ITEM_DEKU_LEAF;
-    if (n == "ITEM_SWITCH_HOOK")       return ITEM_SWITCH_HOOK;
-    if (n == "ITEM_WHIP")              return ITEM_WHIP;
-    if (n == "ITEM_CANE_OF_SOMARIA")   return ITEM_CANE_OF_SOMARIA;
-    if (n == "ITEM_ROD_FIRE")          return ITEM_ROD_FIRE;
-    if (n == "ITEM_ROD_ICE")           return ITEM_ROD_ICE;
-    if (n == "ITEM_BEETLE")            return ITEM_BEETLE;
+    if (n == "ITEM_ROCS_FEATHER_SKIJER")
+        return ITEM_ROCS_FEATHER_SKIJER;
+    if (n == "ITEM_ROCS_CAPE")
+        return ITEM_ROCS_CAPE;
+    if (n == "ITEM_DEKU_LEAF")
+        return ITEM_DEKU_LEAF;
+    if (n == "ITEM_SWITCH_HOOK")
+        return ITEM_SWITCH_HOOK;
+    if (n == "ITEM_WHIP")
+        return ITEM_WHIP;
+    if (n == "ITEM_CANE_OF_SOMARIA")
+        return ITEM_CANE_OF_SOMARIA;
+    if (n == "ITEM_ROD_FIRE")
+        return ITEM_ROD_FIRE;
+    if (n == "ITEM_ROD_ICE")
+        return ITEM_ROD_ICE;
+    if (n == "ITEM_BEETLE")
+        return ITEM_BEETLE;
     SPDLOG_WARN("[Harpoon][PropHunt] unknown item name '{}'", n);
     return ITEM_NONE;
 }
 
 s32 ResolveSlotName(const std::string& n) {
     // Vanilla SLOT_*
-    if (n == "SLOT_STICK")        return SLOT_STICK;
-    if (n == "SLOT_NUT")          return SLOT_NUT;
-    if (n == "SLOT_BOMB")         return SLOT_BOMB;
-    if (n == "SLOT_BOW")          return SLOT_BOW;
-    if (n == "SLOT_ARROW_FIRE")   return SLOT_ARROW_FIRE;
-    if (n == "SLOT_DINS_FIRE")    return SLOT_DINS_FIRE;
-    if (n == "SLOT_SLINGSHOT")    return SLOT_SLINGSHOT;
-    if (n == "SLOT_OCARINA")      return SLOT_OCARINA;
-    if (n == "SLOT_BOMBCHU")      return SLOT_BOMBCHU;
-    if (n == "SLOT_HOOKSHOT")     return SLOT_HOOKSHOT;
-    if (n == "SLOT_ARROW_ICE")    return SLOT_ARROW_ICE;
-    if (n == "SLOT_FARORES_WIND") return SLOT_FARORES_WIND;
-    if (n == "SLOT_BOOMERANG")    return SLOT_BOOMERANG;
-    if (n == "SLOT_LENS")         return SLOT_LENS;
-    if (n == "SLOT_BEAN")         return SLOT_BEAN;
-    if (n == "SLOT_HAMMER")       return SLOT_HAMMER;
-    if (n == "SLOT_ARROW_LIGHT")  return SLOT_ARROW_LIGHT;
-    if (n == "SLOT_NAYRUS_LOVE")  return SLOT_NAYRUS_LOVE;
-    if (n == "SLOT_BOTTLE_1")     return SLOT_BOTTLE_1;
-    if (n == "SLOT_BOTTLE_2")     return SLOT_BOTTLE_2;
-    if (n == "SLOT_BOTTLE_3")     return SLOT_BOTTLE_3;
-    if (n == "SLOT_BOTTLE_4")     return SLOT_BOTTLE_4;
-    if (n == "SLOT_TRADE_CHILD")  return SLOT_TRADE_CHILD;
-    if (n == "SLOT_TRADE_ADULT")  return SLOT_TRADE_ADULT;
-    if (n == "SLOT_NONE")         return SLOT_NONE;
+    if (n == "SLOT_STICK")
+        return SLOT_STICK;
+    if (n == "SLOT_NUT")
+        return SLOT_NUT;
+    if (n == "SLOT_BOMB")
+        return SLOT_BOMB;
+    if (n == "SLOT_BOW")
+        return SLOT_BOW;
+    if (n == "SLOT_ARROW_FIRE")
+        return SLOT_ARROW_FIRE;
+    if (n == "SLOT_DINS_FIRE")
+        return SLOT_DINS_FIRE;
+    if (n == "SLOT_SLINGSHOT")
+        return SLOT_SLINGSHOT;
+    if (n == "SLOT_OCARINA")
+        return SLOT_OCARINA;
+    if (n == "SLOT_BOMBCHU")
+        return SLOT_BOMBCHU;
+    if (n == "SLOT_HOOKSHOT")
+        return SLOT_HOOKSHOT;
+    if (n == "SLOT_ARROW_ICE")
+        return SLOT_ARROW_ICE;
+    if (n == "SLOT_FARORES_WIND")
+        return SLOT_FARORES_WIND;
+    if (n == "SLOT_BOOMERANG")
+        return SLOT_BOOMERANG;
+    if (n == "SLOT_LENS")
+        return SLOT_LENS;
+    if (n == "SLOT_BEAN")
+        return SLOT_BEAN;
+    if (n == "SLOT_HAMMER")
+        return SLOT_HAMMER;
+    if (n == "SLOT_ARROW_LIGHT")
+        return SLOT_ARROW_LIGHT;
+    if (n == "SLOT_NAYRUS_LOVE")
+        return SLOT_NAYRUS_LOVE;
+    if (n == "SLOT_BOTTLE_1")
+        return SLOT_BOTTLE_1;
+    if (n == "SLOT_BOTTLE_2")
+        return SLOT_BOTTLE_2;
+    if (n == "SLOT_BOTTLE_3")
+        return SLOT_BOTTLE_3;
+    if (n == "SLOT_BOTTLE_4")
+        return SLOT_BOTTLE_4;
+    if (n == "SLOT_TRADE_CHILD")
+        return SLOT_TRADE_CHILD;
+    if (n == "SLOT_TRADE_ADULT")
+        return SLOT_TRADE_ADULT;
+    if (n == "SLOT_NONE")
+        return SLOT_NONE;
     // Page-2 custom slots — these are #define aliases in extended_inventory.h
-    if (n == "SLOT_ROCS")         return SLOT_ROCS;
-    if (n == "SLOT_ROCS_CAPE")    return SLOT_ROCS_CAPE;
-    if (n == "SLOT_DEKU_LEAF")    return SLOT_DEKU_LEAF;
-    if (n == "SLOT_WHIP")         return SLOT_WHIP;
-    if (n == "SLOT_SWITCH_HOOK")  return SLOT_SWITCH_HOOK;
-    if (n == "SLOT_CANE_OF_SOMARIA") return SLOT_CANE_OF_SOMARIA;
-    if (n == "SLOT_FIRE_ROD")     return SLOT_FIRE_ROD;
-    if (n == "SLOT_ICE_ROD")      return SLOT_ICE_ROD;
-    if (n == "SLOT_BEETLE")       return SLOT_BEETLE;
+    if (n == "SLOT_ROCS")
+        return SLOT_ROCS;
+    if (n == "SLOT_ROCS_CAPE")
+        return SLOT_ROCS_CAPE;
+    if (n == "SLOT_DEKU_LEAF")
+        return SLOT_DEKU_LEAF;
+    if (n == "SLOT_WHIP")
+        return SLOT_WHIP;
+    if (n == "SLOT_SWITCH_HOOK")
+        return SLOT_SWITCH_HOOK;
+    if (n == "SLOT_CANE_OF_SOMARIA")
+        return SLOT_CANE_OF_SOMARIA;
+    if (n == "SLOT_FIRE_ROD")
+        return SLOT_FIRE_ROD;
+    if (n == "SLOT_ICE_ROD")
+        return SLOT_ICE_ROD;
+    if (n == "SLOT_BEETLE")
+        return SLOT_BEETLE;
     SPDLOG_WARN("[Harpoon][PropHunt] unknown slot name '{}'", n);
     return SLOT_NONE;
 }
 
 s32 ResolveEquipValueName(const std::string& n) {
-    if (n == "EQUIP_VALUE_SWORD_KOKIRI")    return EQUIP_VALUE_SWORD_KOKIRI;
-    if (n == "EQUIP_VALUE_SWORD_MASTER")    return EQUIP_VALUE_SWORD_MASTER;
-    if (n == "EQUIP_VALUE_SWORD_BIGGORON")  return EQUIP_VALUE_SWORD_BIGGORON;
-    if (n == "EQUIP_VALUE_SHIELD_DEKU")     return EQUIP_VALUE_SHIELD_DEKU;
-    if (n == "EQUIP_VALUE_SHIELD_HYLIAN")   return EQUIP_VALUE_SHIELD_HYLIAN;
-    if (n == "EQUIP_VALUE_SHIELD_MIRROR")   return EQUIP_VALUE_SHIELD_MIRROR;
-    if (n == "EQUIP_VALUE_TUNIC_KOKIRI")    return EQUIP_VALUE_TUNIC_KOKIRI;
-    if (n == "EQUIP_VALUE_TUNIC_GORON")     return EQUIP_VALUE_TUNIC_GORON;
-    if (n == "EQUIP_VALUE_TUNIC_ZORA")      return EQUIP_VALUE_TUNIC_ZORA;
-    if (n == "EQUIP_VALUE_BOOTS_KOKIRI")    return EQUIP_VALUE_BOOTS_KOKIRI;
-    if (n == "EQUIP_VALUE_BOOTS_IRON")      return EQUIP_VALUE_BOOTS_IRON;
-    if (n == "EQUIP_VALUE_BOOTS_HOVER")     return EQUIP_VALUE_BOOTS_HOVER;
+    if (n == "EQUIP_VALUE_SWORD_KOKIRI")
+        return EQUIP_VALUE_SWORD_KOKIRI;
+    if (n == "EQUIP_VALUE_SWORD_MASTER")
+        return EQUIP_VALUE_SWORD_MASTER;
+    if (n == "EQUIP_VALUE_SWORD_BIGGORON")
+        return EQUIP_VALUE_SWORD_BIGGORON;
+    if (n == "EQUIP_VALUE_SHIELD_DEKU")
+        return EQUIP_VALUE_SHIELD_DEKU;
+    if (n == "EQUIP_VALUE_SHIELD_HYLIAN")
+        return EQUIP_VALUE_SHIELD_HYLIAN;
+    if (n == "EQUIP_VALUE_SHIELD_MIRROR")
+        return EQUIP_VALUE_SHIELD_MIRROR;
+    if (n == "EQUIP_VALUE_TUNIC_KOKIRI")
+        return EQUIP_VALUE_TUNIC_KOKIRI;
+    if (n == "EQUIP_VALUE_TUNIC_GORON")
+        return EQUIP_VALUE_TUNIC_GORON;
+    if (n == "EQUIP_VALUE_TUNIC_ZORA")
+        return EQUIP_VALUE_TUNIC_ZORA;
+    if (n == "EQUIP_VALUE_BOOTS_KOKIRI")
+        return EQUIP_VALUE_BOOTS_KOKIRI;
+    if (n == "EQUIP_VALUE_BOOTS_IRON")
+        return EQUIP_VALUE_BOOTS_IRON;
+    if (n == "EQUIP_VALUE_BOOTS_HOVER")
+        return EQUIP_VALUE_BOOTS_HOVER;
     SPDLOG_WARN("[Harpoon][PropHunt] unknown equip value '{}'", n);
     return 0;
 }
 
 // JSON value -> int. Accepts integer or named string.
 s32 NumOrSlotName(const nlohmann::json& v) {
-    if (v.is_number_integer()) return v.get<int>();
-    if (v.is_string())         return ResolveSlotName(v.get<std::string>());
+    if (v.is_number_integer())
+        return v.get<int>();
+    if (v.is_string())
+        return ResolveSlotName(v.get<std::string>());
     return 0;
 }
 s32 NumOrItemName(const nlohmann::json& v) {
-    if (v.is_number_integer()) return v.get<int>();
-    if (v.is_string())         return ResolveItemName(v.get<std::string>());
+    if (v.is_number_integer())
+        return v.get<int>();
+    if (v.is_string())
+        return ResolveItemName(v.get<std::string>());
     return ITEM_NONE;
 }
 
 void ApplyUpgrades(const nlohmann::json& upgrades) {
-    if (!upgrades.is_object()) return;
+    if (!upgrades.is_object())
+        return;
     for (auto it = upgrades.begin(); it != upgrades.end(); ++it) {
         s32 upgId = ResolveUpgradeId(it.key());
         if (upgId >= 0) {
@@ -548,7 +668,8 @@ void ApplyUpgrades(const nlohmann::json& upgrades) {
 }
 
 void ApplyCvars(const nlohmann::json& cvars) {
-    if (!cvars.is_object()) return;
+    if (!cvars.is_object())
+        return;
     for (auto it = cvars.begin(); it != cvars.end(); ++it) {
         if (it.value().is_number_integer() || it.value().is_boolean()) {
             CVarSetInteger(it.key().c_str(), (s32)it.value().get<int>());
@@ -595,19 +716,26 @@ void ApplyEquipmentMask(const nlohmann::json& role) {
 }
 
 void ApplyEquipChoice(const nlohmann::json& equipObj) {
-    if (!equipObj.is_object()) return;
+    if (!equipObj.is_object())
+        return;
     auto get = [&](const char* k) -> s32 {
-        if (!equipObj.contains(k)) return 0;
+        if (!equipObj.contains(k))
+            return 0;
         return ResolveEquipValueName(equipObj[k].get<std::string>());
     };
-    if (equipObj.contains("sword"))  Inventory_ChangeEquipment(EQUIP_TYPE_SWORD,  get("sword"));
-    if (equipObj.contains("shield")) Inventory_ChangeEquipment(EQUIP_TYPE_SHIELD, get("shield"));
-    if (equipObj.contains("tunic"))  Inventory_ChangeEquipment(EQUIP_TYPE_TUNIC,  get("tunic"));
-    if (equipObj.contains("boots"))  Inventory_ChangeEquipment(EQUIP_TYPE_BOOTS,  get("boots"));
+    if (equipObj.contains("sword"))
+        Inventory_ChangeEquipment(EQUIP_TYPE_SWORD, get("sword"));
+    if (equipObj.contains("shield"))
+        Inventory_ChangeEquipment(EQUIP_TYPE_SHIELD, get("shield"));
+    if (equipObj.contains("tunic"))
+        Inventory_ChangeEquipment(EQUIP_TYPE_TUNIC, get("tunic"));
+    if (equipObj.contains("boots"))
+        Inventory_ChangeEquipment(EQUIP_TYPE_BOOTS, get("boots"));
 }
 
 void ApplyClearInventoryIfRequested(const nlohmann::json& role) {
-    if (!role.value("inventory_clear", false)) return;
+    if (!role.value("inventory_clear", false))
+        return;
     for (int i = 0; i < 72; i++) { // Skijer's NEI: vanilla 0..23 + custom 24..71
         ExtInv_SetSlotItem(i, ITEM_NONE);
     }
@@ -616,7 +744,8 @@ void ApplyClearInventoryIfRequested(const nlohmann::json& role) {
 // Walk an object whose keys are slot names/integers and whose values are
 // item names/integers. Direct-assigns to gSaveContext.inventory.items[slot].
 void ApplyItemsMap(const nlohmann::json& itemsObj) {
-    if (!itemsObj.is_object()) return;
+    if (!itemsObj.is_object())
+        return;
     for (auto it = itemsObj.begin(); it != itemsObj.end(); ++it) {
         const std::string& key = it.key();
         s32 slot;
@@ -659,11 +788,13 @@ void ApplyAmmo(const nlohmann::json& role) {
         }
     }
     auto ammo = role.value("ammo", nlohmann::json::object());
-    if (!ammo.is_object()) return;
+    if (!ammo.is_object())
+        return;
     // Iterate and skip any underscore-prefixed comment keys.
     for (auto it = ammo.begin(); it != ammo.end(); ++it) {
         const std::string& key = it.key();
-        if (!key.empty() && key[0] == '_') continue;
+        if (!key.empty() && key[0] == '_')
+            continue;
         s32 slot = ResolveSlotName(key);
         if (slot >= 0 && (size_t)slot < ARRAY_COUNT(gSaveContext.inventory.ammo)) {
             gSaveContext.inventory.ammo[slot] = (s8)it.value().get<int>();
@@ -672,14 +803,16 @@ void ApplyAmmo(const nlohmann::json& role) {
 }
 
 void ApplyButtonItems(const nlohmann::json& arr) {
-    if (!arr.is_array()) return;
+    if (!arr.is_array())
+        return;
     for (size_t i = 0; i < arr.size() && i < 8; i++) {
         gSaveContext.equips.buttonItems[i] = (u8)NumOrItemName(arr[i]);
     }
 }
 
 void ApplyCButtonSlots(const nlohmann::json& arr) {
-    if (!arr.is_array()) return;
+    if (!arr.is_array())
+        return;
     // Engine has 7 c-button slots in cButtonSlots[].
     for (size_t i = 0; i < arr.size() && i < 7; i++) {
         gSaveContext.equips.cButtonSlots[i] = (u8)NumOrSlotName(arr[i]);
@@ -697,7 +830,7 @@ void ApplyRoleSection(const std::string& roleKey) {
     }
 
     auto& common = sSavePresetRaw["common"];
-    auto& role   = sSavePresetRaw[roleKey];
+    auto& role = sSavePresetRaw[roleKey];
 
     // Quest id — Scooter uses QUEST_PROP_HUNT (a custom value); this branch
     // hasn't introduced that enum yet, so we leave the quest id alone. Add
@@ -709,11 +842,11 @@ void ApplyRoleSection(const std::string& roleKey) {
     ApplyEquipmentMask(role);
     ApplyEquipChoice(role.value("equip", nlohmann::json::object()));
     ApplyClearInventoryIfRequested(role);
-    ApplyItemsMap(role.value("items",        nlohmann::json::object()));
-    ApplyItemsMap(role.value("items_page1",  nlohmann::json::object()));
+    ApplyItemsMap(role.value("items", nlohmann::json::object()));
+    ApplyItemsMap(role.value("items_page1", nlohmann::json::object()));
     ApplyPageStrategies(role);
     ApplyAmmo(role);
-    ApplyButtonItems(role.value("button_items",   nlohmann::json::array()));
+    ApplyButtonItems(role.value("button_items", nlohmann::json::array()));
     ApplyCButtonSlots(role.value("c_button_slots", nlohmann::json::array()));
     ApplyCommonProgressionFlags(common);
     ApplyCvars(common.value("cvars", nlohmann::json::object()));
@@ -721,9 +854,11 @@ void ApplyRoleSection(const std::string& roleKey) {
     SPDLOG_INFO("[Harpoon][PropHunt] applied '{}' save preset", roleKey);
 }
 
-}  // anon
+} // namespace
 
-void ApplyHiderSave()  { ApplyRoleSection("hider"); }
+void ApplyHiderSave() {
+    ApplyRoleSection("hider");
+}
 void ApplySeekerSave() {
     ApplyRoleSection("seeker");
     // Override: seekers start drained. TickSeekerPassiveRegen refills both
@@ -731,9 +866,9 @@ void ApplySeekerSave() {
     // (full double-magic) so the meter has room to fill regardless of the
     // underlying save's progression state. User spec: "inician en 0 como
     // en TT" — matches TT's ApplyAmmo zero-out + thief regen pattern.
-    gSaveContext.magic              = 0;
-    gSaveContext.magicCapacity      = 96;
-    gSaveContext.isMagicAcquired    = true;
+    gSaveContext.magic = 0;
+    gSaveContext.magicCapacity = 96;
+    gSaveContext.isMagicAcquired = true;
     gSaveContext.isDoubleMagicAcquired = true;
     for (size_t i = 0; i < ARRAY_COUNT(gSaveContext.inventory.ammo); i++) {
         gSaveContext.inventory.ammo[i] = 0;
@@ -744,10 +879,18 @@ void ApplySeekerSave() {
 // Local state
 // ---------------------------------------------------------------------------
 
-LocalState& GetLocalState() { return sLocal; }
-bool IsHider()      { return sLocal.role == Role::Hider; }
-bool IsSeeker()     { return sLocal.role == Role::Seeker; }
-bool IsEliminated() { return sLocal.role == Role::Eliminated; }
+LocalState& GetLocalState() {
+    return sLocal;
+}
+bool IsHider() {
+    return sLocal.role == Role::Hider;
+}
+bool IsSeeker() {
+    return sLocal.role == Role::Seeker;
+}
+bool IsEliminated() {
+    return sLocal.role == Role::Eliminated;
+}
 
 bool IsLocalHiderWithProp() {
     // True for "should we render local as a prop / broadcast disguise" —
@@ -755,10 +898,11 @@ bool IsLocalHiderWithProp() {
     // mess around as a prop while waiting for the next round. Round-only
     // mechanics (decoy spawn) gate on IsHider() separately.
     bool propValid = sLocal.propIndex >= 0 && sLocal.propIndex < kPropsPerCategory;
-    if (!propValid) return false;
-    if (IsHider()) return true;
-    return (Harpoon::Instance != nullptr &&
-            Harpoon::Instance->gameState == HARPOON_STATE_LOBBY);
+    if (!propValid)
+        return false;
+    if (IsHider())
+        return true;
+    return (Harpoon::Instance != nullptr && Harpoon::Instance->gameState == HARPOON_STATE_LOBBY);
 }
 
 // ---------------------------------------------------------------------------
@@ -766,9 +910,11 @@ bool IsLocalHiderWithProp() {
 // ---------------------------------------------------------------------------
 
 bool CyclePropCategory(s32 delta) {
-    if (delta == 0) return false;
+    if (delta == 0)
+        return false;
     s32 newCat = (sLocal.propCategory + delta + kCategoryCount) % kCategoryCount;
-    if (newCat == sLocal.propCategory) return false;
+    if (newCat == sLocal.propCategory)
+        return false;
     sLocal.propCategory = newCat;
     sLocal.propIndex = 0;
     sLocal.propState = 0;
@@ -776,22 +922,27 @@ bool CyclePropCategory(s32 delta) {
 }
 
 bool CyclePropIndex(s32 delta) {
-    if (delta == 0) return false;
+    if (delta == 0)
+        return false;
     s32 newIdx = (sLocal.propIndex + delta + kPropsPerCategory) % kPropsPerCategory;
-    if (newIdx == sLocal.propIndex) return false;
+    if (newIdx == sLocal.propIndex)
+        return false;
     sLocal.propIndex = newIdx;
     sLocal.propState = 0;
     return true;
 }
 
 bool CyclePropState(s32 delta) {
-    if (delta == 0) return false;
+    if (delta == 0)
+        return false;
     s32 mapIdx = sLocal.confirmedMap >= 0 ? sLocal.confirmedMap : 0;
     const PropEntry* entry = GetPropEntry(sLocal.propCategory, sLocal.propIndex, mapIdx);
-    if (entry == nullptr || entry->states.empty()) return false;
+    if (entry == nullptr || entry->states.empty())
+        return false;
     s32 stateCount = (s32)entry->states.size();
     s32 newState = (sLocal.propState + delta + stateCount) % stateCount;
-    if (newState == sLocal.propState) return false;
+    if (newState == sLocal.propState)
+        return false;
     sLocal.propState = newState;
     return true;
 }
@@ -827,11 +978,15 @@ void HandleRoleAssign(const nlohmann::json& p) {
     // Filter: zero / absent target = "to everyone". Non-zero applies only if
     // it matches our ownClientId.
     uint32_t ownId = Harpoon::Instance ? Harpoon::Instance->ownClientId : 0;
-    if (target != 0 && (uint32_t)target != ownId) return;
+    if (target != 0 && (uint32_t)target != ownId)
+        return;
 
-    if      (roleStr == "seeker")     sLocal.role = Role::Seeker;
-    else if (roleStr == "eliminated") sLocal.role = Role::Eliminated;
-    else                              sLocal.role = Role::Hider;
+    if (roleStr == "seeker")
+        sLocal.role = Role::Seeker;
+    else if (roleStr == "eliminated")
+        sLocal.role = Role::Eliminated;
+    else
+        sLocal.role = Role::Hider;
 
     // Becoming a seeker / eliminated → clear our prop selection so the
     // z_player.c prop intercept (`IsLocalHiderWithProp` gate) returns 0
@@ -852,10 +1007,10 @@ void HandleRoleAssign(const nlohmann::json& p) {
 
     Notification::Emit({
         .prefix = "Prop Hunt",
-        .message = (sLocal.role == Role::Hider)      ? "You are a HIDER"
-                 : (sLocal.role == Role::Seeker)     ? "You are a SEEKER"
-                 : (sLocal.role == Role::Eliminated) ? "You are ELIMINATED"
-                                                    : "Role: unassigned",
+        .message = (sLocal.role == Role::Hider)        ? "You are a HIDER"
+                   : (sLocal.role == Role::Seeker)     ? "You are a SEEKER"
+                   : (sLocal.role == Role::Eliminated) ? "You are ELIMINATED"
+                                                       : "Role: unassigned",
         .remainingTime = 4.0f,
     });
 
@@ -871,12 +1026,10 @@ void HandleRoleAssign(const nlohmann::json& p) {
     //     role — not InstantReloadScene the current one. Otherwise a peer
     //     whose MAP_CONFIRMED landed first stays in Hyrule Field forever
     //     with a hider kit.
-    bool inHidePhase = (Harpoon::Instance != nullptr &&
-                        Harpoon::Instance->gameState == HARPOON_STATE_HIDING_PHASE);
-    bool inPlaying   = (Harpoon::Instance != nullptr &&
-                        Harpoon::Instance->gameState == HARPOON_STATE_PLAYING);
-    s32  mapIdx      = (Harpoon::Instance != nullptr) ? Harpoon::Instance->confirmedMapIndex : -1;
-    bool inRound     = inHidePhase || inPlaying;
+    bool inHidePhase = (Harpoon::Instance != nullptr && Harpoon::Instance->gameState == HARPOON_STATE_HIDING_PHASE);
+    bool inPlaying = (Harpoon::Instance != nullptr && Harpoon::Instance->gameState == HARPOON_STATE_PLAYING);
+    s32 mapIdx = (Harpoon::Instance != nullptr) ? Harpoon::Instance->confirmedMapIndex : -1;
+    bool inRound = inHidePhase || inPlaying;
 
     if (inRound && gPlayState != nullptr && mapIdx >= 0 &&
         (sLocal.role == Role::Hider || sLocal.role == Role::Seeker)) {
@@ -885,13 +1038,13 @@ void HandleRoleAssign(const nlohmann::json& p) {
             // Hiders always go to the round map.
             gSaveContext.linkAge = LINK_AGE_CHILD;
             TeleportToEntrance(roundEntr);
-            SetPendingInit(1);   // hider kit post-load
-        } else {  // Role::Seeker
+            SetPendingInit(1); // hider kit post-load
+        } else {               // Role::Seeker
             if (inPlaying) {
                 // Seeker in play phase → round map with seeker kit.
                 gSaveContext.linkAge = LINK_AGE_CHILD;
                 TeleportToEntrance(roundEntr);
-                SetPendingInit(2);   // seeker kit post-load
+                SetPendingInit(2); // seeker kit post-load
             } else {
                 // Seeker in hide phase → lobby. Only teleport if we're
                 // not already in Hyrule Field (the lobby scene) so a
@@ -915,24 +1068,26 @@ void HandleRoleAssign(const nlohmann::json& p) {
 }
 
 // Takes the full envelope (not just data) so we can read `source`.
-void HandleSetDisguise(const nlohmann::json& envelope,
-                       const nlohmann::json& data) {
+void HandleSetDisguise(const nlohmann::json& envelope, const nlohmann::json& data) {
     // Read the broadcasting client's id from the envelope's `source` field
     // (set by the server's relay). Update that client's prop selection in
     // our roster so HarpoonDummyPlayer_Draw can render them as the prop.
     // Without this branch, the dummy player just renders as Link and the
     // seekers see right through the disguise.
-    if (Harpoon::Instance == nullptr) return;
+    if (Harpoon::Instance == nullptr)
+        return;
     s32 cat = data.value("category", 0);
     s32 idx = data.value("propIndex", -1);
-    s32 st  = data.value("propState", 0);
+    s32 st = data.value("propState", 0);
     u32 src = envelope.value("source", 0u);
-    if (src == 0) return;
+    if (src == 0)
+        return;
     auto it = Harpoon::Instance->clients.find(src);
-    if (it == Harpoon::Instance->clients.end()) return;
+    if (it == Harpoon::Instance->clients.end())
+        return;
     it->second.propCategory = cat;
-    it->second.propIndex    = idx;
-    it->second.propState    = st;
+    it->second.propIndex = idx;
+    it->second.propState = st;
     // If a non-trivial prop is being broadcast, the broadcaster IS a
     // hider — but ONLY upgrade the role if it isn't already an authoritative
     // role set by ROLE_ASSIGN. Specifically, don't overwrite "seeker" or
@@ -977,7 +1132,8 @@ void HandleHidePhaseEnd(const nlohmann::json& /*p*/) {
 
 void HandleEliminated(const nlohmann::json& p) {
     s32 victim = p.value("victimClientId", 0);
-    if (victim == 0) return;
+    if (victim == 0)
+        return;
 
     // Backup path for the host's no-hiders count. The dying client also
     // broadcasts ROLE_ASSIGN(self, seeker), but if that packet is dropped
@@ -988,10 +1144,10 @@ void HandleEliminated(const nlohmann::json& p) {
     if (Harpoon::Instance != nullptr) {
         auto it = Harpoon::Instance->clients.find((u32)victim);
         if (it != Harpoon::Instance->clients.end()) {
-            it->second.role         = "seeker";
-            it->second.propIndex    = -1;
+            it->second.role = "seeker";
+            it->second.propIndex = -1;
             it->second.propCategory = 0;
-            it->second.propState    = 0;
+            it->second.propState = 0;
         }
     }
 
@@ -1000,10 +1156,10 @@ void HandleEliminated(const nlohmann::json& p) {
     // harmless on the normal path.
     uint32_t ownId = Harpoon::Instance ? Harpoon::Instance->ownClientId : 0;
     if ((uint32_t)victim == ownId) {
-        sLocal.role         = Role::Seeker;
-        sLocal.propIndex    = -1;
+        sLocal.role = Role::Seeker;
+        sLocal.propIndex = -1;
         sLocal.propCategory = 0;
-        sLocal.propState    = 0;
+        sLocal.propState = 0;
     }
 }
 
@@ -1029,11 +1185,11 @@ void HandleRoundResult(const nlohmann::json& p) {
     if (gPlayState != nullptr) {
         gSaveContext.linkAge = LINK_AGE_CHILD;
         TeleportToEntrance(ENTR_HYRULE_FIELD_PAST_BRIDGE_SPAWN);
-        SetPendingInit(4);  // reset-to-hider preset on next OnSceneSpawnActors
+        SetPendingInit(4); // reset-to-hider preset on next OnSceneSpawnActors
     }
 }
 
-}  // anon
+} // namespace
 
 void HandleEvent(const nlohmann::json& envelope) {
     // Wire format: ROOM.EVENT envelope from the server carries
@@ -1042,18 +1198,26 @@ void HandleEvent(const nlohmann::json& envelope) {
     // accept both the unwrapped envelope (legacy callers) and the standard
     // {event_name, data} layout.
     std::string evt = envelope.value("event_name", std::string());
-    if (evt.empty()) evt = envelope.value("event", std::string());
-    if (evt.empty()) return;
+    if (evt.empty())
+        evt = envelope.value("event", std::string());
+    if (evt.empty())
+        return;
 
-    const nlohmann::json& data = envelope.contains("data") && envelope["data"].is_object()
-                                   ? envelope["data"] : envelope;
+    const nlohmann::json& data =
+        envelope.contains("data") && envelope["data"].is_object() ? envelope["data"] : envelope;
 
-    if      (evt == kEvtRoleAssign)      HandleRoleAssign(data);
-    else if (evt == kEvtSetDisguise)     HandleSetDisguise(envelope, data);
-    else if (evt == kEvtHidePhaseBegin)  HandleHidePhaseBegin(data);
-    else if (evt == kEvtHidePhaseEnd)    HandleHidePhaseEnd(data);
-    else if (evt == kEvtEliminated)      HandleEliminated(data);
-    else if (evt == kEvtRoundResult)     HandleRoundResult(data);
+    if (evt == kEvtRoleAssign)
+        HandleRoleAssign(data);
+    else if (evt == kEvtSetDisguise)
+        HandleSetDisguise(envelope, data);
+    else if (evt == kEvtHidePhaseBegin)
+        HandleHidePhaseBegin(data);
+    else if (evt == kEvtHidePhaseEnd)
+        HandleHidePhaseEnd(data);
+    else if (evt == kEvtEliminated)
+        HandleEliminated(data);
+    else if (evt == kEvtRoundResult)
+        HandleRoundResult(data);
     else if (evt == "PROP_HUNT.OPEN_MAP_SELECT") {
         // Host triggered the map-select fullscreen overlay. Each peer
         // flips gameState locally so the GuiWindow draws.
@@ -1070,10 +1234,9 @@ void HandleEvent(const nlohmann::json& envelope) {
         }
         // Arm a fresh vote window. Host's TickFrame ticks it down; on 0
         // (timeout) or "everyone voted" the tally + HostStartRound fires.
-        sMapVoteArmed    = true;
+        sMapVoteArmed = true;
         sMapVoteDeadline = 15 * 60;
-    }
-    else if (evt == "PROP_HUNT.MAP_CURSOR") {
+    } else if (evt == "PROP_HUNT.MAP_CURSOR") {
         // Peer moved their cursor — update their per-client mapSelectIndex
         // so our navi rendering shows the right cell.
         u32 src = envelope.value("source", 0u);
@@ -1084,8 +1247,7 @@ void HandleEvent(const nlohmann::json& envelope) {
                 it->second.mapSelectIndex = idx;
             }
         }
-    }
-    else if (evt == "PROP_HUNT.MAP_VOTE") {
+    } else if (evt == "PROP_HUNT.MAP_VOTE") {
         // Peer cast a vote. We don't tally here — the host's client owns the
         // tally and broadcasts MAP_CONFIRMED when the round threshold hits.
         u32 src = envelope.value("source", 0u);
@@ -1097,8 +1259,7 @@ void HandleEvent(const nlohmann::json& envelope) {
                 it->second.hasVoted = true;
             }
         }
-    }
-    else if (evt == "PROP_HUNT.MAP_CONFIRMED") {
+    } else if (evt == "PROP_HUNT.MAP_CONFIRMED") {
         s32 idx = data.value("mapIndex", 0);
         LocallyConfirmMap(idx);
     }
@@ -1112,15 +1273,15 @@ void HandleEvent(const nlohmann::json& envelope) {
 // into Harpoon::SendJsonToRemote.
 static nlohmann::json _Envelope(const char* evt, nlohmann::json data) {
     nlohmann::json p;
-    p["type"]       = "ROOM.BROADCAST_EVENT";
+    p["type"] = "ROOM.BROADCAST_EVENT";
     p["event_name"] = evt;
-    p["data"]       = std::move(data);
+    p["data"] = std::move(data);
     return p;
 }
 
 nlohmann::json BuildSetDisguisePayload() {
     nlohmann::json d;
-    d["category"]  = sLocal.propCategory;
+    d["category"] = sLocal.propCategory;
     d["propIndex"] = sLocal.propIndex;
     d["propState"] = sLocal.propState;
     return _Envelope(kEvtSetDisguise, std::move(d));
@@ -1129,10 +1290,10 @@ nlohmann::json BuildSetDisguisePayload() {
 nlohmann::json BuildRoleAssignPayload(u32 targetClientId, Role role) {
     nlohmann::json d;
     d["targetClientId"] = targetClientId;
-    d["role"] = (role == Role::Hider) ? "hider"
-              : (role == Role::Seeker) ? "seeker"
-              : (role == Role::Eliminated) ? "eliminated"
-              : "unassigned";
+    d["role"] = (role == Role::Hider)        ? "hider"
+                : (role == Role::Seeker)     ? "seeker"
+                : (role == Role::Eliminated) ? "eliminated"
+                                             : "unassigned";
     return _Envelope(kEvtRoleAssign, std::move(d));
 }
 
@@ -1170,28 +1331,38 @@ void DrawHud() {
 
     ImGui::SetNextWindowPos(ImVec2(12.0f, 80.0f), ImGuiCond_Always);
     ImGui::SetNextWindowBgAlpha(0.55f);
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
-                              ImGuiWindowFlags_AlwaysAutoResize |
-                              ImGuiWindowFlags_NoSavedSettings |
-                              ImGuiWindowFlags_NoFocusOnAppearing |
-                              ImGuiWindowFlags_NoNav |
-                              ImGuiWindowFlags_NoInputs;
-    if (!ImGui::Begin("PropHuntHUD", nullptr, flags)) { ImGui::End(); return; }
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                             ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;
+    if (!ImGui::Begin("PropHuntHUD", nullptr, flags)) {
+        ImGui::End();
+        return;
+    }
 
     const char* roleStr = "(no role)";
     ImVec4 roleColor(0.8f, 0.8f, 0.8f, 1.0f);
     switch (sLocal.role) {
-        case Role::Hider:      roleStr = "HIDER";       roleColor = ImVec4(0.5f, 1.0f, 0.5f, 1.0f); break;
-        case Role::Seeker:     roleStr = "SEEKER";      roleColor = ImVec4(1.0f, 0.5f, 0.5f, 1.0f); break;
-        case Role::Eliminated: roleStr = "ELIMINATED";  roleColor = ImVec4(0.6f, 0.6f, 0.6f, 1.0f); break;
-        case Role::Unassigned: roleStr = "Lobby";       break;
+        case Role::Hider:
+            roleStr = "HIDER";
+            roleColor = ImVec4(0.5f, 1.0f, 0.5f, 1.0f);
+            break;
+        case Role::Seeker:
+            roleStr = "SEEKER";
+            roleColor = ImVec4(1.0f, 0.5f, 0.5f, 1.0f);
+            break;
+        case Role::Eliminated:
+            roleStr = "ELIMINATED";
+            roleColor = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
+            break;
+        case Role::Unassigned:
+            roleStr = "Lobby";
+            break;
     }
     ImGui::TextColored(roleColor, "Prop Hunt — %s", roleStr);
 
     if (sLocal.inHidePhase) {
         s32 sec = (sLocal.hidePhaseFramesRemaining + 19) / 20;
-        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f),
-                            "Hide phase: %ds", sec);
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "Hide phase: %ds", sec);
     }
 
     // Survival timer — Boss-Rush-style elapsed clock. Per user spec it
@@ -1203,16 +1374,14 @@ void DrawHud() {
         (Harpoon::Instance->gameState == HARPOON_STATE_HIDING_PHASE ||
          Harpoon::Instance->gameState == HARPOON_STATE_PLAYING)) {
         u32 frames = GetRoundElapsedFrames();
-        u32 totalSec = frames / 20;  // 20 fps OoT logic frames
+        u32 totalSec = frames / 20; // 20 fps OoT logic frames
         u32 h = totalSec / 3600;
         u32 m = (totalSec % 3600) / 60;
         u32 s = totalSec % 60;
         if (h > 0) {
-            ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f),
-                                "Survival %02u:%02u:%02u", h, m, s);
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "Survival %02u:%02u:%02u", h, m, s);
         } else {
-            ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f),
-                                "Survival %02u:%02u", m, s);
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "Survival %02u:%02u", m, s);
         }
     }
 
@@ -1228,8 +1397,7 @@ void DrawHud() {
         ImGui::Text("Prop: %s", propName);
         ImGui::Text("State: %d / %d", sLocal.propState + 1, stateCount);
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
-                            "D-Left = cat, D-Down = prop, D-Right = state");
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "D-Left = cat, D-Down = prop, D-Right = state");
     }
 
     ImGui::End();
@@ -1259,13 +1427,14 @@ namespace {
 constexpr s32 kStatesPerProp = 8;
 Actor* sGhostActors[kCategoryCount][kPropsPerCategory][kStatesPerProp] = {};
 
-}  // anon
+} // namespace
 
 // No-op update that the engine can safely invoke each frame without firing
 // the actor's actual AI. We keep the ghost actor alive (so its draw and
 // object stay loaded) but suppress its behaviour.
 static void GhostActorUpdateNoop(Actor* actor, PlayState* play) {
-    (void)actor; (void)play;
+    (void)actor;
+    (void)play;
 }
 
 // Spawn a single ghost actor — mirror of Scooter's PropHunt_SpawnGhost.
@@ -1280,38 +1449,98 @@ static void GhostActorUpdateNoop(Actor* actor, PlayState* play) {
 // EN_BOX, ...) ends up with draw=NULL → SpawnOneGhost kills it →
 // DrawHiderAsProp falls back to Crate forever.
 static void FixDeferredDraw(Actor* ghost, s16 actorId) {
-    if (ghost->draw != nullptr) return;
+    if (ghost->draw != nullptr)
+        return;
     switch (actorId) {
-    case ACTOR_OBJ_TSUBO:    ghost->draw = (ActorFunc)ObjTsubo_Draw;    break;
-    case ACTOR_EN_KUSA:      ghost->draw = (ActorFunc)EnKusa_Draw;      break;
-    case ACTOR_EN_ISHI:      ghost->draw = (ActorFunc)EnIshi_Draw;      break;
-    case ACTOR_OBJ_BOMBIWA:  ghost->draw = (ActorFunc)ObjBombiwa_Draw;  break;
-    case ACTOR_OBJ_HAMISHI:  ghost->draw = (ActorFunc)ObjHamishi_Draw;  break;
-    case ACTOR_EN_ITEM00:    ghost->draw = (ActorFunc)EnItem00_Draw;    break;
-    case ACTOR_EN_GS:        ghost->draw = (ActorFunc)EnGs_Draw;        break;
-    case ACTOR_EN_BOX:       ghost->draw = (ActorFunc)EnBox_Draw;       break;
-    case ACTOR_EN_KANBAN:    ghost->draw = (ActorFunc)EnKanban_Draw;    break;
-    case ACTOR_OBJ_SYOKUDAI: ghost->draw = (ActorFunc)ObjSyokudai_Draw; break;
-    case ACTOR_OBJ_KIBAKO:   ghost->draw = (ActorFunc)ObjKibako_Draw;   break;
-    case ACTOR_OBJ_KIBAKO2:  ghost->draw = (ActorFunc)ObjKibako2_Draw;  break;
-    case ACTOR_EN_WALLMAS:   ghost->draw = (ActorFunc)EnWallmas_Draw;   break;
-    case ACTOR_EN_FLOORMAS:  ghost->draw = (ActorFunc)EnFloormas_Draw;  break;
-    case ACTOR_EN_WF:        ghost->draw = (ActorFunc)EnWf_Draw;        break;
-    case ACTOR_EN_OKUTA:     ghost->draw = (ActorFunc)EnOkuta_Draw;     break;
-    case ACTOR_EN_NIW:       ghost->draw = (ActorFunc)EnNiw_Draw;       break;
-    case ACTOR_EN_ZF:        ghost->draw = (ActorFunc)EnZf_Draw;        break;
-    case ACTOR_EN_CROW:      ghost->draw = (ActorFunc)EnCrow_Draw;      break;
-    case ACTOR_EN_MA1:       ghost->draw = (ActorFunc)EnMa1_Draw;       break;
-    case ACTOR_EN_SA:        ghost->draw = (ActorFunc)EnSa_Draw;        break;
-    case ACTOR_EN_TA:        ghost->draw = (ActorFunc)EnTa_Draw;        break;
-    case ACTOR_EN_DAIKU:     ghost->draw = (ActorFunc)EnDaiku_Draw;     break;
-    case ACTOR_EN_HEISHI1:   ghost->draw = (ActorFunc)EnHeishi1_Draw;   break;
-    case ACTOR_EN_GO2:       ghost->draw = (ActorFunc)EnGo2_Draw;       break;
-    case ACTOR_EN_TK:        ghost->draw = (ActorFunc)EnTk_Draw;        break;
-    case ACTOR_EN_DOG:       ghost->draw = (ActorFunc)EnDog_Draw;       break;
-    case ACTOR_EN_COW:       ghost->draw = (ActorFunc)EnCow_Draw;       break;
-    case ACTOR_EN_DNS:       ghost->draw = (ActorFunc)EnDns_Draw;       break;
-    default: break;
+        case ACTOR_OBJ_TSUBO:
+            ghost->draw = (ActorFunc)ObjTsubo_Draw;
+            break;
+        case ACTOR_EN_KUSA:
+            ghost->draw = (ActorFunc)EnKusa_Draw;
+            break;
+        case ACTOR_EN_ISHI:
+            ghost->draw = (ActorFunc)EnIshi_Draw;
+            break;
+        case ACTOR_OBJ_BOMBIWA:
+            ghost->draw = (ActorFunc)ObjBombiwa_Draw;
+            break;
+        case ACTOR_OBJ_HAMISHI:
+            ghost->draw = (ActorFunc)ObjHamishi_Draw;
+            break;
+        case ACTOR_EN_ITEM00:
+            ghost->draw = (ActorFunc)EnItem00_Draw;
+            break;
+        case ACTOR_EN_GS:
+            ghost->draw = (ActorFunc)EnGs_Draw;
+            break;
+        case ACTOR_EN_BOX:
+            ghost->draw = (ActorFunc)EnBox_Draw;
+            break;
+        case ACTOR_EN_KANBAN:
+            ghost->draw = (ActorFunc)EnKanban_Draw;
+            break;
+        case ACTOR_OBJ_SYOKUDAI:
+            ghost->draw = (ActorFunc)ObjSyokudai_Draw;
+            break;
+        case ACTOR_OBJ_KIBAKO:
+            ghost->draw = (ActorFunc)ObjKibako_Draw;
+            break;
+        case ACTOR_OBJ_KIBAKO2:
+            ghost->draw = (ActorFunc)ObjKibako2_Draw;
+            break;
+        case ACTOR_EN_WALLMAS:
+            ghost->draw = (ActorFunc)EnWallmas_Draw;
+            break;
+        case ACTOR_EN_FLOORMAS:
+            ghost->draw = (ActorFunc)EnFloormas_Draw;
+            break;
+        case ACTOR_EN_WF:
+            ghost->draw = (ActorFunc)EnWf_Draw;
+            break;
+        case ACTOR_EN_OKUTA:
+            ghost->draw = (ActorFunc)EnOkuta_Draw;
+            break;
+        case ACTOR_EN_NIW:
+            ghost->draw = (ActorFunc)EnNiw_Draw;
+            break;
+        case ACTOR_EN_ZF:
+            ghost->draw = (ActorFunc)EnZf_Draw;
+            break;
+        case ACTOR_EN_CROW:
+            ghost->draw = (ActorFunc)EnCrow_Draw;
+            break;
+        case ACTOR_EN_MA1:
+            ghost->draw = (ActorFunc)EnMa1_Draw;
+            break;
+        case ACTOR_EN_SA:
+            ghost->draw = (ActorFunc)EnSa_Draw;
+            break;
+        case ACTOR_EN_TA:
+            ghost->draw = (ActorFunc)EnTa_Draw;
+            break;
+        case ACTOR_EN_DAIKU:
+            ghost->draw = (ActorFunc)EnDaiku_Draw;
+            break;
+        case ACTOR_EN_HEISHI1:
+            ghost->draw = (ActorFunc)EnHeishi1_Draw;
+            break;
+        case ACTOR_EN_GO2:
+            ghost->draw = (ActorFunc)EnGo2_Draw;
+            break;
+        case ACTOR_EN_TK:
+            ghost->draw = (ActorFunc)EnTk_Draw;
+            break;
+        case ACTOR_EN_DOG:
+            ghost->draw = (ActorFunc)EnDog_Draw;
+            break;
+        case ACTOR_EN_COW:
+            ghost->draw = (ActorFunc)EnCow_Draw;
+            break;
+        case ACTOR_EN_DNS:
+            ghost->draw = (ActorFunc)EnDns_Draw;
+            break;
+        default:
+            break;
     }
 }
 
@@ -1324,18 +1553,20 @@ static void FixDeferredDraw(Actor* ghost, s16 actorId) {
 // resolve segment 6 to the wrong bank.
 static s16 ResolveBank(s16 actorId, s16 params) {
     switch (actorId) {
-    case ACTOR_OBJ_TSUBO:
-        // sObjectIds[(params >> 8) & 1] = { DANGEON_KEEP, TSUBO }
-        return ((params >> 8) & 1) ? (s16)OBJECT_TSUBO
-                                   : (s16)OBJECT_GAMEPLAY_DANGEON_KEEP;
-    case ACTOR_EN_KUSA:
-        // sObjectIds[params & 3] = { FIELD_KEEP, KUSA, KUSA, ... }
-        return (params & 3) ? (s16)OBJECT_KUSA
-                            : (s16)OBJECT_GAMEPLAY_FIELD_KEEP;
-    case ACTOR_EN_ISHI:      return (s16)OBJECT_GAMEPLAY_FIELD_KEEP;
-    case ACTOR_OBJ_KIBAKO:   return (s16)OBJECT_GAMEPLAY_DANGEON_KEEP;
-    case ACTOR_OBJ_HAMISHI:  return (s16)OBJECT_GAMEPLAY_FIELD_KEEP;
-    default:                 return -1;
+        case ACTOR_OBJ_TSUBO:
+            // sObjectIds[(params >> 8) & 1] = { DANGEON_KEEP, TSUBO }
+            return ((params >> 8) & 1) ? (s16)OBJECT_TSUBO : (s16)OBJECT_GAMEPLAY_DANGEON_KEEP;
+        case ACTOR_EN_KUSA:
+            // sObjectIds[params & 3] = { FIELD_KEEP, KUSA, KUSA, ... }
+            return (params & 3) ? (s16)OBJECT_KUSA : (s16)OBJECT_GAMEPLAY_FIELD_KEEP;
+        case ACTOR_EN_ISHI:
+            return (s16)OBJECT_GAMEPLAY_FIELD_KEEP;
+        case ACTOR_OBJ_KIBAKO:
+            return (s16)OBJECT_GAMEPLAY_DANGEON_KEEP;
+        case ACTOR_OBJ_HAMISHI:
+            return (s16)OBJECT_GAMEPLAY_FIELD_KEEP;
+        default:
+            return -1;
     }
 }
 
@@ -1360,10 +1591,9 @@ static Actor* SpawnOneGhost(PlayState* play, const PropVariant& v) {
     // certain prerequisite isn't met and self-destruct in Init. Actor_Spawn
     // returns NULL or an actor with draw=NULL in that case — we check both
     // below and just skip that slot.
-    Actor* ghost = Actor_Spawn(&play->actorCtx, play, v.actorId,
-                                spawnX, spawnY, spawnZ,
-                                0, 0, 0, v.params);
-    if (ghost == nullptr) return nullptr;
+    Actor* ghost = Actor_Spawn(&play->actorCtx, play, v.actorId, spawnX, spawnY, spawnZ, 0, 0, 0, v.params);
+    if (ghost == nullptr)
+        return nullptr;
 
     // CRITICAL: install the actor's Draw function manually for the
     // prop actors whose vanilla Init defers it (see FixDeferredDraw
@@ -1387,7 +1617,8 @@ static Actor* SpawnOneGhost(PlayState* play, const PropVariant& v) {
     s16 wantedBank = ResolveBank((s16)v.actorId, (s16)v.params);
     if (wantedBank <= 0) {
         ActorDBEntry* db = ActorDB_Retrieve((s16)v.actorId);
-        if (db != nullptr && db->valid) wantedBank = (s16)db->objectId;
+        if (db != nullptr && db->valid)
+            wantedBank = (s16)db->objectId;
     }
     if (wantedBank > 0) {
         s32 bankIdx = Object_GetIndex(&play->objectCtx, wantedBank);
@@ -1398,19 +1629,21 @@ static Actor* SpawnOneGhost(PlayState* play, const PropVariant& v) {
 
     // Clean flags: the engine should NOT auto-cull our ghosts and should NOT
     // target them with the Z-targeting reticle or damage AI.
-    ghost->flags &= ~(ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE |
-                      ACTOR_FLAG_FRIENDLY        | ACTOR_FLAG_DRAW_CULLING_DISABLED);
+    ghost->flags &=
+        ~(ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE | ACTOR_FLAG_FRIENDLY | ACTOR_FLAG_DRAW_CULLING_DISABLED);
     ghost->flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
-    ghost->update  = GhostActorUpdateNoop;
+    ghost->update = GhostActorUpdateNoop;
     ghost->destroy = NULL;
     Actor_SetScale(ghost, v.scale);
-    ghost->world.pos.y = -9999.0f;  // re-position in case Init moved it
+    ghost->world.pos.y = -9999.0f; // re-position in case Init moved it
     return ghost;
 }
 
 bool SpawnGhostActors(PlayState* play) {
-    if (play == nullptr) return false;
-    if (!sLoaded) return false;
+    if (play == nullptr)
+        return false;
+    if (!sLoaded)
+        return false;
 
     // Clear stale pointers from a previous scene first — all 3 axes.
     for (s32 c = 0; c < kCategoryCount; c++) {
@@ -1427,8 +1660,9 @@ bool SpawnGhostActors(PlayState* play) {
     // gMapLoading=0 + pre-loaded objects + objBankIndex fixup below make
     // it safe to spawn cross-scene actors in any scene.
     s32 mapIdx = sLocal.confirmedMap;
-    if (mapIdx < 0 || mapIdx >= kMapCount) mapIdx = 0;
-    constexpr bool haveMap = true;  // legacy local — always spawn now
+    if (mapIdx < 0 || mapIdx >= kMapCount)
+        mapIdx = 0;
+    constexpr bool haveMap = true; // legacy local — always spawn now
 
     // PRE-LOAD object banks for every prop. Without this, Actor_Spawn
     // fails whenever the scene's static object list doesn't include
@@ -1451,27 +1685,30 @@ bool SpawnGhostActors(PlayState* play) {
         // Sourced by inspecting each actor's z_*.c Init function for
         // Object_GetIndex calls.
         static const s16 kExplicitObjects[] = {
-            OBJECT_TSUBO,                 // OBJ_TSUBO (Pot — params bit 8 set)
-            OBJECT_KUSA,                  // EN_KUSA  (Bush)
-            OBJECT_KIBAKO2,               // OBJ_KIBAKO2 (Crate v2)
-            OBJECT_BOMBIWA,               // OBJ_BOMBIWA (Boulder, bombable)
-            OBJECT_BOX,                   // EN_BOX (Chest)
-            OBJECT_GS,                    // EN_GS (Gossip Stone)
-            OBJECT_KANBAN,                // EN_KANBAN (Sign)
-            OBJECT_SYOKUDAI,              // OBJ_SYOKUDAI (Torch)
+            OBJECT_TSUBO,    // OBJ_TSUBO (Pot — params bit 8 set)
+            OBJECT_KUSA,     // EN_KUSA  (Bush)
+            OBJECT_KIBAKO2,  // OBJ_KIBAKO2 (Crate v2)
+            OBJECT_BOMBIWA,  // OBJ_BOMBIWA (Boulder, bombable)
+            OBJECT_BOX,      // EN_BOX (Chest)
+            OBJECT_GS,       // EN_GS (Gossip Stone)
+            OBJECT_KANBAN,   // EN_KANBAN (Sign)
+            OBJECT_SYOKUDAI, // OBJ_SYOKUDAI (Torch)
             // EN_ISHI (rocks), OBJ_HAMISHI (big boulder), OBJ_KIBAKO (Crate v1)
             // and some OBJ_TSUBO variants share these two keeps:
             OBJECT_GAMEPLAY_FIELD_KEEP,   // ISHI, HAMISHI
             OBJECT_GAMEPLAY_DANGEON_KEEP, // KIBAKO, TSUBO (params bit 8 clear)
         };
-        for (s16 oid : kExplicitObjects) wantedObjects.insert(oid);
+        for (s16 oid : kExplicitObjects)
+            wantedObjects.insert(oid);
         // Also gather every prop's static InitVars objectId via ActorDB
         // — covers anything we forget in the explicit list above.
         auto collectObj = [&](const PropEntry* e) {
-            if (e == nullptr || e->states.empty()) return;
+            if (e == nullptr || e->states.empty())
+                return;
             for (const auto& st : e->states) {
                 ActorDBEntry* db = ActorDB_Retrieve((s16)st.actorId);
-                if (db != nullptr && db->valid) wantedObjects.insert(db->objectId);
+                if (db != nullptr && db->valid)
+                    wantedObjects.insert(db->objectId);
             }
         };
         for (s32 i = 0; i < kPropsPerCategory; i++) {
@@ -1485,11 +1722,14 @@ bool SpawnGhostActors(PlayState* play) {
             }
         }
         for (s16 objectId : wantedObjects) {
-            if (objectId <= 0) continue;
+            if (objectId <= 0)
+                continue;
             // Skip if already loaded into the scene's bank.
-            if (Object_GetIndex(&play->objectCtx, objectId) >= 0) continue;
+            if (Object_GetIndex(&play->objectCtx, objectId) >= 0)
+                continue;
             // Skip if the bank is full — Object_Spawn would assert.
-            if (play->objectCtx.num >= OBJECT_EXCHANGE_BANK_MAX - 1) break;
+            if (play->objectCtx.num >= OBJECT_EXCHANGE_BANK_MAX - 1)
+                break;
             Object_Spawn(&play->objectCtx, objectId);
         }
     }
@@ -1508,7 +1748,8 @@ bool SpawnGhostActors(PlayState* play) {
     // (no real enemies), which would block our enemy-category ghosts. Save
     // every room's clear bit, zero the whole word, restore after.
     u32 savedClearFlags = (play != nullptr) ? play->actorCtx.flags.clear : 0;
-    if (play != nullptr) play->actorCtx.flags.clear = 0;
+    if (play != nullptr)
+        play->actorCtx.flags.clear = 0;
 
     // Spawn ONE GHOST PER VARIANT (state). The actor's `params` are baked
     // into Actor_Spawn — so without a separate ghost per state, props that
@@ -1519,12 +1760,17 @@ bool SpawnGhostActors(PlayState* play) {
     // the state-0 actor with the wrong params. Now each state gets its
     // own ghost; DrawHiderAsProp picks the right one by propState.
     auto spawnAllStates = [&](s32 category, s32 i, const PropEntry* entry) {
-        if (entry == nullptr || entry->states.empty()) return;
+        if (entry == nullptr || entry->states.empty())
+            return;
         s32 maxStates = (s32)entry->states.size();
-        if (maxStates > kStatesPerProp) maxStates = kStatesPerProp;
+        if (maxStates > kStatesPerProp)
+            maxStates = kStatesPerProp;
         for (s32 s = 0; s < maxStates; s++) {
             Actor* ghost = SpawnOneGhost(play, entry->states[s]);
-            if (ghost == nullptr) { failed++; continue; }
+            if (ghost == nullptr) {
+                failed++;
+                continue;
+            }
             sGhostActors[category][i][s] = ghost;
             spawned++;
         }
@@ -1545,11 +1791,12 @@ bool SpawnGhostActors(PlayState* play) {
         }
     }
 
-    if (play != nullptr) play->actorCtx.flags.clear = savedClearFlags;
+    if (play != nullptr)
+        play->actorCtx.flags.clear = savedClearFlags;
     gMapLoading = savedMapLoading;
 
-    SPDLOG_INFO("[Harpoon][PropHunt] ghost actors: spawned={} failed={} map={} haveMap={}",
-                spawned, failed, mapIdx, haveMap ? "yes" : "no");
+    SPDLOG_INFO("[Harpoon][PropHunt] ghost actors: spawned={} failed={} map={} haveMap={}", spawned, failed, mapIdx,
+                haveMap ? "yes" : "no");
     return spawned > 0;
 }
 
@@ -1576,7 +1823,8 @@ bool AreGhostsReady() {
         for (s32 i = 0; i < kPropsPerCategory; i++) {
             for (s32 s = 0; s < kStatesPerProp; s++) {
                 Actor* g = sGhostActors[c][i][s];
-                if (g != nullptr && g->draw != nullptr) return true;
+                if (g != nullptr && g->draw != nullptr)
+                    return true;
             }
         }
     }
@@ -1592,34 +1840,40 @@ static u32 sRoundElapsedFrames = 0;
 // and lobby state never regenerate — gate is explicit. Each client runs
 // this for themselves; no broadcast.
 static void TickSeekerPassiveRegen() {
-    if (Harpoon::Instance == nullptr) return;
-    if (Harpoon::Instance->gameState != HARPOON_STATE_PLAYING) return;
-    if (sLocal.role != Role::Seeker) return;
-    if (gPlayState == nullptr) return;
-    if (gSaveContext.gameMode != GAMEMODE_NORMAL) return;
+    if (Harpoon::Instance == nullptr)
+        return;
+    if (Harpoon::Instance->gameState != HARPOON_STATE_PLAYING)
+        return;
+    if (sLocal.role != Role::Seeker)
+        return;
+    if (gPlayState == nullptr)
+        return;
+    if (gSaveContext.gameMode != GAMEMODE_NORMAL)
+        return;
 
     // Ammo: +1 per slot every 30 frames. Slots match TT's regen targets so
     // every seeker-usable ammo type refills uniformly.
     static s32 ammoTick = 0;
     if (++ammoTick >= 30) {
         ammoTick = 0;
-        s32 maxBombs   = CAPACITY(UPG_BOMB_BAG,    CUR_UPG_VALUE(UPG_BOMB_BAG));
-        s32 maxArrows  = CAPACITY(UPG_QUIVER,      CUR_UPG_VALUE(UPG_QUIVER));
-        s32 maxSeeds   = CAPACITY(UPG_BULLET_BAG,  CUR_UPG_VALUE(UPG_BULLET_BAG));
-        s32 maxNuts    = CAPACITY(UPG_NUTS,        CUR_UPG_VALUE(UPG_NUTS));
-        s32 maxSticks  = CAPACITY(UPG_STICKS,      CUR_UPG_VALUE(UPG_STICKS));
+        s32 maxBombs = CAPACITY(UPG_BOMB_BAG, CUR_UPG_VALUE(UPG_BOMB_BAG));
+        s32 maxArrows = CAPACITY(UPG_QUIVER, CUR_UPG_VALUE(UPG_QUIVER));
+        s32 maxSeeds = CAPACITY(UPG_BULLET_BAG, CUR_UPG_VALUE(UPG_BULLET_BAG));
+        s32 maxNuts = CAPACITY(UPG_NUTS, CUR_UPG_VALUE(UPG_NUTS));
+        s32 maxSticks = CAPACITY(UPG_STICKS, CUR_UPG_VALUE(UPG_STICKS));
         auto bump = [](s32 slot, s32 maxVal) {
-            if (slot < 0 || slot >= (s32)ARRAY_COUNT(gSaveContext.inventory.ammo)) return;
+            if (slot < 0 || slot >= (s32)ARRAY_COUNT(gSaveContext.inventory.ammo))
+                return;
             if (gSaveContext.inventory.ammo[slot] < maxVal) {
                 gSaveContext.inventory.ammo[slot]++;
             }
         };
-        bump(SLOT_BOMB,      maxBombs);
-        bump(SLOT_BOW,       maxArrows);
+        bump(SLOT_BOMB, maxBombs);
+        bump(SLOT_BOW, maxArrows);
         bump(SLOT_SLINGSHOT, maxSeeds);
-        bump(SLOT_NUT,       maxNuts);
-        bump(SLOT_STICK,     maxSticks);
-        bump(SLOT_BOMBCHU,   50);   // chu count independent of bomb bag
+        bump(SLOT_NUT, maxNuts);
+        bump(SLOT_STICK, maxSticks);
+        bump(SLOT_BOMBCHU, 50); // chu count independent of bomb bag
     }
 
     // Magic: +8 every 60 frames. Cap at magicCapacity (forced to 96 by
@@ -1630,7 +1884,8 @@ static void TickSeekerPassiveRegen() {
         magicTick = 0;
         if (gSaveContext.isMagicAcquired) {
             s16 maxMagic = gSaveContext.magicCapacity;
-            if (maxMagic <= 0) maxMagic = 96;
+            if (maxMagic <= 0)
+                maxMagic = 96;
             if (gSaveContext.magic < maxMagic) {
                 s32 newMagic = gSaveContext.magic + 8;
                 gSaveContext.magic = (s16)((newMagic > maxMagic) ? maxMagic : newMagic);
@@ -1640,8 +1895,7 @@ static void TickSeekerPassiveRegen() {
 }
 
 void TickFrame() {
-    bool isHost = (Harpoon::Instance != nullptr &&
-                   Harpoon::Instance->ownClientId != 0 &&
+    bool isHost = (Harpoon::Instance != nullptr && Harpoon::Instance->ownClientId != 0 &&
                    Harpoon::Instance->ownClientId == Harpoon::Instance->hostClientId);
 
     // INVISIBLE WALL — mirrors Scooter's PropHunt_PushBackToSafe. While
@@ -1651,9 +1905,7 @@ void TickFrame() {
     // back to the safe pos and zero all velocity. Engine's transition
     // cancel is the backstop; the push-back keeps the player visibly
     // away from the trigger so it feels like an actual wall.
-    if (Harpoon::Instance != nullptr &&
-        Harpoon::Instance->isPropHuntMode &&
-        gPlayState != nullptr &&
+    if (Harpoon::Instance != nullptr && Harpoon::Instance->isPropHuntMode && gPlayState != nullptr &&
         (Harpoon::Instance->gameState == HARPOON_STATE_PLAYING ||
          Harpoon::Instance->gameState == HARPOON_STATE_HIDING_PHASE)) {
         Player* localPlayer = GET_PLAYER(gPlayState);
@@ -1673,29 +1925,28 @@ void TickFrame() {
             // teleport). sFramesSinceLoad resets on every confirmed-map
             // teleport via the TeleportToEntrance helper.
             static Vec3f sLastSafePos = { 0, 0, 0 };
-            static bool  sHasSafePos  = false;
-            static s32   sFramesSinceLoad = 0;
-            static s16   sPrevSceneNum    = -1;
+            static bool sHasSafePos = false;
+            static s32 sFramesSinceLoad = 0;
+            static s16 sPrevSceneNum = -1;
             if (gPlayState->sceneNum != sPrevSceneNum) {
-                sPrevSceneNum    = gPlayState->sceneNum;
+                sPrevSceneNum = gPlayState->sceneNum;
                 sFramesSinceLoad = 0;
-                sHasSafePos      = false;
+                sHasSafePos = false;
             } else if (sFramesSinceLoad < 1000) {
                 sFramesSinceLoad++;
             }
 
             auto isBlockedExit = [&](CollisionPoly* poly, s32 bgId) -> bool {
-                if (poly == nullptr || gPlayState->setupExitList == nullptr) return false;
-                u32 exitIdx = SurfaceType_GetSceneExitIndex(
-                    &gPlayState->colCtx, poly, bgId);
-                return exitIdx != 0;  // any tagged exit = blocked
+                if (poly == nullptr || gPlayState->setupExitList == nullptr)
+                    return false;
+                u32 exitIdx = SurfaceType_GetSceneExitIndex(&gPlayState->colCtx, poly, bgId);
+                return exitIdx != 0; // any tagged exit = blocked
             };
 
             // Probe player's current floor + 8 outward rays at 30u radius
             // so the wall feels solid before they reach the trigger volume.
             auto isNearExit = [&]() -> bool {
-                if (isBlockedExit(localPlayer->actor.floorPoly,
-                                  localPlayer->actor.floorBgId)) {
+                if (isBlockedExit(localPlayer->actor.floorPoly, localPlayer->actor.floorBgId)) {
                     return true;
                 }
                 constexpr f32 kProbeR = 30.0f;
@@ -1707,9 +1958,9 @@ void TickFrame() {
                     p.z = localPlayer->actor.world.pos.z + Math_CosS(ang) * kProbeR;
                     CollisionPoly* outPoly = nullptr;
                     s32 outBgId = 0;
-                    BgCheck_EntityRaycastFloor3(
-                        &gPlayState->colCtx, &outPoly, &outBgId, &p);
-                    if (isBlockedExit(outPoly, outBgId)) return true;
+                    BgCheck_EntityRaycastFloor3(&gPlayState->colCtx, &outPoly, &outBgId, &p);
+                    if (isBlockedExit(outPoly, outBgId))
+                        return true;
                 }
                 return false;
             };
@@ -1717,12 +1968,12 @@ void TickFrame() {
             auto pushBackToSafe = [&]() {
                 if (sHasSafePos) {
                     localPlayer->actor.world.pos = sLastSafePos;
-                    localPlayer->actor.home.pos  = sLastSafePos;
+                    localPlayer->actor.home.pos = sLastSafePos;
                 }
-                localPlayer->linearVelocity    = 0.0f;
-                localPlayer->actor.velocity.x  = 0.0f;
-                localPlayer->actor.velocity.y  = 0.0f;
-                localPlayer->actor.velocity.z  = 0.0f;
+                localPlayer->linearVelocity = 0.0f;
+                localPlayer->actor.velocity.x = 0.0f;
+                localPlayer->actor.velocity.y = 0.0f;
+                localPlayer->actor.velocity.z = 0.0f;
             };
 
             // Active block only after the grace period — first second of
@@ -1731,12 +1982,10 @@ void TickFrame() {
                 // Backstop: an unauthorized TRANS_TRIGGER_START reached us.
                 // Cancel the trigger AND mode, clear the locking state
                 // flags, push back. Mirrors Scooter's Layer-1 cancel.
-                if (gPlayState->transitionTrigger == TRANS_TRIGGER_START &&
-                    !::sHarpoonAuthorizedTransition) {
+                if (gPlayState->transitionTrigger == TRANS_TRIGGER_START && !::sHarpoonAuthorizedTransition) {
                     gPlayState->transitionTrigger = TRANS_TRIGGER_OFF;
-                    gPlayState->transitionMode    = TRANS_MODE_OFF;
-                    localPlayer->stateFlags1 &= ~(PLAYER_STATE1_LOADING |
-                                                  PLAYER_STATE1_IN_CUTSCENE);
+                    gPlayState->transitionMode = TRANS_MODE_OFF;
+                    localPlayer->stateFlags1 &= ~(PLAYER_STATE1_LOADING | PLAYER_STATE1_IN_CUTSCENE);
                     pushBackToSafe();
                 }
                 // Proactive: poly probe sees a tagged exit nearby.
@@ -1749,7 +1998,7 @@ void TickFrame() {
                 // capture a mid-transition position as "safe".
                 else if (gPlayState->transitionMode == TRANS_MODE_OFF) {
                     sLastSafePos = localPlayer->actor.world.pos;
-                    sHasSafePos  = true;
+                    sHasSafePos = true;
                 }
             }
         }
@@ -1761,10 +2010,9 @@ void TickFrame() {
     // on prop change. Every 2 seconds we re-send so late joiners
     // resolve to the correct prop within at most 2s of joining.
     static s32 sDisguiseHeartbeat = 0;
-    if (Harpoon::Instance != nullptr && Harpoon::Instance->isConnected &&
-        IsLocalHiderWithProp()) {
+    if (Harpoon::Instance != nullptr && Harpoon::Instance->isConnected && IsLocalHiderWithProp()) {
         if (--sDisguiseHeartbeat <= 0) {
-            sDisguiseHeartbeat = 120;  // ~2 sec at 60 fps
+            sDisguiseHeartbeat = 120; // ~2 sec at 60 fps
             Harpoon::Instance->SendJsonToRemote(BuildSetDisguisePayload());
         }
     } else {
@@ -1790,8 +2038,7 @@ void TickFrame() {
     //   - we're in an active round (HIDING_PHASE or PLAYING — not lobby)
     // Per user spec: timer ticks indefinitely as long as you're a hider in
     // a map; pauses the moment you become a seeker or return to the lobby.
-    if (Harpoon::Instance != nullptr &&
-        IsHider() &&
+    if (Harpoon::Instance != nullptr && IsHider() &&
         (Harpoon::Instance->gameState == HARPOON_STATE_HIDING_PHASE ||
          Harpoon::Instance->gameState == HARPOON_STATE_PLAYING)) {
         sRoundElapsedFrames++;
@@ -1847,8 +2094,7 @@ void TickFrame() {
         }
         sPrevTickState = now;
     }
-    if (isHost && Harpoon::Instance != nullptr &&
-        Harpoon::Instance->gameState == HARPOON_STATE_PLAYING) {
+    if (isHost && Harpoon::Instance != nullptr && Harpoon::Instance->gameState == HARPOON_STATE_PLAYING) {
         static s32 sNoHiderTicks = 0;
         // Count peers in the clients map, then add ourselves from sLocal.
         // The host's own entry isn't reliably present in `clients` (server
@@ -1858,11 +2104,15 @@ void TickFrame() {
         s32 hiderCount = 0;
         uint32_t ownId = Harpoon::Instance->ownClientId;
         for (auto& [cid, c] : Harpoon::Instance->clients) {
-            if (cid == ownId) continue;     // counted via sLocal below
-            if (!c.online) continue;
-            if (c.role == "hider") hiderCount++;
+            if (cid == ownId)
+                continue; // counted via sLocal below
+            if (!c.online)
+                continue;
+            if (c.role == "hider")
+                hiderCount++;
         }
-        if (sLocal.role == Role::Hider) hiderCount++;
+        if (sLocal.role == Role::Hider)
+            hiderCount++;
 
         if (hiderCount > 0) {
             sSeenAnyHider = true;
@@ -1877,9 +2127,9 @@ void TickFrame() {
                 sSeenAnyHider = false;
                 SPDLOG_INFO("[Harpoon][PropHunt] all hiders found -> ending round");
                 nlohmann::json env;
-                env["type"]       = "ROOM.BROADCAST_EVENT";
+                env["type"] = "ROOM.BROADCAST_EVENT";
                 env["event_name"] = "PROP_HUNT.ROUND_RESULT";
-                env["data"]       = nlohmann::json::object();
+                env["data"] = nlohmann::json::object();
                 env["data"]["winnerSide"] = "seekers";
                 Harpoon::Instance->SendJsonToRemote(env);
                 // Local apply (relay excludes sender).
@@ -1894,13 +2144,13 @@ void TickFrame() {
     // client has voted, pick the most-voted map (ties broken by lowest
     // index) and broadcast MAP_CONFIRMED. Without this the everyone-votes
     // mode would hang forever waiting on a manual A-press.
-    if (isHost && Harpoon::Instance != nullptr &&
-        Harpoon::Instance->gameState == HARPOON_STATE_MAP_SELECT &&
+    if (isHost && Harpoon::Instance != nullptr && Harpoon::Instance->gameState == HARPOON_STATE_MAP_SELECT &&
         Harpoon::Instance->mapSelectMode == MAP_SELECT_EVERYONE_CHOOSES) {
         // 15-second deadline mirrors TT's everyone-votes flow. Counted in
         // ProcessIncomingPacketQueue frames (~60 fps).
         constexpr s32 kVoteWindowFrames = 15 * 60;
-        if (sMapVoteDeadline > 0) sMapVoteDeadline--;
+        if (sMapVoteDeadline > 0)
+            sMapVoteDeadline--;
         else if (sMapVoteDeadline == 0 && !sMapVoteArmed) {
             // First frame in EVERYONE_CHOOSES this round — arm the timer.
             sMapVoteDeadline = kVoteWindowFrames;
@@ -1915,15 +2165,19 @@ void TickFrame() {
         bool allVoted = true;
         s32 onlineCount = 0;
         for (auto& [cid, c] : Harpoon::Instance->clients) {
-            if (!c.online) continue;
+            if (!c.online)
+                continue;
             onlineCount++;
-            if (!c.hasVoted) { allVoted = false; }
+            if (!c.hasVoted) {
+                allVoted = false;
+            }
         }
         bool timeout = (sMapVoteArmed && sMapVoteDeadline <= 0);
         if ((allVoted && onlineCount > 0) || timeout) {
             std::unordered_map<s32, s32> tally;
             for (auto& [cid, c] : Harpoon::Instance->clients) {
-                if (c.online && c.hasVoted) tally[c.mapSelectIndex]++;
+                if (c.online && c.hasVoted)
+                    tally[c.mapSelectIndex]++;
             }
             s32 winner = 0;
             if (tally.empty()) {
@@ -1935,25 +2189,31 @@ void TickFrame() {
                 s32 best = -1;
                 for (auto& [idx, count] : tally) {
                     if (count > best || (count == best && idx < winner)) {
-                        best = count; winner = idx;
+                        best = count;
+                        winner = idx;
                     }
                 }
             }
-            for (auto& [cid, c] : Harpoon::Instance->clients) c.hasVoted = false;
+            for (auto& [cid, c] : Harpoon::Instance->clients)
+                c.hasVoted = false;
             sMapVoteDeadline = 0;
-            sMapVoteArmed    = false;
+            sMapVoteArmed = false;
             HostStartRound(winner);
         }
     } else {
         // Out of MAP_SELECT / EVERYONE_CHOOSES — clear vote state so the
         // next round starts with a fresh deadline.
         sMapVoteDeadline = 0;
-        sMapVoteArmed    = false;
+        sMapVoteArmed = false;
     }
 }
 
-u32 GetRoundElapsedFrames() { return sRoundElapsedFrames; }
-void ResetRoundElapsed()    { sRoundElapsedFrames = 0; }
+u32 GetRoundElapsedFrames() {
+    return sRoundElapsedFrames;
+}
+void ResetRoundElapsed() {
+    sRoundElapsedFrames = 0;
+}
 
 // ---------------------------------------------------------------------------
 // Local decoy ring — 3 slots, FIFO. Mirrors Scooter's somariaDecoy* fields
@@ -1962,15 +2222,18 @@ void ResetRoundElapsed()    { sRoundElapsedFrames = 0; }
 
 namespace {
 std::array<DecoyEntry, kDecoyMax> sDecoys{};
-u8                                sDecoyCount  = 0;
-u8                                sDecoyOldest = 0;
+u8 sDecoyCount = 0;
+u8 sDecoyOldest = 0;
+} // namespace
+
+const std::array<DecoyEntry, kDecoyMax>& GetLocalDecoys() {
+    return sDecoys;
 }
 
-const std::array<DecoyEntry, kDecoyMax>& GetLocalDecoys() { return sDecoys; }
-
 void ClearDecoys() {
-    for (auto& d : sDecoys) d.active = false;
-    sDecoyCount  = 0;
+    for (auto& d : sDecoys)
+        d.active = false;
+    sDecoyCount = 0;
     sDecoyOldest = 0;
 }
 
@@ -1988,7 +2251,7 @@ static void PropHunt_SpawnDecoyFx(PlayState* play, Player* player) {
     EffectSsBlast_SpawnWhiteShockwave(play, &flashPos, &zeroVec, &zeroVec);
 
     Color_RGBA8 primColor = { 80, 150, 255, 255 };
-    Color_RGBA8 envColor  = { 40,  80, 200, 255 };
+    Color_RGBA8 envColor = { 40, 80, 200, 255 };
     Vec3f accel = { 0.0f, 0.0f, 0.0f };
     for (u8 i = 0; i < 8; i++) {
         // 8 evenly-spaced angles around the player (s16 angle wraps in 65536).
@@ -2001,8 +2264,7 @@ static void PropHunt_SpawnDecoyFx(PlayState* play, Player* player) {
         vel.x = Math_SinS(angleS) * 1.0f;
         vel.y = Rand_ZeroFloat(1.5f) + 0.5f;
         vel.z = Math_CosS(angleS) * 1.0f;
-        EffectSsKiraKira_SpawnFocused(play, &pos, &vel, &accel,
-                                       &primColor, &envColor, 600, 25);
+        EffectSsKiraKira_SpawnFocused(play, &pos, &vel, &accel, &primColor, &envColor, 600, 25);
     }
     Audio_PlayActorSound2(&player->actor, NA_SE_PL_MAGIC_FIRE);
 }
@@ -2010,11 +2272,15 @@ static void PropHunt_SpawnDecoyFx(PlayState* play, Player* player) {
 void SpawnDecoy() {
     // Decoys are a round-only mechanic — gate on Hider role explicitly
     // since IsLocalHiderWithProp now also returns true in the lobby.
-    if (!IsHider()) return;
-    if (!IsLocalHiderWithProp()) return;
-    if (gPlayState == nullptr) return;
+    if (!IsHider())
+        return;
+    if (!IsLocalHiderWithProp())
+        return;
+    if (gPlayState == nullptr)
+        return;
     Player* player = GET_PLAYER(gPlayState);
-    if (player == nullptr) return;
+    if (player == nullptr)
+        return;
 
     // Pick a slot — FIFO: replace oldest when full, otherwise fill empties.
     u8 slot;
@@ -2024,7 +2290,10 @@ void SpawnDecoy() {
     } else {
         slot = 0;
         for (u8 i = 0; i < kDecoyMax; i++) {
-            if (!sDecoys[i].active) { slot = i; break; }
+            if (!sDecoys[i].active) {
+                slot = i;
+                break;
+            }
         }
         sDecoyCount++;
     }
@@ -2033,25 +2302,25 @@ void SpawnDecoy() {
     d.x = player->actor.world.pos.x;
     d.y = player->actor.world.pos.y;
     d.z = player->actor.world.pos.z;
-    d.rotY      = player->actor.shape.rot.y;
-    d.propCat   = sLocal.propCategory;
+    d.rotY = player->actor.shape.rot.y;
+    d.propCat = sLocal.propCategory;
     d.propIndex = sLocal.propIndex;
     d.propState = sLocal.propState;
-    d.active    = true;
+    d.active = true;
 
     // Broadcast so peers render the decoy at the same spot. Uses the
     // existing COMBAT.SPAWN_DECOY primitive — our packet carries enough
     // data for receivers to draw the same prop in the same place.
     nlohmann::json env;
-    env["type"]       = "COMBAT.SPAWN_DECOY";
-    env["slot"]       = slot;
+    env["type"] = "COMBAT.SPAWN_DECOY";
+    env["slot"] = slot;
     nlohmann::json payload;
-    payload["slot"]      = slot;
-    payload["x"]         = d.x;
-    payload["y"]         = d.y;
-    payload["z"]         = d.z;
-    payload["rotY"]      = d.rotY;
-    payload["propCat"]   = d.propCat;
+    payload["slot"] = slot;
+    payload["x"] = d.x;
+    payload["y"] = d.y;
+    payload["z"] = d.z;
+    payload["rotY"] = d.rotY;
+    payload["propCat"] = d.propCat;
     payload["propIndex"] = d.propIndex;
     payload["propState"] = d.propState;
     env["payload"] = payload;
@@ -2060,18 +2329,20 @@ void SpawnDecoy() {
     }
 
     PropHunt_SpawnDecoyFx(gPlayState, player);
-    SPDLOG_INFO("[Harpoon][PropHunt] decoy spawned slot={} cat={} idx={} state={}",
-                slot, d.propCat, d.propIndex, d.propState);
+    SPDLOG_INFO("[Harpoon][PropHunt] decoy spawned slot={} cat={} idx={} state={}", slot, d.propCat, d.propIndex,
+                d.propState);
 }
 
 // Host-side full "the round starts now" sequence. Mirrors Scooter's
 // implicit Start Game flow that happens when the host's GameState machine
 // transitions LOBBY → MAP_SELECT → HIDING_PHASE.
 void HostStartRound(s32 mapIndex) {
-    if (Harpoon::Instance == nullptr) return;
-    bool isHost = (Harpoon::Instance->ownClientId != 0 &&
-                   Harpoon::Instance->ownClientId == Harpoon::Instance->hostClientId);
-    if (!isHost) return;
+    if (Harpoon::Instance == nullptr)
+        return;
+    bool isHost =
+        (Harpoon::Instance->ownClientId != 0 && Harpoon::Instance->ownClientId == Harpoon::Instance->hostClientId);
+    if (!isHost)
+        return;
 
     // 1. Pick seekers. Honor any pre-staged `pendingRole` first (set via the
     //    menu's per-peer Hider/Seeker buttons while in lobby), then fill the
@@ -2080,9 +2351,10 @@ void HostStartRound(s32 mapIndex) {
     //    pendingRole gets cleared so the next round starts fresh.
     std::unordered_set<u32> seekerSet;
     std::unordered_set<u32> pendingHider;
-    std::vector<u32>        unpinned;
+    std::vector<u32> unpinned;
     for (auto& [cid, c] : Harpoon::Instance->clients) {
-        if (!c.online) continue;
+        if (!c.online)
+            continue;
         if (c.pendingRole == "seeker") {
             seekerSet.insert(cid);
         } else if (c.pendingRole == "hider") {
@@ -2100,7 +2372,8 @@ void HostStartRound(s32 mapIndex) {
     s32 needed = desiredSeekerCount - (s32)seekerSet.size();
     if (needed > 0 && !unpinned.empty()) {
         auto picked = Host::PickNextSeekers(unpinned, needed);
-        for (u32 cid : picked) seekerSet.insert(cid);
+        for (u32 cid : picked)
+            seekerSet.insert(cid);
     }
     // Clear pendingRole on every client now that we've consumed it.
     for (auto& [cid, c] : Harpoon::Instance->clients) {
@@ -2123,13 +2396,13 @@ void HostStartRound(s32 mapIndex) {
     // (host's role isn't broadcast), so they render us as that prop the
     // entire round.
     if (ownIsSeeker) {
-        sLocal.propIndex    = -1;
+        sLocal.propIndex = -1;
         sLocal.propCategory = 0;
-        sLocal.propState    = 0;
+        sLocal.propState = 0;
         if (myIt != Harpoon::Instance->clients.end()) {
-            myIt->second.propIndex    = -1;
+            myIt->second.propIndex = -1;
             myIt->second.propCategory = 0;
-            myIt->second.propState    = 0;
+            myIt->second.propState = 0;
         }
         if (Harpoon::Instance->isConnected) {
             Harpoon::Instance->SendJsonToRemote(BuildSetDisguisePayload());
@@ -2138,7 +2411,8 @@ void HostStartRound(s32 mapIndex) {
 
     // 3. Broadcast role assignment per peer.
     for (auto& [cid, c] : Harpoon::Instance->clients) {
-        if (cid == Harpoon::Instance->ownClientId) continue;
+        if (cid == Harpoon::Instance->ownClientId)
+            continue;
         bool peerIsSeeker = seekerSet.count(cid) > 0;
         Role r = peerIsSeeker ? Role::Seeker : Role::Hider;
         c.role = peerIsSeeker ? "seeker" : "hider";
@@ -2150,17 +2424,16 @@ void HostStartRound(s32 mapIndex) {
 
     // 5. Broadcast MAP_CONFIRMED + HIDE_PHASE_BEGIN so peers transition.
     nlohmann::json env;
-    env["type"]       = "ROOM.BROADCAST_EVENT";
+    env["type"] = "ROOM.BROADCAST_EVENT";
     env["event_name"] = "PROP_HUNT.MAP_CONFIRMED";
     nlohmann::json d;
     d["mapIndex"] = mapIndex;
-    env["data"]   = d;
+    env["data"] = d;
     Harpoon::Instance->SendJsonToRemote(env);
-    Harpoon::Instance->SendJsonToRemote(
-        BuildHidePhaseBeginPayload(Host::GetSettings().hideSeconds * 20));
+    Harpoon::Instance->SendJsonToRemote(BuildHidePhaseBeginPayload(Host::GetSettings().hideSeconds * 20));
 
-    SPDLOG_INFO("[Harpoon][PropHunt] HostStartRound map={} ownRole={} seekers={}",
-                mapIndex, ownIsSeeker ? "seeker" : "hider", (int)seekers.size());
+    SPDLOG_INFO("[Harpoon][PropHunt] HostStartRound map={} ownRole={} seekers={}", mapIndex,
+                ownIsSeeker ? "seeker" : "hider", (int)seekers.size());
 }
 
 // "Apply MAP_CONFIRMED locally" — single source of truth used by every code
@@ -2169,9 +2442,9 @@ void HostStartRound(s32 mapIndex) {
 // host wouldn't otherwise execute this branch when broadcasting.
 void LocallyConfirmMap(s32 mapIndex) {
     if (Harpoon::Instance != nullptr) {
-        Harpoon::Instance->selectedMapIndex   = mapIndex;
-        Harpoon::Instance->confirmedMapIndex  = mapIndex;
-        Harpoon::Instance->gameState          = HARPOON_STATE_HIDING_PHASE;
+        Harpoon::Instance->selectedMapIndex = mapIndex;
+        Harpoon::Instance->confirmedMapIndex = mapIndex;
+        Harpoon::Instance->gameState = HARPOON_STATE_HIDING_PHASE;
     }
     sLocal.confirmedMap = mapIndex;
     // NOTE: sRoundElapsedFrames is NOT reset here. Per user spec the PH
@@ -2184,7 +2457,7 @@ void LocallyConfirmMap(s32 mapIndex) {
         s32 entr = GetEntranceForMapIndex(mapIndex);
         gSaveContext.linkAge = LINK_AGE_CHILD;
         TeleportToEntrance(entr);
-        SetPendingInit(1);  // hider preset post-load
+        SetPendingInit(1); // hider preset post-load
     }
     // Seekers stay in the lobby (Hyrule Field) during the hide phase, then
     // teleport on LocallyEndHidePhase. Matches Scooter's two-stage flow.
@@ -2196,12 +2469,12 @@ void LocallyEndHidePhase() {
     if (Harpoon::Instance != nullptr) {
         Harpoon::Instance->gameState = HARPOON_STATE_PLAYING;
     }
-    if (sLocal.role == Role::Seeker && gPlayState != nullptr &&
-        Harpoon::Instance != nullptr && Harpoon::Instance->confirmedMapIndex >= 0) {
+    if (sLocal.role == Role::Seeker && gPlayState != nullptr && Harpoon::Instance != nullptr &&
+        Harpoon::Instance->confirmedMapIndex >= 0) {
         s32 entr = GetEntranceForMapIndex(Harpoon::Instance->confirmedMapIndex);
         gSaveContext.linkAge = LINK_AGE_CHILD;
         TeleportToEntrance(entr);
-        SetPendingInit(2);  // seeker preset post-load
+        SetPendingInit(2); // seeker preset post-load
     }
 }
 
@@ -2220,7 +2493,7 @@ s32 GetEntranceForMapIndex(s32 mapIndex) {
         0x0EE,  // Kokiri Forest
     };
     if (mapIndex < 0 || mapIndex >= (s32)(sizeof(kEntrances) / sizeof(kEntrances[0]))) {
-        return 0x0CD;  // Hyrule Field fallback
+        return 0x0CD; // Hyrule Field fallback
     }
     return kEntrances[mapIndex];
 }
@@ -2237,38 +2510,45 @@ s32 GetEntranceForMapIndex(s32 mapIndex) {
 // ---------------------------------------------------------------------------
 
 namespace {
-struct ClusterDef { const s8* scenes; s32 count; };
-
-static const s8 sCluster_Kakariko[]   = { SCENE_KAKARIKO_VILLAGE };
-static const s8 sCluster_DeathMtn[]   = { SCENE_DEATH_MOUNTAIN_TRAIL };
-static const s8 sCluster_BotW[]       = { SCENE_BOTTOM_OF_THE_WELL };
-static const s8 sCluster_Gerudo[]     = { SCENE_GERUDOS_FORTRESS };
-static const s8 sCluster_ForestTmp[]  = { SCENE_FOREST_TEMPLE };
-static const s8 sCluster_ZorasRiver[] = {
-    SCENE_ZORAS_RIVER, SCENE_ZORAS_DOMAIN, SCENE_ZORAS_FOUNTAIN,
+struct ClusterDef {
+    const s8* scenes;
+    s32 count;
 };
-static const s8 sCluster_Dodongo[]    = { SCENE_DODONGOS_CAVERN };
-static const s8 sCluster_Ganon[]      = { SCENE_INSIDE_GANONS_CASTLE };
-static const s8 sCluster_Kokiri[]     = { SCENE_KOKIRI_FOREST };
+
+static const s8 sCluster_Kakariko[] = { SCENE_KAKARIKO_VILLAGE };
+static const s8 sCluster_DeathMtn[] = { SCENE_DEATH_MOUNTAIN_TRAIL };
+static const s8 sCluster_BotW[] = { SCENE_BOTTOM_OF_THE_WELL };
+static const s8 sCluster_Gerudo[] = { SCENE_GERUDOS_FORTRESS };
+static const s8 sCluster_ForestTmp[] = { SCENE_FOREST_TEMPLE };
+static const s8 sCluster_ZorasRiver[] = {
+    SCENE_ZORAS_RIVER,
+    SCENE_ZORAS_DOMAIN,
+    SCENE_ZORAS_FOUNTAIN,
+};
+static const s8 sCluster_Dodongo[] = { SCENE_DODONGOS_CAVERN };
+static const s8 sCluster_Ganon[] = { SCENE_INSIDE_GANONS_CASTLE };
+static const s8 sCluster_Kokiri[] = { SCENE_KOKIRI_FOREST };
 
 static const ClusterDef sClusterByMap[] = {
-    { sCluster_Kakariko,   (s32)ARRAY_COUNT(sCluster_Kakariko)   },
-    { sCluster_DeathMtn,   (s32)ARRAY_COUNT(sCluster_DeathMtn)   },
-    { sCluster_BotW,       (s32)ARRAY_COUNT(sCluster_BotW)       },
-    { sCluster_Gerudo,     (s32)ARRAY_COUNT(sCluster_Gerudo)     },
-    { sCluster_ForestTmp,  (s32)ARRAY_COUNT(sCluster_ForestTmp)  },
+    { sCluster_Kakariko, (s32)ARRAY_COUNT(sCluster_Kakariko) },
+    { sCluster_DeathMtn, (s32)ARRAY_COUNT(sCluster_DeathMtn) },
+    { sCluster_BotW, (s32)ARRAY_COUNT(sCluster_BotW) },
+    { sCluster_Gerudo, (s32)ARRAY_COUNT(sCluster_Gerudo) },
+    { sCluster_ForestTmp, (s32)ARRAY_COUNT(sCluster_ForestTmp) },
     { sCluster_ZorasRiver, (s32)ARRAY_COUNT(sCluster_ZorasRiver) },
-    { sCluster_Dodongo,    (s32)ARRAY_COUNT(sCluster_Dodongo)    },
-    { sCluster_Ganon,      (s32)ARRAY_COUNT(sCluster_Ganon)      },
-    { sCluster_Kokiri,     (s32)ARRAY_COUNT(sCluster_Kokiri)     },
+    { sCluster_Dodongo, (s32)ARRAY_COUNT(sCluster_Dodongo) },
+    { sCluster_Ganon, (s32)ARRAY_COUNT(sCluster_Ganon) },
+    { sCluster_Kokiri, (s32)ARRAY_COUNT(sCluster_Kokiri) },
 };
-}  // anon
+} // namespace
 
 bool IsSceneInRoundCluster(s32 mapIndex, s32 sceneNum) {
-    if (mapIndex < 0 || mapIndex >= (s32)ARRAY_COUNT(sClusterByMap)) return false;
+    if (mapIndex < 0 || mapIndex >= (s32)ARRAY_COUNT(sClusterByMap))
+        return false;
     const ClusterDef& def = sClusterByMap[mapIndex];
     for (s32 i = 0; i < def.count; i++) {
-        if ((s32)def.scenes[i] == sceneNum) return true;
+        if ((s32)def.scenes[i] == sceneNum)
+            return true;
     }
     return false;
 }
@@ -2288,12 +2568,14 @@ s32 GetReturnEntranceForInvalidExit(s32 mapIndex, s32 destSceneNum) {
 namespace Host {
 
 namespace {
-    Settings                       sSettings;
-    std::unordered_set<u32>        sSeekerHistory;   // cids who've been seeker this rotation
-    std::unordered_map<u32, u32>   sClientTimers;    // cid -> total seconds as hider this game
-}
+Settings sSettings;
+std::unordered_set<u32> sSeekerHistory;     // cids who've been seeker this rotation
+std::unordered_map<u32, u32> sClientTimers; // cid -> total seconds as hider this game
+} // namespace
 
-Settings& GetSettings() { return sSettings; }
+Settings& GetSettings() {
+    return sSettings;
+}
 
 void ResetSeekerHistory() {
     sSeekerHistory.clear();
@@ -2304,12 +2586,14 @@ bool HasBeenSeeker(u32 clientId) {
 }
 
 std::vector<u32> PickNextSeekers(const std::vector<u32>& candidates, s32 seekerCount) {
-    if (candidates.empty() || seekerCount <= 0) return {};
+    if (candidates.empty() || seekerCount <= 0)
+        return {};
 
     // Pool 1: clients who haven't been seeker yet this rotation.
     std::vector<u32> pool;
     for (u32 cid : candidates) {
-        if (!HasBeenSeeker(cid)) pool.push_back(cid);
+        if (!HasBeenSeeker(cid))
+            pool.push_back(cid);
     }
     // If everyone has been seeker, reset history and rebuild pool.
     if (pool.empty()) {
@@ -2349,16 +2633,17 @@ void ResetClientTimer(u32 clientId) {
     sClientTimers[clientId] = 0;
 }
 
-}  // namespace Host
+} // namespace Host
 
 void TeleportToEntrance(s32 entranceIndex) {
-    if (gPlayState == nullptr) return;
+    if (gPlayState == nullptr)
+        return;
     // Keep linkAgeOnLoad in sync with the age the save preset just set so
     // Inventory_SwapAgeEquipment doesn't corrupt mid-transition.
-    gPlayState->linkAgeOnLoad     = gSaveContext.linkAge;
+    gPlayState->linkAgeOnLoad = gSaveContext.linkAge;
     gPlayState->nextEntranceIndex = entranceIndex;
     gPlayState->transitionTrigger = TRANS_TRIGGER_START;
-    gPlayState->transitionType    = TRANS_TYPE_FADE_BLACK;
+    gPlayState->transitionType = TRANS_TYPE_FADE_BLACK;
     // Authorize this transition with the round-active blocker (global
     // flag defined just below this namespace). Force global lookup
     // explicitly — MSVC mangles unqualified function-scope `extern` as
@@ -2473,8 +2758,10 @@ void BigStartGameAs(Role role) {
         if (sLocal.propCategory < 0 || sLocal.propCategory >= kCategoryCount) {
             sLocal.propCategory = CAT_ENVIRONMENT;
         }
-        if (sLocal.propIndex < 0) sLocal.propIndex = 0;
-        if (sLocal.propState < 0) sLocal.propState = 0;
+        if (sLocal.propIndex < 0)
+            sLocal.propIndex = 0;
+        if (sLocal.propState < 0)
+            sLocal.propState = 0;
     } else {
         // Becoming a seeker (or eliminated). Wipe any leftover prop state
         // from a previous hider stint and tell peers immediately — the
@@ -2499,8 +2786,9 @@ void BigStartGameAs(Role role) {
     GameInteractor_ExecuteOnLoadGame(gSaveContext.fileNum);
 
     SPDLOG_INFO("[Harpoon][PropHunt] BigStartGameAs role={} entrance=0x{:X}",
-                role == Role::Hider ? "hider" :
-                role == Role::Seeker ? "seeker" : "unassigned",
+                role == Role::Hider    ? "hider"
+                : role == Role::Seeker ? "seeker"
+                                       : "unassigned",
                 (u32)gSaveContext.entranceIndex);
 }
 
@@ -2513,18 +2801,30 @@ void BigStartGameAs(Role role) {
 
 static s32 sPendingInit = 0;
 
-void SetPendingInit(s32 type) { sPendingInit = type; }
+void SetPendingInit(s32 type) {
+    sPendingInit = type;
+}
 
 void ProcessPendingInit() {
-    if (sPendingInit == 0) return;
+    if (sPendingInit == 0)
+        return;
     s32 t = sPendingInit;
     sPendingInit = 0;
     switch (t) {
-        case 1: ApplyHiderSave();  break;  // hider
-        case 2: ApplySeekerSave(); break;  // seeker
-        case 3: ApplySeekerSave(); break;  // converted seeker (died as hider)
-        case 4: ApplyHiderSave();  break;  // reset to hider (game over)
-        default: break;
+        case 1:
+            ApplyHiderSave();
+            break; // hider
+        case 2:
+            ApplySeekerSave();
+            break; // seeker
+        case 3:
+            ApplySeekerSave();
+            break; // converted seeker (died as hider)
+        case 4:
+            ApplyHiderSave();
+            break; // reset to hider (game over)
+        default:
+            break;
     }
 }
 
@@ -2536,21 +2836,23 @@ void ProcessPendingInit() {
 // ---------------------------------------------------------------------------
 
 void InstantReloadScene() {
-    if (gPlayState == nullptr) return;
+    if (gPlayState == nullptr)
+        return;
     Player* player = GET_PLAYER(gPlayState);
-    if (player == nullptr) return;
+    if (player == nullptr)
+        return;
 
     gSaveContext.respawnFlag = 1;
     gPlayState->nextEntranceIndex = gSaveContext.entranceIndex;
     gSaveContext.respawn[RESPAWN_MODE_DOWN].entranceIndex = gPlayState->nextEntranceIndex;
-    gSaveContext.respawn[RESPAWN_MODE_DOWN].roomIndex     = gPlayState->roomCtx.curRoom.num;
-    gSaveContext.respawn[RESPAWN_MODE_DOWN].pos           = player->actor.world.pos;
-    gSaveContext.respawn[RESPAWN_MODE_DOWN].yaw           = player->actor.shape.rot.y;
+    gSaveContext.respawn[RESPAWN_MODE_DOWN].roomIndex = gPlayState->roomCtx.curRoom.num;
+    gSaveContext.respawn[RESPAWN_MODE_DOWN].pos = player->actor.world.pos;
+    gSaveContext.respawn[RESPAWN_MODE_DOWN].yaw = player->actor.shape.rot.y;
     // 0x0DFF = vanilla "down respawn" params for regular scenes.
     gSaveContext.respawn[RESPAWN_MODE_DOWN].playerParams = 0x0DFF;
 
     gPlayState->transitionTrigger = TRANS_TRIGGER_START;
-    gPlayState->transitionType    = TRANS_TYPE_INSTANT;
+    gPlayState->transitionType = TRANS_TYPE_INSTANT;
     gSaveContext.nextTransitionType = TRANS_TYPE_FADE_BLACK_FAST;
 
     // Sync target age with whatever the preset just set so the reload picks
@@ -2570,28 +2872,32 @@ void ChangeRoleAndReload(Role role) {
         ApplyHiderSave();
     }
     InstantReloadScene();
-    SPDLOG_INFO("[Harpoon][PropHunt] role changed -> {} (in-place reload)",
-                role == Role::Seeker ? "seeker" : "hider");
+    SPDLOG_INFO("[Harpoon][PropHunt] role changed -> {} (in-place reload)", role == Role::Seeker ? "seeker" : "hider");
 }
 
 f32 GetPropVisualScale(s32 category, s32 propIndex, s32 propState, s32 mapIdx) {
     const PropEntry* entry = GetPropEntry(category, propIndex, mapIdx);
-    if (entry == nullptr || entry->states.empty()) return 1.0f;
-    if (propState < 0 || propState >= (s32)entry->states.size()) propState = 0;
+    if (entry == nullptr || entry->states.empty())
+        return 1.0f;
+    if (propState < 0 || propState >= (s32)entry->states.size())
+        propState = 0;
     f32 s = entry->states[propState].scale;
     return (s > 0.0f) ? s : 1.0f;
 }
 
 Actor* GetGhostActor(s32 category, s32 propIndex, s32 propState) {
-    if (category < 0 || category >= kCategoryCount) return nullptr;
-    if (propIndex < 0 || propIndex >= kPropsPerCategory) return nullptr;
-    if (propState < 0) propState = 0;
-    if (propState >= kStatesPerProp) propState = kStatesPerProp - 1;
+    if (category < 0 || category >= kCategoryCount)
+        return nullptr;
+    if (propIndex < 0 || propIndex >= kPropsPerCategory)
+        return nullptr;
+    if (propState < 0)
+        propState = 0;
+    if (propState >= kStatesPerProp)
+        propState = kStatesPerProp - 1;
     return sGhostActors[category][propIndex][propState];
 }
 
-bool DrawHiderAsProp(Actor* playerActor, PlayState* play,
-                     s32 category, s32 propIndex, s32 propState, s32 mapIdx) {
+bool DrawHiderAsProp(Actor* playerActor, PlayState* play, s32 category, s32 propIndex, s32 propState, s32 mapIdx) {
     // Rate-limited debug logging — fires every ~5s while a hider with a prop
     // selected is trying to render. Helps diagnose which guard is failing
     // when the prop doesn't show up.
@@ -2606,24 +2912,28 @@ bool DrawHiderAsProp(Actor* playerActor, PlayState* play,
         }
         return false;
     }
-    if (playerActor == nullptr || play == nullptr) return false;
+    if (playerActor == nullptr || play == nullptr)
+        return false;
 
     const PropEntry* entry = GetPropEntry(category, propIndex, mapIdx);
     if (entry == nullptr) {
         if (shouldLog) {
-            SPDLOG_WARN("[Harpoon][PropHunt] DrawHiderAsProp: entry NULL cat={} idx={} map={}",
-                        category, propIndex, mapIdx);
+            SPDLOG_WARN("[Harpoon][PropHunt] DrawHiderAsProp: entry NULL cat={} idx={} map={}", category, propIndex,
+                        mapIdx);
             sLastLog = nowMs;
         }
         return false;
     }
-    if (propState < 0 || propState >= (s32)entry->states.size()) propState = 0;
+    if (propState < 0 || propState >= (s32)entry->states.size())
+        propState = 0;
     const PropVariant& v = entry->states[propState];
 
     // Helper: check whether a ghost is usable (non-null, has draw, object loaded).
     auto ghostUsable = [&](Actor* g) -> bool {
-        if (g == nullptr || g->draw == nullptr) return false;
-        if (g->objBankIndex < 0) return true;
+        if (g == nullptr || g->draw == nullptr)
+            return false;
+        if (g->objBankIndex < 0)
+            return true;
         return Object_IsLoaded(&play->objectCtx, g->objBankIndex);
     };
 
@@ -2631,7 +2941,8 @@ bool DrawHiderAsProp(Actor* playerActor, PlayState* play,
     // range above; clamp again for safety against the kStatesPerProp
     // storage cap (kept as a hard upper bound for the static array).
     s32 stateIdx = propState;
-    if (stateIdx >= kStatesPerProp) stateIdx = kStatesPerProp - 1;
+    if (stateIdx >= kStatesPerProp)
+        stateIdx = kStatesPerProp - 1;
 
     Actor* ghost = sGhostActors[category][propIndex][stateIdx];
     if (!ghostUsable(ghost)) {
@@ -2648,7 +2959,11 @@ bool DrawHiderAsProp(Actor* playerActor, PlayState* play,
                 for (s32 s = 0; s < kStatesPerProp; s++) {
                     Actor* g = sGhostActors[c][i][s];
                     if (ghostUsable(g)) {
-                        alt = g; altCat = c; altIdx = i; altState = s; break;
+                        alt = g;
+                        altCat = c;
+                        altIdx = i;
+                        altState = s;
+                        break;
                     }
                 }
             }
@@ -2675,7 +2990,7 @@ bool DrawHiderAsProp(Actor* playerActor, PlayState* play,
     Vec3f savedPos = ghost->world.pos;
     Vec3s savedRot = ghost->shape.rot;
     Vec3f savedScale = ghost->scale;
-    f32   savedYOffset = ghost->shape.yOffset;
+    f32 savedYOffset = ghost->shape.yOffset;
 
     ghost->world.pos = playerActor->world.pos;
     ghost->shape.rot = playerActor->shape.rot;
@@ -2687,11 +3002,8 @@ bool DrawHiderAsProp(Actor* playerActor, PlayState* play,
     ghost->shape.yOffset = v.yOffset;
 
     Matrix_Push();
-    Matrix_SetTranslateRotateYXZ(
-        ghost->world.pos.x,
-        ghost->world.pos.y + (v.yOffset * v.scale),
-        ghost->world.pos.z,
-        &ghost->shape.rot);
+    Matrix_SetTranslateRotateYXZ(ghost->world.pos.x, ghost->world.pos.y + (v.yOffset * v.scale), ghost->world.pos.z,
+                                 &ghost->shape.rot);
     Matrix_Scale(v.scale, v.scale, v.scale, MTXMODE_APPLY);
 
     // Segment 6 needs to point at the ghost's object bank for the actor's
@@ -2706,10 +3018,8 @@ bool DrawHiderAsProp(Actor* playerActor, PlayState* play,
         GraphicsContext* __gfxCtx = play->state.gfxCtx;
         Gfx* dispRefs[4];
         Graph_OpenDisps(dispRefs, __gfxCtx, __FILE__, __LINE__);
-        gSPSegment(POLY_OPA_DISP++, 0x06,
-                   (uintptr_t)play->objectCtx.status[ghost->objBankIndex].segment);
-        gSPSegment(POLY_XLU_DISP++, 0x06,
-                   (uintptr_t)play->objectCtx.status[ghost->objBankIndex].segment);
+        gSPSegment(POLY_OPA_DISP++, 0x06, (uintptr_t)play->objectCtx.status[ghost->objBankIndex].segment);
+        gSPSegment(POLY_XLU_DISP++, 0x06, (uintptr_t)play->objectCtx.status[ghost->objBankIndex].segment);
         Graph_CloseDisps(dispRefs, __gfxCtx, __FILE__, __LINE__);
         FrameInterpolation_RecordCloseChild();
     }
@@ -2724,7 +3034,7 @@ bool DrawHiderAsProp(Actor* playerActor, PlayState* play,
     return true;
 }
 
-}  // namespace HarpoonPropHunt
+} // namespace HarpoonPropHunt
 
 // =============================================================================
 // C bridge
@@ -2735,13 +3045,27 @@ extern "C" {
 s32 HarpoonPropHunt_IsActive(void) {
     return (Harpoon::Instance != nullptr && Harpoon::Instance->isPropHuntMode) ? 1 : 0;
 }
-s32 HarpoonPropHunt_IsHider(void)            { return HarpoonPropHunt::IsHider()      ? 1 : 0; }
-s32 HarpoonPropHunt_IsSeeker(void)           { return HarpoonPropHunt::IsSeeker()     ? 1 : 0; }
-s32 HarpoonPropHunt_IsEliminated(void)       { return HarpoonPropHunt::IsEliminated() ? 1 : 0; }
-s32 HarpoonPropHunt_GetLocalPropCategory(void){ return HarpoonPropHunt::GetLocalState().propCategory; }
-s32 HarpoonPropHunt_GetLocalPropIndex(void)  { return HarpoonPropHunt::GetLocalState().propIndex; }
-s32 HarpoonPropHunt_GetLocalPropState(void)  { return HarpoonPropHunt::GetLocalState().propState; }
-s32 HarpoonPropHunt_GetConfirmedMapIndex(void){ return HarpoonPropHunt::GetLocalState().confirmedMap; }
+s32 HarpoonPropHunt_IsHider(void) {
+    return HarpoonPropHunt::IsHider() ? 1 : 0;
+}
+s32 HarpoonPropHunt_IsSeeker(void) {
+    return HarpoonPropHunt::IsSeeker() ? 1 : 0;
+}
+s32 HarpoonPropHunt_IsEliminated(void) {
+    return HarpoonPropHunt::IsEliminated() ? 1 : 0;
+}
+s32 HarpoonPropHunt_GetLocalPropCategory(void) {
+    return HarpoonPropHunt::GetLocalState().propCategory;
+}
+s32 HarpoonPropHunt_GetLocalPropIndex(void) {
+    return HarpoonPropHunt::GetLocalState().propIndex;
+}
+s32 HarpoonPropHunt_GetLocalPropState(void) {
+    return HarpoonPropHunt::GetLocalState().propState;
+}
+s32 HarpoonPropHunt_GetConfirmedMapIndex(void) {
+    return HarpoonPropHunt::GetLocalState().confirmedMap;
+}
 
 // Direct prop-draw intercept for z_player.c Player_Draw. Called every
 // frame from the actor draw callback BEFORE Player_DrawGameplay runs.
@@ -2752,14 +3076,17 @@ s32 HarpoonPropHunt_GetConfirmedMapIndex(void){ return HarpoonPropHunt::GetLocal
 // the requested ghost actor isn't loadable this frame).
 s32 HarpoonPropHunt_TryDrawLocalProp(Actor* thisx, PlayState* play) {
     using namespace HarpoonPropHunt;
-    if (thisx == nullptr || play == nullptr) return 0;
-    if (Harpoon::Instance == nullptr || !Harpoon::Instance->isPropHuntMode) return 0;
-    if (!IsLocalHiderWithProp()) return 0;
-    if (!AreGhostsReady())       return 0;
+    if (thisx == nullptr || play == nullptr)
+        return 0;
+    if (Harpoon::Instance == nullptr || !Harpoon::Instance->isPropHuntMode)
+        return 0;
+    if (!IsLocalHiderWithProp())
+        return 0;
+    if (!AreGhostsReady())
+        return 0;
     const auto& s = GetLocalState();
     s32 mapIdx = (s.confirmedMap >= 0) ? s.confirmedMap : 0;
-    return DrawHiderAsProp(thisx, play, s.propCategory, s.propIndex, s.propState, mapIdx)
-             ? 1 : 0;
+    return DrawHiderAsProp(thisx, play, s.propCategory, s.propIndex, s.propState, mapIdx) ? 1 : 0;
 }
 
-}  // extern "C"
+} // extern "C"

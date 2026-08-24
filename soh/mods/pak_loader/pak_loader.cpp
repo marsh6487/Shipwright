@@ -21,7 +21,7 @@ static void O2rUpdateMounts(void);
 #include "global.h"
 #include "z64.h"
 #include "soh/OTRGlobals.h"
-#include <libultraship/bridge.h> // CVarGet*/CVarSet* — was transitive via OTRGlobals.h before upstream #6636
+#include <libultraship/bridge.h>       // CVarGet*/CVarSet* — was transitive via OTRGlobals.h before upstream #6636
 #include <libultraship/libultraship.h> // full Ship::Window (GetGui) — was transitive via OTRGlobals.h before #6636
 
 // Used for scene-change detection to invalidate stale OTR pointers in the equipment cache.
@@ -172,9 +172,9 @@ static inline void SWAP32_INPLACE(u8* p) {
 // ("[PAK]" / "[ZOBJ]" / "[O2R]") and the cleanup path on shutdown (o2r entries
 // own their Gfx* via shared_ptr<IResource> instead of zobj-allocated bytes).
 enum PakModelSource : u8 {
-    PAK_SOURCE_PAK  = 0,
+    PAK_SOURCE_PAK = 0,
     PAK_SOURCE_ZOBJ = 1,
-    PAK_SOURCE_O2R  = 2,
+    PAK_SOURCE_O2R = 2,
 };
 
 struct PakModel {
@@ -209,9 +209,9 @@ struct PakModel {
     u8 hasChild;
     u8 adultReady;
     u8 childReady;
-    u8 isEquipmentOnly; // 1 = zzequipment pak (no body, only equipment items)
-    u8 isSyncOnly;      // 1 = loaded from harpoon/skins/; hidden from local menu,
-                        //     only picked up via PakLoader_BeginRemoteRender for remote players
+    u8 isEquipmentOnly;    // 1 = zzequipment pak (no body, only equipment items)
+    u8 isSyncOnly;         // 1 = loaded from harpoon/skins/; hidden from local menu,
+                           //     only picked up via PakLoader_BeginRemoteRender for remote players
     PakModelSource source; // PAK / ZOBJ / O2R — drives dropdown prefix + cleanup branch.
 
     // .o2r entries: native Gfx* in adultEquipDLs/childEquipDLs come from
@@ -1160,28 +1160,28 @@ static const EquipSlotMapping sEquipSlotMap[] = {
     { "shield1_held", 0x5110 }, // DL_SHIELD_2 (Hylian)
     { "shield2_held", 0x5118 }, // DL_SHIELD_3 (Mirror)
     // Ranged
-    { "bow", 0x5138 },             // DL_BOW
-    { "bow_string", 0x5140 },      // DL_BOW_STRING
-    { "hookshot", 0x5148 },        // DL_HOOKSHOT
-    { "hookshot_chain", 0x5150 },  // DL_HOOKSHOT_CHAIN
-    { "hookshot_hook", 0x5158 },   // DL_HOOKSHOT_HOOK
-    { "hookshot_aim", 0x5160 },    // DL_HOOKSHOT_AIM
-    { "boomerang", 0x5178 },       // DL_BOOMERANG
-    { "slingshot", 0x5180 },       // DL_SLINGSHOT
+    { "bow", 0x5138 },              // DL_BOW
+    { "bow_string", 0x5140 },       // DL_BOW_STRING
+    { "hookshot", 0x5148 },         // DL_HOOKSHOT
+    { "hookshot_chain", 0x5150 },   // DL_HOOKSHOT_CHAIN
+    { "hookshot_hook", 0x5158 },    // DL_HOOKSHOT_HOOK
+    { "hookshot_aim", 0x5160 },     // DL_HOOKSHOT_AIM
+    { "boomerang", 0x5178 },        // DL_BOOMERANG
+    { "slingshot", 0x5180 },        // DL_SLINGSHOT
     { "slingshot_string", 0x5188 }, // DL_SLINGSHOT_STRING
     // Items
-    { "deku_stick", 0x5130 },  // DL_DEKU_STICK
-    { "bottle", 0x5120 },      // DL_BOTTLE
-    { "ocarina_0", 0x5190 },   // DL_OCARINA_FAIRY
-    { "ocarina_1_a", 0x5128 }, // DL_OCARINA_2 (adult OoT)
-    { "ocarina_1", 0x5128 },   // DL_OCARINA_2 (alternate name)
-    { "hammer", 0x51F0 },      // DL_HAMMER
+    { "deku_stick", 0x5130 },     // DL_DEKU_STICK
+    { "bottle", 0x5120 },         // DL_BOTTLE
+    { "ocarina_0", 0x5190 },      // DL_OCARINA_FAIRY
+    { "ocarina_1_a", 0x5128 },    // DL_OCARINA_2 (adult OoT)
+    { "ocarina_1", 0x5128 },      // DL_OCARINA_2 (alternate name)
+    { "hammer", 0x51F0 },         // DL_HAMMER
     { "goron_bracelet", 0x5198 }, // DL_GORON_BRACELET
     // Boots (Iron + Hover)
-    { "boot1_l", 0x5228 },     // DL_BOOT_LIRON
-    { "boot1_r", 0x5230 },     // DL_BOOT_RIRON
-    { "boot2_l", 0x5238 },     // DL_BOOT_LHOVER
-    { "boot2_r", 0x5240 },     // DL_BOOT_RHOVER
+    { "boot1_l", 0x5228 }, // DL_BOOT_LIRON
+    { "boot1_r", 0x5230 }, // DL_BOOT_RIRON
+    { "boot2_l", 0x5238 }, // DL_BOOT_LHOVER
+    { "boot2_r", 0x5240 }, // DL_BOOT_RHOVER
     // Alternate naming conventions for boots
     { "boot_l_iron", 0x5228 },
     { "boot_r_iron", 0x5230 },
@@ -1234,39 +1234,39 @@ static u32 EquipSlotNameToAlias(const char* slotName) {
 // rebuild from whatever primitive pieces ended up in sCachedEquipDLs.
 
 struct EquipSlotGroup {
-    const char* cvarKey;       // CVar suffix: "gMods.PakLoader.SlotMix." + cvarKey
-    const char* displayLabel;  // human-readable label shown in the menu
-    u32 aliases[8];            // 0-terminated; ALL pulled together from the chosen pak
+    const char* cvarKey;      // CVar suffix: "gMods.PakLoader.SlotMix." + cvarKey
+    const char* displayLabel; // human-readable label shown in the menu
+    u32 aliases[8];           // 0-terminated; ALL pulled together from the chosen pak
 };
 
 static const EquipSlotGroup sSlotGroups[] = {
-    { "Sword0",       "Kokiri Sword",       { 0x50C0, 0x50D8, 0x50F0, 0 } },
-    { "Sword1",       "Master Sword",       { 0x50C8, 0x50E0, 0x50F8, 0 } },
-    { "Sword2",       "Giant's Knife",      { 0x50D0, 0x50E8, 0x5100, 0x51E0, 0 } },
-    { "Shield0",      "Deku Shield",        { 0x5108, 0x53E8, 0 } },
-    { "Shield1",      "Hylian Shield",      { 0x5110, 0x53F0, 0 } },
-    { "Shield2",      "Mirror Shield",      { 0x5118, 0x53F8, 0 } },
-    { "Bow",          "Bow",                { 0x5138, 0x5140, 0 } },
-    { "Hookshot",     "Hookshot",           { 0x5148, 0x5150, 0x5158, 0x5160, 0 } },
-    { "Slingshot",    "Slingshot",          { 0x5180, 0x5188, 0 } },
-    { "Boomerang",    "Boomerang",          { 0x5178, 0 } },
-    { "Hammer",       "Megaton Hammer",     { 0x51F0, 0 } },
-    { "DekuStick",    "Deku Stick",         { 0x5130, 0 } },
-    { "Bottle",       "Bottle",             { 0x5120, 0 } },
-    { "OcarinaFairy", "Fairy Ocarina",      { 0x5190, 0 } },
-    { "OcarinaTime",  "Ocarina of Time",    { 0x5128, 0 } },
-    { "IronBoots",    "Iron Boots",         { 0x5228, 0x5230, 0 } },
-    { "HoverBoots",   "Hover Boots",        { 0x5238, 0x5240, 0 } },
-    { "Gauntlets",    "Gauntlets",          { 0x51F8, 0x5200, 0x5208, 0x5210, 0x5218, 0x5220, 0 } },
-    { "Bracelet",     "Goron Bracelet",     { 0x5198, 0 } },
-    { "MaskSkull",    "Skull Mask",         { 0x51A0, 0 } },
-    { "MaskSpooky",   "Spooky Mask",        { 0x51A8, 0 } },
-    { "MaskKeaton",   "Keaton Mask",        { 0x51B0, 0 } },
-    { "MaskTruth",    "Mask of Truth",      { 0x51B8, 0 } },
-    { "MaskGoron",    "Goron Mask",         { 0x51C0, 0 } },
-    { "MaskZora",     "Zora Mask",          { 0x51C8, 0 } },
-    { "MaskGerudo",   "Gerudo Mask",        { 0x51D0, 0 } },
-    { "MaskBunny",    "Bunny Hood",         { 0x51D8, 0 } },
+    { "Sword0", "Kokiri Sword", { 0x50C0, 0x50D8, 0x50F0, 0 } },
+    { "Sword1", "Master Sword", { 0x50C8, 0x50E0, 0x50F8, 0 } },
+    { "Sword2", "Giant's Knife", { 0x50D0, 0x50E8, 0x5100, 0x51E0, 0 } },
+    { "Shield0", "Deku Shield", { 0x5108, 0x53E8, 0 } },
+    { "Shield1", "Hylian Shield", { 0x5110, 0x53F0, 0 } },
+    { "Shield2", "Mirror Shield", { 0x5118, 0x53F8, 0 } },
+    { "Bow", "Bow", { 0x5138, 0x5140, 0 } },
+    { "Hookshot", "Hookshot", { 0x5148, 0x5150, 0x5158, 0x5160, 0 } },
+    { "Slingshot", "Slingshot", { 0x5180, 0x5188, 0 } },
+    { "Boomerang", "Boomerang", { 0x5178, 0 } },
+    { "Hammer", "Megaton Hammer", { 0x51F0, 0 } },
+    { "DekuStick", "Deku Stick", { 0x5130, 0 } },
+    { "Bottle", "Bottle", { 0x5120, 0 } },
+    { "OcarinaFairy", "Fairy Ocarina", { 0x5190, 0 } },
+    { "OcarinaTime", "Ocarina of Time", { 0x5128, 0 } },
+    { "IronBoots", "Iron Boots", { 0x5228, 0x5230, 0 } },
+    { "HoverBoots", "Hover Boots", { 0x5238, 0x5240, 0 } },
+    { "Gauntlets", "Gauntlets", { 0x51F8, 0x5200, 0x5208, 0x5210, 0x5218, 0x5220, 0 } },
+    { "Bracelet", "Goron Bracelet", { 0x5198, 0 } },
+    { "MaskSkull", "Skull Mask", { 0x51A0, 0 } },
+    { "MaskSpooky", "Spooky Mask", { 0x51A8, 0 } },
+    { "MaskKeaton", "Keaton Mask", { 0x51B0, 0 } },
+    { "MaskTruth", "Mask of Truth", { 0x51B8, 0 } },
+    { "MaskGoron", "Goron Mask", { 0x51C0, 0 } },
+    { "MaskZora", "Zora Mask", { 0x51C8, 0 } },
+    { "MaskGerudo", "Gerudo Mask", { 0x51D0, 0 } },
+    { "MaskBunny", "Bunny Hood", { 0x51D8, 0 } },
     { NULL, NULL, { 0 } }
 };
 
@@ -1275,7 +1275,7 @@ static constexpr s32 kSlotCount = (sizeof(sSlotGroups) / sizeof(sSlotGroups[0]))
 // Active per-slot selection: pak index in sModels, or -1 to inherit from the
 // global Equipment Pack dropdown / body pak / vanilla cascade.
 static s32 sSlotMix[kSlotCount] = {};
-static u8  sSlotMixInitialized = 0;
+static u8 sSlotMixInitialized = 0;
 
 // Hash of sSlotMix[] folded into the cache key so changes trigger a rebuild.
 static u64 sCacheSlotMixHash = 0;
@@ -1305,7 +1305,8 @@ static u64 SlotMixHash(void) {
 // no body or Equipment Pack.
 static bool AnySlotMixActive(void) {
     for (s32 i = 0; i < kSlotCount; i++) {
-        if (sSlotMix[i] >= 0) return true;
+        if (sSlotMix[i] >= 0)
+            return true;
     }
     return false;
 }
@@ -1596,17 +1597,22 @@ static void LoadEquipmentZobj(u8* zobjData, u32 zobjSize, PakModel& model) {
 // the stem (case-insensitive). Defaults to adult.
 static u8 GuessAgeFromFilename(const std::string& path) {
     std::string lower = std::filesystem::path(path).stem().string();
-    for (char& c : lower) c = (char)tolower((unsigned char)c);
-    if (lower.find("child") != std::string::npos) return 1;
-    if (lower.find("_kid") != std::string::npos)  return 1;
-    if (lower.find("kid_") != std::string::npos)  return 1;
+    for (char& c : lower)
+        c = (char)tolower((unsigned char)c);
+    if (lower.find("child") != std::string::npos)
+        return 1;
+    if (lower.find("_kid") != std::string::npos)
+        return 1;
+    if (lower.find("kid_") != std::string::npos)
+        return 1;
     return 0;
 }
 
 // Returns true if the zobj contains the EQUIPMANIFEST marker (zzequipment-style
 // equipment-only export). Same marker LoadEquipmentZobj scans for.
 static bool ZobjHasEquipManifest(const u8* data, u32 size) {
-    if (size < 13) return false;
+    if (size < 13)
+        return false;
     for (u32 i = 0; i + 13 <= size; i++) {
         if (memcmp(data + i, "EQUIPMANIFEST", 13) == 0)
             return true;
@@ -1618,7 +1624,8 @@ static bool ZobjHasEquipManifest(const u8* data, u32 size) {
 // pipeline that LoadPakModel uses after extracting from a .pak archive.
 static bool LoadRawZobjModel(PakModel& model) {
     FILE* f = fopen(model.pakPath.c_str(), "rb");
-    if (!f) return false;
+    if (!f)
+        return false;
 
     fseek(f, 0, SEEK_END);
     long fileSize = ftell(f);
@@ -1630,7 +1637,10 @@ static bool LoadRawZobjModel(PakModel& model) {
     }
 
     u8* zobjData = (u8*)malloc((size_t)fileSize);
-    if (!zobjData) { fclose(f); return false; }
+    if (!zobjData) {
+        fclose(f);
+        return false;
+    }
     if (fread(zobjData, 1, (size_t)fileSize, f) != (size_t)fileSize) {
         free(zobjData);
         fclose(f);
@@ -1661,13 +1671,17 @@ static bool LoadRawZobjModel(PakModel& model) {
         bool ok = !model.adultEquipDLs.empty() || !model.childEquipDLs.empty();
         if (!ok) {
             // No equipment DLs decoded — let the caller free the zobj
-            if (age == 1) { model.childZobj = nullptr; model.childZobjSize = 0; }
-            else          { model.adultZobj = nullptr; model.adultZobjSize = 0; }
+            if (age == 1) {
+                model.childZobj = nullptr;
+                model.childZobjSize = 0;
+            } else {
+                model.adultZobj = nullptr;
+                model.adultZobjSize = 0;
+            }
             free(zobjData);
             return false;
         }
-        PAK_LOG("Raw zobj equipment loaded: '%s' age=%d (adult=%d, child=%d DLs)",
-                model.displayName, (int)age,
+        PAK_LOG("Raw zobj equipment loaded: '%s' age=%d (adult=%d, child=%d DLs)", model.displayName, (int)age,
                 (int)model.adultEquipDLs.size(), (int)model.childEquipDLs.size());
         return true;
     }
@@ -1687,7 +1701,8 @@ static bool LoadRawZobjModel(PakModel& model) {
     u8 age;
     if (isOldFormat) {
         age = zobjData[0x500B];
-        if (age != 0 && age != 1) age = GuessAgeFromFilename(model.pakPath);
+        if (age != 0 && age != 1)
+            age = GuessAgeFromFilename(model.pakPath);
     } else {
         age = GuessAgeFromFilename(model.pakPath);
     }
@@ -1699,8 +1714,8 @@ static bool LoadRawZobjModel(PakModel& model) {
         model.childZobj = zobjData;
         model.childZobjSize = zobjSize;
         model.hasChild = 1;
-        if (ZobjBuildSkeleton(zobjData, zobjSize, model.childLimbs, model.childLimbTable,
-                              &model.childFlexHeader, model.childTranslatedDLs, &swapCtx)) {
+        if (ZobjBuildSkeleton(zobjData, zobjSize, model.childLimbs, model.childLimbTable, &model.childFlexHeader,
+                              model.childTranslatedDLs, &swapCtx)) {
             model.childReady = 1;
             ZobjParseAliasTable(zobjData, zobjSize, model.childEquipDLs, model.childTranslatedDLs, swapCtx);
             PAK_LOG("Raw zobj '%s' loaded as CHILD model", model.displayName);
@@ -1710,8 +1725,8 @@ static bool LoadRawZobjModel(PakModel& model) {
         model.adultZobj = zobjData;
         model.adultZobjSize = zobjSize;
         model.hasAdult = 1;
-        if (ZobjBuildSkeleton(zobjData, zobjSize, model.adultLimbs, model.adultLimbTable,
-                              &model.adultFlexHeader, model.adultTranslatedDLs, &swapCtx)) {
+        if (ZobjBuildSkeleton(zobjData, zobjSize, model.adultLimbs, model.adultLimbTable, &model.adultFlexHeader,
+                              model.adultTranslatedDLs, &swapCtx)) {
             model.adultReady = 1;
             ZobjParseAliasTable(zobjData, zobjSize, model.adultEquipDLs, model.adultTranslatedDLs, swapCtx);
             PAK_LOG("Raw zobj '%s' loaded as ADULT model", model.displayName);
@@ -1752,10 +1767,14 @@ static bool LoadRawZobjModel(PakModel& model) {
 // archives sometimes ship paired adult+child symbols under the same archive.
 static bool O2rPathIsChild(const std::string& path) {
     std::string lower = path;
-    for (char& c : lower) c = (char)tolower((unsigned char)c);
-    if (lower.find("child") != std::string::npos) return true;
-    if (lower.find("_kid_") != std::string::npos) return true;
-    if (lower.find("kid_") != std::string::npos)  return true;
+    for (char& c : lower)
+        c = (char)tolower((unsigned char)c);
+    if (lower.find("child") != std::string::npos)
+        return true;
+    if (lower.find("_kid_") != std::string::npos)
+        return true;
+    if (lower.find("kid_") != std::string::npos)
+        return true;
     return false;
 }
 
@@ -1771,101 +1790,144 @@ static bool O2rPathIsChild(const std::string& path) {
 // combo regen will overwrite them if hilt/blade pieces are also present.
 static u32 O2rInferAlias(const std::string& symbolName) {
     std::string s = symbolName;
-    for (char& c : s) c = (char)tolower((unsigned char)c);
+    for (char& c : s)
+        c = (char)tolower((unsigned char)c);
     // Strip leading 'g' (gSym → sym) for cleaner keyword matching.
-    if (!s.empty() && s[0] == 'g') s.erase(0, 1);
+    if (!s.empty() && s[0] == 'g')
+        s.erase(0, 1);
     auto has = [&](const char* k) { return s.find(k) != std::string::npos; };
 
     // Exact Z64O slot-name match against the existing equip slot table.
     for (const EquipSlotMapping* m = sEquipSlotMap; m->slotName != NULL; m++) {
-        if (s == m->slotName) return m->z64oAlias;
+        if (s == m->slotName)
+            return m->z64oAlias;
     }
 
     // Sword pieces — hilt / blade / sheath of Kokiri / Master / Biggoron.
-    bool sword       = has("sword") || has("kokirisword") || has("mastersword") ||
-                       has("biggoron") || has("giantsknife") || has("giantknife");
-    bool isKokiri    = has("kokiri") || has("sword_1") || has("sword1");
-    bool isMaster    = has("master") || has("sword_2") || has("sword2");
-    bool isBgs       = has("biggoron") || has("giants") || has("sword_3") ||
-                       has("sword3") || has("longsword");
-    bool pieceHilt   = has("hilt") || has("grip") || has("handle");
-    bool pieceBlade  = has("blade");
+    bool sword = has("sword") || has("kokirisword") || has("mastersword") || has("biggoron") || has("giantsknife") ||
+                 has("giantknife");
+    bool isKokiri = has("kokiri") || has("sword_1") || has("sword1");
+    bool isMaster = has("master") || has("sword_2") || has("sword2");
+    bool isBgs = has("biggoron") || has("giants") || has("sword_3") || has("sword3") || has("longsword");
+    bool pieceHilt = has("hilt") || has("grip") || has("handle");
+    bool pieceBlade = has("blade");
     bool pieceSheath = has("sheath") || has("scabbard");
 
     if (sword) {
         if (isMaster) {
-            if (pieceHilt)   return 0x50E0;
-            if (pieceBlade)  return 0x50F8;
-            if (pieceSheath) return 0x50C8;
+            if (pieceHilt)
+                return 0x50E0;
+            if (pieceBlade)
+                return 0x50F8;
+            if (pieceSheath)
+                return 0x50C8;
             if (has("inhand") || has("lfist") || has("inhand") || has("holding"))
                 return 0x5450; // LFIST_SWORD2 combined
-            return 0x5450; // bare "MasterSword" → combined Master.
+            return 0x5450;     // bare "MasterSword" → combined Master.
         }
         if (isBgs) {
-            if (has("broken")) return 0x51E0; // SWORD_BLADE_3_BROKEN
-            if (pieceHilt)     return 0x50E8;
-            if (pieceBlade)    return 0x5100;
-            if (pieceSheath)   return 0x50D0;
+            if (has("broken"))
+                return 0x51E0; // SWORD_BLADE_3_BROKEN
+            if (pieceHilt)
+                return 0x50E8;
+            if (pieceBlade)
+                return 0x5100;
+            if (pieceSheath)
+                return 0x50D0;
             return 0x5458; // LFIST_SWORD3 combined.
         }
         if (isKokiri) {
-            if (pieceHilt)   return 0x50D8;
-            if (pieceBlade)  return 0x50F0;
-            if (pieceSheath) return 0x50C0;
+            if (pieceHilt)
+                return 0x50D8;
+            if (pieceBlade)
+                return 0x50F0;
+            if (pieceSheath)
+                return 0x50C0;
             return 0x5448; // LFIST_SWORD1 combined.
         }
     }
 
     // Shields.
-    bool shield     = has("shield");
-    bool isDeku     = has("deku");
-    bool isHylian   = has("hylian");
-    bool isMirror   = has("mirror");
+    bool shield = has("shield");
+    bool isDeku = has("deku");
+    bool isHylian = has("hylian");
+    bool isMirror = has("mirror");
     bool shieldBack = has("back") || has("onback") || has("on_back");
     if (shield) {
-        if (isDeku)   return shieldBack ? 0x53E8 : 0x5108;
-        if (isHylian) return shieldBack ? 0x53F0 : 0x5110;
-        if (isMirror) return shieldBack ? 0x53F8 : 0x5118;
+        if (isDeku)
+            return shieldBack ? 0x53E8 : 0x5108;
+        if (isHylian)
+            return shieldBack ? 0x53F0 : 0x5110;
+        if (isMirror)
+            return shieldBack ? 0x53F8 : 0x5118;
     }
 
     // Ranged + tools.
-    if (has("bow") && has("string"))    return 0x5140;
-    if (has("bow"))                     return 0x5138;
-    if (has("hookshot") && has("chain")) return 0x5150;
-    if (has("hookshot") && has("hook"))  return 0x5158;
-    if (has("hookshot") && has("aim"))   return 0x5160;
-    if (has("hookshot") || has("longshot")) return 0x5148;
-    if (has("boomerang"))               return 0x5178;
-    if (has("slingshot") && has("string")) return 0x5188;
-    if (has("slingshot"))               return 0x5180;
-    if (has("hammer") || has("megaton")) return 0x51F0;
-    if (has("dekustick") || has("deku_stick")) return 0x5130;
-    if (has("bottle"))                  return 0x5120;
-    if (has("ocarinaoftime") || has("ootime") || has("oot")) return 0x5128;
-    if (has("ocarina") || has("fairyocarina")) return 0x5190;
-    if (has("goronbracelet") || has("bracelet")) return 0x5198;
+    if (has("bow") && has("string"))
+        return 0x5140;
+    if (has("bow"))
+        return 0x5138;
+    if (has("hookshot") && has("chain"))
+        return 0x5150;
+    if (has("hookshot") && has("hook"))
+        return 0x5158;
+    if (has("hookshot") && has("aim"))
+        return 0x5160;
+    if (has("hookshot") || has("longshot"))
+        return 0x5148;
+    if (has("boomerang"))
+        return 0x5178;
+    if (has("slingshot") && has("string"))
+        return 0x5188;
+    if (has("slingshot"))
+        return 0x5180;
+    if (has("hammer") || has("megaton"))
+        return 0x51F0;
+    if (has("dekustick") || has("deku_stick"))
+        return 0x5130;
+    if (has("bottle"))
+        return 0x5120;
+    if (has("ocarinaoftime") || has("ootime") || has("oot"))
+        return 0x5128;
+    if (has("ocarina") || has("fairyocarina"))
+        return 0x5190;
+    if (has("goronbracelet") || has("bracelet"))
+        return 0x5198;
 
     // Boots.
-    if (has("ironboot") || has("iron_boot")) return has("right") ? 0x5230 : 0x5228;
-    if (has("hoverboot") || has("hover_boot")) return has("right") ? 0x5240 : 0x5238;
+    if (has("ironboot") || has("iron_boot"))
+        return has("right") ? 0x5230 : 0x5228;
+    if (has("hoverboot") || has("hover_boot"))
+        return has("right") ? 0x5240 : 0x5238;
 
     // Gauntlet plates (silver/gold bracers drawn standalone for Adult).
     if (has("gauntlet") || has("bracer")) {
         bool right = has("right");
-        if (has("plate1") || has("forearm")) return right ? 0x5210 : 0x51F8;
-        if (has("plate2") || has("hand"))    return right ? 0x5218 : 0x5200;
-        if (has("plate3") || has("fist"))    return right ? 0x5220 : 0x5208;
+        if (has("plate1") || has("forearm"))
+            return right ? 0x5210 : 0x51F8;
+        if (has("plate2") || has("hand"))
+            return right ? 0x5218 : 0x5200;
+        if (has("plate3") || has("fist"))
+            return right ? 0x5220 : 0x5208;
     }
 
     // Child masks.
-    if (has("skullmask"))   return 0x51A0;
-    if (has("spookymask"))  return 0x51A8;
-    if (has("keatonmask"))  return 0x51B0;
-    if (has("maskoftruth") || has("truthmask")) return 0x51B8;
-    if (has("goronmask"))   return 0x51C0;
-    if (has("zoramask"))    return 0x51C8;
-    if (has("gerudomask"))  return 0x51D0;
-    if (has("bunnyhood") || has("bunnymask")) return 0x51D8;
+    if (has("skullmask"))
+        return 0x51A0;
+    if (has("spookymask"))
+        return 0x51A8;
+    if (has("keatonmask"))
+        return 0x51B0;
+    if (has("maskoftruth") || has("truthmask"))
+        return 0x51B8;
+    if (has("goronmask"))
+        return 0x51C0;
+    if (has("zoramask"))
+        return 0x51C8;
+    if (has("gerudomask"))
+        return 0x51D0;
+    if (has("bunnyhood") || has("bunnymask"))
+        return 0x51D8;
 
     return 0;
 }
@@ -1877,7 +1939,8 @@ static u32 O2rInferAlias(const std::string& symbolName) {
 static std::map<std::string, u32> O2rLoadManifest(Ship::Archive& archive) {
     std::map<std::string, u32> out;
     auto file = archive.LoadFile("equip_manifest.json");
-    if (!file || !file->Buffer || file->Buffer->empty()) return out;
+    if (!file || !file->Buffer || file->Buffer->empty())
+        return out;
     std::string text(file->Buffer->begin(), file->Buffer->end());
     // Hand-rolled tiny JSON walker — same approach used elsewhere in this file
     // to avoid pulling in a JSON dep for one optional config file. Pattern:
@@ -1885,19 +1948,25 @@ static std::map<std::string, u32> O2rLoadManifest(Ship::Archive& archive) {
     size_t pos = 0;
     while (pos < text.size()) {
         size_t k1 = text.find('"', pos);
-        if (k1 == std::string::npos) break;
+        if (k1 == std::string::npos)
+            break;
         size_t k2 = text.find('"', k1 + 1);
-        if (k2 == std::string::npos) break;
+        if (k2 == std::string::npos)
+            break;
         std::string key = text.substr(k1 + 1, k2 - k1 - 1);
         size_t colon = text.find(':', k2);
-        if (colon == std::string::npos) break;
+        if (colon == std::string::npos)
+            break;
         size_t v1 = text.find('"', colon);
-        if (v1 == std::string::npos) break;
+        if (v1 == std::string::npos)
+            break;
         size_t v2 = text.find('"', v1 + 1);
-        if (v2 == std::string::npos) break;
+        if (v2 == std::string::npos)
+            break;
         std::string val = text.substr(v1 + 1, v2 - v1 - 1);
         u32 alias = EquipSlotNameToAlias(val.c_str());
-        if (alias != 0) out[key] = alias;
+        if (alias != 0)
+            out[key] = alias;
         pos = v2 + 1;
     }
     return out;
@@ -1921,7 +1990,8 @@ static bool LoadO2rEquipment(PakModel& model) {
     // want into the equipment cache. Removing the global mount means the .o2r
     // is now ONLY active when the user explicitly selects it in the dropdown.
     auto rm = Ship::Context::GetRawInstance()->GetResourceManager();
-    if (!rm) return false;
+    if (!rm)
+        return false;
     auto archiveManager = rm->GetArchiveManager();
     if (archiveManager) {
         // RemoveArchive matches by exact stored path string. libultraship's
@@ -1936,21 +2006,24 @@ static bool LoadO2rEquipment(PakModel& model) {
             if (archives) {
                 std::filesystem::path our(path);
                 std::string ourStem = our.filename().string();
-                for (char& c : ourStem) c = (char)tolower((unsigned char)c);
+                for (char& c : ourStem)
+                    c = (char)tolower((unsigned char)c);
                 // Snapshot a list of paths to remove — RemoveArchive mutates
                 // the underlying vector, so iterating while removing is UB.
                 std::vector<std::string> toRemove;
                 for (auto& a : *archives) {
-                    if (!a) continue;
+                    if (!a)
+                        continue;
                     std::filesystem::path ap(a->GetPath());
                     std::string apStem = ap.filename().string();
-                    for (char& c : apStem) c = (char)tolower((unsigned char)c);
-                    if (apStem == ourStem) toRemove.push_back(a->GetPath());
+                    for (char& c : apStem)
+                        c = (char)tolower((unsigned char)c);
+                    if (apStem == ourStem)
+                        toRemove.push_back(a->GetPath());
                 }
                 for (auto& p : toRemove) {
                     archiveManager->RemoveArchive(p);
-                    PAK_LOG("LoadO2rEquipment: removed auto-mounted '%s' from ArchiveManager",
-                            p.c_str());
+                    PAK_LOG("LoadO2rEquipment: removed auto-mounted '%s' from ArchiveManager", p.c_str());
                 }
             }
         } catch (...) {}
@@ -1967,7 +2040,8 @@ static bool LoadO2rEquipment(PakModel& model) {
         return false;
     }
     auto loader = rm->GetResourceLoader();
-    if (!loader) return false;
+    if (!loader)
+        return false;
 
     auto manifest = O2rLoadManifest(*archive);
     if (!manifest.empty())
@@ -1986,8 +2060,10 @@ static bool LoadO2rEquipment(PakModel& model) {
     // garbage. Always hand it the canonical vanilla path "objects/...".
     auto NormaliseSkelPath = [](const std::string& raw) -> std::string {
         std::string s = raw;
-        if (s.compare(0, 7, "__OTR__") == 0) s.erase(0, 7);
-        if (s.compare(0, 4, "alt/") == 0) s.erase(0, 4);
+        if (s.compare(0, 7, "__OTR__") == 0)
+            s.erase(0, 7);
+        if (s.compare(0, 4, "alt/") == 0)
+            s.erase(0, 4);
         return s;
     };
 
@@ -2005,24 +2081,23 @@ static bool LoadO2rEquipment(PakModel& model) {
         if (!hasAdultSkel && sym == "gLinkAdultSkel") {
             hasAdultSkel = true;
             std::string norm = NormaliseSkelPath(fpath);
-            snprintf(model.o2rAdultSkelOtr, sizeof(model.o2rAdultSkelOtr),
-                     "__OTR__%s", norm.c_str());
-            PAK_LOG("O2R '%s': adult skel path '%s' → lookup '%s'",
-                    std::filesystem::path(path).stem().string().c_str(),
+            snprintf(model.o2rAdultSkelOtr, sizeof(model.o2rAdultSkelOtr), "__OTR__%s", norm.c_str());
+            PAK_LOG("O2R '%s': adult skel path '%s' → lookup '%s'", std::filesystem::path(path).stem().string().c_str(),
                     fpath.c_str(), model.o2rAdultSkelOtr);
         }
         if (!hasChildSkel && sym == "gLinkChildSkel") {
             hasChildSkel = true;
             std::string norm = NormaliseSkelPath(fpath);
-            snprintf(model.o2rChildSkelOtr, sizeof(model.o2rChildSkelOtr),
-                     "__OTR__%s", norm.c_str());
+            snprintf(model.o2rChildSkelOtr, sizeof(model.o2rChildSkelOtr), "__OTR__%s", norm.c_str());
         }
     }
 
     s32 loadedCount = 0;
     for (auto& [hash, fpath] : *files) {
-        if (fpath.find(".meta") != std::string::npos) continue;
-        if (fpath.find(".json") != std::string::npos) continue;
+        if (fpath.find(".meta") != std::string::npos)
+            continue;
+        if (fpath.find(".json") != std::string::npos)
+            continue;
 
         // Symbol = last path segment ("objects/object_custom/gFooDL" → "gFooDL").
         size_t slash = fpath.find_last_of('/');
@@ -2039,24 +2114,26 @@ static bool LoadO2rEquipment(PakModel& model) {
             continue; // Not equipment-shaped — skip.
 
         auto file = archive->LoadFile(fpath);
-        if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->empty()) continue;
+        if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->empty())
+            continue;
 
         std::shared_ptr<Ship::IResource> res;
         try {
             res = loader->LoadResource(fpath, file, nullptr);
-        } catch (...) {
-            res = nullptr;
-        }
-        if (!res) continue;
+        } catch (...) { res = nullptr; }
+        if (!res)
+            continue;
 
         // Only DisplayList resources contribute; textures/vertices loaded
         // alongside stay alive via the resource holder but never participate
         // in equipDL lookups.
         auto dlRes = std::dynamic_pointer_cast<Fast::DisplayList>(res);
-        if (!dlRes) continue;
+        if (!dlRes)
+            continue;
 
         Gfx* dl = (Gfx*)res->GetRawPointer();
-        if (!dl) continue;
+        if (!dl)
+            continue;
 
         bool isChild = O2rPathIsChild(fpath);
         auto& dest = isChild ? model.childEquipDLs : model.adultEquipDLs;
@@ -2067,7 +2144,8 @@ static bool LoadO2rEquipment(PakModel& model) {
 
     if (loadedCount == 0) {
         PAK_LOG("O2R '%s': no equipment-shaped DLs found — skipping (body-only "
-                ".o2r packs aren't supported)", path.c_str());
+                ".o2r packs aren't supported)",
+                path.c_str());
         return false;
     }
 
@@ -2091,11 +2169,9 @@ static bool LoadO2rEquipment(PakModel& model) {
     model.hasChild = !model.childEquipDLs.empty();
     model.adultReady = 0; // body swap intentionally disabled for .o2r
     model.childReady = 0;
-    snprintf(model.displayName, sizeof(model.displayName), "%s",
-             std::filesystem::path(path).stem().string().c_str());
-    PAK_LOG("O2R '%s' loaded %d equipment DLs (adult=%d, child=%d, skel adult=%d child=%d)",
-            model.displayName, loadedCount, (int)model.adultEquipDLs.size(),
-            (int)model.childEquipDLs.size(), hasAdultSkel, hasChildSkel);
+    snprintf(model.displayName, sizeof(model.displayName), "%s", std::filesystem::path(path).stem().string().c_str());
+    PAK_LOG("O2R '%s' loaded %d equipment DLs (adult=%d, child=%d, skel adult=%d child=%d)", model.displayName,
+            loadedCount, (int)model.adultEquipDLs.size(), (int)model.childEquipDLs.size(), hasAdultSkel, hasChildSkel);
     return true;
 }
 
@@ -2169,8 +2245,8 @@ static bool LoadPakModel(PakModel& model) {
                        (packageJson.find("\"child_model\"") != std::string::npos);
     if (hasZzEquipmentType || (hasEquipmentArray && !hasBodyKeys)) {
         model.isEquipmentOnly = 1;
-        PAK_LOG("Loading equipment pak: '%s' (zzType=%d, equipArray=%d, bodyKeys=%d)",
-                model.displayName, (int)hasZzEquipmentType, (int)hasEquipmentArray, (int)hasBodyKeys);
+        PAK_LOG("Loading equipment pak: '%s' (zzType=%d, equipArray=%d, bodyKeys=%d)", model.displayName,
+                (int)hasZzEquipmentType, (int)hasEquipmentArray, (int)hasBodyKeys);
 
         // Find the equipment array in JSON: "equipment": ["file1.zobj", "file2.zobj"]
         size_t eqPos = packageJson.find("\"equipment\"");
@@ -2284,7 +2360,8 @@ static bool LoadPakModel(PakModel& model) {
         std::string snippet = packageJson.substr(0, std::min<size_t>(packageJson.size(), 400));
         // Strip newlines to keep the log line readable.
         for (char& c : snippet) {
-            if (c == '\n' || c == '\r') c = ' ';
+            if (c == '\n' || c == '\r')
+                c = ' ';
         }
         PAK_LOG("Unrecognised pak shape '%s' — package.json head: %s", model.displayName, snippet.c_str());
     }
@@ -2403,12 +2480,16 @@ static s32 sSavedDListCount = 0;
 // have to mount globally because the skeleton walks limb DLs via
 // gSPDisplayList(OTR-string), which goes through ArchiveManager. Idempotent.
 static bool MountO2rArchive(PakModel& model) {
-    if (model.source != PAK_SOURCE_O2R) return false;
-    if (model.o2rArchiveMounted) return true;
+    if (model.source != PAK_SOURCE_O2R)
+        return false;
+    if (model.o2rArchiveMounted)
+        return true;
     auto rm = Ship::Context::GetRawInstance()->GetResourceManager();
-    if (!rm) return false;
+    if (!rm)
+        return false;
     auto am = rm->GetArchiveManager();
-    if (!am) return false;
+    if (!am)
+        return false;
     auto added = am->AddArchive(model.pakPath);
     if (!added) {
         PAK_LOG("MountO2rArchive: AddArchive failed for '%s'", model.pakPath.c_str());
@@ -2456,40 +2537,41 @@ static void UnmountO2rArchive(PakModel& model) {
 // swap — the body model dropdown entry just won't change Link's body, which
 // matches the .pak path's behaviour for a malformed pak.
 static bool IsValidLinkSkel(SkeletonHeader* hdr) {
-    if (!hdr) return false;
-    if (hdr->limbCount == 0 || hdr->limbCount > 32) return false;
-    if (!hdr->segment) return false;
+    if (!hdr)
+        return false;
+    if (hdr->limbCount == 0 || hdr->limbCount > 32)
+        return false;
+    if (!hdr->segment)
+        return false;
     return true;
 }
 
 static void LazyResolveO2rSkel(PakModel& model) {
-    if (model.source != PAK_SOURCE_O2R) return;
-    if (!model.o2rArchiveMounted) return;
+    if (model.source != PAK_SOURCE_O2R)
+        return;
+    if (!model.o2rArchiveMounted)
+        return;
     if (!model.o2rAdultSkel && model.o2rAdultSkelOtr[0]) {
         SkeletonHeader* hdr = ResourceMgr_LoadSkeletonByName(model.o2rAdultSkelOtr, NULL);
         if (!IsValidLinkSkel(hdr)) {
             PAK_LOG("LazyResolveO2rSkel: '%s' adult REJECTED (path='%s' hdr=%p limbCount=%d) — "
                     "skel will fall back to vanilla so the game doesn't crash",
-                    model.displayName, model.o2rAdultSkelOtr, (void*)hdr,
-                    hdr ? hdr->limbCount : -1);
+                    model.displayName, model.o2rAdultSkelOtr, (void*)hdr, hdr ? hdr->limbCount : -1);
         } else {
             model.o2rAdultSkel = (FlexSkeletonHeader*)hdr;
-            PAK_LOG("LazyResolveO2rSkel: '%s' adult ok (limbCount=%d, dListCount=%d, segment=%p)",
-                    model.displayName, hdr->limbCount, model.o2rAdultSkel->dListCount,
-                    (void*)hdr->segment);
+            PAK_LOG("LazyResolveO2rSkel: '%s' adult ok (limbCount=%d, dListCount=%d, segment=%p)", model.displayName,
+                    hdr->limbCount, model.o2rAdultSkel->dListCount, (void*)hdr->segment);
         }
     }
     if (!model.o2rChildSkel && model.o2rChildSkelOtr[0]) {
         SkeletonHeader* hdr = ResourceMgr_LoadSkeletonByName(model.o2rChildSkelOtr, NULL);
         if (!IsValidLinkSkel(hdr)) {
-            PAK_LOG("LazyResolveO2rSkel: '%s' child REJECTED (path='%s' hdr=%p limbCount=%d)",
-                    model.displayName, model.o2rChildSkelOtr, (void*)hdr,
-                    hdr ? hdr->limbCount : -1);
+            PAK_LOG("LazyResolveO2rSkel: '%s' child REJECTED (path='%s' hdr=%p limbCount=%d)", model.displayName,
+                    model.o2rChildSkelOtr, (void*)hdr, hdr ? hdr->limbCount : -1);
         } else {
             model.o2rChildSkel = (FlexSkeletonHeader*)hdr;
-            PAK_LOG("LazyResolveO2rSkel: '%s' child ok (limbCount=%d, dListCount=%d, segment=%p)",
-                    model.displayName, hdr->limbCount, model.o2rChildSkel->dListCount,
-                    (void*)hdr->segment);
+            PAK_LOG("LazyResolveO2rSkel: '%s' child ok (limbCount=%d, dListCount=%d, segment=%p)", model.displayName,
+                    hdr->limbCount, model.o2rChildSkel->dListCount, (void*)hdr->segment);
         }
     }
 }
@@ -2716,7 +2798,7 @@ static bool IsValidGfxPtr(Gfx* ptr) {
         return false; // __OTR__ prefixed string
     uint8_t* bytes = (uint8_t*)ptr;
     if (bytes[0] == '/')
-        return false; // raw path without __OTR__
+        return false;          // raw path without __OTR__
     uint8_t opcode = bytes[3]; // GBI opcode on LE (high byte of w0)
     if (opcode <= 0x07)
         return true; // basic commands
@@ -2850,8 +2932,7 @@ static void RebuildCachedEquipDLs(void) {
     // a focused log when equipment selections aren't taking effect.
     PAK_LOG("RebuildCachedEquipDLs ENTRY: enabled=%d forcedBody=%d selectedAdult=%d "
             "selectedChild=%d selectedEquip=%d forcedEquip=%d",
-            CVarGetInteger("gMods.PakLoader.Enabled", 0),
-            sForcedModelIndex, sSelectedAdultIndex, sSelectedChildIndex,
+            CVarGetInteger("gMods.PakLoader.Enabled", 0), sForcedModelIndex, sSelectedAdultIndex, sSelectedChildIndex,
             sSelectedEquipIndex, sForcedEquipIndex);
 
     // Rotate the combined-DL pool at most ONCE per frame. On the first rebuild of
@@ -2905,13 +2986,19 @@ static void RebuildCachedEquipDLs(void) {
     auto isBodyPartAlias = [](u32 alias) -> bool {
         switch (alias) {
             case 0x5020: // WAIST
-            case 0x5028: case 0x5030: case 0x5038: // R-leg
-            case 0x5040: case 0x5048: case 0x5050: // L-leg
+            case 0x5028:
+            case 0x5030:
+            case 0x5038: // R-leg
+            case 0x5040:
+            case 0x5048:
+            case 0x5050: // L-leg
             case 0x5058: // HEAD
             case 0x5060: // HAT (part of the body model — Link's cap)
             case 0x5068: // COLLAR
-            case 0x5070: case 0x5078: // L shoulder + forearm
-            case 0x5080: case 0x5088: // R shoulder + forearm
+            case 0x5070:
+            case 0x5078: // L shoulder + forearm
+            case 0x5080:
+            case 0x5088: // R shoulder + forearm
             case 0x5090: // TORSO
             case 0x5098: // LHAND
             case 0x50A0: // LFIST
@@ -2923,8 +3010,8 @@ static void RebuildCachedEquipDLs(void) {
                 return false;
         }
     };
-    auto insertValidEquipmentOnly = [&insertValid, &isBodyPartAlias]
-                                    (std::map<u32, Gfx*>& dst, const std::map<u32, Gfx*>& src) {
+    auto insertValidEquipmentOnly = [&insertValid, &isBodyPartAlias](std::map<u32, Gfx*>& dst,
+                                                                     const std::map<u32, Gfx*>& src) {
         for (auto& [k, v] : src) {
             if (isBodyPartAlias(k))
                 continue; // body parts come from Layer 1 / vanilla, not from equipment paks
@@ -2972,10 +3059,8 @@ static void RebuildCachedEquipDLs(void) {
             s32 mixIdx = sSlotMix[s];
             if (mixIdx < 0 || mixIdx >= (s32)sModels.size())
                 continue;
-            const auto& primary  = isAdult ? sModels[mixIdx].adultEquipDLs
-                                           : sModels[mixIdx].childEquipDLs;
-            const auto& fallback = isAdult ? sModels[mixIdx].childEquipDLs
-                                           : sModels[mixIdx].adultEquipDLs;
+            const auto& primary = isAdult ? sModels[mixIdx].adultEquipDLs : sModels[mixIdx].childEquipDLs;
+            const auto& fallback = isAdult ? sModels[mixIdx].childEquipDLs : sModels[mixIdx].adultEquipDLs;
             for (s32 i = 0; sSlotGroups[s].aliases[i] != 0; i++) {
                 u32 alias = sSlotGroups[s].aliases[i];
                 auto it = primary.find(alias);
@@ -3022,7 +3107,8 @@ static void RebuildCachedEquipDLs(void) {
         // AND avoids the crash from passing a raw OTR string to G_DL which
         // would happily execute the string's bytes as opcodes.
         auto resolveVanilla = [&](u32 alias, const char* path) {
-            if (sCachedEquipDLs.count(alias)) return;
+            if (sCachedEquipDLs.count(alias))
+                return;
             Gfx* dl = ResourceMgr_LoadGfxByName(path);
             if (IsValidGfxPtr(dl)) {
                 sCachedEquipDLs[alias] = dl;
@@ -3070,16 +3156,13 @@ static void RebuildCachedEquipDLs(void) {
         // Previously this seeded gLinkAdultSheathNearDL (which IS the Master
         // sheath geometry) into 0x50C0 (SHEATH_1 = Kokiri slot), corrupting any
         // Kokiri-sheathed combo built off it.
-        if (!sCachedEquipDLs.count(0x50C0) &&
-            (sCachedEquipDLs.count(0x50D8) || sCachedEquipDLs.count(0x50F0))) {
+        if (!sCachedEquipDLs.count(0x50C0) && (sCachedEquipDLs.count(0x50D8) || sCachedEquipDLs.count(0x50F0))) {
             resolveVanilla(0x50C0, gLinkChildSheathNearDL); // SHEATH_1 = Kokiri
         }
-        if (!sCachedEquipDLs.count(0x50C8) &&
-            (sCachedEquipDLs.count(0x50E0) || sCachedEquipDLs.count(0x50F8))) {
+        if (!sCachedEquipDLs.count(0x50C8) && (sCachedEquipDLs.count(0x50E0) || sCachedEquipDLs.count(0x50F8))) {
             resolveVanilla(0x50C8, gLinkAdultSheathNearDL); // SHEATH_2 = Master
         }
-        if (!sCachedEquipDLs.count(0x50D0) &&
-            (sCachedEquipDLs.count(0x50E8) || sCachedEquipDLs.count(0x5100))) {
+        if (!sCachedEquipDLs.count(0x50D0) && (sCachedEquipDLs.count(0x50E8) || sCachedEquipDLs.count(0x5100))) {
             // BGS has no dedicated sheath DL in vanilla; reuse Master sheath.
             resolveVanilla(0x50D0, gLinkAdultSheathNearDL); // SHEATH_3 = BGS
         }
@@ -3274,7 +3357,8 @@ static void RebuildCachedEquipDLs(void) {
         char tmp[16];
         for (auto& [k, v] : sCachedEquipDLs) {
             snprintf(tmp, sizeof(tmp), "%04X%s", k, v == PAK_DL_STUB ? "(stub)" : "");
-            if (!buf.empty()) buf += ',';
+            if (!buf.empty())
+                buf += ',';
             buf += tmp;
             if (++n % 12 == 0) {
                 PAK_LOG("  cache: %s", buf.c_str());
@@ -3313,9 +3397,8 @@ extern "C" Gfx* PakLoader_GetEquipDL(Player* player, s32 limbIndex) {
     // only selection AND slot mixes work without "Enable Custom Player Model"
     // being on.
     EnsureSlotMixLoaded();
-    if (!CVarGetInteger("gMods.PakLoader.Enabled", 0) &&
-        sForcedModelIndex < 0 && sSelectedEquipIndex < 0 && sForcedEquipIndex < 0 &&
-        !AnySlotMixActive())
+    if (!CVarGetInteger("gMods.PakLoader.Enabled", 0) && sForcedModelIndex < 0 && sSelectedEquipIndex < 0 &&
+        sForcedEquipIndex < 0 && !AnySlotMixActive())
         return NULL;
 
     std::map<u32, Gfx*>* eqPtr = sGetEquipDLs();
@@ -3349,9 +3432,12 @@ extern "C" Gfx* PakLoader_GetEquipDL(Player* player, s32 limbIndex) {
                 // sword item instead.
                 u8 item = gSaveContext.equips.buttonItems[0];
                 u32 alias;
-                if (item == ITEM_SWORD_MASTER)      alias = 0x5450; // LFIST_SWORD2
-                else if (item == ITEM_SWORD_BGS)    alias = 0x5458; // LFIST_SWORD3
-                else                                alias = 0x5448; // LFIST_SWORD1 (Kokiri/default)
+                if (item == ITEM_SWORD_MASTER)
+                    alias = 0x5450; // LFIST_SWORD2
+                else if (item == ITEM_SWORD_BGS)
+                    alias = 0x5458; // LFIST_SWORD3
+                else
+                    alias = 0x5448; // LFIST_SWORD1 (Kokiri/default)
                 result = FindEquip(eq, alias);
                 if (result)
                     sPakLeftHandCombined = 1;
@@ -3464,9 +3550,16 @@ extern "C" Gfx* PakLoader_GetEquipDL(Player* player, s32 limbIndex) {
             // Adult+Master will render with the Kokiri SWORD1_SHEATHED visual.
             u8 item = gSaveContext.equips.buttonItems[0];
             u32 sheathedAlias, sheathPiece;
-            if (item == ITEM_SWORD_MASTER)      { sheathedAlias = 0x53D8; sheathPiece = 0x50C8; }
-            else if (item == ITEM_SWORD_BGS)    { sheathedAlias = 0x53E0; sheathPiece = 0x50D0; }
-            else                                { sheathedAlias = 0x53D0; sheathPiece = 0x50C0; }
+            if (item == ITEM_SWORD_MASTER) {
+                sheathedAlias = 0x53D8;
+                sheathPiece = 0x50C8;
+            } else if (item == ITEM_SWORD_BGS) {
+                sheathedAlias = 0x53E0;
+                sheathPiece = 0x50D0;
+            } else {
+                sheathedAlias = 0x53D0;
+                sheathPiece = 0x50C0;
+            }
             result = FindEquip(eq, sheathedAlias, sheathPiece);
         } else if (hasShieldOnBack && shield > 0) {
             // Shield on back, no sword.
@@ -3525,32 +3618,32 @@ static const OtrAliasEntry sStandaloneOtrTable[] = {
     // mask_skull/keaton/etc. actually take effect — without these entries the
     // GbiWrap intercept doesn't know which custom DL to substitute for the
     // vanilla mask.
-    { gLinkChildSkullMaskDL,    0x51A0 }, // DL_MASK_SKULL
-    { gLinkChildSpookyMaskDL,   0x51A8 }, // DL_MASK_SPOOKY
-    { gLinkChildKeatonMaskDL,   0x51B0 }, // DL_MASK_KEATON
-    { gLinkChildMaskOfTruthDL,  0x51B8 }, // DL_MASK_TRUTH
-    { gLinkChildGoronMaskDL,    0x51C0 }, // DL_MASK_GORON
-    { gLinkChildZoraMaskDL,     0x51C8 }, // DL_MASK_ZORA
-    { gLinkChildGerudoMaskDL,   0x51D0 }, // DL_MASK_GERUDO
-    { gLinkChildBunnyHoodDL,    0x51D8 }, // DL_MASK_BUNNY
+    { gLinkChildSkullMaskDL, 0x51A0 },   // DL_MASK_SKULL
+    { gLinkChildSpookyMaskDL, 0x51A8 },  // DL_MASK_SPOOKY
+    { gLinkChildKeatonMaskDL, 0x51B0 },  // DL_MASK_KEATON
+    { gLinkChildMaskOfTruthDL, 0x51B8 }, // DL_MASK_TRUTH
+    { gLinkChildGoronMaskDL, 0x51C0 },   // DL_MASK_GORON
+    { gLinkChildZoraMaskDL, 0x51C8 },    // DL_MASK_ZORA
+    { gLinkChildGerudoMaskDL, 0x51D0 },  // DL_MASK_GERUDO
+    { gLinkChildBunnyHoodDL, 0x51D8 },   // DL_MASK_BUNNY
     // Hookshot parts
     { gLinkAdultHookshotChainDL, 0x5150 }, // DL_HOOKSHOT_CHAIN
     { gLinkAdultHookshotTipDL, 0x5158 },   // DL_HOOKSHOT_HOOK
     // Bow string
-    { gLinkAdultBowStringDL, 0x5140 },         // DL_BOW_STRING
+    { gLinkAdultBowStringDL, 0x5140 }, // DL_BOW_STRING
     // Slingshot string — drawn standalone via sBowStringData[1].dList
     // (z_player_lib.c:2251) when child holds the slingshot.
-    { gLinkChildSlingshotStringDL, 0x5188 },   // DL_SLINGSHOT_STRING (child)
+    { gLinkChildSlingshotStringDL, 0x5188 }, // DL_SLINGSHOT_STRING (child)
     // Bottle — both adult and child variants share alias 0x5120 (DL_BOTTLE).
     // Drawn via sBottleDLists[gSaveContext.linkAge] (z_player_lib.c:2175).
-    { gLinkAdultBottleDL, 0x5120 },            // DL_BOTTLE (adult)
-    { gLinkChildBottleDL, 0x5120 },            // DL_BOTTLE (child)
+    { gLinkAdultBottleDL, 0x5120 }, // DL_BOTTLE (adult)
+    { gLinkChildBottleDL, 0x5120 }, // DL_BOTTLE (child)
     // Deku Stick — drawn standalone in Player_PostLimbDrawGameplay
     // (z_player_lib.c:2113) on the child's L_HAND limb when Deku Stick action.
-    { gLinkChildLinkDekuStickDL, 0x5130 },     // DL_DEKU_STICK
+    { gLinkChildLinkDekuStickDL, 0x5130 }, // DL_DEKU_STICK
     // Goron Bracelet — drawn standalone when child has STRENGTH upgrade
     // (z_player_lib.c:1327).
-    { gLinkChildGoronBraceletDL, 0x5198 },     // DL_GORON_BRACELET
+    { gLinkChildGoronBraceletDL, 0x5198 }, // DL_GORON_BRACELET
     // Boots
     { gLinkAdultLeftIronBootDL, 0x5228 },   // DL_BOOT_LIRON
     { gLinkAdultRightIronBootDL, 0x5230 },  // DL_BOOT_RIRON
@@ -3757,7 +3850,8 @@ static Gfx* MakeCombinedDL(Gfx* parts[], s32 count) {
 extern "C" Gfx* HarpoonSkinSync_GetDLOverride(const char* otrPath);
 
 extern "C" Gfx* PakLoader_GetDLOverride(const char* otrPath) {
-    if (otrPath == nullptr) return NULL;
+    if (otrPath == nullptr)
+        return NULL;
 
     // Harpoon dummy player .o2r override path: when a Harpoon dummy is being
     // drawn, HarpoonSkinSync's BeginRemoteOverrides has pushed the remote's
@@ -3877,8 +3971,7 @@ extern "C" Gfx* PakLoader_GetDLOverride(const char* otrPath) {
                 if (IsValidGfxPtrOrOtrPath(it->second)) {
                     return it->second;
                 }
-                PAK_LOG("ERROR: GetDLOverride dropped invalid Gfx* for alias 0x%04X (path=%s)",
-                        e->alias, otrPath);
+                PAK_LOG("ERROR: GetDLOverride dropped invalid Gfx* for alias 0x%04X (path=%s)", e->alias, otrPath);
             }
             return NULL;
         }
@@ -3941,16 +4034,16 @@ extern "C" void* HarpoonSkinSync_GetVanillaEyeTexture(int32_t eyeIndex, int32_t 
 extern "C" void* HarpoonSkinSync_GetVanillaMouthTexture(int32_t mouthIndex, int32_t isAdult);
 
 extern "C" void* PakLoader_GetEyeTexture(s32 eyeIndex) {
-    if (void* harpoonEye = HarpoonSkinSync_GetVanillaEyeTexture(
-            eyeIndex, gSaveContext.linkAge == 0 /* LINK_AGE_ADULT */)) {
+    if (void* harpoonEye =
+            HarpoonSkinSync_GetVanillaEyeTexture(eyeIndex, gSaveContext.linkAge == 0 /* LINK_AGE_ADULT */)) {
         return harpoonEye;
     }
     return PakLoader_GetFaceTexture(sEyeTextureOffsets, eyeIndex, 7, 0x800);
 }
 
 extern "C" void* PakLoader_GetMouthTexture(s32 mouthIndex) {
-    if (void* harpoonMouth = HarpoonSkinSync_GetVanillaMouthTexture(
-            mouthIndex, gSaveContext.linkAge == 0 /* LINK_AGE_ADULT */)) {
+    if (void* harpoonMouth =
+            HarpoonSkinSync_GetVanillaMouthTexture(mouthIndex, gSaveContext.linkAge == 0 /* LINK_AGE_ADULT */)) {
         return harpoonMouth;
     }
     return PakLoader_GetFaceTexture(sMouthTextureOffsets, mouthIndex, 3, 0x400);
@@ -4084,11 +4177,13 @@ extern "C" void PakLoader_Init(void) {
             modsPath, std::filesystem::directory_options::skip_permission_denied, ec);
         std::filesystem::recursive_directory_iterator end;
         for (; it != end; it.increment(ec)) {
-            if (ec) break;
+            if (ec)
+                break;
             if (it->is_directory(ec))
                 continue;
             std::string ext = it->path().extension().string();
-            for (char& c : ext) c = (char)tolower((unsigned char)c);
+            for (char& c : ext)
+                c = (char)tolower((unsigned char)c);
             std::string p = it->path().string();
             if (ext == ".pak") {
                 pakFiles.push_back(p);
@@ -4100,8 +4195,7 @@ extern "C" void PakLoader_Init(void) {
         }
     }
 
-    PAK_LOG("Found %d .pak, %d .zobj files",
-            (int)pakFiles.size(), (int)rawZobjFiles.size());
+    PAK_LOG("Found %d .pak, %d .zobj files", (int)pakFiles.size(), (int)rawZobjFiles.size());
 
     // Reserve space so push_back doesn't reallocate and invalidate internal pointers
     sModels.reserve(pakFiles.size() + rawZobjFiles.size());
@@ -4150,11 +4244,13 @@ extern "C" void PakLoader_Init(void) {
                 if (m.childLimbTable[j])
                     m.childLimbTable[j] = &m.childLimbs[j];
             }
-            PAK_LOG("Loaded raw zobj: '%s' (adult=%d, child=%d, equipOnly=%d)",
-                    m.displayName, m.adultReady, m.childReady, m.isEquipmentOnly);
+            PAK_LOG("Loaded raw zobj: '%s' (adult=%d, child=%d, equipOnly=%d)", m.displayName, m.adultReady,
+                    m.childReady, m.isEquipmentOnly);
         } else {
-            if (model.adultZobj) free(model.adultZobj);
-            if (model.childZobj) free(model.childZobj);
+            if (model.adultZobj)
+                free(model.adultZobj);
+            if (model.childZobj)
+                free(model.childZobj);
             PAK_LOG("Failed to load raw zobj: %s", zobjPath.c_str());
         }
     }
@@ -4202,8 +4298,7 @@ extern "C" void PakLoader_Init(void) {
         PakLoader_SelectChildModel(finalChild);
     }
     PakLoader_SelectEquipment(finalEquip);
-    PAK_LOG("Init Select: enabled=%d adult=%d child=%d equip=%d",
-            CVarGetInteger("gMods.PakLoader.Enabled", 0),
+    PAK_LOG("Init Select: enabled=%d adult=%d child=%d equip=%d", CVarGetInteger("gMods.PakLoader.Enabled", 0),
             finalAdult, finalChild, finalEquip);
 
     // Force one pass through the o2r mount tracker so slot-mix-only selections
@@ -4217,18 +4312,10 @@ extern "C" void PakLoader_Init(void) {
     PakLoader_InitSyncRegistry();
 }
 
-// Auto-force model based on worn MM mask (called per-frame)
-static void PakLoader_CheckMaskForce(void) {
-    // CVar disabled at runtime — clear kafei forced model if active
-    if (!CVarGetInteger("gMods.KafeiMaskTransform", 0) && sForcedModelIndex >= 0 &&
-        sForcedModelPath == "nei/N64_Kafei.pak") {
-        PakLoader_ClearForcedModel();
-    }
-}
-
 extern "C" u8 PakLoader_HasActiveModel(void) {
-    // Check if worn mask should auto-force a model
-    PakLoader_CheckMaskForce();
+    // (The Kafei Mask used to force nei/N64_Kafei.pak from here, which meant a
+    // string compare every frame. Kafei is a normal custom form now — its model
+    // lives in soh.o2r and goes through custom_forms.cpp / O2rLoader.)
 
     // Forced model/equipment bypasses the Enabled CVar
     if (sForcedModelIndex >= 0 && sForcedModelIndex < (s32)sModels.size()) {
@@ -4385,8 +4472,10 @@ extern "C" const char* PakLoader_GetModelLabel(s32 index) {
     PakModel& m = sModels[index];
     if (m.displayLabel[0] == '\0') {
         const char* tag = "[PAK]";
-        if (m.source == PAK_SOURCE_ZOBJ) tag = "[ZOBJ]";
-        else if (m.source == PAK_SOURCE_O2R) tag = "[O2R]";
+        if (m.source == PAK_SOURCE_ZOBJ)
+            tag = "[ZOBJ]";
+        else if (m.source == PAK_SOURCE_O2R)
+            tag = "[O2R]";
         snprintf(m.displayLabel, sizeof(m.displayLabel), "%s %s", tag, m.displayName);
     }
     return m.displayLabel;
@@ -4407,8 +4496,10 @@ extern "C" const char* PakLoader_GetModelLabel(s32 index) {
 static void O2rUpdateMounts(void) {
     std::set<s32> needMounted;
     auto noteO2r = [&](s32 idx) {
-        if (idx < 0 || idx >= (s32)sModels.size()) return;
-        if (sModels[idx].source == PAK_SOURCE_O2R) needMounted.insert(idx);
+        if (idx < 0 || idx >= (s32)sModels.size())
+            return;
+        if (sModels[idx].source == PAK_SOURCE_O2R)
+            needMounted.insert(idx);
     };
     noteO2r(sSelectedAdultIndex);
     noteO2r(sSelectedChildIndex);
@@ -4416,7 +4507,8 @@ static void O2rUpdateMounts(void) {
     noteO2r(sForcedModelIndex);
     noteO2r(sForcedEquipIndex);
     EnsureSlotMixLoaded();
-    for (s32 s = 0; s < kSlotCount; s++) noteO2r(sSlotMix[s]);
+    for (s32 s = 0; s < kSlotCount; s++)
+        noteO2r(sSlotMix[s]);
 
     // Sticky mount: we only ADD here. UnmountO2rArchive is a no-op (see its
     // definition) because Fast3D's resource cache survives RemoveArchive with
@@ -4427,7 +4519,8 @@ static void O2rUpdateMounts(void) {
     // resident archive data; the alternative is the access violation in
     // gfx_vtx_otr_filepath_handler_custom we just patched away.
     for (size_t i = 0; i < sModels.size(); i++) {
-        if (sModels[i].source != PAK_SOURCE_O2R) continue;
+        if (sModels[i].source != PAK_SOURCE_O2R)
+            continue;
         bool want = needMounted.count((s32)i) != 0;
         if (want && !sModels[i].o2rArchiveMounted) {
             MountO2rArchive(sModels[i]);
@@ -4590,8 +4683,7 @@ extern "C" void PakLoader_SetSlotMix(s32 slotIdx, s32 pakIdx) {
     // sGetEquipDLs sees mixHash != sCacheSlotMixHash and triggers a rebuild
     // immediately, so per-slot picks apply in real time.
     if (pakIdx >= 0) {
-        PAK_LOG("SlotMix[%s] = '%s' (index %d)",
-                sSlotGroups[slotIdx].cvarKey, sModels[pakIdx].displayName, pakIdx);
+        PAK_LOG("SlotMix[%s] = '%s' (index %d)", sSlotGroups[slotIdx].cvarKey, sModels[pakIdx].displayName, pakIdx);
     } else {
         PAK_LOG("SlotMix[%s] = default (inherit)", sSlotGroups[slotIdx].cvarKey);
     }
@@ -4637,8 +4729,8 @@ extern "C" void PakLoader_ForceModel(const char* pakPath) {
         if (base == requestedBase) {
             sForcedModelIndex = i;
             sForcedModelPath = sModels[i].pakPath;
-            PAK_LOG("Forced model (cached, basename '%s'): '%s' (index %d)",
-                    requestedBase.c_str(), sModels[i].displayName, i);
+            PAK_LOG("Forced model (cached, basename '%s'): '%s' (index %d)", requestedBase.c_str(),
+                    sModels[i].displayName, i);
             return;
         }
     }
@@ -4704,7 +4796,7 @@ extern "C" void PakLoader_ForceEquipment(const char* pakPath) {
     if (sForcedEquipIndex >= 0 && sForcedEquipPath == pakPath)
         return;
 
-    // Custom items hardcode pak paths (e.g. "nei/Equip_Four_Sword.pak") but the
+    // Custom items may hardcode pak paths (the Four Sword used to) but the
     // user may have placed the .pak in mods/ or harpoon/skins/. Match first by
     // exact path, then fall back to basename matching so the asset is found
     // wherever it lives.
@@ -4725,8 +4817,8 @@ extern "C" void PakLoader_ForceEquipment(const char* pakPath) {
         if (base == requestedBase) {
             sForcedEquipIndex = i;
             sForcedEquipPath = sModels[i].pakPath;
-            PAK_LOG("Forced equipment (cached, basename '%s'): '%s' (index %d)",
-                    requestedBase.c_str(), sModels[i].displayName, i);
+            PAK_LOG("Forced equipment (cached, basename '%s'): '%s' (index %d)", requestedBase.c_str(),
+                    sModels[i].displayName, i);
             return;
         }
     }
@@ -4797,13 +4889,15 @@ static bool sRemoteRenderActive = false;
 
 // Helper used by RebuildCachedEquipDLs's Layer 2.5 gate, forward-declared
 // near the top of this file.
-static bool PakLoader_IsRemoteRenderActive(void) { return sRemoteRenderActive; }
+static bool PakLoader_IsRemoteRenderActive(void) {
+    return sRemoteRenderActive;
+}
 
-static s32  sSavedForcedModelIndex = -1;
+static s32 sSavedForcedModelIndex = -1;
 static std::string sSavedForcedModelPath;
-static s32  sSavedSelectedAdultIndex = -1;
-static s32  sSavedSelectedChildIndex = -1;
-static s32  sSavedSelectedEquipIndex = -1;
+static s32 sSavedSelectedAdultIndex = -1;
+static s32 sSavedSelectedChildIndex = -1;
+static s32 sSavedSelectedEquipIndex = -1;
 extern "C" void PakLoader_InitSyncRegistry(void) {
     // Canonical path: <appdir>/harpoon/skins/. HarpoonSkinSync scans this
     // location for .o2r/.otr overrides; PakLoader scans the same folder for
@@ -4837,18 +4931,18 @@ extern "C" void PakLoader_InitSyncRegistry(void) {
             std::filesystem::recursive_directory_iterator end;
             for (; it != end; it.increment(walkEc)) {
                 if (walkEc) {
-                    PAK_LOG("harpoon/skins: scan aborted (symlink cycle / vanished dir): %s",
-                            walkEc.message().c_str());
+                    PAK_LOG("harpoon/skins: scan aborted (symlink cycle / vanished dir): %s", walkEc.message().c_str());
                     break;
                 }
                 try {
-                    if (it->is_directory()) continue;
+                    if (it->is_directory())
+                        continue;
                     std::string ext = it->path().extension().string();
-                    for (char& c : ext) c = (char)tolower((unsigned char)c);
-                    if (ext == ".pak") pakFiles.push_back(it->path());
-                } catch (const std::exception&) {
-                    continue;
-                }
+                    for (char& c : ext)
+                        c = (char)tolower((unsigned char)c);
+                    if (ext == ".pak")
+                        pakFiles.push_back(it->path());
+                } catch (const std::exception&) { continue; }
             }
         }
     }
@@ -4857,8 +4951,10 @@ extern "C" void PakLoader_InitSyncRegistry(void) {
 
     auto fixupLimbTables = [](PakModel& m) {
         for (s32 j = 0; j < PAK_MAX_LIMBS; j++) {
-            if (m.adultLimbTable[j]) m.adultLimbTable[j] = &m.adultLimbs[j];
-            if (m.childLimbTable[j]) m.childLimbTable[j] = &m.childLimbs[j];
+            if (m.adultLimbTable[j])
+                m.adultLimbTable[j] = &m.adultLimbs[j];
+            if (m.childLimbTable[j])
+                m.childLimbTable[j] = &m.childLimbs[j];
         }
     };
 
@@ -4871,7 +4967,8 @@ extern "C" void PakLoader_InitSyncRegistry(void) {
     // chasing a stale limb pointer.
     size_t preSyncCount = sModels.size();
     sModels.reserve(preSyncCount + pakFiles.size());
-    for (auto& m : sModels) fixupLimbTables(m);
+    for (auto& m : sModels)
+        fixupLimbTables(m);
 
     for (auto& p : pakFiles) {
         PakModel model = {};
@@ -4881,30 +4978,37 @@ extern "C" void PakLoader_InitSyncRegistry(void) {
             model.isSyncOnly = 1;
             sModels.push_back(std::move(model));
             fixupLimbTables(sModels.back());
-            PAK_LOG("Sync loaded .pak: '%s' (idx=%d, syncOnly)",
-                    sModels.back().displayName, (int)sModels.size() - 1);
+            PAK_LOG("Sync loaded .pak: '%s' (idx=%d, syncOnly)", sModels.back().displayName, (int)sModels.size() - 1);
         } else {
-            if (model.adultZobj) free(model.adultZobj);
-            if (model.childZobj) free(model.childZobj);
+            if (model.adultZobj)
+                free(model.adultZobj);
+            if (model.childZobj)
+                free(model.childZobj);
             PAK_LOG("Sync failed to load .pak: %s", p.string().c_str());
         }
     }
 }
 
 extern "C" s32 PakLoader_FindLocalIndexByName(const char* name) {
-    if (!name || !*name) return -1;
+    if (!name || !*name)
+        return -1;
     for (size_t i = 0; i < sModels.size(); i++) {
-        if (sModels[i].isSyncOnly) continue;
-        if (strcmp(sModels[i].displayName, name) == 0) return (s32)i;
+        if (sModels[i].isSyncOnly)
+            continue;
+        if (strcmp(sModels[i].displayName, name) == 0)
+            return (s32)i;
     }
     return -1;
 }
 
 extern "C" s32 PakLoader_FindSyncIndexByName(const char* name) {
-    if (!name || !*name) return -1;
+    if (!name || !*name)
+        return -1;
     for (size_t i = 0; i < sModels.size(); i++) {
-        if (!sModels[i].isSyncOnly) continue;
-        if (strcmp(sModels[i].displayName, name) == 0) return (s32)i;
+        if (!sModels[i].isSyncOnly)
+            continue;
+        if (strcmp(sModels[i].displayName, name) == 0)
+            return (s32)i;
     }
     return -1;
 }
@@ -4919,7 +5023,8 @@ extern "C" s32 PakLoader_FindSyncIndexByName(const char* name) {
 // Must be paired with PakLoader_EndRemoteRender before any other actor draws
 // or before the frame ends.
 extern "C" void PakLoader_BeginRemoteRender(s32 syncIdx) {
-    if (sRemoteRenderActive) return; // Already in a block (shouldn't happen — dummies draw sequentially)
+    if (sRemoteRenderActive)
+        return; // Already in a block (shouldn't happen — dummies draw sequentially)
 
     sSavedForcedModelIndex = sForcedModelIndex;
     sSavedForcedModelPath = sForcedModelPath;
@@ -4949,7 +5054,8 @@ extern "C" void PakLoader_BeginRemoteRender(s32 syncIdx) {
 }
 
 extern "C" void PakLoader_EndRemoteRender(void) {
-    if (!sRemoteRenderActive) return;
+    if (!sRemoteRenderActive)
+        return;
     sForcedModelIndex = sSavedForcedModelIndex;
     sForcedModelPath = sSavedForcedModelPath;
     sSelectedAdultIndex = sSavedSelectedAdultIndex;

@@ -39,7 +39,8 @@ class RemoteSaveEditorWindow final : public Ship::GuiWindow {
     using GuiWindow::GuiWindow;
     void InitElement() override;
     void DrawElement() override;
-    void UpdateElement() override {}
+    void UpdateElement() override {
+    }
 };
 
 // Show the editor focused on a specific peer. Side effect: fires a
@@ -57,7 +58,7 @@ void HandlePeekResponse(const nlohmann::json& data);
 nlohmann::json BuildPeekRequestPayload(uint32_t targetClientId);
 nlohmann::json BuildPeekResponsePayload(uint32_t requesterClientId);
 
-}  // namespace HarpoonRemoteSaveEditor
+} // namespace HarpoonRemoteSaveEditor
 
-#endif  // __cplusplus
-#endif  // SOH_NETWORK_HARPOON_REMOTE_SAVE_EDITOR_H
+#endif // __cplusplus
+#endif // SOH_NETWORK_HARPOON_REMOTE_SAVE_EDITOR_H

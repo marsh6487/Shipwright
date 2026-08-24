@@ -25,7 +25,6 @@ namespace HarpoonSkinSync {
 // Both subfolders are auto-created on first run.
 void InitO2rOverrides();
 
-
 // ============================================================================
 // Per-actor remote render
 // ============================================================================
@@ -46,7 +45,7 @@ void EndRemoteOverrides();
 // the resource manager wasn't ready at init time (game starting in some weird
 // mode); callers should fall through to the engine's default behaviour.
 void** GetVanillaLinkLimbTable(bool isAdult);
-int   GetVanillaLinkDListCount(bool isAdult);
+int GetVanillaLinkDListCount(bool isAdult);
 
 // Active-override Link skeleton accessors. When a remote dummy has at least
 // one matching override that bundles its own gLink*Skel (community packers
@@ -59,7 +58,7 @@ int   GetVanillaLinkDListCount(bool isAdult);
 // limbs + a few override-replaced ones at vanilla path names). Returns
 // nullptr / 0 when no active override has a skeleton for the given age.
 void** GetActiveOverrideLinkLimbTable(bool isAdult);
-int   GetActiveOverrideLinkDListCount(bool isAdult);
+int GetActiveOverrideLinkDListCount(bool isAdult);
 
 // ============================================================================
 // Notifications (UI)
@@ -78,8 +77,7 @@ void NotifyMissingPak(uint32_t clientId, const std::string& playerName, const st
 // don't" notification when X is in their sync registry (they CAN render us
 // with it). Without this, the warning fires even when the other side has
 // the mod available — just not mounted globally.
-void NotifyO2rDivergence(uint32_t clientId, const std::string& playerName,
-                         const std::vector<std::string>& remoteMods,
+void NotifyO2rDivergence(uint32_t clientId, const std::string& playerName, const std::vector<std::string>& remoteMods,
                          const std::vector<std::string>& remoteSyncMods);
 
 // Returns the names of all overrides loaded from the local harpoon/skins/

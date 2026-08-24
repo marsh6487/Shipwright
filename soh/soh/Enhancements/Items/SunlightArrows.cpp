@@ -41,9 +41,8 @@ struct SunlightArrowData {
 static ObjectExtension::Register<SunlightArrowData> SunlightArrowDataRegister;
 
 void RegisterSunlightArrowsHooks() {
-    bool shouldRegister =
-        CVarGetInteger(CVAR_ENHANCEMENT("SunlightArrows"), 0) || (IS_RANDO && RAND_GET_OPTION(RSK_SUNLIGHT_ARROWS)) ||
-        SW97_MEDALLIONS_ENABLED();
+    bool shouldRegister = CVarGetInteger(CVAR_ENHANCEMENT("SunlightArrows"), 0) ||
+                          (IS_RANDO && RAND_GET_OPTION(RSK_SUNLIGHT_ARROWS)) || SW97_MEDALLIONS_ENABLED();
 
     COND_ID_HOOK(OnActorInit, ACTOR_OBJ_LIGHTSWITCH, shouldRegister, [](void* actor) {
         auto* thisx = (ObjLightswitch*)actor;

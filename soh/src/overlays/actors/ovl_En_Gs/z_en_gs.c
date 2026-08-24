@@ -190,8 +190,7 @@ void func_80A4E648(EnGs* this, PlayState* play) {
         // fairies the fairy-spawning songs summon (randomizer-checked). Gated by
         // the stone's own switch flag so it spawns once and the song path won't
         // re-spawn it afterward. Skijer's NEI
-        if (Player_GetMask(play) == PLAYER_MASK_TRUTH &&
-            !Flags_GetSwitch(play, (this->actor.params >> 8) & 0x3F)) {
+        if (Player_GetMask(play) == PLAYER_MASK_TRUTH && !Flags_GetSwitch(play, (this->actor.params >> 8) & 0x3F)) {
             if (!ShuffleFairies_SpawnStoneFairyOnTalk(this)) {
                 // Vanilla (no stone-fairy shuffle): spawn the heal fairy directly.
                 Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ELF, this->actor.world.pos.x,

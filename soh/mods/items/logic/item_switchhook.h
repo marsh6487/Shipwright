@@ -26,7 +26,8 @@
 // CONFIGURATION
 // ============================================================================
 
-#define SWITCHHOOK_TIMER 26       // Longshot distance (frames). Skijer's NEI: reach now lives in
+#define SWITCHHOOK_TIMER \
+    26                            // Longshot distance (frames). Skijer's NEI: reach now lives in
                                   // z_arms_hook.c's variant table (20 * 26); this define is legacy.
 #define SWITCHHOOK_SPEED 20.0f    // Projectile speed
 #define SWITCHHOOK_SWAP_FRAMES 15 // Frames for swap animation
@@ -97,6 +98,36 @@ static ColliderQuadInit sSwitchHookQuadInit = {
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/**
+ * Teleporting an actor by writing world.pos moves its model and bg checks but leaves its HITBOXES
+ * behind: colliders store world-space geometry that only the owning actor refreshes inside its own
+ * update, and many actors build theirs once at init.
+ *
+ * Capture BEFORE the teleport (slot 0 = Link, slot 1 = the actor he swaps with), then re-anchor once
+ * per frame until both have settled — the actors keep moving after the teleport (pushed out of walls,
+ * dropped onto floors) and only an absolute reposition per frame follows that. Defined in
+ * item_switchhook.c; z_arms_hook.c drives it for the switch-hook swap.
+ */
+void SwitchHook_CaptureSwapColliders(PlayState* play, s32 slot, Actor* actor);
+void SwitchHook_ReanchorSwapColliders(PlayState* play);
+void SwitchHook_ClearSwapColliders(void);
+
+/** One-shot rigid translation of every collider `actor` has live this frame. */
+void SwitchHook_ShiftActorColliders(PlayState* play, Actor* actor, Vec3f* delta);
+
+/**
+ * The two primitives the re-anchoring is built out of, exported because Ultrahand needs the same
+ * treatment for a different number of actors (a built structure is up to seven) and there is no
+ * second correct way to write either of them.
+ *
+ * SwitchHook_ShiftCollider translates one collider rigidly, covering all four shapes including
+ * the two easy to miss: a ColliderTris' cached plane distance and a ColliderQuad's cached edge
+ * midpoints. SwitchHook_GetColliderRefPos reads back the one point that stands in for "where
+ * this collider is". Returns 0 for a shape it cannot read.
+ */
+void SwitchHook_ShiftCollider(Collider* col, Vec3f* delta);
+s32 SwitchHook_GetColliderRefPos(Collider* col, Vec3f* out);
 
 /**
  * Check if an actor can be swapped with.

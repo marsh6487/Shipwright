@@ -1442,14 +1442,19 @@ s32 SetCameraManual(Camera* camera) {
     return 0;
 }
 
-s32 Camera_Free(Camera* camera) {
+/**
+ * SOH [Enhancement] Free-look movement, shared by every camera function that hands control to the
+ * player: orbits `at` (the player) with the right stick / mouse at `distTarget` units of distance.
+ * Split out of Camera_Free so scripted camera functions can reuse it: Camera_Free's parameter
+ * handling casts camera->paramData to Parallel1 and reads the mode's value table with the Parallel1
+ * layout, which would corrupt the parameters of any camera function that owns a different struct.
+ */
+s32 Camera_FreeMove(Camera* camera, f32 distTarget) {
     Vec3f* eye = &camera->eye;
     Vec3f* at = &camera->at;
     Vec3f* eyeNext = &camera->eyeNext;
     VecSph spA8;
     CamColChk sp6C;
-    Parallel1* para1 = (Parallel1*)camera->paramData;
-    f32 playerHeight;
 
     // SOH [Enhancement] If free-look resuming after another camera drove view (e.g. Spirit Temple alcove,
     // or crawling), re-seed free-look angles so view continues from where it was left instead of snapping
@@ -1473,6 +1478,60 @@ s32 Camera_Free(Camera* camera) {
                                                                      1.2f,
                              camera->at.y, 0.5f, 1.0f);
     at->z = Camera_LERPCeilF(camera->player->actor.world.pos.z, camera->at.z, 0.5f, 1.0f);
+
+    f32 newCamX = -D_8015BD7C->state.input[0].cur.right_stick_x * 10.0f;
+    f32 newCamY = +D_8015BD7C->state.input[0].cur.right_stick_y * 10.0f;
+
+    /* Disable mouse movement when holding down the shield */
+    if (!(camera->player->stateFlags1 & 0x400000)) {
+        Mouse_HandleThirdPerson(&newCamX, &newCamY);
+    }
+
+    newCamX *= (CVarGetFloat(CVAR_SETTING("FreeLook.CameraSensitivity.X"), 1.0f));
+    newCamY *= (CVarGetFloat(CVAR_SETTING("FreeLook.CameraSensitivity.Y"), 1.0f));
+
+    bool invertXAxis = (CVarGetInteger(CVAR_SETTING("FreeLook.InvertXAxis"), 0) &&
+                        !CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0)) ||
+                       (!CVarGetInteger(CVAR_SETTING("FreeLook.InvertXAxis"), 0) &&
+                        CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0));
+
+    camera->play->camX += newCamX * (invertXAxis ? -1 : 1);
+    camera->play->camY += newCamY * (CVarGetInteger(CVAR_SETTING("FreeLook.InvertYAxis"), 1) ? 1 : -1);
+
+    if (camera->play->camY > 0x32A4) {
+        camera->play->camY = 0x32A4;
+    }
+    if (camera->play->camY < -0x228C) {
+        camera->play->camY = -0x228C;
+    }
+
+    f32 speedScaler = CVarGetInteger(CVAR_SETTING("FreeLook.TransitionSpeed"), 25);
+    f32 distDiff = ABS(distTarget - camera->dist);
+    if (distDiff > 0)
+        camera->dist = Camera_LERPCeilF(distTarget, camera->dist, speedScaler / (distDiff + speedScaler), 0.0f);
+    OLib_Vec3fDiffToVecSphGeo(&spA8, at, eyeNext);
+
+    spA8.r = camera->dist;
+    spA8.yaw = camera->play->camX;
+    spA8.pitch = camera->play->camY;
+
+    Camera_Vec3fVecSphGeoAdd(eyeNext, at, &spA8);
+    if (camera->status == CAM_STAT_ACTIVE) {
+        sp6C.pos = *eyeNext;
+        Camera_BGCheckInfo(camera, at, &sp6C);
+        *eye = sp6C.pos;
+    }
+
+    camera->fov = Camera_LERPCeilF(65.0f, camera->fov, camera->fovUpdateRate, 1.0f);
+    camera->roll = Camera_LERPCeilS(0, camera->roll, 0.5, 0xA);
+
+    return 1;
+}
+
+s32 Camera_Free(Camera* camera) {
+    VecSph spA8;
+    Parallel1* para1 = (Parallel1*)camera->paramData;
+    f32 playerHeight;
 
     playerHeight = Player_GetHeight(camera->player);
 
@@ -1503,58 +1562,57 @@ s32 Camera_Free(Camera* camera) {
 
     camera->animState = 0;
 
-    f32 newCamX = -D_8015BD7C->state.input[0].cur.right_stick_x * 10.0f;
-    f32 newCamY = +D_8015BD7C->state.input[0].cur.right_stick_y * 10.0f;
-
-    /* Disable mouse movement when holding down the shield */
-    if (!(camera->player->stateFlags1 & 0x400000)) {
-        Mouse_HandleThirdPerson(&newCamX, &newCamY);
-    }
-
-    newCamX *= (CVarGetFloat(CVAR_SETTING("FreeLook.CameraSensitivity.X"), 1.0f));
-    newCamY *= (CVarGetFloat(CVAR_SETTING("FreeLook.CameraSensitivity.Y"), 1.0f));
-
-    bool invertXAxis = (CVarGetInteger(CVAR_SETTING("FreeLook.InvertXAxis"), 0) &&
-                        !CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0)) ||
-                       (!CVarGetInteger(CVAR_SETTING("FreeLook.InvertXAxis"), 0) &&
-                        CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0));
-
-    camera->play->camX += newCamX * (invertXAxis ? -1 : 1);
-    camera->play->camY += newCamY * (CVarGetInteger(CVAR_SETTING("FreeLook.InvertYAxis"), 1) ? 1 : -1);
-
-    if (camera->play->camY > 0x32A4) {
-        camera->play->camY = 0x32A4;
-    }
-    if (camera->play->camY < -0x228C) {
-        camera->play->camY = -0x228C;
-    }
-
     // SOH [Enhancement] When set, use the game's per-mode default distance (para1->distTarget)
     // instead of the fixed free-look distance.
     f32 distTarget = CVarGetInteger(CVAR_SETTING("FreeLook.UseGameDistance"), 0)
                          ? para1->distTarget
                          : CVarGetInteger(CVAR_SETTING("FreeLook.MaxCameraDistance"), para1->distTarget);
-    f32 speedScaler = CVarGetInteger(CVAR_SETTING("FreeLook.TransitionSpeed"), 25);
-    f32 distDiff = ABS(distTarget - camera->dist);
-    if (distDiff > 0)
-        camera->dist = Camera_LERPCeilF(distTarget, camera->dist, speedScaler / (distDiff + speedScaler), 0.0f);
-    OLib_Vec3fDiffToVecSphGeo(&spA8, at, eyeNext);
 
-    spA8.r = camera->dist;
-    spA8.yaw = camera->play->camX;
-    spA8.pitch = camera->play->camY;
+    return Camera_FreeMove(camera, distTarget);
+}
 
-    Camera_Vec3fVecSphGeoAdd(eyeNext, at, &spA8);
-    if (camera->status == CAM_STAT_ACTIVE) {
-        sp6C.pos = *eyeNext;
-        Camera_BGCheckInfo(camera, at, &sp6C);
-        *eye = sp6C.pos;
+/**
+ * SOH [Enhancement] Free camera during the scripted "turn around" camera settings (CAM_SET_TURN_AROUND,
+ * i.e. Camera_KeepOn4): getting an item, opening doors, drinking a bottle, playing the ocarina...
+ * The vanilla framing plays as usual until the player actually pushes the right stick (or moves the
+ * mouse), and free look then drives the camera for the rest of that scene.
+ *
+ * This deliberately does not use SetCameraManual()/play->manualCamera: that flag is shared with the
+ * gameplay cameras and is normally already set when one of these scenes starts, which would snap the
+ * camera to the free-look angles on the very first frame and destroy the framing every single time.
+ * Instead the arming is tracked locally and reset whenever this camera function stops running for a
+ * frame, i.e. when a new scripted camera scene begins.
+ */
+s32 Camera_ScriptedFreeCamActive(Camera* camera) {
+    static s32 sScriptedFreeLastFrame = 0;
+    static s32 sScriptedFreeArmed = 0;
+
+    s32 curFrame = camera->play->state.frames;
+
+    if (curFrame - sScriptedFreeLastFrame > 1) {
+        sScriptedFreeArmed = 0;
+    }
+    sScriptedFreeLastFrame = curFrame;
+
+    if (!sScriptedFreeArmed) {
+        f32 newCamX = -D_8015BD7C->state.input[0].cur.right_stick_x * 10.0f;
+        f32 newCamY = D_8015BD7C->state.input[0].cur.right_stick_y * 10.0f;
+
+        Mouse_HandleThirdPerson(&newCamX, &newCamY);
+
+        if ((fabsf(newCamX) >= 15.0f) || (fabsf(newCamY) >= 15.0f)) {
+            VecSph eyeAdjustment;
+
+            // Take over from whatever the scripted camera had framed, so there is no snap.
+            OLib_Vec3fDiffToVecSphGeo(&eyeAdjustment, &camera->at, &camera->eye);
+            camera->play->camX = eyeAdjustment.yaw;
+            camera->play->camY = eyeAdjustment.pitch;
+
+            sScriptedFreeArmed = 1;
+        }
     }
 
-    camera->fov = Camera_LERPCeilF(65.0f, camera->fov, camera->fovUpdateRate, 1.0f);
-    camera->roll = Camera_LERPCeilS(0, camera->roll, 0.5, 0xA);
-
-    return 1;
+    return sScriptedFreeArmed;
 }
 
 s32 Camera_Normal1(Camera* camera) {
@@ -3904,7 +3962,17 @@ s32 Camera_KeepOn4(Camera* camera) {
         Camera_Vec3fVecSphGeoAdd(at, at, &spB8);
     }
     camera->atLERPStepScale = 0.0f;
-    camera->dist = Camera_LERPCeilF(keep4->unk_04, camera->dist, 0.25f, 2.0f);
+    // SOH [Enhancement] Free camera during item-get / turn-around cutscenes. Checked here, before the
+    // scene's own distance LERP, so the free-look distance is not fought over by both every frame; the
+    // camera itself is only taken over further below, after this function has had the chance to hand the
+    // previous camera setting back when the cutscene ends (see the camera->unk_14C & 8 branch).
+    s32 scriptedFreeCam = CVarGetInteger(CVAR_SETTING("FreeLook.Enabled"), 0) &&
+                          CVarGetInteger(CVAR_SETTING("FreeLook.TurnAroundCam"), 0) &&
+                          Camera_ScriptedFreeCamActive(camera);
+
+    if (!scriptedFreeCam) {
+        camera->dist = Camera_LERPCeilF(keep4->unk_04, camera->dist, 0.25f, 2.0f);
+    }
     spB8.r = camera->dist;
     if (unk20->unk_10 != 0) {
         camera->unk_14C |= 0x20;
@@ -3932,6 +4000,15 @@ s32 Camera_KeepOn4(Camera* camera) {
             }
         }
     }
+    if (scriptedFreeCam) {
+        f32 freeDist = CVarGetInteger(CVAR_SETTING("FreeLook.UseGameDistance"), 0)
+                           ? keep4->unk_04
+                           : CVarGetInteger(CVAR_SETTING("FreeLook.MaxCameraDistance"), keep4->unk_04);
+
+        Camera_FreeMove(camera, freeDist);
+        return 1;
+    }
+
     spB8.yaw = Camera_LERPCeilS(unk20->unk_0C, spA8.yaw, keep4->unk_14, 4);
     spB8.pitch = Camera_LERPCeilS(unk20->unk_0E, spA8.pitch, keep4->unk_14, 4);
     Camera_Vec3fVecSphGeoAdd(eyeNext, at, &spB8);
@@ -3939,6 +4016,8 @@ s32 Camera_KeepOn4(Camera* camera) {
     Camera_BGCheck(camera, at, eye);
     camera->fov = Camera_LERPCeilF(keep4->unk_18, camera->fov, camera->fovUpdateRate, 1.0f);
     camera->roll = Camera_LERPCeilS(0, camera->roll, 0.5f, 0xA);
+
+    return 1;
 }
 
 /**

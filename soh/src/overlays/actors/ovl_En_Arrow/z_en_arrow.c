@@ -301,7 +301,9 @@ void EnArrow_Shoot(EnArrow* this, PlayState* play) {
         // Force world.rot.y to match the camera's horizontal aim so the arrow goes where the
         // crosshair points. Seeds also benefit: their rot is zeroed below so yaw is carried
         // through world.rot.y into Actor_SetProjectileSpeed.
-        if (TransformMasks_IsTransformed()) {
+        // The Rito's bow is the exception: it spawns with its own yaw AND pitch already
+        // resolved (aim assist included), so overwriting the yaw here would flatten it.
+        if (TransformMasks_IsTransformed() && !MmForm_RitoBowOwnsArrow(&this->actor)) {
             this->actor.world.rot.y = Camera_GetCamDirYaw(GET_ACTIVE_CAM(play));
         }
 
@@ -309,7 +311,17 @@ void EnArrow_Shoot(EnArrow* this, PlayState* play) {
             // Seeds/nuts: slow projectile
             Actor_SetProjectileSpeed(&this->actor, 80.0f);
             this->timer = 15;
-            this->actor.shape.rot.x = this->actor.shape.rot.y = this->actor.shape.rot.z = 0;
+
+            // Only the PLAIN seed and the deku nut get their visual rotation zeroed. Vanilla does
+            // that because both are billboarded sparkles (see EnArrow_Draw) that have no meaningful
+            // facing — but an ELEMENTAL seed carries a SW97 effect actor as a child, and that actor
+            // orients its cone off this shape.rot before applying its own fixed +90°. Zeroed here,
+            // the cone came out perpendicular to the flight path and read as a flying line rather
+            // than a cone. The seed's own render is unaffected: it is billboarded either way.
+            // Skijer's NEI
+            if (this->actor.params < ARROW_SEED_FIRE) {
+                this->actor.shape.rot.x = this->actor.shape.rot.y = this->actor.shape.rot.z = 0;
+            }
         } else {
             // Arrows (including SW97 medallion arrows): fast projectile
             Actor_SetProjectileSpeed(&this->actor, 150.0f);
@@ -447,6 +459,8 @@ void EnArrow_Fly(EnArrow* this, PlayState* play) {
 
                 Audio_PlayActorSound2(&this->actor, NA_SE_IT_ARROW_STICK_OBJ);
                 this->hitFlags |= 1;
+                // world.pos was snapped to hitPoint above, so this is the impact point.
+                MmForm_RitoBowOnArrowStick(play, &this->actor);
             }
         }
     } else {
@@ -461,7 +475,15 @@ void EnArrow_Fly(EnArrow* this, PlayState* play) {
             Math_Vec3f_Copy(&this->actor.world.pos, &hitPoint);
         }
 
-        if (this->actor.params <= ARROW_0E) {
+        // Pitch the model along the trajectory as it arcs. Vanilla only did this for real arrows;
+        // extended to the SW97 sets (Skijer's NEI) because both of them need it and neither had it:
+        //   * elemental SEEDS carry a SW97 cone effect whose orientation comes from this rotation —
+        //     without it the cone stays flat and looks like a line;
+        //   * SW97 medallion ARROWS are drawn with SkelAnime, exactly like vanilla arrows, so
+        //     without it the arrow model stayed level instead of following its arc.
+        if ((this->actor.params <= ARROW_0E) ||
+            ((this->actor.params >= ARROW_SEED_FIRE) && (this->actor.params <= ARROW_SEED_0E)) ||
+            ((this->actor.params >= ARROW_SW97_FIRE) && (this->actor.params <= ARROW_SW97_0E))) {
             this->actor.shape.rot.x = Math_Atan2S(this->actor.speedXZ, -this->actor.velocity.y);
         }
     }
@@ -538,27 +560,38 @@ void EnArrow_Update(Actor* thisx, PlayState* play) {
         s16 sw97ActorIds[] = { gSw97ActorId_ArrowFire, gSw97ActorId_ArrowIce,  gSw97ActorId_ArrowLight,
                                gSw97ActorId_ArrowDark, gSw97ActorId_ArrowSoul, gSw97ActorId_ArrowWind };
 
-        if (this->actor.child == NULL) {
-            Actor* effect = Actor_SpawnAsChild(
-                &play->actorCtx, &this->actor, play,
-                sw97ActorIds[this->actor.params - ARROW_SW97_FIRE],
-                this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z,
-                0, 0, 0, 0);
+        s16 sw97EffectId = sw97ActorIds[this->actor.params - ARROW_SW97_FIRE];
+
+        // The ids are -1 until ActorDB::AddBuiltInCustomActors() has run. Spawning with -1 indexes
+        // the overlay table out of bounds and kills the process, which is exactly what happened when
+        // that call went missing in the upstream merge. This is a LOUD last resort, not a silent
+        // disable: if it ever fires again the log names the cause instead of the game just dying.
+        // Skijer's NEI
+        if ((this->actor.child == NULL) && (sw97EffectId <= 0)) {
+            static u8 sWarned = 0;
+            if (!sWarned) {
+                sWarned = 1;
+                LUSLOG_ERROR("[SW97] arrow effect actor is unregistered (id=%d) — is "
+                             "ActorDB::AddBuiltInCustomActors() still being called?",
+                             sw97EffectId);
+            }
+        }
+
+        if ((this->actor.child == NULL) && (sw97EffectId > 0)) {
+            Actor* effect =
+                Actor_SpawnAsChild(&play->actorCtx, &this->actor, play, sw97EffectId, this->actor.world.pos.x,
+                                   this->actor.world.pos.y, this->actor.world.pos.z, 0, 0, 0, 0);
 
             // Tell teammates to spawn the same trail/glow effect actor on
             // their side. Fire-and-forget — it follows the parent EnArrow
             // (which is a vanilla actor and exists locally on every client).
             if (effect != NULL) {
                 static const s32 sVfxKindByArrowIdx[] = {
-                    HARPOON_VFX_KIND_SW97_ARROW_FIRE,
-                    HARPOON_VFX_KIND_SW97_ARROW_ICE,
-                    HARPOON_VFX_KIND_SW97_ARROW_LIGHT,
-                    HARPOON_VFX_KIND_SW97_ARROW_DARK,
-                    HARPOON_VFX_KIND_SW97_ARROW_SOUL,
-                    HARPOON_VFX_KIND_SW97_ARROW_WIND,
+                    HARPOON_VFX_KIND_SW97_ARROW_FIRE,  HARPOON_VFX_KIND_SW97_ARROW_ICE,
+                    HARPOON_VFX_KIND_SW97_ARROW_LIGHT, HARPOON_VFX_KIND_SW97_ARROW_DARK,
+                    HARPOON_VFX_KIND_SW97_ARROW_SOUL,  HARPOON_VFX_KIND_SW97_ARROW_WIND,
                 };
-                Harpoon_NotifyVfxSpawn(effect,
-                                       sVfxKindByArrowIdx[this->actor.params - ARROW_SW97_FIRE],
+                Harpoon_NotifyVfxSpawn(effect, sVfxKindByArrowIdx[this->actor.params - ARROW_SW97_FIRE],
                                        /*attachedToOwner=*/0);
             }
         }

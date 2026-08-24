@@ -26,13 +26,15 @@ static void UpdateBlueFireCollidersBgIceShelter(void* actorPtr) {
 }
 
 static bool CheckAC(Actor* ac) {
-    if (ac == NULL || ac->id != ACTOR_EN_ARROW) return false;
+    if (ac == NULL || ac->id != ACTOR_EN_ARROW)
+        return false;
     s16 p = (s16)ac->params;
     return p == ARROW_ICE || p == ARROW_SW97_ICE || p == ARROW_SEED_ICE;
 }
 
 static bool IsSw97IceArrow(Actor* ac) {
-    if (ac == NULL || ac->id != ACTOR_EN_ARROW) return false;
+    if (ac == NULL || ac->id != ACTOR_EN_ARROW)
+        return false;
     s16 p = (s16)ac->params;
     return p == ARROW_SW97_ICE || p == ARROW_SEED_ICE;
 }
@@ -43,9 +45,9 @@ static bool IsSw97IceArrow(Actor* ac) {
 // ice arrow for the red-ice melt check so the Water medallion gustjar also
 // melts BgIceShelter, the same way the SW97 bow / slingshot ice already do.
 static bool IsGustJarIceBlow(Actor* ac) {
-    if (ac == NULL || ac->id != ACTOR_PLAYER) return false;
-    return gCustomItemState.gustJarEquipped &&
-           gCustomItemState.gustJarMode == 3 /* GUST_MODE_BLOW */ &&
+    if (ac == NULL || ac->id != ACTOR_PLAYER)
+        return false;
+    return gCustomItemState.gustJarEquipped && gCustomItemState.gustJarMode == 3 /* GUST_MODE_BLOW */ &&
            gCustomItemState.gustJarElement == 2 /* GUST_ELEMENT_ICE */;
 }
 
@@ -69,14 +71,13 @@ void RegisterBlueFireArrowsHooks() {
 
     COND_VB_SHOULD(VB_BG_ICE_SHELTER_MELT, shouldRegister, {
         BgIceShelter* thisx = va_arg(args, BgIceShelter*);
-        bool meltCheatOn =
-            CVarGetInteger(CVAR_ENHANCEMENT("BlueFireArrows"), 0) || (IS_RANDO && RAND_GET_OPTION(RSK_BLUE_FIRE_ARROWS));
+        bool meltCheatOn = CVarGetInteger(CVAR_ENHANCEMENT("BlueFireArrows"), 0) ||
+                           (IS_RANDO && RAND_GET_OPTION(RSK_BLUE_FIRE_ARROWS));
 
         Actor* ac1 = thisx->cylinder1.base.ac;
         Actor* ac2 = thisx->cylinder2.base.ac;
 
-        if (IsSw97IceArrow(ac1) || IsSw97IceArrow(ac2) ||
-            IsGustJarIceBlow(ac1) || IsGustJarIceBlow(ac2)) {
+        if (IsSw97IceArrow(ac1) || IsSw97IceArrow(ac2) || IsGustJarIceBlow(ac1) || IsGustJarIceBlow(ac2)) {
             // SW97 ice (bow or slingshot) and Water-medallion gustjar BLOW
             // always melt red ice regardless of cheat state.
             *should = true;

@@ -401,8 +401,8 @@ static s16 sSubCamId = 0;
 // Bari, body — breaks/stuns at once. Lets one attack near Barinade clear a phase
 // without aiming at the boomerang-only AC colliders.
 static s32 sBariSuperBreakFrame = -100;
-#define BARI_SUPER_BREAK_ACTIVE(play) (((play)->gameplayFrames - sBariSuperBreakFrame) >= 0 && \
-                                       ((play)->gameplayFrames - sBariSuperBreakFrame) <= 2)
+#define BARI_SUPER_BREAK_ACTIVE(play) \
+    (((play)->gameplayFrames - sBariSuperBreakFrame) >= 0 && ((play)->gameplayFrames - sBariSuperBreakFrame) <= 2)
 
 static BossVaEffect sEffects[400];
 static u8 sBodyState;
@@ -3480,12 +3480,18 @@ void BossVa_Draw(Actor* thisx, PlayState* play) {
         Vec3f limbs[7];
         c.y += 30.0f;
         limbs[0] = c;
-        limbs[1] = c; limbs[1].x += 38.0f;
-        limbs[2] = c; limbs[2].x -= 38.0f;
-        limbs[3] = c; limbs[3].z += 38.0f;
-        limbs[4] = c; limbs[4].z -= 38.0f;
-        limbs[5] = c; limbs[5].y += 38.0f;
-        limbs[6] = c; limbs[6].y -= 38.0f;
+        limbs[1] = c;
+        limbs[1].x += 38.0f;
+        limbs[2] = c;
+        limbs[2].x -= 38.0f;
+        limbs[3] = c;
+        limbs[3].z += 38.0f;
+        limbs[4] = c;
+        limbs[4].z -= 38.0f;
+        limbs[5] = c;
+        limbs[5].y += 38.0f;
+        limbs[6] = c;
+        limbs[6].y -= 38.0f;
         BossSuperDamage_DrawElectricSparks(&this->actor, play, limbs, 7, 1.1f);
     }
 }

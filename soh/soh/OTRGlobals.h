@@ -67,6 +67,9 @@ class OTRGlobals {
     void ScaleImGui();
     void Initialize();
     void RunExtract(int argc, char* argv[]);
+    // Fleet Ship Combo: pump the window with a "waiting" modal while 2ship's VISIBLE extractor
+    // (2ship.exe --fleet-extract) builds mm.o2r; returns when that child exits. Skijer's NEI
+    void RunFleetGuestExtractWait();
     bool HasMasterQuest();
     bool HasOriginal();
     uint32_t GetInterpolationFPS();

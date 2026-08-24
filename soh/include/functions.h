@@ -1139,6 +1139,12 @@ s32 Player_HoldsBow(Player* player);
 s32 Player_HoldsSlingshot(Player* player);
 s32 func_8008F128(Player* player);
 s32 Player_ActionToMeleeWeapon(s32 actionParam);
+// Skijer's NEI: Fierce Deity skin active AND a real sword (Master/Kokiri/Biggoron) in
+// hand — the gate for FD's always-two-handed Deity sword. See z_player_lib.c.
+s32 Player_IsFDHoldingSword(Player* player);
+// Skijer's NEI: exposed to environmental heat. Shared so z_player.c and z_player_lib.c
+// cannot drift apart on it again. See z_player_lib.c.
+s32 Player_SuffersHeat(Player* player);
 s32 Player_GetMeleeWeaponHeld(Player* player);
 s32 Player_HoldsTwoHandedWeapon(Player* player);
 s32 Player_HoldsBrokenKnife(Player* player);

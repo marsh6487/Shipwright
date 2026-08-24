@@ -36,18 +36,14 @@ constexpr uint16_t REMOTE_PROJECTILE_BIT = 0x8000;
 
 // Broadcast a projectile spawn. Returns the assigned projId (caller stores
 // this in its own actor instance so PROJECTILE_HIT can reference it).
-uint32_t BroadcastSpawn(HarpoonCombat::HarpoonWeaponId source,
-                        float px, float py, float pz,
-                        float vx, float vy, float vz,
-                        float yaw, uint16_t charge);
+uint32_t BroadcastSpawn(HarpoonCombat::HarpoonWeaponId source, float px, float py, float pz, float vx, float vy,
+                        float vz, float yaw, uint16_t charge);
 
 // Broadcast a confirmed hit-on-player.
-void BroadcastHit(uint32_t projId, uint32_t targetCid,
-                  float hitX, float hitY, float hitZ);
+void BroadcastHit(uint32_t projId, uint32_t targetCid, float hitX, float hitY, float hitZ);
 
 // Broadcast a Mirror Shield reflect — reverse velocity and reassign owner.
-void BroadcastReflect(uint32_t projId, float newVx, float newVy, float newVz,
-                      uint32_t newOwnerCid);
+void BroadcastReflect(uint32_t projId, float newVx, float newVy, float newVz, uint32_t newOwnerCid);
 
 // Network event handlers (called from Harpoon.cpp dispatch).
 void HandleSpawn(const nlohmann::json& data);
@@ -62,7 +58,7 @@ Actor* FindByProjId(uint32_t projId);
 // are dropped.
 void ClearRegistry();
 
-}  // namespace HarpoonProjectileMirror
+} // namespace HarpoonProjectileMirror
 
-#endif  // __cplusplus
-#endif  // SOH_NETWORK_HARPOON_COMBAT_PROJECTILE_MIRROR_H
+#endif // __cplusplus
+#endif // SOH_NETWORK_HARPOON_COMBAT_PROJECTILE_MIRROR_H

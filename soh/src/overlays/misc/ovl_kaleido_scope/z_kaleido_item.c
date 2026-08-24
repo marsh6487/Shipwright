@@ -9,12 +9,14 @@
 
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "mods/extended_inventory.h"
-#include "mods/nei_save.h" // Skijer's NEI
+#include "mods/ext_buttons/ext_buttons.h" // Skijer's NEI — C-equipping u16 EXT items
+#include "mods/nei_save.h"                // Skijer's NEI
 #include "mods/transformation_masks/transformation_masks.h"
+#include "mods/transformation_masks/custom_forms.h" // Skijer's NEI — Rito Mask shares the Farore's Wind cell
 #include "mods/extended_inventory.c"
 #include "mods/items/custom_items.h"
-#include "mods/items/custom_bottles.h" // Skijer's NEI — bottle randomizer wheels (A/B)
-#include "mods/items/logic/item_lantern.h" // LanternFireType enum (Vacía/Regular/Blue/Poe/Green)
+#include "mods/items/custom_bottles.h"         // Skijer's NEI — bottle randomizer wheels (A/B)
+#include "mods/items/logic/item_lantern.h"     // LanternFireType enum (Vacía/Regular/Blue/Poe/Green)
 #include "mods/items/logic/twilight_upgrade.h" // Clawshot / Gale Boomerang mode selectors
 #include "expansions/sw97/sw97_config.h"
 
@@ -182,11 +184,17 @@ static int sSlotCycleActiveAnimTimer[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 // sizePx×sizePx texture (tc in s10.5 = sizePx<<5). Returns the temp Vtx (Graph_Alloc'd). Skijer's NEI
 static Vtx* KaleidoScope_AllocRemappedQuad(GraphicsContext* gfxCtx, Vtx* srcQuad, s32 sizePx) {
     Vtx* v = (Vtx*)Graph_Alloc(gfxCtx, 4 * sizeof(Vtx));
-    for (s32 i = 0; i < 4; i++) { v[i] = srcQuad[i]; }
-    v[0].v.tc[0] = 0;            v[0].v.tc[1] = 0;
-    v[1].v.tc[0] = sizePx << 5;  v[1].v.tc[1] = 0;
-    v[2].v.tc[0] = 0;            v[2].v.tc[1] = sizePx << 5;
-    v[3].v.tc[0] = sizePx << 5;  v[3].v.tc[1] = sizePx << 5;
+    for (s32 i = 0; i < 4; i++) {
+        v[i] = srcQuad[i];
+    }
+    v[0].v.tc[0] = 0;
+    v[0].v.tc[1] = 0;
+    v[1].v.tc[0] = sizePx << 5;
+    v[1].v.tc[1] = 0;
+    v[2].v.tc[0] = 0;
+    v[2].v.tc[1] = sizePx << 5;
+    v[3].v.tc[0] = sizePx << 5;
+    v[3].v.tc[1] = sizePx << 5;
     return v;
 }
 
@@ -212,12 +220,22 @@ static void KaleidoScope_DrawItemCycleExtrasImpl(PlayState* play, u8 slot, u8 ca
         }
     }
 
-    u8 slotItem = ExtInv_GetSlotItem(slot); // Skijer's NEI
+    u16 slotItem = ExtInv_GetSlotItem(slot); // Skijer's NEI
     u8 showLeftItem = leftItem != ITEM_NONE && (forceShow || slotItem != leftItem);
     u8 showRightItem = rightItem != ITEM_NONE && (forceShow || (slotItem != rightItem && leftItem != rightItem));
 
-    // Render the extra cycle items if at least the left or right item are valid
-    if (canCycle && slotItem != ITEM_NONE && (showLeftItem || showRightItem)) {
+    // Render the extra cycle items if at least the left or right item are valid.
+    //
+    // Candidates belong to the cell you are POINTING AT, not to every cell that happens to own a
+    // wheel. Without this gate each wheel painted its two minis permanently: resting 15px below the
+    // cell centre they landed on the top edge of the cell underneath, and the bottom row pushed them
+    // outside the page frame. The A-button hint below was already hover-gated; the candidates were
+    // not. Keeping the timer in the condition lets a cell you just left finish closing instead of
+    // popping. Mirrors the same fix in 2Ship so the two inventories read identically. Skijer's NEI
+    u8 hovered = (pauseCtx->cursorSlot[PAUSE_ITEM] == slot) && (pauseCtx->cursorSpecialPos == 0);
+
+    if (canCycle && slotItem != ITEM_NONE && (showLeftItem || showRightItem) &&
+        (hovered || isCycling || sSlotCycleActiveAnimTimer[slot] > 0)) {
         Matrix_Push();
 
         Vtx* itemTopLeft = &pauseCtx->itemVtx[slot * 4];
@@ -309,7 +327,7 @@ void KaleidoScope_HandleItemCycleExtras(PlayState* play, u8 slot, bool canCycle,
     Input* input = &play->state.input[0];
     PauseContext* pauseCtx = &play->pauseCtx;
     bool dpad = (CVarGetInteger(CVAR_SETTING("DPadOnPause"), 0) && !CHECK_BTN_ALL(input->cur.button, BTN_CUP));
-    u8 slotItem = ExtInv_GetSlotItem(slot); // Skijer's NEI
+    u16 slotItem = ExtInv_GetSlotItem(slot); // Skijer's NEI
     u8 hasLeftItem = leftItem != ITEM_NONE && slotItem != leftItem;
     u8 hasRightItem = rightItem != ITEM_NONE && slotItem != rightItem && leftItem != rightItem;
 
@@ -396,7 +414,7 @@ extern void* ExtInv_GetItemIcon(uint16_t itemId);
 // cycles. Replaces the old hold-C-to-extinguish shortcut.
 #define LANTERN_SELECTOR_MAX 5
 
-static u8  sLanternSelectorActive = 0;
+static u8 sLanternSelectorActive = 0;
 
 // Tint colors per LanternFireType — used by the overlay draw to indicate which
 // fuel is in each slot without needing dedicated icons.
@@ -406,11 +424,7 @@ static u8  sLanternSelectorActive = 0;
 //   3 POE: magenta
 //   4 GREEN: green
 static const u8 sLanternTypeTint[5][3] = {
-    { 110, 110, 110 },
-    { 255, 140,  40 },
-    {  60, 180, 255 },
-    { 220,  80, 220 },
-    {  80, 230, 100 },
+    { 110, 110, 110 }, { 255, 140, 40 }, { 60, 180, 255 }, { 220, 80, 220 }, { 80, 230, 100 },
 };
 
 // Forward declarations — defined below.
@@ -418,11 +432,9 @@ static const u8 sLanternTypeTint[5][3] = {
 // leftSize / rightSize: texture native size in pixels (32 for item icons,
 // 24 for quest medallion icons). Mod authors pass the actual size of the
 // PNG they're displaying so UVs scale correctly inside the 32x32 quad.
-static void KaleidoCycle_DrawRocStyle(PlayState* play, s32 visualSlot, u8 isCycling,
-                                       u8 hasLeftItem, u8 hasRightItem,
-                                       void* leftIconTex, void* rightIconTex,
-                                       const u8* leftTint, const u8* rightTint,
-                                       s32 leftSize, s32 rightSize);
+static void KaleidoCycle_DrawRocStyle(PlayState* play, s32 visualSlot, u8 isCycling, u8 hasLeftItem, u8 hasRightItem,
+                                      void* leftIconTex, void* rightIconTex, const u8* leftTint, const u8* rightTint,
+                                      s32 leftSize, s32 rightSize);
 static void ArrowWheel_Build(void);
 
 static u8 Lantern_BuildSelectorEntries(u8 entries[LANTERN_SELECTOR_MAX]) {
@@ -499,6 +511,84 @@ static void Lantern_Cycle(PlayState* play, s32 dir) {
     }
 }
 
+// ── Dual Cane: which cane the shared cell shows ─────────────────────────────
+// Cane of Somaria and Cane of Pacci are ONE inventory cell (the player is nearly
+// out of item slots), so which one you are carrying is a context variable rather
+// than a second slot: NeiSaveData.caneType, flipped from here.
+//
+// This is the Lantern's pattern verbatim — press A on the cell, stick L/R picks,
+// A confirms — because KaleidoWheel_Run already implements that input and
+// KaleidoCycle_DrawRocStyle already draws it. Nothing new is needed.
+//
+// The toggle only appears once BOTH chains are owned: the two progressions are
+// independent and one never grants the other, so a player who only ever found
+// Somaria items has nothing to switch to.
+static u8 sCaneSelectorActive = 0;
+
+// C-side accessors (mods/items/logic/item_cane_of_somaria.c + mods/nei_save.cpp).
+u8 Cane_GetType(void);
+u8 Nei_CaneTypeOwned(u8 type);
+void Nei_CaneSetType(u8 type);
+u8 Nei_CaneTypeCount(void);
+u8 Nei_CaneNextType(s8 dir);
+
+// FOUR entries can live on this cell — Cane of Somaria, Trirod, Cane of Pacci and
+// Ultrahand — because finishing a chain ADDS its end-item to the wheel instead of
+// replacing the cane that led there. The wheel is worth opening from two onward.
+static u8 Cane_WheelHasChoice(void) {
+    return Nei_CaneTypeCount() > 1;
+}
+
+static void Cane_KaleidoCycle(PlayState* play, s32 dir) {
+    // Walk to the next OWNED entry in that direction; locked ones are skipped.
+    Nei_CaneSetType(Nei_CaneNextType((s8)((dir >= 0) ? 1 : -1)));
+    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
+static void Cane_HandleKaleidoSelector(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+    u8 onThisItem = (pauseCtx->cursorItem[PAUSE_ITEM] == ITEM_CANE_OF_SOMARIA);
+
+    KaleidoWheel_Run(play, onThisItem, Cane_WheelHasChoice(), &sCaneSelectorActive, Cane_KaleidoCycle);
+}
+
+// The cell always holds ITEM_CANE_OF_SOMARIA, so both sides of the wheel show that
+// same icon; the TINT is what says which cane you are about to carry, matching the
+// in-hand model (Somaria red, Pacci yellow).
+static const Color_RGB8 sCaneTint[4] = {
+    { 255, 60, 60 },   // Cane of Somaria — red
+    { 255, 140, 40 },  // Trirod
+    { 255, 215, 70 },  // Cane of Pacci — yellow
+    { 120, 200, 255 }, // Ultrahand
+};
+
+static void Cane_DrawKaleidoSelector(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+
+    if (pauseCtx->cursorItem[PAUSE_ITEM] != ITEM_CANE_OF_SOMARIA) {
+        KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], 0, 0, 0, NULL, NULL, NULL, NULL, 0, 0);
+        return;
+    }
+    if (!Cane_WheelHasChoice()) {
+        return;
+    }
+
+    void* caneTex = ExtInv_GetItemIcon(ITEM_CANE_OF_SOMARIA);
+    if (caneTex == NULL) {
+        return;
+    }
+
+    // Each side previews the entry that direction would land on, so the tint tells you
+    // what you are about to switch to rather than what you already have.
+    const Color_RGB8* prevTint = &sCaneTint[Nei_CaneNextType(-1)];
+    const Color_RGB8* nextTint = &sCaneTint[Nei_CaneNextType(1)];
+
+    KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], sCaneSelectorActive,
+                              /*hasLeftItem=*/1, /*hasRightItem=*/1, caneTex, caneTex, prevTint, nextTint,
+                              /*leftSize=*/32, /*rightSize=*/32);
+}
+
 static void Lantern_HandleKaleidoSelector(PlayState* play) {
     PauseContext* pauseCtx = &play->pauseCtx;
 
@@ -547,9 +637,8 @@ static void Lantern_DrawKaleidoSelector(PlayState* play) {
 
     // Lantern icon is 32x32.
     KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], sLanternSelectorActive,
-                              /*hasLeftItem=*/1, /*hasRightItem=*/1,
-                              lanternTex, lanternTex,
-                              sLanternTypeTint[prevType], sLanternTypeTint[nextType],
+                              /*hasLeftItem=*/1, /*hasRightItem=*/1, lanternTex, lanternTex, sLanternTypeTint[prevType],
+                              sLanternTypeTint[nextType],
                               /*leftSize=*/32, /*rightSize=*/32);
 }
 
@@ -569,22 +658,25 @@ static void Lantern_DrawKaleidoSelector(PlayState* play) {
 //   rightIconTex - RGBA32 texture for the right mini icon
 //   leftTint     - 3-byte RGB tint or NULL for white
 //   rightTint    - 3-byte RGB tint or NULL for white
-static void KaleidoCycle_DrawRocStyle(PlayState* play, s32 visualSlot, u8 isCycling,
-                                       u8 hasLeftItem, u8 hasRightItem,
-                                       void* leftIconTex, void* rightIconTex,
-                                       const u8* leftTint, const u8* rightTint,
-                                       s32 leftSize, s32 rightSize) {
-    if (visualSlot < 0 || visualSlot >= (s32)ARRAY_COUNT(sSlotCycleActiveAnimTimer)) return;
-    if (leftSize <= 0) leftSize = 32;
-    if (rightSize <= 0) rightSize = 32;
+static void KaleidoCycle_DrawRocStyle(PlayState* play, s32 visualSlot, u8 isCycling, u8 hasLeftItem, u8 hasRightItem,
+                                      void* leftIconTex, void* rightIconTex, const u8* leftTint, const u8* rightTint,
+                                      s32 leftSize, s32 rightSize) {
+    if (visualSlot < 0 || visualSlot >= (s32)ARRAY_COUNT(sSlotCycleActiveAnimTimer))
+        return;
+    if (leftSize <= 0)
+        leftSize = 32;
+    if (rightSize <= 0)
+        rightSize = 32;
     PauseContext* pauseCtx = &play->pauseCtx;
 
     OPEN_DISPS(play->state.gfxCtx);
 
     if (isCycling) {
-        if (sSlotCycleActiveAnimTimer[visualSlot] < 5) sSlotCycleActiveAnimTimer[visualSlot]++;
+        if (sSlotCycleActiveAnimTimer[visualSlot] < 5)
+            sSlotCycleActiveAnimTimer[visualSlot]++;
     } else {
-        if (sSlotCycleActiveAnimTimer[visualSlot] > 0) sSlotCycleActiveAnimTimer[visualSlot]--;
+        if (sSlotCycleActiveAnimTimer[visualSlot] > 0)
+            sSlotCycleActiveAnimTimer[visualSlot]--;
     }
 
     if (hasLeftItem || hasRightItem) {
@@ -625,8 +717,10 @@ static void KaleidoCycle_DrawRocStyle(PlayState* play, s32 visualSlot, u8 isCycl
             gDPLoadTextureBlock_4b(POLY_OPA_DISP++, gPausePromptCursorTex, G_IM_FMT_I, 48, 48, 0,
                                    G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK,
                                    G_TX_NOLOD, G_TX_NOLOD);
-            if (hasLeftItem) gSP1Quadrangle(POLY_OPA_DISP++, 0, 2, 3, 1, 0);
-            if (hasRightItem) gSP1Quadrangle(POLY_OPA_DISP++, 4, 6, 7, 5, 0);
+            if (hasLeftItem)
+                gSP1Quadrangle(POLY_OPA_DISP++, 0, 2, 3, 1, 0);
+            if (hasRightItem)
+                gSP1Quadrangle(POLY_OPA_DISP++, 4, 6, 7, 5, 0);
         }
 
         // Left + right icons.
@@ -666,7 +760,7 @@ extern u8 TradeAdult_PrevItem(u8 cur);
 extern u8 TradeAdult_NextItem(u8 cur);
 extern void TradeAdult_FoldCurrent(u8 item);
 
-#if 0 // Skijer's NEI — old custom 2D-grid handler/draw, replaced by feeding the existing linear wheel.
+#if 0  // Skijer's NEI — old custom 2D-grid handler/draw, replaced by feeding the existing linear wheel.
 static void KaleidoTradeGrid_Handle(PlayState* play) {
     // Vanilla adult-trade shuffle keeps the linear cycle; the owned-grid is the non-rando path.
     if (IS_RANDO && Randomizer_GetSettingValue(RSK_SHUFFLE_ADULT_TRADE)) {
@@ -732,7 +826,7 @@ static void KaleidoTradeGrid_Handle(PlayState* play) {
         s32 gi = TradeAdult_OwnedAt(sTradeGridCursor);
         if (gi >= 0) {
             u8 newItem = TradeAdult_ItemId(gi);
-            u8 oldItem = ExtInv_GetSlotItem(SLOT_TRADE_ADULT);
+            u16 oldItem = ExtInv_GetSlotItem(SLOT_TRADE_ADULT);
             for (int i = 1; i < ARRAY_COUNT(gSaveContext.equips.buttonItems); i++) {
                 if (gSaveContext.equips.buttonItems[i] == oldItem) {
                     gSaveContext.equips.buttonItems[i] = newItem;
@@ -844,10 +938,10 @@ static void KaleidoTradeGrid_Draw(PlayState* play) {
 #define TWILIGHT_TOGGLE_SLOTS 2
 
 // Clawshot selector state
-static u8  sClawshotSelectorActive = 0;
+static u8 sClawshotSelectorActive = 0;
 static s32 sClawshotAnimTimer = 0;
 // Gale Boomerang selector state
-static u8  sGaleSelectorActive = 0;
+static u8 sGaleSelectorActive = 0;
 static s32 sGaleAnimTimer = 0;
 
 // Helper: returns 1 if the cursor item is a hookshot/longshot.
@@ -888,7 +982,8 @@ static void Clawshot_DrawKaleidoSelector(PlayState* play) {
     s32 cursorItem = pauseCtx->cursorItem[PAUSE_ITEM];
     if (!TwilightSel_IsHookshotItem(cursorItem) || !TwilightUpgrade_HasClawshot()) {
         // Reset animation when leaving the hookshot/longshot cursor.
-        if (sClawshotAnimTimer > 0) sClawshotAnimTimer--;
+        if (sClawshotAnimTimer > 0)
+            sClawshotAnimTimer--;
         return;
     }
 
@@ -902,15 +997,14 @@ static void Clawshot_DrawKaleidoSelector(PlayState* play) {
     void* clawshotTex = MmAssets_LoadHookshotIcon();
     if (clawshotTex == NULL)
         clawshotTex = (void*)gItemIconClawshotTex;
-    if (vanillaTex == NULL || clawshotTex == NULL) return;
+    if (vanillaTex == NULL || clawshotTex == NULL)
+        return;
 
-    static const u8 sVanillaTint[3]  = { 255, 255, 255 };
+    static const u8 sVanillaTint[3] = { 255, 255, 255 };
     static const u8 sClawshotTint[3] = { 255, 255, 255 };
 
     KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], sClawshotSelectorActive,
-                              /*hasLeft=*/1, /*hasRight=*/1,
-                              vanillaTex, clawshotTex,
-                              sVanillaTint, sClawshotTint,
+                              /*hasLeft=*/1, /*hasRight=*/1, vanillaTex, clawshotTex, sVanillaTint, sClawshotTint,
                               /*leftSize=*/32, /*rightSize=*/32);
 }
 
@@ -935,22 +1029,100 @@ static void Gale_DrawKaleidoSelector(PlayState* play) {
     PauseContext* pauseCtx = &play->pauseCtx;
     s32 cursorItem = pauseCtx->cursorItem[PAUSE_ITEM];
     if (cursorItem != ITEM_BOOMERANG || !TwilightUpgrade_HasGaleBoomerang()) {
-        if (sGaleAnimTimer > 0) sGaleAnimTimer--;
+        if (sGaleAnimTimer > 0)
+            sGaleAnimTimer--;
         return;
     }
 
     extern void* gItemIcons[];
     void* vanillaTex = gItemIcons[ITEM_BOOMERANG];
     void* galeTex = (void*)gItemIconGaleBoomerangTex;
-    if (vanillaTex == NULL || galeTex == NULL) return;
+    if (vanillaTex == NULL || galeTex == NULL)
+        return;
 
     static const u8 sVanillaTint[3] = { 255, 255, 255 };
-    static const u8 sGaleTint[3]    = { 255, 255, 255 };
+    static const u8 sGaleTint[3] = { 255, 255, 255 };
 
     KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], sGaleSelectorActive,
-                              /*hasLeft=*/1, /*hasRight=*/1,
-                              vanillaTex, galeTex,
-                              sVanillaTint, sGaleTint,
+                              /*hasLeft=*/1, /*hasRight=*/1, vanillaTex, galeTex, sVanillaTint, sGaleTint,
+                              /*leftSize=*/32, /*rightSize=*/32);
+}
+
+// ── Shovel <-> Dominion Rod selector (shared cell 46) — 2026-08-06 re-layout ─────────────────────
+// The rod rides the shovel's cell as a wheel entry (its old cell 47 is the Rod of Seasons now).
+// Ownership of each is its own NeiSaveData flag — a shared cell's value cannot say "both owned".
+// Same A-toggle pattern as the Clawshot/Gale selectors; the cycle swaps the CELL item, and the
+// icon/name follow the slot value on their own. Mirrors the MM wheel exactly. Skijer's NEI
+static u8 sShovelSelectorActive = 0;
+
+// Fold a pre-re-layout save into the new cell assignment. Idempotent, cheap; runs from the handle
+// pass. 47 held the rod -> flag + clear; 46 backfills its flag; 44 pokeball -> flag + clear;
+// 41 hylia -> clear (item retired).
+static void Page2Relayout_Heal(void) {
+    NeiSaveData* nei = Nei_Save();
+
+    if (ExtInv_GetSlotItem(SLOT_ROD_OF_SEASONS) == ITEM_DOMINION_ROD) {
+        nei->dominionOwned = 1;
+        ExtInv_SetSlotItem(SLOT_ROD_OF_SEASONS, ITEM_NONE);
+        if (ExtInv_GetSlotItem(SLOT_SHOVEL) == ITEM_NONE) {
+            ExtInv_SetSlotItem(SLOT_SHOVEL, ITEM_DOMINION_ROD);
+        }
+    }
+    if (ExtInv_GetSlotItem(SLOT_SHOVEL) == ITEM_SHOVEL) {
+        nei->shovelOwned = 1;
+    } else if (ExtInv_GetSlotItem(SLOT_SHOVEL) == ITEM_DOMINION_ROD) {
+        nei->dominionOwned = 1;
+    }
+    if (ExtInv_GetSlotItem(SLOT_SHADOW_CRYSTAL) == ITEM_POKEBALL) {
+        nei->pokeballOwned = 1;
+        ExtInv_SetSlotItem(SLOT_SHADOW_CRYSTAL, ITEM_NONE);
+    }
+    if (ExtInv_GetSlotItem(SLOT_PHANTOM_HOURGLASS) == ITEM_HYLIAS_GRACE) {
+        ExtInv_SetSlotItem(SLOT_PHANTOM_HOURGLASS, ITEM_NONE);
+    }
+}
+
+static u8 ShovelSel_IsShovelCellItem(s32 item) {
+    return item == ITEM_SHOVEL || item == ITEM_DOMINION_ROD;
+}
+
+static void Shovel_Cycle(PlayState* play, s32 dir) {
+    u16 cur = ExtInv_GetSlotItem(SLOT_SHOVEL);
+    u16 next = (cur == ITEM_SHOVEL) ? ITEM_DOMINION_ROD : ITEM_SHOVEL;
+    ExtInv_SetSlotItem(SLOT_SHOVEL, next);
+    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
+static void Shovel_HandleKaleidoSelector(PlayState* play) {
+    NeiSaveData* nei;
+    s32 cursorItem;
+    u8 onThisItem;
+
+    Page2Relayout_Heal();
+
+    nei = Nei_Save();
+    cursorItem = play->pauseCtx.cursorItem[PAUSE_ITEM];
+    onThisItem = ShovelSel_IsShovelCellItem(cursorItem) && nei->shovelOwned && nei->dominionOwned;
+    KaleidoWheel_Run(play, onThisItem, 1, &sShovelSelectorActive, Shovel_Cycle);
+}
+
+// Left side: the shovel; right side: the rod. Same small-flip renderer as Clawshot/Gale.
+static void Shovel_DrawKaleidoSelector(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+    s32 cursorItem = pauseCtx->cursorItem[PAUSE_ITEM];
+    NeiSaveData* nei = Nei_Save();
+
+    if (!ShovelSel_IsShovelCellItem(cursorItem) || !nei->shovelOwned || !nei->dominionOwned) {
+        return;
+    }
+
+    static const u8 sShovelTint[3] = { 255, 255, 255 };
+    static const u8 sRodTint[3] = { 255, 255, 255 };
+
+    KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], sShovelSelectorActive,
+                              /*hasLeft=*/1, /*hasRight=*/1, (void*)gItemIconShovelTex, (void*)gItemIconDominionRodTex,
+                              sShovelTint, sRodTint,
                               /*leftSize=*/32, /*rightSize=*/32);
 }
 
@@ -1100,8 +1272,8 @@ static const u16 sGustElemToMedallion[6] = {
 };
 
 static void GustJar_Cycle(PlayState* play, s32 dir) {
-    sGustElemCursor = (dir > 0) ? (sGustElemCursor + 1) % sGustAvailCount
-                                : (sGustElemCursor + sGustAvailCount - 1) % sGustAvailCount;
+    sGustElemCursor =
+        (dir > 0) ? (sGustElemCursor + 1) % sGustAvailCount : (sGustElemCursor + sGustAvailCount - 1) % sGustAvailCount;
     gCustomItemState.gustJarElement = sGustAvailElems[sGustElemCursor];
     Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
@@ -1128,7 +1300,8 @@ static void GustJar_DrawPressASelector(PlayState* play) {
     }
 
     GustJar_BuildKaleidoElements();
-    if (sGustAvailCount <= 1) return;
+    if (sGustAvailCount <= 1)
+        return;
 
     // Prev/next medallion icons relative to the current element.
     u8 cur = gCustomItemState.gustJarElement;
@@ -1145,9 +1318,8 @@ static void GustJar_DrawPressASelector(PlayState* play) {
     void* rightTex = ExtInv_GetItemIcon(sGustElemToMedallion[nextElem]);
 
     // Quest medallion icons are 24x24 (z_kaleido_collect.c:450).
-    KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], sGustPressASelectorActive,
-                              leftTex != NULL, rightTex != NULL,
-                              leftTex, rightTex, NULL, NULL,
+    KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], sGustPressASelectorActive, leftTex != NULL,
+                              rightTex != NULL, leftTex, rightTex, NULL, NULL,
                               /*leftSize=*/24, /*rightSize=*/24);
 }
 
@@ -1293,100 +1465,89 @@ static void GustJar_DrawElementCycle(PlayState* play) {
 // Mirrors the GustJar wheel pattern above.
 
 #define ARROW_WHEEL_HOLD_FRAMES 20
-#define ARROW_WHEEL_MAX_ENTRIES 7 // 6 medallion arrows + bomb arrows
+#define ARROW_WHEEL_MAX_ENTRIES SW97_ELEM_COUNT // plain + 6 medallions + bomb arrows
 
-// Element ids 0-5 map to medallions (Wind=Forest, Fire, Ice=Water, Light, Shadow, Spirit).
-// Id 6 = Bomb Arrow.
-#define ARROW_WHEEL_ENTRY_BOMB    6
-static const s32 sArrowWheelItem[ARROW_WHEEL_MAX_ENTRIES] = {
-    ITEM_SW97_ARROW_WIND, ITEM_SW97_ARROW_FIRE,  ITEM_SW97_ARROW_ICE,  ITEM_SW97_ARROW_LIGHT,
-    ITEM_SW97_ARROW_DARK, ITEM_SW97_ARROW_SOUL,  ITEM_BOMB_ARROWS,
-};
-static const s32 sArrowWheelMedallion[6] = {
-    ITEM_MEDALLION_FOREST, ITEM_MEDALLION_FIRE,   ITEM_MEDALLION_WATER,
-    ITEM_MEDALLION_LIGHT,  ITEM_MEDALLION_SHADOW, ITEM_MEDALLION_SPIRIT,
-};
-static const s32 sArrowWheelQuest[6] = {
-    QUEST_MEDALLION_FOREST, QUEST_MEDALLION_FIRE,   QUEST_MEDALLION_WATER,
-    QUEST_MEDALLION_LIGHT,  QUEST_MEDALLION_SHADOW, QUEST_MEDALLION_SPIRIT,
-};
-// Vanilla elemental-arrow inventory items per element (-1 if no vanilla equivalent)
-static const s32 sArrowWheelVanillaArrow[6] = {
-    -1, ITEM_ARROW_FIRE, ITEM_ARROW_ICE, ITEM_ARROW_LIGHT, -1, -1,
-};
-// Heptagonal radial layout (positions 0..6 around the cursor)
-static const s16 sArrowWheelOffX[ARROW_WHEEL_MAX_ENTRIES] = {  0,  19,  24,  12, -12, -24, -19 };
-static const s16 sArrowWheelOffY[ARROW_WHEEL_MAX_ENTRIES] = { -24, -15,   5,  20,  20,   5, -15 };
+// Skijer's NEI: the wheel used to swap WHICH ITEM sat on the C-button (six ITEM_SW97_ARROW_* ids
+// plus ITEM_BOMB_ARROWS) and mark the slot 0xFF "not from inventory". It now writes a FLAG and never
+// touches the button's item at all — the button keeps the plain bow/slingshot and the medallion is
+// composited over the HUD icon. Entries hold SW97_ELEM_* values; ownership, ordering and the
+// bow-only rule for bombs all come from the shared Sw97_Element* helpers in extended_inventory.c,
+// so the kaleido, the R/L cycle and the shot decode can never disagree about them.
 
-static u8  sArrowWheelEntries[ARROW_WHEEL_MAX_ENTRIES];
-static u8  sArrowWheelAvailCount = 0;
-static u8  sArrowWheelCursor = 0;
-static u8  sArrowWheelOverlayActive = 0;
+// Octagonal radial layout (positions 0..7 around the cursor)
+static const s16 sArrowWheelOffX[ARROW_WHEEL_MAX_ENTRIES] = { 0, 17, 24, 17, 0, -17, -24, -17 };
+static const s16 sArrowWheelOffY[ARROW_WHEEL_MAX_ENTRIES] = { -24, -17, 0, 17, 24, 17, 0, -17 };
+
+static u8 sArrowWheelEntries[ARROW_WHEEL_MAX_ENTRIES];
+static u8 sArrowWheelAvailCount = 0;
+static u8 sArrowWheelCursor = 0;
+static u8 sArrowWheelOverlayActive = 0;
 static s16 sArrowWheelHoldTimer = 0;
 static s32 sArrowWheelLastCBtn = -1;
 static s32 sArrowWheelStickHeld = 0;
+// Which weapon the wheel is currently serving (0 = bow, 1 = slingshot). The two carry independent
+// elements, and bombs only exist on the bow, so the entry list differs per weapon.
+static u8 sArrowWheelIsSling = 0;
 
 // Press-A selector (Roc's Feather style) — alternative to the hold-C wheel.
-static u8  sArrowWheelPressAActive = 0;
+static u8 sArrowWheelPressAActive = 0;
 
-// Find which C-button currently has the bow/slingshot or a cycled arrow item.
-// Returns the cursor index into sArrowWheelEntries (0..N-1) for the current
-// item, or -1 if not found. Writes the C-button index (0=C-Left, 1=C-Down,
-// 2=C-Right) into *outCBtn, or -1 if no relevant C-button.
+// Find a C-button holding the weapon this wheel serves. Returns the cursor index into
+// sArrowWheelEntries for the currently primed element, or -1 if it is not in the list. Writes the
+// C-button index (0=C-Left, 1=C-Down, 2=C-Right) into *outCBtn, or -1 if no C-button has it.
 static s8 ArrowWheel_GetCurrentEntry(s32* outCBtn) {
     *outCBtn = -1;
     for (s32 i = 1; i <= 3; i++) {
         u8 item = gSaveContext.equips.buttonItems[i];
-        s8 entry = -1;
-        if (item == ITEM_BOW || item == ITEM_SLINGSHOT) {
-            entry = 0; // default to WIND
-        } else if (item >= ITEM_SW97_ARROW_FIRE && item <= ITEM_SW97_ARROW_WIND) {
-            for (u8 k = 0; k < 6; k++) {
-                if ((s32)sArrowWheelItem[k] == (s32)item) {
-                    entry = (s8)k;
-                    break;
-                }
-            }
-        } else if (item == ITEM_BOMB_ARROWS) {
-            entry = ARROW_WHEEL_ENTRY_BOMB;
+        u8 isSling = Sw97_IsSlingItem(item);
+        if (!Sw97_IsBowItem(item) && !isSling) {
+            continue;
         }
-        if (entry >= 0) {
-            *outCBtn = i - 1;
-            for (u8 k = 0; k < sArrowWheelAvailCount; k++) {
-                if (sArrowWheelEntries[k] == (u8)entry) {
-                    return (s8)k;
-                }
-            }
-            return -1;
+        if (isSling != sArrowWheelIsSling) {
+            continue; // that button holds the OTHER weapon; its element is a separate flag
+        }
+        *outCBtn = i - 1;
+        break;
+    }
+    u8 elem = Sw97_GetElement(sArrowWheelIsSling);
+    for (u8 k = 0; k < sArrowWheelAvailCount; k++) {
+        if (sArrowWheelEntries[k] == elem) {
+            return (s8)k;
         }
     }
     return -1;
 }
 
-// Apply the selected entry to the given C-button.
+// Apply the selected entry. Note what is NOT here any more: no buttonItems[] write and no
+// cButtonSlots[cBtn] = 0xFF. The icon reload still is — the composite HUD icon is built from
+// iconItemSegment[], which would otherwise keep showing the previous element.
 static void ArrowWheel_ApplyEntry(PlayState* play, u8 entryIdx, s32 cBtn) {
-    if (cBtn < 0 || cBtn > 2 || entryIdx >= sArrowWheelAvailCount) return;
-    u8 entry = sArrowWheelEntries[entryIdx];
-    s32 chosenItem = sArrowWheelItem[entry];
-    s32 targetButtonIndex = cBtn + 1; // buttonItems[0] is B
-    gSaveContext.equips.buttonItems[targetButtonIndex] = chosenItem;
-    gSaveContext.equips.cButtonSlots[cBtn] = 0xFF; // not-from-inventory marker
-    Interface_LoadItemIcon1(play, targetButtonIndex);
+    if (entryIdx >= sArrowWheelAvailCount)
+        return;
+    Sw97_SetElement(sArrowWheelIsSling, sArrowWheelEntries[entryIdx]);
+    if (cBtn >= 0 && cBtn <= 2) {
+        Interface_LoadItemIcon1(play, cBtn + 1); // buttonItems[0] is B
+    }
+    Sw97_RefreshButtonIcons(play); // any other button holding the same weapon
 }
 
-// Resolve a wheel entry to its display icon texture.
+// Resolve a wheel entry to its display icon texture. SW97_ELEM_NONE has no medallion — it shows the
+// bare weapon, which is exactly what "no element primed" means.
 static void* ArrowWheel_GetEntryIcon(u8 entry) {
-    if (entry == ARROW_WHEEL_ENTRY_BOMB) {
-        return ExtInv_GetItemIcon(ITEM_BOMB_ARROWS);
-    } else if (entry < 6) {
-        return ExtInv_GetItemIcon(sArrowWheelMedallion[entry]);
+    if (entry == SW97_ELEM_NONE) {
+        return ExtInv_GetItemIcon(sArrowWheelIsSling ? ITEM_SLINGSHOT : ITEM_BOW);
     }
-    return NULL;
+    return ExtInv_GetItemIcon(Sw97_ElementIcon(entry));
+}
+
+// Medallion icons are 24x24; the bare weapon and the bomb-arrows icon are 32x32.
+static s32 ArrowWheel_GetEntryIconSize(u8 entry) {
+    return ((entry == SW97_ELEM_NONE) || (entry == SW97_ELEM_BOMB)) ? 32 : 24;
 }
 
 // Per-call context for ArrowWheel_Cycle, stashed by the handler after its
 // inline gates pass (the wheel callback can't take extra args).
-static s8  sArrowWheelCycleCurIdx = 0;
+static s8 sArrowWheelCycleCurIdx = 0;
 static s32 sArrowWheelCycleCBtn = -1;
 
 static void ArrowWheel_Cycle(PlayState* play, s32 dir) {
@@ -1395,6 +1556,84 @@ static void ArrowWheel_Cycle(PlayState* play, s32 dir) {
     ArrowWheel_ApplyEntry(play, newIdx, sArrowWheelCycleCBtn);
     Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
+// ── Elemental Wand — six rods in one page-2 cell ─────────────────────────────
+// Same press-A idiom as the Dual Cane above: A opens, stick L/R picks, A confirms. What makes this
+// one worth its slot is that six items share one cell — the cell's ICON and NAME follow the active
+// mode (ExtInv_GetItemIcon / ExtInv_GetCustomItemNameTex resolve them from Wand_GetMode), and the
+// preview on each side is the MEDALLION that unlocks the neighbouring rod, so the wheel doubles as a
+// reminder of what you are still missing.
+static u8 sWandSelectorActive = 0;
+
+static void Wand_KaleidoCycle(PlayState* play, s32 dir) {
+    Wand_SetMode(Wand_ModeNeighbor(Wand_GetMode(), dir));
+    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
+static void Wand_HandleKaleidoSelector(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+    u8 onThisItem = (pauseCtx->cursorItem[PAUSE_ITEM] == ITEM_ELEMENTAL_WAND);
+
+    KaleidoWheel_Run(play, onThisItem, Wand_ModeCount() > 1, &sWandSelectorActive, Wand_KaleidoCycle);
+}
+
+static void Wand_DrawKaleidoSelector(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+
+    if (pauseCtx->cursorItem[PAUSE_ITEM] != ITEM_ELEMENTAL_WAND) {
+        KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], 0, 0, 0, NULL, NULL, NULL, NULL, 0, 0);
+        return;
+    }
+    if (Wand_ModeCount() <= 1) {
+        return;
+    }
+
+    // Previews are the medallions of the neighbouring rods (24x24 quest icons), not the rods
+    // themselves — you pick a rod by recognising its element.
+    void* leftTex = ExtInv_GetItemIcon(Wand_ModeMedallion(Wand_ModeNeighbor(Wand_GetMode(), -1)));
+    void* rightTex = ExtInv_GetItemIcon(Wand_ModeMedallion(Wand_ModeNeighbor(Wand_GetMode(), 1)));
+
+    KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], sWandSelectorActive, leftTex != NULL,
+                              rightTex != NULL, leftTex, rightTex, NULL, NULL, 24, 24);
+}
+
+// ── Sheikah Slate — four runes in one page-2 cell ────────────────────────────
+// Wand idiom over the EXT (u16) slate id: the cell's ICON follows the active rune
+// (ExtInv_GetItemIcon returns the slate-with-badge composite from Slate_GetRune), and the previews
+// on each side are the neighbouring runes' 24x24 glyphs — the gust-jar "mini icons on top" look.
+static u8 sSlateSelectorActive = 0;
+
+static void Slate_KaleidoCycle(PlayState* play, s32 dir) {
+    Slate_SetRune(Slate_RuneNeighbor(Slate_GetRune(), dir));
+    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
+static void Slate_HandleKaleidoSelector(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+    u8 onThisItem = (pauseCtx->cursorItem[PAUSE_ITEM] == EXT_ITEM_SHEIKAH_SLATE);
+
+    KaleidoWheel_Run(play, onThisItem, Slate_RuneCount() > 1, &sSlateSelectorActive, Slate_KaleidoCycle);
+}
+
+static void Slate_DrawKaleidoSelector(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+
+    if (pauseCtx->cursorItem[PAUSE_ITEM] != EXT_ITEM_SHEIKAH_SLATE) {
+        KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], 0, 0, 0, NULL, NULL, NULL, NULL, 0, 0);
+        return;
+    }
+    if (Slate_RuneCount() <= 1) {
+        return;
+    }
+
+    void* leftTex = Slate_RuneMiniIcon(Slate_RuneNeighbor(Slate_GetRune(), -1));
+    void* rightTex = Slate_RuneMiniIcon(Slate_RuneNeighbor(Slate_GetRune(), 1));
+
+    KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], sSlateSelectorActive, leftTex != NULL,
+                              rightTex != NULL, leftTex, rightTex, NULL, NULL, 32, 32);
 }
 
 static void ArrowWheel_HandlePressA(PlayState* play) {
@@ -1415,21 +1654,21 @@ static void ArrowWheel_HandlePressA(PlayState* play) {
         return;
     }
 
+    sArrowWheelIsSling = (cursorItem == ITEM_SLINGSHOT);
     ArrowWheel_Build();
-    if (sArrowWheelAvailCount <= 1) return;
+    if (sArrowWheelAvailCount <= 1)
+        return;
 
-    // Resolve which C-button holds the bow/slingshot and the current entry.
-    // If NO C-button has bow/slingshot/SW97-arrow/bomb-arrows, fall back to
-    // C-Left (button index 0) as the target — cycling still updates a
-    // C-button so the change is visible, and the auto-equip lets the user
-    // just open the pause and cycle without having to manually drop the bow
-    // onto a C-button first. Skijer's NEI (Sw97).
+    // Resolve which C-button holds this weapon. If none does, fall back to C-Left as the target so
+    // the icon still refreshes somewhere visible; the flag itself is set regardless of any button,
+    // so cycling works even with the weapon unequipped. Skijer's NEI (Sw97).
     s32 cBtn = -1;
     s8 curIdx = ArrowWheel_GetCurrentEntry(&cBtn);
     if (cBtn < 0) {
         cBtn = 0; // C-Left as default target
     }
-    if (curIdx < 0) curIdx = 0;
+    if (curIdx < 0)
+        curIdx = 0;
     sArrowWheelCycleCurIdx = curIdx;
     sArrowWheelCycleCBtn = cBtn;
 
@@ -1437,7 +1676,8 @@ static void ArrowWheel_HandlePressA(PlayState* play) {
 }
 
 static void ArrowWheel_DrawPressA(PlayState* play) {
-    if (!SW97_MEDALLIONS_ENABLED()) return;
+    if (!SW97_MEDALLIONS_ENABLED())
+        return;
     PauseContext* pauseCtx = &play->pauseCtx;
     s32 cursorItem = pauseCtx->cursorItem[PAUSE_ITEM];
     if (cursorItem != ITEM_BOW && cursorItem != ITEM_SLINGSHOT) {
@@ -1445,12 +1685,15 @@ static void ArrowWheel_DrawPressA(PlayState* play) {
         return;
     }
 
+    sArrowWheelIsSling = (cursorItem == ITEM_SLINGSHOT);
     ArrowWheel_Build();
-    if (sArrowWheelAvailCount <= 1) return;
+    if (sArrowWheelAvailCount <= 1)
+        return;
 
     s32 cBtn = -1;
     s8 curIdx = ArrowWheel_GetCurrentEntry(&cBtn);
-    if (curIdx < 0) curIdx = 0;
+    if (curIdx < 0)
+        curIdx = 0;
 
     u8 prevEntry = sArrowWheelEntries[(curIdx + sArrowWheelAvailCount - 1) % sArrowWheelAvailCount];
     u8 nextEntry = sArrowWheelEntries[(curIdx + 1) % sArrowWheelAvailCount];
@@ -1458,32 +1701,25 @@ static void ArrowWheel_DrawPressA(PlayState* play) {
     void* leftTex = ArrowWheel_GetEntryIcon(prevEntry);
     void* rightTex = ArrowWheel_GetEntryIcon(nextEntry);
 
-    // Per-entry native size: medallion icons (entries 0-5) are 24x24, bomb arrows
-    // and bombchus (entries 6-7) are 32x32. Mixed prev/next is supported.
-    s32 leftSize = (prevEntry < 6) ? 24 : 32;
-    s32 rightSize = (nextEntry < 6) ? 24 : 32;
+    // Per-entry native size — medallions are 24x24, the bare weapon and bomb arrows 32x32. Mixed
+    // prev/next is supported.
+    s32 leftSize = ArrowWheel_GetEntryIconSize(prevEntry);
+    s32 rightSize = ArrowWheel_GetEntryIconSize(nextEntry);
 
-    KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], sArrowWheelPressAActive,
-                              leftTex != NULL, rightTex != NULL,
-                              leftTex, rightTex, NULL, NULL,
-                              leftSize, rightSize);
+    KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], sArrowWheelPressAActive, leftTex != NULL,
+                              rightTex != NULL, leftTex, rightTex, NULL, NULL, leftSize, rightSize);
 }
 
+// Rebuild the entry list for whichever weapon the cursor is on. Ownership (medallion OR the vanilla
+// elemental arrow) and the bomb-arrows unlock all live in Sw97_ElementOwned now, so the old
+// duplicated CHECK_QUEST_ITEM table and the ExtInv_GetItemSlot(ITEM_BOMB_ARROWS) lookup are gone.
 static void ArrowWheel_Build(void) {
-    sArrowWheelAvailCount = 0;
-    for (s32 i = 0; i < 6; i++) {
-        u8 hasMedallion = CHECK_QUEST_ITEM(sArrowWheelQuest[i]);
-        u8 hasVanillaArrow = (sArrowWheelVanillaArrow[i] >= 0) &&
-                             (INV_CONTENT(sArrowWheelVanillaArrow[i]) != ITEM_NONE);
-        if (hasMedallion || hasVanillaArrow) {
-            sArrowWheelEntries[sArrowWheelAvailCount++] = (u8)i;
-        }
+    sArrowWheelAvailCount = Sw97_ElementCount(sArrowWheelIsSling);
+    if (sArrowWheelAvailCount > ARROW_WHEEL_MAX_ENTRIES) {
+        sArrowWheelAvailCount = ARROW_WHEEL_MAX_ENTRIES;
     }
-    // ITEM_BOMB_ARROWS is a NEI custom item (0xAE); INV_CONTENT()/SLOT() would index
-    // gItemSlots[56] out of bounds. Resolve the real extended-inventory slot instead.
-    u8 baSlot = ExtInv_GetItemSlot(ITEM_BOMB_ARROWS);
-    if (baSlot != 0xFF && ExtInv_GetSlotItem(baSlot) != ITEM_NONE) { // Skijer's NEI
-        sArrowWheelEntries[sArrowWheelAvailCount++] = ARROW_WHEEL_ENTRY_BOMB;
+    for (u8 i = 0; i < sArrowWheelAvailCount; i++) {
+        sArrowWheelEntries[i] = Sw97_ElementAt(sArrowWheelIsSling, i);
     }
     if (sArrowWheelCursor >= sArrowWheelAvailCount) {
         sArrowWheelCursor = 0;
@@ -1507,6 +1743,7 @@ static void ArrowWheel_Handle(PlayState* play) {
         return;
     }
 
+    sArrowWheelIsSling = (cursorItem == ITEM_SLINGSHOT);
     ArrowWheel_Build();
     if (sArrowWheelAvailCount == 0) {
         sArrowWheelOverlayActive = 0;
@@ -1517,9 +1754,12 @@ static void ArrowWheel_Handle(PlayState* play) {
     // Detect held C-button (priority CLEFT > CDOWN > CRIGHT)
     u16 btn = input->cur.button;
     s32 cBtn = -1;
-    if (btn & BTN_CLEFT) cBtn = 0;
-    else if (btn & BTN_CDOWN) cBtn = 1;
-    else if (btn & BTN_CRIGHT) cBtn = 2;
+    if (btn & BTN_CLEFT)
+        cBtn = 0;
+    else if (btn & BTN_CDOWN)
+        cBtn = 1;
+    else if (btn & BTN_CRIGHT)
+        cBtn = 2;
 
     if (cBtn >= 0) {
         sArrowWheelLastCBtn = cBtn;
@@ -1549,16 +1789,10 @@ static void ArrowWheel_Handle(PlayState* play) {
         }
     } else {
         if (sArrowWheelOverlayActive && sArrowWheelLastCBtn >= 0 && sArrowWheelAvailCount > 0) {
-            // Confirm: equip chosen SW97 arrow item to the recorded C-slot.
-            // Overrides whatever the engine just bound (the bow itself) — same
-            // marker pattern as z_kaleido_collect.c medallion equip.
-            u8 entry = sArrowWheelEntries[sArrowWheelCursor];
-            s32 chosenItem = sArrowWheelItem[entry];
-            s32 targetCBtn = sArrowWheelLastCBtn;
-            s32 targetButtonIndex = targetCBtn + 1; // buttonItems[0] is B
-            gSaveContext.equips.buttonItems[targetButtonIndex] = chosenItem;
-            gSaveContext.equips.cButtonSlots[targetCBtn] = 0xFF; // not-from-inventory marker
-            Interface_LoadItemIcon1(play, targetButtonIndex);
+            // Confirm: prime the chosen element. The button keeps whatever weapon the engine just
+            // bound — we no longer overwrite buttonItems or set the 0xFF "not from inventory"
+            // marker, so the slot stays a normal inventory binding.
+            ArrowWheel_ApplyEntry(play, sArrowWheelCursor, sArrowWheelLastCBtn);
             Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         }
@@ -1568,14 +1802,18 @@ static void ArrowWheel_Handle(PlayState* play) {
 }
 
 static void ArrowWheel_Draw(PlayState* play) {
-    if (!SW97_MEDALLIONS_ENABLED()) return;
+    if (!SW97_MEDALLIONS_ENABLED())
+        return;
 
     PauseContext* pauseCtx = &play->pauseCtx;
     s32 cursorItem = pauseCtx->cursorItem[PAUSE_ITEM];
-    if (cursorItem != ITEM_BOW && cursorItem != ITEM_SLINGSHOT) return;
+    if (cursorItem != ITEM_BOW && cursorItem != ITEM_SLINGSHOT)
+        return;
 
+    sArrowWheelIsSling = (cursorItem == ITEM_SLINGSHOT);
     ArrowWheel_Build();
-    if (!sArrowWheelOverlayActive || sArrowWheelAvailCount == 0) return;
+    if (!sArrowWheelOverlayActive || sArrowWheelAvailCount == 0)
+        return;
 
     s32 cursorSlot = pauseCtx->cursorSlot[PAUSE_ITEM];
     s32 vtxIdx = cursorSlot * 4;
@@ -1584,16 +1822,10 @@ static void ArrowWheel_Draw(PlayState* play) {
 
     for (u8 i = 0; i < sArrowWheelAvailCount; i++) {
         u8 entry = sArrowWheelEntries[i];
-        bool isBomb = (entry == ARROW_WHEEL_ENTRY_BOMB);
-        bool is32px = isBomb; // bomb arrows icon is 32x32
-        s32 iconItem;
-        if (isBomb) {
-            iconItem = ITEM_BOMB_ARROWS;
-        } else {
-            iconItem = sArrowWheelMedallion[entry];
-        }
-        void* tex = ExtInv_GetItemIcon(iconItem);
-        if (tex == NULL) continue;
+        bool is32px = (ArrowWheel_GetEntryIconSize(entry) == 32);
+        void* tex = ArrowWheel_GetEntryIcon(entry);
+        if (tex == NULL)
+            continue;
 
         u8 alpha = (i == sArrowWheelCursor) ? pauseCtx->alpha : (pauseCtx->alpha >> 1);
         gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, alpha);
@@ -1659,7 +1891,7 @@ static void Bottle_WheelHandle(PlayState* play, u8 wheel, u8 kaleidoSlot) {
         if (dir != 0) {
             Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-            u8 oldItem = ExtInv_GetSlotItem(kaleidoSlot);
+            u16 oldItem = ExtInv_GetSlotItem(kaleidoSlot);
             u8 newItem = (u8)Bottle_WheelStep(wheel, dir);
             // Update the C-button equipped to THIS slot (if any) to the new bottle.
             for (int i = 1; i < ARRAY_COUNT(gSaveContext.equips.buttonItems); i++) {
@@ -1682,17 +1914,18 @@ void KaleidoScope_HandleItemCycles(PlayState* play) {
     // Skijer's NEI. The IS_RANDO term is upstream's: in rando the wheel stays usable even when
     // CanMaskSelect() says no, and that has to keep working on page 0.
     if (ExtInv_GetCurrentPage() == 0)
-        KaleidoScope_HandleItemCycleExtras(
-        play, SLOT_TRADE_CHILD, IS_RANDO || CanMaskSelect(),
-        IS_RANDO ? Randomizer_GetPrevChildTradeItem()
-                 : (INV_CONTENT(ITEM_TRADE_CHILD) <= ITEM_MASK_KEATON || INV_CONTENT(ITEM_TRADE_CHILD) > ITEM_MASK_TRUTH
-                        ? ITEM_MASK_TRUTH
-                        : INV_CONTENT(ITEM_TRADE_CHILD) - 1),
-        IS_RANDO ? Randomizer_GetNextChildTradeItem()
-                 : (INV_CONTENT(ITEM_TRADE_CHILD) >= ITEM_MASK_TRUTH || INV_CONTENT(ITEM_TRADE_CHILD) < ITEM_MASK_KEATON
-                        ? ITEM_MASK_KEATON
-                        : INV_CONTENT(ITEM_TRADE_CHILD) + 1),
-        true);
+        KaleidoScope_HandleItemCycleExtras(play, SLOT_TRADE_CHILD, IS_RANDO || CanMaskSelect(),
+                                           IS_RANDO ? Randomizer_GetPrevChildTradeItem()
+                                                    : (INV_CONTENT(ITEM_TRADE_CHILD) <= ITEM_MASK_KEATON ||
+                                                               INV_CONTENT(ITEM_TRADE_CHILD) > ITEM_MASK_TRUTH
+                                                           ? ITEM_MASK_TRUTH
+                                                           : INV_CONTENT(ITEM_TRADE_CHILD) - 1),
+                                           IS_RANDO ? Randomizer_GetNextChildTradeItem()
+                                                    : (INV_CONTENT(ITEM_TRADE_CHILD) >= ITEM_MASK_TRUTH ||
+                                                               INV_CONTENT(ITEM_TRADE_CHILD) < ITEM_MASK_KEATON
+                                                           ? ITEM_MASK_KEATON
+                                                           : INV_CONTENT(ITEM_TRADE_CHILD) + 1),
+                                           true);
 
     // the slot age requirement for the child trade slot has to be updated
     // in case it currently holds a mask
@@ -1717,8 +1950,14 @@ void KaleidoScope_HandleItemCycles(PlayState* play) {
     // stick L/R cycles). Only on the vanilla item page (0) — on pages 1/2 the cell is a custom item /
     // MM mask, so the wheel must not respond there (same as the bottle wheels). Skijer's NEI
     if (ExtInv_GetCurrentPage() == 0) {
-        u8 tradeCur = ExtInv_GetSlotItem(SLOT_TRADE_ADULT);
+        u16 tradeCur = ExtInv_GetSlotItem(SLOT_TRADE_ADULT);
         TradeAdult_FoldCurrent(tradeCur);
+        // The child chain's non-mask items (Weird Egg / Cucco / Zelda's Letter, trade indices 20-22)
+        // live in SLOT_TRADE_CHILD, which this wheel never reads — so nothing was ever setting their
+        // ownership bits and they could not reach the unified wheel (or MM). Fold them from their own
+        // slot. Masks in that slot are ignored: TradeAdult_IndexOfItem returns -1 for them.
+        // Skijer 2026-07-30
+        TradeAdult_FoldCurrent(ExtInv_GetSlotItem(SLOT_TRADE_CHILD));
         if (tradeCur == ITEM_NONE && TradeAdult_OwnedCount() > 0) {
             tradeCur = TradeAdult_ItemId(TradeAdult_OwnedAt(0)); // show the first owned item in an empty slot
             ExtInv_SetSlotItem(SLOT_TRADE_ADULT, tradeCur);
@@ -1743,6 +1982,14 @@ void KaleidoScope_HandleItemCycles(PlayState* play) {
     KaleidoScope_HandleItemCycleExtras(play, SLOT_NAYRUS_LOVE, Randomizer_GetSettingValue(RSK_ROCS_FEATHER),
                                        Enhancement_GetPrevNayrusItem(), Enhancement_GetNextNayrusItem(), true);
 
+    // Handle Farore's Wind/Rito Mask — same idea, page 0 only (on pages 1/2 that
+    // grid position is a different item entirely). Skijer's NEI
+    if (ExtInv_GetCurrentPage() == 0) {
+        RitoItem_SyncCell(); // records what this file owns, seeds an empty cell
+        KaleidoScope_HandleItemCycleExtras(play, SLOT_FARORES_WIND, RitoItem_CanCycle(), RitoItem_OtherItem(),
+                                           RitoItem_OtherItem(), true);
+    }
+
     // Handle Gust Jar element cycle
     GustJar_HandleElementCycle(play);
 
@@ -1752,6 +1999,19 @@ void KaleidoScope_HandleItemCycles(PlayState* play) {
     // Handle Lantern fire-type selector (press A on lantern → stick L/R picks
     // between captured types + Vacía, press A confirms / B cancels)
     Lantern_HandleKaleidoSelector(play);
+
+    // Dual Cane cane-type toggle (A on the cell) — Somaria <-> Pacci.
+    Cane_HandleKaleidoSelector(play);
+
+    // Shovel <-> Dominion Rod (shared cell 46; also folds pre-re-layout saves). Skijer's NEI
+    Shovel_HandleKaleidoSelector(play);
+
+    // Elemental Wand rod selector (A on the cell) — six rods share the page-2 slot the Bomb Arrows
+    // used to occupy. Skijer's NEI
+    Wand_HandleKaleidoSelector(play);
+
+    // Sheikah Slate rune selector (A on the cell) — four runes share the slate cell. Skijer's NEI
+    Slate_HandleKaleidoSelector(play);
 
     // Twilight Upgrade mode toggles — A on hookshot/longshot (Clawshot) or
     // boomerang (Gale Boomerang) opens a 2-slot selector. Gated by the
@@ -1780,20 +2040,21 @@ void KaleidoScope_DrawItemCycles(PlayState* play) {
     // mask-select overlay only on the vanilla item page (0) — pages 1/2 show custom items / masks. Skijer's NEI
     // IS_RANDO term from upstream, same reasoning as the input handler above.
     if (ExtInv_GetCurrentPage() == 0)
-        KaleidoScope_DrawItemCycleExtras(
-        play, SLOT_TRADE_CHILD, IS_RANDO || CanMaskSelect(),
-        IS_RANDO ? Randomizer_GetPrevChildTradeItem()
-                 : (INV_CONTENT(ITEM_TRADE_CHILD) <= ITEM_MASK_KEATON || INV_CONTENT(ITEM_TRADE_CHILD) > ITEM_MASK_TRUTH
-                        ? ITEM_MASK_TRUTH
-                        : INV_CONTENT(ITEM_TRADE_CHILD) - 1),
-        IS_RANDO ? Randomizer_GetNextChildTradeItem()
-                 : (INV_CONTENT(ITEM_TRADE_CHILD) >= ITEM_MASK_TRUTH || INV_CONTENT(ITEM_TRADE_CHILD) < ITEM_MASK_KEATON
-                        ? ITEM_MASK_KEATON
-                        : INV_CONTENT(ITEM_TRADE_CHILD) + 1));
+        KaleidoScope_DrawItemCycleExtras(play, SLOT_TRADE_CHILD, IS_RANDO || CanMaskSelect(),
+                                         IS_RANDO ? Randomizer_GetPrevChildTradeItem()
+                                                  : (INV_CONTENT(ITEM_TRADE_CHILD) <= ITEM_MASK_KEATON ||
+                                                             INV_CONTENT(ITEM_TRADE_CHILD) > ITEM_MASK_TRUTH
+                                                         ? ITEM_MASK_TRUTH
+                                                         : INV_CONTENT(ITEM_TRADE_CHILD) - 1),
+                                         IS_RANDO ? Randomizer_GetNextChildTradeItem()
+                                                  : (INV_CONTENT(ITEM_TRADE_CHILD) >= ITEM_MASK_TRUTH ||
+                                                             INV_CONTENT(ITEM_TRADE_CHILD) < ITEM_MASK_KEATON
+                                                         ? ITEM_MASK_KEATON
+                                                         : INV_CONTENT(ITEM_TRADE_CHILD) + 1));
 
     // draw the adult trade select — only on the vanilla item page (0), like the mask select above. Skijer's NEI
     if (ExtInv_GetCurrentPage() == 0) {
-        u8 tradeCur = ExtInv_GetSlotItem(SLOT_TRADE_ADULT);
+        u16 tradeCur = ExtInv_GetSlotItem(SLOT_TRADE_ADULT);
         KaleidoScope_DrawItemCycleExtras(play, SLOT_TRADE_ADULT, TradeAdult_OwnedCount() > 1,
                                          TradeAdult_PrevItem(tradeCur), TradeAdult_NextItem(tradeCur));
     }
@@ -1814,6 +2075,12 @@ void KaleidoScope_DrawItemCycles(PlayState* play) {
     KaleidoScope_DrawItemCycleExtras(play, SLOT_NAYRUS_LOVE, Randomizer_GetSettingValue(RSK_ROCS_FEATHER),
                                      Enhancement_GetPrevNayrusItem(), Enhancement_GetNextNayrusItem());
 
+    // Draw Farore's Wind/Rito Mask (see HandleItemCycles — page 0 only). Skijer's NEI
+    if (ExtInv_GetCurrentPage() == 0) {
+        KaleidoScope_DrawItemCycleExtras(play, SLOT_FARORES_WIND, RitoItem_CanCycle(), RitoItem_OtherItem(),
+                                         RitoItem_OtherItem());
+    }
+
     // Draw Gust Jar element indicator
     GustJar_DrawElementCycle(play);
 
@@ -1822,6 +2089,18 @@ void KaleidoScope_DrawItemCycles(PlayState* play) {
 
     // Draw Lantern fire-type selector overlay (only when active)
     Lantern_DrawKaleidoSelector(play);
+
+    // Dual Cane cane-type toggle overlay.
+    Cane_DrawKaleidoSelector(play);
+
+    // Shovel <-> Dominion Rod overlay (shared cell 46). Skijer's NEI
+    Shovel_DrawKaleidoSelector(play);
+
+    // Elemental Wand rod selector overlay. Skijer's NEI
+    Wand_DrawKaleidoSelector(play);
+
+    // Sheikah Slate rune selector overlay. Skijer's NEI
+    Slate_DrawKaleidoSelector(play);
 
     // Draw Twilight Upgrade mode toggles (Clawshot + Gale Boomerang)
     Clawshot_DrawKaleidoSelector(play);
@@ -1887,24 +2166,24 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
         // C-Up to switch into D-Pad swap mode. Counter resets when the
         // slot changes or C-Up is released.
         {
-            static s32  sHarpoonHoldFrames = 0;
-            static s16  sHarpoonHoldSlot   = -1;
+            static s32 sHarpoonHoldFrames = 0;
+            static s16 sHarpoonHoldSlot = -1;
             s16 curSlot = pauseCtx->cursorSlot[PAUSE_ITEM];
             if (CHECK_BTN_ALL(input->cur.button, BTN_CUP) && curSlot >= 0) {
                 if (sHarpoonHoldSlot != curSlot) {
-                    sHarpoonHoldSlot   = curSlot;
+                    sHarpoonHoldSlot = curSlot;
                     sHarpoonHoldFrames = 0;
                 }
                 sHarpoonHoldFrames++;
                 if (sHarpoonHoldFrames == 20) {
                     extern void HarpoonDrops_RequestDropFromPause(int tabId, int slot);
-                    HarpoonDrops_RequestDropFromPause(/*tabId=items*/0, curSlot);
+                    HarpoonDrops_RequestDropFromPause(/*tabId=items*/ 0, curSlot);
                     // Continue counting so a long hold doesn't re-fire
                     // every frame — only the single fire at exactly 20.
                 }
             } else {
                 sHarpoonHoldFrames = 0;
-                sHarpoonHoldSlot   = -1;
+                sHarpoonHoldSlot = -1;
             }
         }
         bool dpad = (CVarGetInteger(CVAR_SETTING("DPadOnPause"), 0) && !CHECK_BTN_ALL(input->cur.button, BTN_CUP));
@@ -1958,8 +2237,8 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
                         if (pauseCtx->cursorX[PAUSE_ITEM] != 0) {
                             pauseCtx->cursorX[PAUSE_ITEM] -= 1;
                             pauseCtx->cursorPoint[PAUSE_ITEM] -= 1;
-                            if ((ExtInv_GetSlotItem(ExtInv_GetInventorySlot(
-                                     pauseCtx->cursorPoint[PAUSE_ITEM])) != ITEM_NONE) || // Skijer's NEI
+                            if ((ExtInv_GetSlotItem(ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])) !=
+                                 ITEM_NONE) || // Skijer's NEI
                                 pauseAnyCursor) {
                                 moveCursorResult = 1;
                             }
@@ -1991,8 +2270,8 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
                         if (pauseCtx->cursorX[PAUSE_ITEM] < 5) {
                             pauseCtx->cursorX[PAUSE_ITEM] += 1;
                             pauseCtx->cursorPoint[PAUSE_ITEM] += 1;
-                            if ((ExtInv_GetSlotItem(ExtInv_GetInventorySlot(
-                                     pauseCtx->cursorPoint[PAUSE_ITEM])) != ITEM_NONE) || // Skijer's NEI
+                            if ((ExtInv_GetSlotItem(ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])) !=
+                                 ITEM_NONE) || // Skijer's NEI
                                 pauseAnyCursor) {
                                 moveCursorResult = 1;
                             }
@@ -2118,8 +2397,8 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
                             if (pauseCtx->cursorY[PAUSE_ITEM] != 0) {
                                 pauseCtx->cursorY[PAUSE_ITEM] -= 1;
                                 pauseCtx->cursorPoint[PAUSE_ITEM] -= 6;
-                                if ((ExtInv_GetSlotItem(ExtInv_GetInventorySlot(
-                                         pauseCtx->cursorPoint[PAUSE_ITEM])) != ITEM_NONE) || // Skijer's NEI
+                                if ((ExtInv_GetSlotItem(ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])) !=
+                                     ITEM_NONE) || // Skijer's NEI
                                     pauseAnyCursor) {
                                     moveCursorResult = 1;
                                 }
@@ -2134,8 +2413,8 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
                             if (pauseCtx->cursorY[PAUSE_ITEM] < 3) {
                                 pauseCtx->cursorY[PAUSE_ITEM] += 1;
                                 pauseCtx->cursorPoint[PAUSE_ITEM] += 6;
-                                if ((ExtInv_GetSlotItem(ExtInv_GetInventorySlot(
-                                         pauseCtx->cursorPoint[PAUSE_ITEM])) != ITEM_NONE) || // Skijer's NEI
+                                if ((ExtInv_GetSlotItem(ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])) !=
+                                     ITEM_NONE) || // Skijer's NEI
                                     pauseAnyCursor) {
                                     moveCursorResult = 1;
                                 }
@@ -2313,16 +2592,28 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
                 for (mvi = 0; mvi < 4; mvi++) {
                     mv[mvi] = cellVtx[0];
                 }
-                mv[0].v.ob[0] = mx0;         mv[0].v.ob[1] = myTop;         mv[0].v.tc[0] = 0;       mv[0].v.tc[1] = 0;
-                mv[1].v.ob[0] = mx0 + mSize; mv[1].v.ob[1] = myTop;         mv[1].v.tc[0] = 24 << 5; mv[1].v.tc[1] = 0;
-                mv[2].v.ob[0] = mx0;         mv[2].v.ob[1] = myTop - mSize; mv[2].v.tc[0] = 0;       mv[2].v.tc[1] = 24 << 5;
-                mv[3].v.ob[0] = mx0 + mSize; mv[3].v.ob[1] = myTop - mSize; mv[3].v.tc[0] = 24 << 5; mv[3].v.tc[1] = 24 << 5;
+                mv[0].v.ob[0] = mx0;
+                mv[0].v.ob[1] = myTop;
+                mv[0].v.tc[0] = 0;
+                mv[0].v.tc[1] = 0;
+                mv[1].v.ob[0] = mx0 + mSize;
+                mv[1].v.ob[1] = myTop;
+                mv[1].v.tc[0] = 24 << 5;
+                mv[1].v.tc[1] = 0;
+                mv[2].v.ob[0] = mx0;
+                mv[2].v.ob[1] = myTop - mSize;
+                mv[2].v.tc[0] = 0;
+                mv[2].v.tc[1] = 24 << 5;
+                mv[3].v.ob[0] = mx0 + mSize;
+                mv[3].v.ob[1] = myTop - mSize;
+                mv[3].v.tc[0] = 24 << 5;
+                mv[3].v.tc[1] = 24 << 5;
 
                 gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
                 gSPVertex(POLY_OPA_DISP++, mv, 4, 0);
                 KaleidoScope_DrawQuadTextureRGBA32(
-                    play->state.gfxCtx, (u8*)"__OTR__textures/icon_item_24_static/gQuestIconMedallionLightTex", 24,
-                    24, 0);
+                    play->state.gfxCtx, (u8*)"__OTR__textures/icon_item_24_static/gQuestIconMedallionLightTex", 24, 24,
+                    0);
             }
         }
     }
@@ -2793,8 +3084,18 @@ void KaleidoScope_UpdateItemEquip(PlayState* play) {
                 }
             }
 
-            gSaveContext.equips.buttonItems[targetButtonIndex] = pauseCtx->equipTargetItem;
-            gSaveContext.equips.cButtonSlots[pauseCtx->equipTargetCBtn] = pauseCtx->equipTargetSlot;
+            // Skijer's NEI: a u16 EXT id (>= 0x0200, e.g. the Sheikah Slate) does not fit the u8
+            // buttonItems array, so it rides the ext-button marker — ITEM_EXT_BUTTON parks here and
+            // the real id in the parallel u16 store, which every icon site resolves. Its home slot
+            // is not a vanilla inventory slot either, hence the 0xFF sentinel.
+            if (pauseCtx->equipTargetItem >= 0x0200) {
+                ExtButton_SetItem(targetButtonIndex, pauseCtx->equipTargetItem);
+                gSaveContext.equips.cButtonSlots[pauseCtx->equipTargetCBtn] = 0xFF;
+            } else {
+                ExtButton_ClearItem(targetButtonIndex); // drop any stale ext id this button carried
+                gSaveContext.equips.buttonItems[targetButtonIndex] = pauseCtx->equipTargetItem;
+                gSaveContext.equips.cButtonSlots[pauseCtx->equipTargetCBtn] = pauseCtx->equipTargetSlot;
+            }
             Interface_LoadItemIcon1(play, targetButtonIndex);
 
             pauseCtx->unk_1E4 = 0;

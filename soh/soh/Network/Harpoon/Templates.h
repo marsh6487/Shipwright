@@ -40,29 +40,29 @@ struct Template {
     //   [24..47] Shipwright custom items (Roc's Feather, Spinner, …)
     //   [48..71] MM masks
     uint8_t items[72];
-    s8      ammo[16];
+    s8 ammo[16];
 
     // ---- Equipment / upgrades ---------------------------------------------
     uint32_t equipment;
     uint32_t upgrades;
 
     // ---- Resources --------------------------------------------------------
-    int16_t  rupees;
-    int16_t  magic;
-    int16_t  magicCapacity;
-    int16_t  healthCapacity;
+    int16_t rupees;
+    int16_t magic;
+    int16_t magicCapacity;
+    int16_t healthCapacity;
 
     // ---- Quest items ------------------------------------------------------
     uint32_t questItems;
-    uint8_t  dungeonItems[20];
-    int8_t   dungeonKeys[19];   // small keys per dungeon (no keys for Barinade)
-    int16_t  gsTokens;          // gold skulltula tokens counter
+    uint8_t dungeonItems[20];
+    int8_t dungeonKeys[19]; // small keys per dungeon (no keys for Barinade)
+    int16_t gsTokens;       // gold skulltula tokens counter
 
     // ---- GM movement restrictions ----------------------------------------
-    bool     restrictNoClimb;
-    bool     restrictNoGrab;
-    bool     restrictNoCrawl;
-    bool     restrictNoTalk;
+    bool restrictNoClimb;
+    bool restrictNoGrab;
+    bool restrictNoCrawl;
+    bool restrictNoTalk;
 
     // ---- Save-state progression flags (full overwrite) -------------------
     uint16_t eventChkInf[14];
@@ -74,50 +74,50 @@ struct Template {
     std::vector<uint16_t> randomizerInf;
 
     // ---- File metadata ----------------------------------------------------
-    int32_t  fileNum;
-    uint8_t  playerName[8];
-    uint8_t  filenameLanguage;
+    int32_t fileNum;
+    uint8_t playerName[8];
+    uint8_t filenameLanguage;
 
     // ---- Defense / Magic acquisition --------------------------------------
-    uint8_t  isDoubleDefenseAcquired;
-    int16_t  defenseHearts;
-    int8_t   magicLevel;
-    uint8_t  isMagicAcquired;
-    uint8_t  isDoubleMagicAcquired;
+    uint8_t isDoubleDefenseAcquired;
+    int16_t defenseHearts;
+    int8_t magicLevel;
+    uint8_t isMagicAcquired;
+    uint8_t isDoubleMagicAcquired;
 
     // ---- Time / counters --------------------------------------------------
     uint16_t dayTime;
-    int32_t  totalDays;
+    int32_t totalDays;
     uint16_t deaths;
-    uint8_t  bgsFlag;
+    uint8_t bgsFlag;
     uint16_t swordHealth;
-    int32_t  bgsDayCount;
+    int32_t bgsDayCount;
 
     // ---- Entrance / scene state ------------------------------------------
-    int32_t  entranceIndex;
-    int32_t  cutsceneIndex;
+    int32_t entranceIndex;
+    int32_t cutsceneIndex;
 
     // ---- Timers -----------------------------------------------------------
     uint16_t naviTimer;
-    int16_t  timerState;
-    int16_t  timerSeconds;
-    int16_t  subTimerState;
-    int16_t  subTimerSeconds;
+    int16_t timerState;
+    int16_t timerSeconds;
+    int16_t subTimerState;
+    int16_t subTimerSeconds;
 
     // ---- Settings ---------------------------------------------------------
-    uint8_t  audioSetting;
-    int16_t  n64ddFlag;
-    uint8_t  zTargetSetting;
+    uint8_t audioSetting;
+    int16_t n64ddFlag;
+    uint8_t zTargetSetting;
 
     // ---- Randomizer-specific scalars -------------------------------------
-    uint8_t  triforcePiecesCollected;
-    uint8_t  bombchuUpgradeLevel;
+    uint8_t triforcePiecesCollected;
+    uint8_t bombchuUpgradeLevel;
 
     // ---- High scores ------------------------------------------------------
-    int32_t  highScores[7];
+    int32_t highScores[7];
 
     // ---- Gold skulltulas --------------------------------------------------
-    int32_t  gsFlags[6];
+    int32_t gsFlags[6];
 
     // ---- Per-scene saved flags (124 scenes) ------------------------------
     TplSceneFlags sceneFlags[124];
@@ -150,13 +150,12 @@ bool ApplyToPeer(uint32_t targetClientId, const std::string& name);
 bool ApplyToLocal(const std::string& name);
 
 // ---- Network ----
-nlohmann::json BuildTemplateApplyPayload(uint32_t targetClientId,
-                                          const Template& t);
+nlohmann::json BuildTemplateApplyPayload(uint32_t targetClientId, const Template& t);
 void HandleTemplateApply(const nlohmann::json& payload);
 
 // ---- Serialization (used by RemoteSaveEditor for peek payloads) ----
 nlohmann::json SerializeTemplate(const Template& t);
-Template       DeserializeTemplate(const nlohmann::json& j);
+Template DeserializeTemplate(const nlohmann::json& j);
 
 // Snapshot the LOCAL player's gSaveContext into the passed Template,
 // without touching disk or the in-memory template list. Used by
@@ -167,7 +166,7 @@ void CaptureLocalState(Template& t);
 // disk. Returns false if name is empty.
 bool SaveAsTemplate(const std::string& name, Template src);
 
-}  // namespace HarpoonTemplates
+} // namespace HarpoonTemplates
 
-#endif  // __cplusplus
-#endif  // SOH_NETWORK_HARPOON_TEMPLATES_H
+#endif // __cplusplus
+#endif // SOH_NETWORK_HARPOON_TEMPLATES_H

@@ -304,8 +304,11 @@ typedef enum {
     /* 0x7D */ ITEM_DOUBLE_DEFENSE,
     /* 0x7E */ ITEM_INVALID_4,
     /* 0x7F */ ITEM_INVALID_5,
-    /* 0x80 */ ITEM_INVALID_6,
-    /* 0x81 */ ITEM_INVALID_7,
+    // Skijer's NEI boss_remains: the four boss remains repurpose the only free C-button-visible u8
+    // ids (0x80/0x81 were ITEM_INVALID_6/7, 0x89 was ITEM_INVALID_8, 0x9C was ITEM_CUSTOM). The set
+    // is NON-contiguous — use BossRemains_ItemIndex/IndexItem, never range tests.
+    /* 0x80 */ ITEM_MM_REMAINS_ODOLWA = 0x80,
+    /* 0x81 */ ITEM_MM_REMAINS_GOHT = 0x81,
     /* 0x82 */ ITEM_MILK,
     /* 0x83 */ ITEM_HEART,
     /* 0x84 */ ITEM_RUPEE_GREEN,
@@ -313,7 +316,9 @@ typedef enum {
     /* 0x86 */ ITEM_RUPEE_RED,
     /* 0x87 */ ITEM_RUPEE_PURPLE,
     /* 0x88 */ ITEM_RUPEE_GOLD,
-    /* 0x89 */ ITEM_INVALID_8,
+    // Skijer's NEI boss_remains (was ITEM_INVALID_8; the z_parameter.c rupee-drop range tests now
+    // end at ITEM_RUPEE_GOLD so 0x89 is no longer treated as a consumable drop).
+    /* 0x89 */ ITEM_MM_REMAINS_TWINMOLD = 0x89,
     /* 0x8A */ ITEM_STICKS_5,
     /* 0x8B */ ITEM_STICKS_10,
     /* 0x8C */ ITEM_NUTS_5,
@@ -332,7 +337,12 @@ typedef enum {
     /* 0x99 */ ITEM_STICK_UPGRADE_30,
     /* 0x9A */ ITEM_NUT_UPGRADE_30,
     /* 0x9B */ ITEM_NUT_UPGRADE_40,
-    /* 0x9C */ ITEM_CUSTOM,
+    // Skijer's NEI boss_remains (was ITEM_CUSTOM, which only had a blank name-table row; the old
+    // "custom message icon" sentinel value 0x9C is unchanged — see CustomMessageManager).
+    /* 0x9C */ ITEM_MM_REMAINS_GYORG = 0x9C,
+    // Legacy alias: CustomMessageManager/ItemMessages still use ITEM_CUSTOM as the 0x9C sentinel
+    // (duplicate enumerator values are legal C — this adds the old name back without a new slot).
+    /* 0x9C */ ITEM_CUSTOM = 0x9C,
     /* 0x9D */ ITEM_ROCS_FEATHER,
     // Custom items (for second inventory page) - start at 0x9E
     /* 0x9E */ ITEM_ROCS_FEATHER_SKIJER = 0x9E,
@@ -386,16 +396,34 @@ typedef enum {
     /* 0xCD */ ITEM_MM_MASK_CAPTAIN,
     /* 0xCE */ ITEM_MM_MASK_GIANT,
     /* 0xCF */ ITEM_MM_MASK_FIERCE_DEITY,
-    // SW97 Medallion arrow items (arrow mode on C-buttons)
-    /* 0xD0 */ ITEM_SW97_ARROW_FIRE,
-    /* 0xD1 */ ITEM_SW97_ARROW_ICE,
-    /* 0xD2 */ ITEM_SW97_ARROW_LIGHT,
-    /* 0xD3 */ ITEM_SW97_ARROW_DARK,
-    /* 0xD4 */ ITEM_SW97_ARROW_SOUL,
-    /* 0xD5 */ ITEM_SW97_ARROW_WIND,
+    // Elemental Wand — six rods (Sand / Tornado / Water / Meteor / Storm / Shadow Scepter) in ONE
+    // page-2 cell, selected by a kaleido wheel that shows the matching medallion. Takes 0xD0, which
+    // the six ITEM_SW97_ARROW_* used to occupy: the primed element is a flag now (NeiSaveData
+    // .sw97BowElement / .sw97SlingElement), so those ids are gone. 0xD1-0xD5 are free.
+    /* 0xD0 */ ITEM_ELEMENTAL_WAND = 0xD0,
+    // Extended-button infrastructure. `equips.buttonItems[]` is u8 and the u8 ItemID space is
+    // essentially exhausted, so custom items whose real id is u16 (>= 0x0200) cannot be stored there.
+    // One reserved u8 acts as a MARKER: when a button slot holds ITEM_EXT_BUTTON, the REAL (u16) id
+    // lives in the parallel array gSaveContext.ship.extButtons.items[button] (EXT_BUTTON_ITEM,
+    // z64save.h). Vanilla code that reads the u8 sees an inert id — ExtPlayer_GetItemAction returns
+    // PLAYER_IA_NONE for it (not in the NEI registry, past VANILLA_SITEMACTIONS_SIZE) and it is in no
+    // usability/restriction table. Only the icon sites and owner-mod code resolve the real u16
+    // (see ExtButton_GetItem / z_parameter.c).
+    // 0xD1 is from the free 0xD1-0xD5 gap left by the removed ITEM_SW97_ARROW_*. It is deliberately
+    // below ITEM_LAST_USED (0xFC) so the existing `buttonItems[n] < ITEM_LAST_USED` HUD gates admit it
+    // with no change.
+    /* 0xD1 */ ITEM_EXT_BUTTON = 0xD1,
+    // Rito form trigger (Skijer's NEI). Lives in the FARORE'S WIND cell and cycles
+    // with the spell the way Roc's Feather cycles with Nayru's Love. Behaves as a
+    // wearable mask so far as the player code is concerned — ExtPlayer_GetItemAction
+    // aliases it to a vanilla mask action, which lands it in the z_player.c mask
+    // branch where CustomForms_TrySkinItem already toggles skin forms.
+    // Takes 0xD2 from the free 0xD1-0xD5 gap; below ITEM_LAST_USED (0xFC) so the
+    // C-button HUD draws it.
+    /* 0xD2 */ ITEM_RITO_MASK = 0xD2,
     // SM64 Mario mode toggle item — locked to C-Down via gSm64MarioMaskForce
     // CVar; pressing C-Down with this item equipped toggles gSm64Mario.
-    /* 0xD6 */ ITEM_MARIO_MASK,
+    /* 0xD6 */ ITEM_MARIO_MASK = 0xD6,
     // Prop Hunt button icons (Harpoon multiplayer mode). Slotted into the
     // C-buttons + D-pad while a hider is in "prop mode" so they show the
     // cycling controls instead of vanilla item icons. No gameplay action

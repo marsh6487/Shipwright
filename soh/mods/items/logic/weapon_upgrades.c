@@ -159,7 +159,14 @@ u8 WeaponUpgrade_ApplyHeldSwordDL(Gfx** dList, void* ootHand, Player* player, u8
     void* blade = NULL;
     void* handle = NULL;
 
-    if (player->heldItemAction == PLAYER_IA_SWORD_KOKIRI && WeaponUpgrade_KokiriLevel() >= 1) {
+    // Four Sword first: it replaces whichever sword is in hand while equipped, so it outranks the
+    // per-sword upgrade blades below. Its DLs come from soh.o2r (converted out of the old pak), not
+    // from mm.o2r. Defined in equipment/behaviors/equip_foursword.c.
+    extern u8 FourSword_HeldSwordDL(void** blade, void** handle);
+    if ((player->heldItemAction >= PLAYER_IA_SWORD_MASTER && player->heldItemAction <= PLAYER_IA_SWORD_BIGGORON) &&
+        FourSword_HeldSwordDL(&blade, &handle)) {
+        // fall through to the compound-DL builder with the Four Sword pieces
+    } else if (player->heldItemAction == PLAYER_IA_SWORD_KOKIRI && WeaponUpgrade_KokiriLevel() >= 1) {
         u8 gilded = WeaponUpgrade_HasGilded() && CVarGetInteger("gEnhancements.SkijerNEI.GildedUsesGildedLook", 1);
         if (gilded) {
             if (!sGildedTried) {

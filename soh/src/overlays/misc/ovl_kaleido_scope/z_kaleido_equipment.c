@@ -1,5 +1,7 @@
 #include "z_kaleido_scope.h"
 #include "textures/icon_item_static/icon_item_static.h"
+#include "assets/soh_assets.h"          // gItemIconReservedSlotTex (left-column reserved cells)
+#include "soh/ResourceManagerHelpers.h" // ResourceMgr_LoadTexOrDListByName (missing-icon probe)
 #include "textures/parameter_static/parameter_static.h"
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/enhancementTypes.h"
@@ -8,20 +10,16 @@
 #include "mods/broken_items/broken_items.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
-static u8 sChildUpgrades[] = { UPG_BULLET_BAG, UPG_BOMB_BAG, UPG_STRENGTH, UPG_SCALE };
-static u8 sAdultUpgrades[] = { UPG_QUIVER, UPG_BOMB_BAG, UPG_STRENGTH, UPG_SCALE };
+// Left column of the equipment page (Skijer, latest 2026-07-29 — mirror of 2ship):
+//   row 0 = MAGIC CAPE          (A toggles the cloth visibility; its half-cost passive is always on)
+//   row 1 = PENDANT OF MEMORIES (A toggles its whole moveset)
+//   row 2 = RESERVED ext slot 1 } freed when quiver/bullet bag, bomb bag, STRENGTH and SWIM all moved
+//   row 3 = RESERVED ext slot 2 } to the quest page. Placeholder icon, hoverable, A error-beeps.
+// Rows 0/1 draw solid = toggle ON, half-transparent = OFF (the spiritual-stones visual from
+// z_kaleido_collect.c).
+#define EQUIP_UPGRADE_ROW_RESERVED_1 2
+#define EQUIP_UPGRADE_ROW_RESERVED_2 3
 
-static u8 sChildUpgradeItemBases[] = { ITEM_BULLET_BAG_30, ITEM_BOMB_BAG_20, ITEM_BRACELET, ITEM_SCALE_SILVER };
-static u8 sAdultUpgradeItemBases[] = { ITEM_QUIVER_30, ITEM_BOMB_BAG_20, ITEM_BRACELET, ITEM_SCALE_SILVER };
-
-static u8 sUpgradeItemOffsets[] = { 0x00, 0x03, 0x06, 0x09 };
-
-// Skijer 2026-07-15: upgrade-column rows 0 and 1 no longer show the quiver/bullet-bag and bomb-bag
-// capacity icons — they now hold the MAGIC CAPE (row 0) and the PENDANT OF MEMORIES (row 1), moved
-// out of the ext-equipment grid. Their cells are landable when owned and A toggles them
-// (solid = on, half-transparent = off — the spiritual-stones visual from z_kaleido_collect.c).
-// Cape toggle = cloth VISIBILITY only (its magic refund is always active once owned);
-// Pendant toggle = its whole moveset on/off. Rows 2 (strength) and 3 (scale) are untouched.
 static s32 KaleidoEquip_UpgradeCellAvailable(s16 cursorY) {
     if (cursorY == 0) {
         return ExtEquip_CapeOwned();
@@ -29,21 +27,14 @@ static s32 KaleidoEquip_UpgradeCellAvailable(s16 cursorY) {
     if (cursorY == 1) {
         return ExtEquip_PendantOwned();
     }
-    return CUR_UPG_VALUE(cursorY) != 0; // strength / scale rows unchanged
+    return true; // reserved: always drawn/hoverable until the item that lands here is decided
 }
 
 static u8 sEquipmentItemOffsets[] = {
     0x00, 0x00, 0x01, 0x02, 0x00, 0x03, 0x04, 0x05, 0x00, 0x06, 0x07, 0x08, 0x00, 0x09, 0x0A, 0x0B,
 };
 
-// Vertices for A button indicator (coordinates 0.75x the texture size)
-// pt (-97, -36)
-static Vtx sStrengthAButtonVtx[] = {
-    VTX(-9, 6, 0, 0 << 5, 0 << 5, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(9, 6, 0, 24 << 5, 0 << 5, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(-9, -6, 0, 0 << 5, 16 << 5, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(9, -6, 0, 24 << 5, 16 << 5, 0xFF, 0xFF, 0xFF, 0xFF),
-};
+// (The strength A-button-indicator vertices moved to z_kaleido_collect.c with the strength cell.)
 
 static s16 sEquipTimer = 0;
 
@@ -567,14 +558,9 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                 cursorPoint = cursorX = cursorY = 0;
                 while (true) {
                     if (cursorX == 0) {
-                        if (cursorY == 0) {
-                            if (CUR_UPG_VALUE(UPG_BULLET_BAG) != 0) {
-                                pauseCtx->cursorPoint[PAUSE_EQUIP] = cursorPoint;
-                                pauseCtx->cursorX[PAUSE_EQUIP] = cursorX;
-                                pauseCtx->cursorY[PAUSE_EQUIP] = cursorY;
-                                break;
-                            }
-                        } else if (CUR_UPG_VALUE(cursorY) != 0) {
+                        // The left column is Cape / Pendant / 2 reserved slots now — one landability
+                        // rule for all four rows (Skijer 2026-07-29).
+                        if (KaleidoEquip_UpgradeCellAvailable(cursorY)) {
                             pauseCtx->cursorPoint[PAUSE_EQUIP] = cursorPoint;
                             pauseCtx->cursorX[PAUSE_EQUIP] = cursorX;
                             pauseCtx->cursorY[PAUSE_EQUIP] = cursorY;
@@ -615,7 +601,7 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                 cursorY = 0;
                 while (true) {
                     if (cursorX == 0) {
-                        if (CUR_UPG_VALUE(cursorY) != 0) {
+                        if (KaleidoEquip_UpgradeCellAvailable(cursorY)) {
                             pauseCtx->cursorPoint[PAUSE_EQUIP] = cursorPoint;
                             pauseCtx->cursorX[PAUSE_EQUIP] = cursorX;
                             pauseCtx->cursorY[PAUSE_EQUIP] = cursorY;
@@ -647,23 +633,27 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
             }
         }
 
+        gExtEquipGridNameContext = false; // re-armed below only while naming a page-2 grid cell
+
         if (pauseCtx->cursorX[PAUSE_EQUIP] == 0) {
             pauseCtx->cursorColorSet = 0;
 
-            if (pauseCtx->cursorY[PAUSE_EQUIP] == 0) {
-                // Row 0 = Magic Cape (was quiver/bullet-bag capacity). Skijer 2026-07-15
-                cursorItem = ITEM_EXT_TUNIC_1;
-            } else if (pauseCtx->cursorY[PAUSE_EQUIP] == 1) {
-                // Row 1 = Pendant of Memories (was bomb-bag capacity)
-                cursorItem = ITEM_EXT_BOOTS_2;
+            if (pauseCtx->cursorY[PAUSE_EQUIP] <= 1) {
+                // Rows 0/1 = Magic Cape / Pendant of Memories. They no longer borrow the ext TUNIC-1 /
+                // BOOTS-2 ids for their label — those slots are the Champion's Tunic and the Climb
+                // Boots now, so the name box would lie. Left unnamed to match 2ship exactly until both
+                // games get dedicated Cape/Pendant name textures wired.
+                cursorItem = PAUSE_ITEM_NONE;
             } else {
-                cursorItem = ITEM_QUIVER_30 + sUpgradeItemOffsets[pauseCtx->cursorY[PAUSE_EQUIP]] +
-                             CUR_UPG_VALUE(pauseCtx->cursorY[PAUSE_EQUIP]) - 1;
-                osSyncPrintf("H_arrowcase_1 + non_equip_item_table = %d\n", cursorItem);
+                // Rows 2/3 = the reserved slots — nothing to name yet (Skijer 2026-07-29).
+                cursorItem = PAUSE_ITEM_NONE;
             }
         } else {
             if (extEquipPage) {
-                // Extended equipment page: map cursor position to ext item ID
+                // Extended equipment page: map cursor position to ext item ID. The name resolver runs
+                // later (z_kaleido_scope_PAL.c), so flag that the id it gets is a GRID slot — the one
+                // shared id (0xEA) means Climb Boots here, Pendant of Memories everywhere else.
+                gExtEquipGridNameContext = true;
                 cursorItem = ExtEquip_GetItemId(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP]);
             } else {
                 cursorItem = ITEM_SWORD_KOKIRI + sEquipmentItemOffsets[pauseCtx->cursorPoint[PAUSE_EQUIP]];
@@ -697,41 +687,13 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
             pauseCtx->nameColorSet = 1;
         }
 
-        if (pauseCtx->cursorItem[PAUSE_EQUIP] == ITEM_BRACELET) {
-            if (LINK_AGE_IN_YEARS == YEARS_CHILD || IS_RANDO) {
-                pauseCtx->nameColorSet = 0;
-            } else {
-                pauseCtx->nameColorSet = 1;
-            }
-        }
-
-        if ((pauseCtx->cursorX[PAUSE_EQUIP] == 0) && (pauseCtx->cursorY[PAUSE_EQUIP] == 0)) {
-            if (LINK_AGE_IN_YEARS != YEARS_CHILD) {
-                if ((cursorItem >= ITEM_BULLET_BAG_30) && (cursorItem <= ITEM_BULLET_BAG_50)) {
-                    pauseCtx->nameColorSet = 1;
-                } else {
-                    pauseCtx->nameColorSet = 0;
-                }
-            } else {
-                pauseCtx->nameColorSet = 0;
-            }
-        }
+        // (The age-based greying for the strength/quiver capacity labels moved to the quest page with
+        // those cells — the left column holds the Cape, the Pendant and 2 reserved slots now.)
 
         KaleidoScope_SetCursorVtx(pauseCtx, cursorSlot * 4, pauseCtx->equipVtx);
 
-        // Allow Toggling of Strength when Pressing A on Strength Upgrade Slot
-        if ((pauseCtx->cursorSpecialPos == 0) && (pauseCtx->state == 6) && (pauseCtx->unk_1E4 == 0) &&
-            CHECK_BTN_ALL(input->press.button, BTN_A) && (pauseCtx->cursorX[PAUSE_EQUIP] == 0) &&
-            (pauseCtx->cursorY[PAUSE_EQUIP] == 2) && CVarGetInteger(CVAR_ENHANCEMENT("ToggleStrength"), 0)) {
-            CVarSetInteger(CVAR_ENHANCEMENT("StrengthDisabled"),
-                           !CVarGetInteger(CVAR_ENHANCEMENT("StrengthDisabled"), 0));
-            // Equip success sound
-            Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-            // Wait 10 frames before accepting input again
-            pauseCtx->unk_1E4 = 7;
-            sEquipTimer = 10;
-        }
+        // (The "A toggles Strength" interaction moved to the quest page with the strength cell —
+        // see z_kaleido_collect.c. Skijer 2026-07-29)
 
         // Skijer 2026-07-15: A on upgrade row 0 = toggle Magic Cape VISIBILITY (its magic refund is
         // always active once owned); A on row 1 = toggle the Pendant of Memories moveset on/off.
@@ -778,8 +740,11 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
                     pauseCtx->unk_1E4 = 7;
                     sEquipTimer = 10;
-                } else if (CHECK_BTN_ANY(input->press.button, BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT)) {
-                    // Assign ext equipment to C button for toggle on/off during gameplay
+                } else if (CHECK_BTN_ANY(input->press.button, BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT) &&
+                           (pauseCtx->cursorY[PAUSE_EQUIP] != EQUIP_TYPE_BOOTS)) {
+                    // Assign ext equipment to C button for toggle on/off during gameplay. The BOOTS row
+                    // is excluded: all three are real boots (A equips them), and its middle id (0xEA)
+                    // belongs to the Pendant of Memories in the C-button id space. Skijer 2026-07-29
                     u16 extItemId = ExtEquip_GetItemId(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP]);
                     // Determine which C button was pressed (1=CLeft, 2=CDown, 3=CRight)
                     s32 cBtn = CHECK_BTN_ALL(input->press.button, BTN_CLEFT)   ? 0
@@ -1014,21 +979,7 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
         }
     }
 
-    // Add zoom effect to strength item if cursor is hovering over it when toggle option is on
-    if ((pauseCtx->cursorX[PAUSE_EQUIP] == 0) && (pauseCtx->cursorY[PAUSE_EQUIP] == 2) &&
-        CVarGetInteger(CVAR_ENHANCEMENT("ToggleStrength"), 0) && pauseCtx->cursorSpecialPos == 0) {
-        u8 row = 2;
-        u8 column = 0;
-        u8 equipVtxIndex = 16 * row + 4 * column;
-        pauseCtx->equipVtx[equipVtxIndex].v.ob[0] = pauseCtx->equipVtx[equipVtxIndex + 2].v.ob[0] =
-            pauseCtx->equipVtx[equipVtxIndex].v.ob[0] - 2;
-        pauseCtx->equipVtx[equipVtxIndex + 1].v.ob[0] = pauseCtx->equipVtx[equipVtxIndex + 3].v.ob[0] =
-            pauseCtx->equipVtx[equipVtxIndex + 1].v.ob[0] + 4;
-        pauseCtx->equipVtx[equipVtxIndex].v.ob[1] = pauseCtx->equipVtx[equipVtxIndex + 1].v.ob[1] =
-            pauseCtx->equipVtx[equipVtxIndex].v.ob[1] + 2;
-        pauseCtx->equipVtx[equipVtxIndex + 2].v.ob[1] = pauseCtx->equipVtx[equipVtxIndex + 3].v.ob[1] =
-            pauseCtx->equipVtx[equipVtxIndex + 2].v.ob[1] - 4;
-    }
+    // (The strength cell's hover-zoom moved to the quest page with the cell itself.)
 
     Gfx_SetupDL_42Opa(play->state.gfxCtx);
 
@@ -1037,7 +988,6 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
 
     for (rowStart = 0, j = 0, temp = 0, i = 0; i < 4; i++, rowStart += 4, j += 16) {
         gSPVertex(POLY_OPA_DISP++, &pauseCtx->equipVtx[j], 16, 0);
-        bool drawGreyItems = !CVarGetInteger(CVAR_CHEAT("TimelessEquipment"), 0);
         if (i == 0 || i == 1) {
             // Skijer 2026-07-15: upgrade rows 0/1 = MAGIC CAPE / PENDANT OF MEMORIES (replacing the
             // quiver/bullet-bag and bomb-bag capacity icons). Solid = toggle ON, half-transparent =
@@ -1055,51 +1005,11 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                     gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
                 }
             }
-        } else if (LINK_AGE_IN_YEARS == YEARS_CHILD) {
-            point = CUR_UPG_VALUE(sChildUpgrades[i]);
-            if ((point != 0) && (CUR_UPG_VALUE(sChildUpgrades[i]) != 0)) {
-                // Grey Out the Gauntlets as Child
-                // Grey Out Strength Upgrades when Disabled and the Toggle Strength Option is on
-                if ((drawGreyItems &&
-                     ((sChildUpgradeItemBases[i] + CUR_UPG_VALUE(sChildUpgrades[i]) - 1) == ITEM_GAUNTLETS_SILVER ||
-                      (sChildUpgradeItemBases[i] + CUR_UPG_VALUE(sChildUpgrades[i]) - 1) == ITEM_GAUNTLETS_GOLD)) ||
-                    (CVarGetInteger(CVAR_ENHANCEMENT("ToggleStrength"), 0) &&
-                     CVarGetInteger(CVAR_ENHANCEMENT("StrengthDisabled"), 0) && sChildUpgrades[i] == UPG_STRENGTH)) {
-                    gDPSetGrayscaleColor(POLY_OPA_DISP++, 109, 109, 109, 255);
-                    gSPGrayscale(POLY_OPA_DISP++, true);
-                }
-                KaleidoScope_DrawQuadTextureRGBA32(
-                    play->state.gfxCtx, ExtInv_GetItemIcon(sChildUpgradeItemBases[i] + point - 1), 32, 32, 0);
-                gSPGrayscale(POLY_OPA_DISP++, false);
-            }
         } else {
-            if ((i == 0) &&
-                (CUR_UPG_VALUE(sAdultUpgrades[i]) ==
-                 0)) { // If the player doesn't have the bow, load the current slingshot ammo upgrade instead.
-                if (drawGreyItems) {
-                    gDPSetGrayscaleColor(POLY_OPA_DISP++, 109, 109, 109, 255); // Grey Out Slingshot Bullet Bags
-                    gSPGrayscale(POLY_OPA_DISP++, true);
-                }
-                KaleidoScope_DrawQuadTextureRGBA32(
-                    play->state.gfxCtx,
-                    ExtInv_GetItemIcon(sChildUpgradeItemBases[i] + CUR_UPG_VALUE(sChildUpgrades[i]) - 1), 32, 32, 0);
-                gSPGrayscale(POLY_OPA_DISP++, false);
-            } else if (CUR_UPG_VALUE(sAdultUpgrades[i]) != 0) {
-                // Grey Out the Goron Bracelet when Not Randomized and Toggle Strength Option is off
-                // Grey Out Strength Upgrades when Disabled and the Toggle Strength Option is on
-                if ((drawGreyItems &&
-                     (((sAdultUpgradeItemBases[i] + CUR_UPG_VALUE(sAdultUpgrades[i]) - 1) == ITEM_BRACELET &&
-                       !(IS_RANDO) && !CVarGetInteger(CVAR_ENHANCEMENT("ToggleStrength"), 0)))) ||
-                    (CVarGetInteger(CVAR_ENHANCEMENT("ToggleStrength"), 0) &&
-                     CVarGetInteger(CVAR_ENHANCEMENT("StrengthDisabled"), 0) && sAdultUpgrades[i] == UPG_STRENGTH)) {
-                    gDPSetGrayscaleColor(POLY_OPA_DISP++, 109, 109, 109, 255);
-                    gSPGrayscale(POLY_OPA_DISP++, true);
-                }
-                KaleidoScope_DrawQuadTextureRGBA32(
-                    play->state.gfxCtx,
-                    ExtInv_GetItemIcon(sAdultUpgradeItemBases[i] + CUR_UPG_VALUE(sAdultUpgrades[i]) - 1), 32, 32, 0);
-                gSPGrayscale(POLY_OPA_DISP++, false);
-            }
+            // Rows 2/3 = the two RESERVED slots (Skijer 2026-07-29). The quiver/bullet-bag, bomb-bag,
+            // strength and swim capacities all live on the quest page now, so nothing here is
+            // age-dependent any more — just the placeholder art.
+            KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, (void*)gItemIconReservedSlotTex, 32, 32, 0);
         }
         // Draw inventory screen icons
         for (k = 0, bit = rowStart, point = 4; k < 3; k++, point += 4, temp++, bit++) {
@@ -1109,6 +1019,12 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                 // Cape/Pendant on the upgrade column, deleted Dragon Scale — stay empty)
                 if (ExtEquip_HasItem(i, k + 1) && !ExtEquip_SlotRetired(i, k + 1)) {
                     void* extIcon = ExtEquip_GetIcon(i, k + 1); // i=row(0-3), k+1=col(1-3)
+                    // A path that isn't in the archive does NOT draw nothing: gDPLoadTextureBlock
+                    // leaves whatever was last in TMEM, so the cell shows the PREVIOUS cell's icon and
+                    // the grid reads as if its rows were scrambled. Probe first. Skijer 2026-07-29
+                    if ((extIcon != NULL) && (ResourceMgr_LoadTexOrDListByName((const char*)extIcon) == NULL)) {
+                        extIcon = NULL;
+                    }
                     if (extIcon) {
                         bool extAgeRestricted = !ExtEquip_CheckAgeReq(i, k + 1);
                         if (extAgeRestricted) {
@@ -1143,20 +1059,7 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
         }
     }
 
-    // Render A button indicator when hovered over strength
-    if ((pauseCtx->cursorX[PAUSE_EQUIP] == 0) && (pauseCtx->cursorY[PAUSE_EQUIP] == 2) &&
-        CVarGetInteger(CVAR_ENHANCEMENT("ToggleStrength"), 0) && pauseCtx->cursorSpecialPos == 0 &&
-        pauseCtx->unk_1E4 == 0 && pauseCtx->state == 6) {
-        u8 row = 2;
-        u8 column = 0;
-        u8 equipVtxIndex = 16 * row + 4 * column;
-        // Get Bottom Bisector of the Quad
-        s16 translateX =
-            (pauseCtx->equipVtx[equipVtxIndex].v.ob[0] + pauseCtx->equipVtx[equipVtxIndex + 1].v.ob[0]) / 2;
-        // Add 4 since the icon will be zoomed in on
-        s16 translateY = pauseCtx->equipVtx[equipVtxIndex + 2].v.ob[1] + 4;
-        KaleidoScope_DrawAButton(play, sStrengthAButtonVtx, translateX, translateY);
-    }
+    // (The strength A-button indicator moved to the quest page with the strength cell.)
 
     KaleidoScope_DrawPlayerWork(play);
 

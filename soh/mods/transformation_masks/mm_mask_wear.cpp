@@ -19,6 +19,7 @@
 #include "soh/cvar_prefixes.h"
 
 #include "mods/transformation_masks/mm_mask_wear.h"
+#include "mods/transformation_masks/custom_forms.h"
 #include "mods/transformation_masks/assets/mm_asset_loader.h"
 #include "mods/sound_translator/mm_sfx_ids.h"
 #include "mods/sound_translator/mm_bgm_loader.h"
@@ -53,8 +54,8 @@ extern "C" {
 // z_player.c but no public header). Speed mode constants come from z_player.c.
 #define SPEED_MODE_LINEAR 0.0f
 #define SPEED_MODE_CURVED 0.018f
-extern "C" s32 Player_GetMovementSpeedAndYaw(Player* this_, f32* outSpeedTarget, s16* outYawTarget,
-                                              f32 speedMode, PlayState* play);
+extern "C" s32 Player_GetMovementSpeedAndYaw(Player* this_, f32* outSpeedTarget, s16* outYawTarget, f32 speedMode,
+                                             PlayState* play);
 
 // For Great Fairy Mask map overlay (same textures as minish_kaleido)
 #include "textures/map_name_static/map_name_static.h"
@@ -209,13 +210,13 @@ static s32 sCaptainHatSpawnTimer = 0;
 
 // Giant's Mask state.
 static s32 sGiantMaskMagicTimer = 0;
-static s32 sGiantTransformTimer = -1;   // -1 = inactive; >=0 = transform cutscene frame
-static s16 sGiantFlashAlpha = 0;        // white screen-fill alpha (R_PLAY_FILL_SCREEN equivalent)
+static s32 sGiantTransformTimer = -1;                    // -1 = inactive; >=0 = transform cutscene frame
+static s16 sGiantFlashAlpha = 0;                         // white screen-fill alpha (R_PLAY_FILL_SCREEN equivalent)
 static LinkAnimationHeader* sGiantSetMaskAnim = NULL;    // gPlayerAnim_cl_setmask (hands to face)
 static LinkAnimationHeader* sGiantSetMaskEndAnim = NULL; // gPlayerAnim_cl_setmaskend (hold)
 static f32 sGiantTransformFrame = 0.0f;
-static u8 sGiantSetMaskEnded = 0;       // 1 once cl_setmask finished → holding cl_setmaskend
-static u8 sGiantScaleSnapped = 0;       // 1 once the giant size snaps in behind the white fill
+static u8 sGiantSetMaskEnded = 0; // 1 once cl_setmask finished → holding cl_setmaskend
+static u8 sGiantScaleSnapped = 0; // 1 once the giant size snaps in behind the white fill
 
 // Kamaro's Mask state
 static s32 sKamaroDancing = 0;
@@ -229,10 +230,11 @@ static s32 sDaruniaDanceTimer = 0; // Frames Darunia has been dancing with playe
 //   sBremenActiveAnim     — which variant is currently bound to skelAnime.
 //   sBremenEntrySpeed     — mirrors MM's unk_B48 (saved speed between frames).
 static s32 sBremenMarching = 0;
-static LinkAnimationHeader* sBremenAnimWalkB = NULL;  // gPlayerAnim_clink_normal_okarina_walkB
-static LinkAnimationHeader* sBremenActiveAnim = NULL; // unused now (PlayLoop runs every frame); kept to avoid clear-path churn
-static f32 sBremenMarchFrame = 0.0f;  // manual curFrame tracker for the loop
-static s32 sBremenMarchFrames = 0;    // counts active-march frames (for the 120-frame cucco spawn)
+static LinkAnimationHeader* sBremenAnimWalkB = NULL; // gPlayerAnim_clink_normal_okarina_walkB
+static LinkAnimationHeader* sBremenActiveAnim =
+    NULL;                            // unused now (PlayLoop runs every frame); kept to avoid clear-path churn
+static f32 sBremenMarchFrame = 0.0f; // manual curFrame tracker for the loop
+static s32 sBremenMarchFrames = 0;   // counts active-march frames (for the 120-frame cucco spawn)
 static s32 sBremenBgmStarted = 0;
 
 // Mirrors MM func_80839E74 (z_player.c:8305-8308): transition to idle.
@@ -260,7 +262,7 @@ static void MmMaskWear_StopBremenMarch(Player* player, PlayState* play) {
 // Mask of Scents state — transient
 static LinkAnimationHeader* sScentsSniffAnim = NULL;
 static f32 sScentsSniffFrame = 0.0f;
-static s32 sScentsSniffActive = 0; // 1 = sniff anim playing (Link idle on ground)
+static s32 sScentsSniffActive = 0;   // 1 = sniff anim playing (Link idle on ground)
 static s32 sScentsPrevSfxFrame = -1; // last frame where we fired the pig-grunt SFX (avoids spam)
 // Bremen Mask state — persistent (NOT cleared in MmMaskWear_Clear; cleared on death)
 // Fixed forward speed during march (user spec: "3.5 speed always").
@@ -900,17 +902,9 @@ static const u16 sFrogShifts[] = {
 // =============================================================================
 
 extern "C" void MmMaskWear_Toggle(PlayState* play, Player* player, s32 itemId) {
-    // Kafei Mask Transform: toggle between Kafei model and Link (no visible mask on face)
-    if (itemId == ITEM_MM_MASK_KAFEI && CVarGetInteger("gMods.KafeiMaskTransform", 0)) {
-        if (PakLoader_HasForcedModel()) {
-            PakLoader_ClearForcedModel();
-        } else {
-            PakLoader_ForceModel("nei/N64_Kafei.pak");
-        }
-        Player_PlaySfx(&player->actor, NA_SE_PL_CHANGE_ARMS);
-        player->stateFlags2 |= PLAYER_STATE2_FOOTSTEP;
-        return;
-    }
+    // Skin forms (Kafei / Keaton / Rito …) are handled earlier, in z_player.c
+    // via CustomForms_TrySkinItem — by the time we get here the item is a
+    // plain cosmetic mask.
 
     s32 idx = MaskItemToIndex(itemId);
     if (idx < 0 || idx >= MM_MASK_COUNT) {
@@ -986,8 +980,8 @@ extern "C" void MmMaskWear_Toggle(PlayState* play, Player* player, s32 itemId) {
         // before the worn-mask sync arrives. Only transformation masks
         // (Deku / Goron / Zora / Fierce Deity) trigger this — vanity
         // masks (Bunny Hood, Postman Hat, etc.) just swap visually.
-        if (itemId == ITEM_MM_MASK_DEKU || itemId == ITEM_MM_MASK_GORON ||
-            itemId == ITEM_MM_MASK_ZORA || itemId == ITEM_MM_MASK_FIERCE_DEITY) {
+        if (itemId == ITEM_MM_MASK_DEKU || itemId == ITEM_MM_MASK_GORON || itemId == ITEM_MM_MASK_ZORA ||
+            itemId == ITEM_MM_MASK_FIERCE_DEITY) {
             extern void HarpoonCombat_BroadcastMaskEquipStart_C(int maskId);
             HarpoonCombat_BroadcastMaskEquipStart_C(itemId);
         }
@@ -1038,8 +1032,8 @@ extern "C" void MmMaskWear_Draw(PlayState* play, Player* player) {
         return;
     }
 
-    bool isTransformation = (idx == MM_MASK_IDX_DEKU || idx == MM_MASK_IDX_GORON ||
-                             idx == MM_MASK_IDX_ZORA || idx == MM_MASK_IDX_FIERCE_DEITY);
+    bool isTransformation = (idx == MM_MASK_IDX_DEKU || idx == MM_MASK_IDX_GORON || idx == MM_MASK_IDX_ZORA ||
+                             idx == MM_MASK_IDX_FIERCE_DEITY);
     if (!isTransformation && CVarGetInteger(CVAR_ENHANCEMENT("HideNonTransformationMasks"), 0)) {
         return;
     }
@@ -1364,16 +1358,14 @@ extern "C" void MmMaskWear_Update(PlayState* play, Player* player) {
                 }
 
                 // Bail during cutscene/dead/loading — restore idle anim.
-                if (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE |
-                                           PLAYER_STATE1_LOADING | PLAYER_STATE1_IN_ITEM_CS |
-                                           PLAYER_STATE1_GETTING_ITEM)) {
+                if (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
+                                           PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_GETTING_ITEM)) {
                     MmMaskWear_StopBremenMarch(player, play);
                     break;
                 }
 
                 // === START march ===
-                if (!sBremenMarching &&
-                    (player->actor.bgCheckFlags & 1 /* BGCHECKFLAG_GROUND */) &&
+                if (!sBremenMarching && (player->actor.bgCheckFlags & 1 /* BGCHECKFLAG_GROUND */) &&
                     CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B) &&
                     MmBgm_GetSeqId(MM_BGM_BREMEN_MARCH) != 0xFFFF) {
 
@@ -1405,11 +1397,9 @@ extern "C" void MmMaskWear_Update(PlayState* play, Player* player) {
                     // so the player can't spam cuccos. ACTOR_EN_NIW with the
                     // vanilla update — no follower configuration.
                     if (sBremenMarchFrames == 120 && sBremenCuccoCooldown == 0) {
-                        Actor_Spawn(&play->actorCtx, play, ACTOR_EN_NIW,
-                                    player->actor.world.pos.x,
-                                    player->actor.world.pos.y,
-                                    player->actor.world.pos.z,
-                                    0, player->actor.shape.rot.y, 0, 0);
+                        Actor_Spawn(&play->actorCtx, play, ACTOR_EN_NIW, player->actor.world.pos.x,
+                                    player->actor.world.pos.y, player->actor.world.pos.z, 0, player->actor.shape.rot.y,
+                                    0, 0);
                         sBremenCuccoCooldown = BREMEN_CUCCO_COOLDOWN_FRAMES;
                     }
 
@@ -1425,12 +1415,10 @@ extern "C" void MmMaskWear_Update(PlayState* play, Player* player) {
                         player->skelAnime.curFrame = sBremenMarchFrame;
 
                         AnimationContext_SetLoadFrame(play, activeAnim, (s32)sBremenMarchFrame,
-                                                     player->skelAnime.limbCount,
-                                                     player->skelAnime.jointTable);
+                                                      player->skelAnime.limbCount, player->skelAnime.jointTable);
 
                         sBremenMarchFrame += 1.0f;
-                        if (player->skelAnime.animLength > 0.0f &&
-                            sBremenMarchFrame >= player->skelAnime.animLength) {
+                        if (player->skelAnime.animLength > 0.0f && sBremenMarchFrame >= player->skelAnime.animLength) {
                             sBremenMarchFrame = 0.0f;
                         }
                     }
@@ -1546,9 +1534,9 @@ extern "C" void MmMaskWear_Update(PlayState* play, Player* player) {
                 // with our tracked phase, same Kamaro pattern.
                 u8 onGround = (player->actor.bgCheckFlags & 1) != 0;
                 u8 idle = (player->linearVelocity < 0.5f) && onGround;
-                u8 blocked = (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE |
-                                                     PLAYER_STATE1_LOADING | PLAYER_STATE1_IN_ITEM_CS |
-                                                     PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_TALKING)) != 0;
+                u8 blocked = (player->stateFlags1 &
+                              (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
+                               PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_TALKING)) != 0;
 
                 if (idle && !blocked) {
                     // Lazy-load the MM sniff anim.
@@ -1577,8 +1565,7 @@ extern "C" void MmMaskWear_Update(PlayState* play, Player* player) {
                                 // Real MM pig-grunt voice from mm.o2r's Soundfont_0.
                                 // Silent if mm.o2r is not loaded — NO OOT fallback by design.
                                 if (MmSfx_IsAvailable()) {
-                                    MmSfx_PlayAtPos(MM_NA_SE_VO_LI_POO_WAIT,
-                                                    &player->actor.projectedPos);
+                                    MmSfx_PlayAtPos(MM_NA_SE_VO_LI_POO_WAIT, &player->actor.projectedPos);
                                 }
                             }
                             sScentsPrevSfxFrame = fi;
@@ -2013,7 +2000,8 @@ extern "C" s32 MmMaskWear_IsBremenMarching(void) {
 // OOT input pipeline reads B for sword draw BEFORE our case 7/18 ever sees
 // the press, so the mask action would never start.
 extern "C" s32 MmMaskWear_BlocksSword(void) {
-    if (sCurrentMmMask == ITEM_NONE) return 0;
+    if (sCurrentMmMask == ITEM_NONE)
+        return 0;
     s32 idx = MaskItemToIndex(sCurrentMmMask);
     return (idx == MM_MASK_IDX_BREMEN) || (idx == MM_MASK_IDX_KAMARO);
 }
@@ -2052,8 +2040,7 @@ extern "C" s32 MmMaskWear_MakesRedeadsFriendly(void) {
     }
     if (gPlayState != NULL) {
         Player* player = GET_PLAYER(gPlayState);
-        if (player != NULL &&
-            (player->currentMask == PLAYER_MASK_SKULL || player->currentMask == PLAYER_MASK_SPOOKY)) {
+        if (player != NULL && (player->currentMask == PLAYER_MASK_SKULL || player->currentMask == PLAYER_MASK_SPOOKY)) {
             return 1;
         }
     }

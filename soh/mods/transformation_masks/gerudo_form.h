@@ -5,18 +5,23 @@
  * cheat `gMods.GerudoMaskTransform` is on and Link equips the mask, we call
  * `O2rLoader_ForceModel("gerudo")`. Link keeps his own skeleton and anims;
  * the gerudo look comes from a draw-time DL path-swap
- * (GerudoForm_OverrideLimbDraw) that redirects vanilla Link DL references to
- * the gerudo .o2r's `objects/gerudoPlayer/...` twins, tinted with Link's
- * current tunic color (see gerudo_hybrid_render.h).
+ * (CustomForms_OverrideLimbDraw) that redirects vanilla Link DL references to
+ * the gerudo .o2r's `objects/forms/gerudo/...` twins, tinted with Link's
+ * current tunic color (redirection lives in custom_forms.h now).
  *
  * Mask is removed → O2rLoader_ClearForcedModel → Link's vanilla skel/skin
  * returns. The toggle is edge-detected per-frame from an OnPlayerUpdate hook.
  *
  * Effects active while the mask is worn:
- *   - Sandstorm OFF in Haunted Wasteland (per-frame + on transition end).
+ *   - Sandstorm OFF in Haunted Wasteland (per-frame + on transition end), plus
+ *     a skippable Yes/No offer to warp straight across the desert.
  *   - Gerudo NPCs friendly: VB_GERUDOS_BE_FRIENDLY → true.
  *   - Skip card-give: VB_GIVE_ITEM_GERUDO_MEMBERSHIP_CARD → false (access is
  *     temporary; no QUEST_GERUDO_CARD is granted).
+ *   - No jail: VB_GERUDO_FIGHTER_THROW_LINK_TO_JAIL → false.
+ *
+ * Combat is NOT here — it belongs to gerudo_mhr_combat.inc.c
+ * (MmForm_GerudoMhrUpdate), dispatched from MmForm_UpdateActive.
  *
  * The Ge1/Ge2/Ge3 actor patches still call GerudoForm_IsActive() — the
  * function stays in the public API and now returns true when the O2rLoader
@@ -41,7 +46,7 @@ u8 GerudoForm_IsActive(void);
 
 // Resolve Link's current tunic into a Color_RGB8, honouring the cosmetic
 // CVar overrides (CVAR_COSMETIC("Link.KokiriTunic.Value"), etc). Used by
-// gerudo_hybrid_render.cpp::OverrideLimbDraw to tint the gerudo outfit.
+// custom_forms.cpp::CustomForms_OverrideLimbDraw to tint the gerudo outfit.
 void GerudoForm_GetTunicColor(s32 tunic, Color_RGB8* out);
 
 // Retained no-op (always returns 0). The gerudo form now draws entirely
@@ -50,10 +55,15 @@ void GerudoForm_GetTunicColor(s32 tunic, Color_RGB8* out);
 // surviving z_player.c callsite.
 s32 GerudoForm_TryDrawSmoothSkin(PlayState* play, Player* player);
 
-// Custom sword DLs for dual-wield. Adult Link gets Master-Sword-styled custom
-// scimitars, Child Link gets Kokiri-Sword-styled ones — both supplied by the
-// gerudo .o2r. Returns NULL if the resource isn't present; caller should fall
-// back to vanilla hand DLs in that case (cosmetic miss, not a crash).
+// Dual-wield hand DLs. ONE scimitar DL from the gerudo .o2r serves both hands
+// and both ages: the right-hand bone matrix mirrors it, and the child skel's
+// smaller bone scale shrinks it proportionally.
+//
+// Returns NULL when the scimitars are sheathed — visibility is owned entirely
+// by the MHR fighter latch (GerudoMhr_SwordsOut, gerudo_mhr_combat.inc.c),
+// which also plays the unsheath/sheathe SFX on its edges. Also NULL if the
+// resource is missing (cosmetic miss, not a crash — caller falls back to the
+// vanilla hand DL).
 Gfx* GerudoForm_GetSwordDL_L(void);
 Gfx* GerudoForm_GetSwordDL_R(void);
 
@@ -67,15 +77,21 @@ u8 GerudoForm_ResolveLimbDL(s32 limbIndex, Gfx** dList);
 // getter returns the EffectBlure slot spawned for the R sword (the L sword
 // piggybacks on Link's vanilla meleeWeaponEffectIndex). Damage is the
 // per-slash value flagged by the action handler.
-u8  GerudoForm_PunchActiveThisFrame(void);
+//
+// NOTE: PunchActiveThisFrame currently has no in-tree caller — it lost its last
+// one when the sword-visibility latch moved to GerudoMhr_SwordsOut (2026-08-07).
+// Kept as the public read of gFormState.gerudoQuadsActive.
+u8 GerudoForm_PunchActiveThisFrame(void);
 s32 GerudoForm_GetRightTrailEffectIndex(void);
-u8  GerudoForm_GetCurrentDamage(void);
+u8 GerudoForm_GetCurrentDamage(void);
 
-// Gerudo Mirror Shield is OOT's vanilla shield 1:1 — no MM-side pose override.
-// GerudoForm_Update keeps heldItemAction pinned to the one-handed Master/Kokiri
-// sword (so Player_HoldsTwoHandedWeapon stays false and the vanilla pipeline
-// runs unmodified), and GerudoForm_GetSwordDL_R returns NULL while SHIELDING
-// so R_HAND draws the equipped shield (path-swapped to gerudoPlayer/...).
+// Gerudo does NOT shield. R is the wirebug modifier, owned by
+// MmForm_GerudoMhrUpdate, and OOT's shield actions are gated off form-side via
+// MmForm_GetShieldMode() == MMFORM_SHIELD_BLOCK — PLAYER_STATE1_SHIELDING never
+// sets for this form. The player's equipped shield is neither read nor written
+// (decision 2026-07-28: no form touches the player's equipment), and there is no
+// heldItemAction pinning left in this module (removed 2026-08-07 with the
+// pre-MHR combat state machine).
 
 #ifdef __cplusplus
 }

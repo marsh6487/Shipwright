@@ -10,13 +10,16 @@
 #include "extended_inventory.h"
 #include "extended_equipment.h"
 #include "z64.h"
+#include "macros.h"    // ARRAY_COUNT — z64.h does not pull it in
 #include "functions.h" // Item_Give, Player_UnsetMask (ExtInv_KeepMmMaskOrSell)
 #include <string.h>
 #include "assets/soh_assets.h"
 #include "transformation_masks/transformation_masks.h"
 #include "transformation_masks/assets/mm_asset_loader.h"
 #include "items/logic/weapon_upgrades.h" // NEI weapon-upgrade icon overrides
-extern void* gItemIcons[];
+#include "expansions/sw97/sw97_config.h" // SW97_MEDALLIONS_ENABLED
+#include "variables.h"                   // gItemIcons[158] con su tamaño REAL (aquí se declaraba incompleto y el
+                                         // corte de abajo tenía que ir a mano, que es como se desfasó)
 extern uint8_t gItemSlots[];
 static ExtendedInventoryState sExtInvState = { .currentPage = 0, .pageSwitchTimer = 0 };
 
@@ -26,7 +29,7 @@ static ExtendedInventoryState sExtInvState = { .currentPage = 0, .pageSwitchTime
 const uint8_t gPage2Items[24] = { ITEM_ROCS_FEATHER_SKIJER,
                                   ITEM_WHIP,
                                   ITEM_SPINNER,
-                                  ITEM_BOMB_ARROWS,
+                                  ITEM_ELEMENTAL_WAND, // slot 27 — was ITEM_BOMB_ARROWS (now a flag)
                                   ITEM_ROD_FIRE,
                                   ITEM_DEMISE_DESTRUCTION,
                                   ITEM_DEKU_LEAF,
@@ -51,7 +54,9 @@ const uint8_t gPage2Items[24] = { ITEM_ROCS_FEATHER_SKIJER,
 // Age requirements for page 2 items
 // Roc's items (slot 0/24) = AGE_REQ_NONE (both adult and child can use Feather AND Cape)
 // Desire Sensor (slot 15/39) = AGE_REQ_NONE (both adult and child can use)
-const uint8_t gPage2ItemAgeReqs[24] = { AGE_REQ_NONE, AGE_REQ_NONE,  AGE_REQ_NONE, AGE_REQ_ADULT, AGE_REQ_NONE,
+// Index 3 (slot 27) was AGE_REQ_ADULT for Bomb Arrows; the Elemental Wand that replaced it is
+// age-free — the medallions gate it, not Link's age.
+const uint8_t gPage2ItemAgeReqs[24] = { AGE_REQ_NONE, AGE_REQ_NONE,  AGE_REQ_NONE, AGE_REQ_NONE,  AGE_REQ_NONE,
                                         AGE_REQ_NONE, AGE_REQ_CHILD, AGE_REQ_NONE, AGE_REQ_ADULT, AGE_REQ_CHILD,
                                         AGE_REQ_NONE, AGE_REQ_NONE,  AGE_REQ_NONE, AGE_REQ_CHILD, AGE_REQ_ADULT,
                                         AGE_REQ_NONE, AGE_REQ_NONE,  AGE_REQ_NONE, AGE_REQ_NONE,  AGE_REQ_CHILD,
@@ -208,6 +213,20 @@ uint8_t ExtInv_GetSlotAgeReq(uint8_t slot) {
         }
     }
 
+    // NEI: SLOT_TRADE_ADULT is no longer adult-only. It is the UNIFIED trade wheel — it also holds the
+    // MM trade items (Moon's Tear, the 4 Title Deeds, Room Key, Letter to Kafei, Special Delivery), the
+    // Pendant of Memories and the OoT *child* trade items. Vanilla marks the slot AGE_REQ_ADULT, which
+    // greyed all of those out for child Link (they are obtained in MM / as child, so that was wrong).
+    // Only the 11 genuine OoT adult-trade items (trade indices 0..10) keep the adult requirement.
+    // Skijer's NEI
+    if (slot == SLOT_TRADE_ADULT) {
+        extern s32 TradeAdult_IndexOfItem(u8 item);
+        s32 tradeIdx = TradeAdult_IndexOfItem(ExtInv_GetSlotItem(slot));
+        if (tradeIdx > TRADE_ADULT_OOT_LAST) {
+            return 9; // AGE_REQ_NONE
+        }
+    }
+
     // Vanilla slots (0-23) use the original array
     if (slot < 24) {
         return gSlotAgeReqs[slot];
@@ -270,40 +289,48 @@ typedef struct {
 } CustomItemAsset;
 
 static const CustomItemAsset sCustomItemAssets[] = {
-    { ITEM_ROCS_FEATHER_SKIJER, (void*)gItemIconRocsFeatherTex,       (void*)gRocsFeatherNameTex },       // 0x9D
-    { ITEM_ROCS_CAPE,           (void*)gItemIconRocsCapeTex,          (void*)gRocsCapeNameTex },          // 0x9E
-    { ITEM_DESIRE_SENSOR,       (void*)gItemIconDesireSensorTex,      (void*)gDesireSensorNameTex },      // 0x9F
-    { ITEM_HYLIAS_GRACE,        (void*)gItemIconHyliaGraceTex,        (void*)gHyliaGraceNameTex },        // 0xA0
-    { ITEM_ZONAI_PERMAFROST,    (void*)gItemIconZonaiPermafrostTex,   (void*)gZonaiPermafrostNameTex },   // 0xA1
-    { ITEM_DEMISE_DESTRUCTION,  (void*)gItemIconDemiseDestructionTex, (void*)gDemiseDestructionNameTex }, // 0xA2
-    { ITEM_DEKU_LEAF,           (void*)gItemIconDekuLeafTex,          (void*)gDekuLeafNameTex },          // 0xA3
-    { ITEM_SWITCH_HOOK,         (void*)gItemIconSwitchHookTex,        (void*)gSwitchHookNameTex },        // 0xA4
-    { ITEM_MOGMA_MITTS,         (void*)gItemIconMogmaMittsTex,        (void*)gMogmaMittsNameTex },        // 0xA5
-    { ITEM_GUST_JAR,            (void*)gItemIconGustJarTex,           (void*)gGustJarNameTex },           // 0xA6
-    { ITEM_BALL_AND_CHAIN,      (void*)gItemIconBallAndChainTex,      (void*)gBallAndChainNameTex },      // 0xA7
-    { ITEM_WHIP,                (void*)gItemIconWhipTex,              (void*)gWhipNameTex },              // 0xA8
-    { ITEM_SPINNER,             (void*)gItemIconSpinnerTex,           (void*)gSpinnerNameTex },           // 0xA9
-    { ITEM_CANE_OF_SOMARIA,     (void*)gItemIconCaneOfSomariaTex,     (void*)gCaneOfSomariaNameTex },     // 0xAA
-    { ITEM_DOMINION_ROD,        (void*)gItemIconDominionRodTex,       (void*)gDominionRodNameTex },       // 0xAB
-    { ITEM_TIME_GATE,           (void*)gItemIconTimeGateTex,          (void*)gTimeGateNameTex },          // 0xAC
-    { ITEM_BOMB_ARROWS,         (void*)gItemIconBombArrowsTex,        (void*)gBombArrowsNameTex },        // 0xAD
-    { ITEM_ROD_FIRE,            (void*)gItemIconFireRodTex,           (void*)gFireRodNameTex },           // 0xAE
-    { ITEM_ROD_ICE,             (void*)gItemIconIceRodTex,            (void*)gIceRodNameTex },            // 0xAF
-    { ITEM_ROD_LIGHT,           (void*)gItemIconLightRodTex,          (void*)gLightRodNameTex },          // 0xB0
-    { ITEM_BEETLE,              (void*)gItemIconBeetleTex,            (void*)gBeetleNameTex },            // 0xB1
-    { ITEM_SHOVEL,              (void*)gItemIconShovelTex,            (void*)gShovelNameTex },            // 0xB2
-    { ITEM_MINISH_CAP,          (void*)gItemIconMinishCapTex,         (void*)gMinishCapNameTex },         // 0xB3
+    { ITEM_ROCS_FEATHER_SKIJER, (void*)gItemIconRocsFeatherTex, (void*)gRocsFeatherNameTex },            // 0x9D
+    { ITEM_ROCS_CAPE, (void*)gItemIconRocsCapeTex, (void*)gRocsCapeNameTex },                            // 0x9E
+    { ITEM_DESIRE_SENSOR, (void*)gItemIconDesireSensorTex, (void*)gDesireSensorNameTex },                // 0x9F
+    { ITEM_HYLIAS_GRACE, (void*)gItemIconHyliaGraceTex, (void*)gHyliaGraceNameTex },                     // 0xA0
+    { ITEM_ZONAI_PERMAFROST, (void*)gItemIconZonaiPermafrostTex, (void*)gZonaiPermafrostNameTex },       // 0xA1
+    { ITEM_DEMISE_DESTRUCTION, (void*)gItemIconDemiseDestructionTex, (void*)gDemiseDestructionNameTex }, // 0xA2
+    { ITEM_DEKU_LEAF, (void*)gItemIconDekuLeafTex, (void*)gDekuLeafNameTex },                            // 0xA3
+    { ITEM_SWITCH_HOOK, (void*)gItemIconSwitchHookTex, (void*)gSwitchHookNameTex },                      // 0xA4
+    { ITEM_MOGMA_MITTS, (void*)gItemIconMogmaMittsTex, (void*)gMogmaMittsNameTex },                      // 0xA5
+    { ITEM_GUST_JAR, (void*)gItemIconGustJarTex, (void*)gGustJarNameTex },                               // 0xA6
+    { ITEM_BALL_AND_CHAIN, (void*)gItemIconBallAndChainTex, (void*)gBallAndChainNameTex },               // 0xA7
+    { ITEM_WHIP, (void*)gItemIconWhipTex, (void*)gWhipNameTex },                                         // 0xA8
+    { ITEM_SPINNER, (void*)gItemIconSpinnerTex, (void*)gSpinnerNameTex },                                // 0xA9
+    { ITEM_CANE_OF_SOMARIA, (void*)gItemIconCaneOfSomariaTex, (void*)gCaneOfSomariaNameTex },            // 0xAA
+    { ITEM_DOMINION_ROD, (void*)gItemIconDominionRodTex, (void*)gDominionRodNameTex },                   // 0xAB
+    { ITEM_TIME_GATE, (void*)gItemIconTimeGateTex, (void*)gTimeGateNameTex },                            // 0xAC
+    // Bomb Arrows keeps its icon/name row even though it owns no inventory cell any more: the
+    // wheel's corner badge and the get-item textbox still look them up by item id.
+    { ITEM_BOMB_ARROWS, (void*)gItemIconBombArrowsTex, (void*)gBombArrowsNameTex }, // 0xAD
+    // Elemental Wand's icon/name are per-MODE, so they are resolved in ExtInv_GetItemIcon /
+    // ExtInv_GetCustomItemNameTex instead of here. The row below is only the fallback.
+    { ITEM_ELEMENTAL_WAND, (void*)gItemIconSandRodTex, (void*)gSandRodNameTex }, // 0xD0
+    { ITEM_ROD_FIRE, (void*)gItemIconFireRodTex, (void*)gFireRodNameTex },       // 0xAE
+    { ITEM_ROD_ICE, (void*)gItemIconIceRodTex, (void*)gIceRodNameTex },          // 0xAF
+    { ITEM_ROD_LIGHT, (void*)gItemIconLightRodTex, (void*)gLightRodNameTex },    // 0xB0
+    { ITEM_BEETLE, (void*)gItemIconBeetleTex, (void*)gBeetleNameTex },           // 0xB1
+    { ITEM_SHOVEL, (void*)gItemIconShovelTex, (void*)gShovelNameTex },           // 0xB2
+    { ITEM_MINISH_CAP, (void*)gItemIconMinishCapTex, (void*)gMinishCapNameTex }, // 0xB3
     // Lantern: name texture is constant, but the icon is chosen dynamically by
     // fire type -> icon left NULL so the icon getter handles it below.
-    { ITEM_LANTERN,             NULL,                                 (void*)gLanternNameTex },           // 0xB4
-    { ITEM_POKEBALL,            (void*)gItemIconPokeballTex,          (void*)gPokeballNameTex },
+    { ITEM_LANTERN, NULL, (void*)gLanternNameTex }, // 0xB4
+    { ITEM_POKEBALL, (void*)gItemIconPokeballTex, (void*)gPokeballNameTex },
     // Mario Mask: slotless (page 2 is full) — ownership lives in
     // RAND_INF_OBTAINED_MARIO_MASK and unlocks MARIO MODE in the Broken Items
     // form selector, which is also what reads this name texture. Skijer's NEI
-    { ITEM_MARIO_MASK,          (void*)gItemIconMarioMaskTex,         (void*)gMarioMaskNameTex },         // 0xD6
+    { ITEM_MARIO_MASK, (void*)gItemIconMarioMaskTex, (void*)gMarioMaskNameTex }, // 0xD6
+    // Rito Mask: no page-2 cell of its own — it shares the Farore's Wind cell and
+    // is reached with the kaleido cycle there (RitoItem_* in custom_forms.cpp).
+    { ITEM_RITO_MASK, (void*)gItemIconRitoMaskTex, (void*)gRitoMaskNameTex }, // 0xD2
     // Bottle Randomizer extra items (Skijer's NEI). Net + Bottomless Bottle; SLOT_BOTTLE_3/4.
-    { ITEM_NET,                 (void*)gItemIconNetTex,               (void*)gNetNameTex },               // 0xF4
-    { ITEM_BOTTOMLESS_BOTTLE,   (void*)gItemIconBottomlessBottleTex,  (void*)gBottomlessBottleNameTex },  // 0xF5
+    { ITEM_NET, (void*)gItemIconNetTex, (void*)gNetNameTex },                                         // 0xF4
+    { ITEM_BOTTOMLESS_BOTTLE, (void*)gItemIconBottomlessBottleTex, (void*)gBottomlessBottleNameTex }, // 0xF5
 };
 
 static const CustomItemAsset* ExtInv_FindCustomItemAsset(uint16_t itemId) {
@@ -316,6 +343,38 @@ static const CustomItemAsset* ExtInv_FindCustomItemAsset(uint16_t itemId) {
 }
 
 void* ExtInv_GetCustomItemNameTex(uint16_t itemId, uint8_t language) {
+    // 2026-08-06 page-2 additions — EXT (u16) ids; their IA4 name textures come from the
+    // generate_names.py pipeline. Path strings, resolved by the RSP like every custom name.
+    switch (itemId) {
+        case EXT_ITEM_SHEIKAH_SLATE:
+            return (void*)"__OTR__textures/item_name_custom/gSheikahSlateNameTex";
+        case EXT_ITEM_PHANTOM_HOURGLASS:
+            return (void*)"__OTR__textures/item_name_custom/gPhantomHourglassNameTex";
+        case EXT_ITEM_SHADOW_CRYSTAL:
+            return (void*)"__OTR__textures/item_name_custom/gShadowCrystalNameTex";
+        case EXT_ITEM_ROD_OF_SEASONS:
+            return (void*)"__OTR__textures/item_name_custom/gRodOfSeasonsNameTex";
+        default:
+            break;
+    }
+
+    // Elemental Wand: one item id, six names — the name follows the active rod.
+    if (itemId == ITEM_ELEMENTAL_WAND) {
+        return Wand_ModeNameTex(Wand_GetMode());
+    }
+    // Dual Cane: same reasoning as the icon override — one item id, four names.
+    if (itemId == ITEM_CANE_OF_SOMARIA && Nei_CaneOwned()) {
+        switch (Nei_CaneGetType()) {
+            case 1:
+                return (void*)"__OTR__textures/item_name_custom/gTrirodNameTex";
+            case 2:
+                return (void*)"__OTR__textures/item_name_custom/gCaneOfPacciNameTex";
+            case 3:
+                return (void*)"__OTR__textures/item_name_custom/gUltrahandNameTex";
+            default:
+                break;
+        }
+    }
     // MM Mask items: return OTR path string so the RSP resolves actual texture
     // dimensions from resource metadata (HD mod textures render at native resolution).
     if (itemId >= ITEM_MM_MASK_POSTMAN && itemId <= ITEM_MM_MASK_FIERCE_DEITY) {
@@ -333,25 +392,43 @@ void* ExtInv_GetCustomItemNameTex(uint16_t itemId, uint8_t language) {
     // MM bottle-content custom items: name textures from mm.o2r (item_name_static), like Chateau.
     // Hylian Loach + Obaba's Drink only exist as JPN textures in MM. Skijer's NEI
     switch (itemId) {
-        case ITEM_GOLD_DUST:        return (void*)"__OTR__item_name_static/gItemNameGoldDustENGTex";
-        case ITEM_HOT_SPRING_WATER: return (void*)"__OTR__item_name_static/gItemNameHotSpringWaterENGTex";
-        case ITEM_DEKU_PRINCESS:    return (void*)"__OTR__item_name_static/gItemNameDekuPrincessENGTex";
-        case ITEM_SEAHORSE:         return (void*)"__OTR__item_name_static/gItemNameSeaHorseENGTex";
-        case ITEM_SPRING_WATER:     return (void*)"__OTR__item_name_static/gItemNameSpringWaterENGTex";
-        case ITEM_ZORA_EGG:         return (void*)"__OTR__item_name_static/gItemNameZoraEggENGTex";
-        case ITEM_HYLIAN_LOACH:     return (void*)"__OTR__item_name_static/gItemNameHylianLoachJPNTex";
-        case ITEM_OBABA_DRINK:      return (void*)"__OTR__item_name_static/gItemNameObabasDrinkJPNTex";
-        case ITEM_MAGIC_MUSHROOM:   return (void*)"__OTR__item_name_static/gItemNameMagicalMushroomENGTex";
+        case ITEM_GOLD_DUST:
+            return (void*)"__OTR__item_name_static/gItemNameGoldDustENGTex";
+        case ITEM_HOT_SPRING_WATER:
+            return (void*)"__OTR__item_name_static/gItemNameHotSpringWaterENGTex";
+        case ITEM_DEKU_PRINCESS:
+            return (void*)"__OTR__item_name_static/gItemNameDekuPrincessENGTex";
+        case ITEM_SEAHORSE:
+            return (void*)"__OTR__item_name_static/gItemNameSeaHorseENGTex";
+        case ITEM_SPRING_WATER:
+            return (void*)"__OTR__item_name_static/gItemNameSpringWaterENGTex";
+        case ITEM_ZORA_EGG:
+            return (void*)"__OTR__item_name_static/gItemNameZoraEggENGTex";
+        case ITEM_HYLIAN_LOACH:
+            return (void*)"__OTR__item_name_static/gItemNameHylianLoachJPNTex";
+        case ITEM_OBABA_DRINK:
+            return (void*)"__OTR__item_name_static/gItemNameObabasDrinkJPNTex";
+        case ITEM_MAGIC_MUSHROOM:
+            return (void*)"__OTR__item_name_static/gItemNameMagicalMushroomENGTex";
         // MM adult trade-quest items (Skijer's NEI) — names from mm.o2r item_name_static.
-        case ITEM_MM_MOONS_TEAR:       return (void*)"__OTR__item_name_static/gItemNameMoonsTearENGTex";
-        case ITEM_MM_DEED_LAND:        return (void*)"__OTR__item_name_static/gItemNameLandTitleDeedENGTex";
-        case ITEM_MM_DEED_SWAMP:       return (void*)"__OTR__item_name_static/gItemNameSwampTitleDeedENGTex";
-        case ITEM_MM_DEED_MOUNTAIN:    return (void*)"__OTR__item_name_static/gItemNameMountainTitleDeedENGTex";
-        case ITEM_MM_DEED_OCEAN:       return (void*)"__OTR__item_name_static/gItemNameOceanTitleDeedENGTex";
-        case ITEM_MM_ROOM_KEY:         return (void*)"__OTR__item_name_static/gItemNameRoomKeyENGTex";
-        case ITEM_MM_LETTER_KAFEI:     return (void*)"__OTR__item_name_static/gItemNameLetterToKafeiENGTex";
-        case ITEM_MM_SPECIAL_DELIVERY: return (void*)"__OTR__item_name_static/gItemNameSpecialDeliveryToMamaENGTex";
-        default:                    break;
+        case ITEM_MM_MOONS_TEAR:
+            return (void*)"__OTR__item_name_static/gItemNameMoonsTearENGTex";
+        case ITEM_MM_DEED_LAND:
+            return (void*)"__OTR__item_name_static/gItemNameLandTitleDeedENGTex";
+        case ITEM_MM_DEED_SWAMP:
+            return (void*)"__OTR__item_name_static/gItemNameSwampTitleDeedENGTex";
+        case ITEM_MM_DEED_MOUNTAIN:
+            return (void*)"__OTR__item_name_static/gItemNameMountainTitleDeedENGTex";
+        case ITEM_MM_DEED_OCEAN:
+            return (void*)"__OTR__item_name_static/gItemNameOceanTitleDeedENGTex";
+        case ITEM_MM_ROOM_KEY:
+            return (void*)"__OTR__item_name_static/gItemNameRoomKeyENGTex";
+        case ITEM_MM_LETTER_KAFEI:
+            return (void*)"__OTR__item_name_static/gItemNameLetterToKafeiENGTex";
+        case ITEM_MM_SPECIAL_DELIVERY:
+            return (void*)"__OTR__item_name_static/gItemNameSpecialDeliveryToMamaENGTex";
+        default:
+            break;
     }
     // All page-2 custom item name textures live in the shared asset table.
     const CustomItemAsset* asset = ExtInv_FindCustomItemAsset(itemId);
@@ -371,15 +448,64 @@ extern const char* MmAssets_GetChateauIconPath(void);
 // 3 = Fire Flower. Used by the corner power-up HUD draw in z_parameter.c.
 void* ExtInv_GetCapIcon(uint8_t cap) {
     switch (cap) {
-        case 0: return (void*)gItemIconVanishCapTex;
-        case 1: return (void*)gItemIconMetalCapTex;
-        case 2: return (void*)gItemIconWingCapTex;
-        case 3: return (void*)gItemIconFireFlowerTex;
-        default: return NULL;
+        case 0:
+            return (void*)gItemIconVanishCapTex;
+        case 1:
+            return (void*)gItemIconMetalCapTex;
+        case 2:
+            return (void*)gItemIconWingCapTex;
+        case 3:
+            return (void*)gItemIconFireFlowerTex;
+        default:
+            return NULL;
     }
 }
 
+// mods/nei_save.cpp — Dual Cane context variables (see the icon override below).
+uint8_t Nei_CaneOwned(void);
+uint8_t Nei_CaneActiveSkill(void);
+
 void* ExtInv_GetItemIcon(uint16_t itemId) {
+
+    // 2026-08-06 page-2 additions — EXT (u16) inventory ids. Resolved FIRST: any generic fallback
+    // below would index vanilla art with an id > 0xFF. Stand-in icons from OoT's own icon set;
+    // TODO(user): real icons via the icon_item_custom PNG pipeline. Skijer's NEI
+    switch (itemId) {
+        case EXT_ITEM_SHEIKAH_SLATE:
+            // Once any rune is lit the cell/HUD icon carries the ACTIVE rune's badge (wand idiom).
+            if (Nei_Save()->slateRunesOwned != 0) {
+                return Slate_RuneIcon(Slate_GetRune());
+            }
+            return (void*)"__OTR__textures/icon_item_custom/gItemIconSheikahSlateTex";
+        case EXT_ITEM_PHANTOM_HOURGLASS:
+            return (void*)"__OTR__textures/icon_item_custom/gItemIconPhantomHourglassTex";
+        case EXT_ITEM_SHADOW_CRYSTAL:
+            return (void*)"__OTR__textures/icon_item_custom/gItemIconShadowCrystalTex";
+        case EXT_ITEM_ROD_OF_SEASONS:
+            return (void*)"__OTR__textures/icon_item_custom/gItemIconRodOfSeasonsTex";
+        default:
+            break;
+    }
+
+    // ── Dual Cane: the cell's icon is simply which of the four is in hand ────
+    // Four entries share one item id, so the icon cannot come from the id — it comes
+    // from the context variable. Trirod and Ultrahand are their own entries here,
+    // NOT the third level of the cane that unlocked them.
+    //
+    // OTR paths rather than the generated gItemIcon* symbols, because those only
+    // exist after an asset re-extract; the FD sword override below does the same.
+    if (itemId == ITEM_CANE_OF_SOMARIA && Nei_CaneOwned()) {
+        switch (Nei_CaneGetType()) {
+            case 1: // Trirod
+                return (void*)"__OTR__textures/icon_item_custom/gItemIconTrirodTex";
+            case 2: // Cane of Pacci
+                return (void*)"__OTR__textures/icon_item_custom/gItemIconCaneOfPacciTex";
+            case 3: // Ultrahand
+                return (void*)"__OTR__textures/icon_item_custom/gItemIconUltrahandTex";
+            default:
+                break; // Cane of Somaria keeps the cell's own icon
+        }
+    }
 
     // Extended equipment: override A button icon when ext sword/shield is active
     // Suppressed during kaleido equipment screen so vanilla icons show there
@@ -494,15 +620,24 @@ void* ExtInv_GetItemIcon(uint16_t itemId) {
     // gItemIconChateauRomaniTex; Magic Mushroom 0xDD keeps its own.) Skijer's NEI
     {
         const char* p = NULL;
-        if (itemId == ITEM_GOLD_DUST)             p = "__OTR__icon_item_static_yar/gItemIconBottledGoldDustTex";
-        else if (itemId == ITEM_HOT_SPRING_WATER) p = "__OTR__icon_item_static_yar/gItemIconHotSpringWaterTex";
-        else if (itemId == ITEM_DEKU_PRINCESS)    p = "__OTR__icon_item_static_yar/gItemIconBottledDekuPrincessTex";
-        else if (itemId == ITEM_SEAHORSE)         p = "__OTR__icon_item_static_yar/gItemIconBottledSeahorseTex";
-        else if (itemId == ITEM_SPRING_WATER)     p = "__OTR__icon_item_static_yar/gItemIconSpringWaterTex";
-        else if (itemId == ITEM_ZORA_EGG)         p = "__OTR__icon_item_static_yar/gItemIconBottledZoraEggTex";
-        else if (itemId == ITEM_HYLIAN_LOACH)     p = "__OTR__icon_item_static_yar/gItemIconBottledHylianLoachTex";
-        else if (itemId == ITEM_OBABA_DRINK)      p = "__OTR__icon_item_static_yar/gItemIconEmptyBottle2Tex";
-        if (p && MmAssets_LoadResource(p)) return (void*)p; // PATH -> HD-pack aware
+        if (itemId == ITEM_GOLD_DUST)
+            p = "__OTR__icon_item_static_yar/gItemIconBottledGoldDustTex";
+        else if (itemId == ITEM_HOT_SPRING_WATER)
+            p = "__OTR__icon_item_static_yar/gItemIconHotSpringWaterTex";
+        else if (itemId == ITEM_DEKU_PRINCESS)
+            p = "__OTR__icon_item_static_yar/gItemIconBottledDekuPrincessTex";
+        else if (itemId == ITEM_SEAHORSE)
+            p = "__OTR__icon_item_static_yar/gItemIconBottledSeahorseTex";
+        else if (itemId == ITEM_SPRING_WATER)
+            p = "__OTR__icon_item_static_yar/gItemIconSpringWaterTex";
+        else if (itemId == ITEM_ZORA_EGG)
+            p = "__OTR__icon_item_static_yar/gItemIconBottledZoraEggTex";
+        else if (itemId == ITEM_HYLIAN_LOACH)
+            p = "__OTR__icon_item_static_yar/gItemIconBottledHylianLoachTex";
+        else if (itemId == ITEM_OBABA_DRINK)
+            p = "__OTR__icon_item_static_yar/gItemIconEmptyBottle2Tex";
+        if (p && MmAssets_LoadResource(p))
+            return (void*)p; // PATH -> HD-pack aware
     }
 
     // MM adult trade-quest items (Skijer's NEI) — shown in the SLOT_TRADE_ADULT 2D-grid wheel. Icons
@@ -510,19 +645,61 @@ void* ExtInv_GetItemIcon(uint16_t itemId) {
     // from the ext-equipment block below. Special Delivery to Mama reuses MM's "Letter to Mama" icon.
     {
         const char* p = NULL;
-        if (itemId == ITEM_MM_MOONS_TEAR)            p = "__OTR__icon_item_static_yar/gItemIconMoonsTearTex";
-        else if (itemId == ITEM_MM_DEED_LAND)        p = "__OTR__icon_item_static_yar/gItemIconLandDeedTex";
-        else if (itemId == ITEM_MM_DEED_SWAMP)       p = "__OTR__icon_item_static_yar/gItemIconSwampDeedTex";
-        else if (itemId == ITEM_MM_DEED_MOUNTAIN)    p = "__OTR__icon_item_static_yar/gItemIconMountainDeedTex";
-        else if (itemId == ITEM_MM_DEED_OCEAN)       p = "__OTR__icon_item_static_yar/gItemIconOceanDeedTex";
-        else if (itemId == ITEM_MM_ROOM_KEY)         p = "__OTR__icon_item_static_yar/gItemIconRoomKeyTex";
-        else if (itemId == ITEM_MM_LETTER_KAFEI)     p = "__OTR__icon_item_static_yar/gItemIconLetterToKafeiTex";
-        else if (itemId == ITEM_MM_SPECIAL_DELIVERY) p = "__OTR__icon_item_static_yar/gItemIconLetterToMamaTex";
-        if (p && MmAssets_LoadResource(p)) return (void*)p; // PATH -> HD-pack aware
+        if (itemId == ITEM_MM_MOONS_TEAR)
+            p = "__OTR__icon_item_static_yar/gItemIconMoonsTearTex";
+        else if (itemId == ITEM_MM_DEED_LAND)
+            p = "__OTR__icon_item_static_yar/gItemIconLandDeedTex";
+        else if (itemId == ITEM_MM_DEED_SWAMP)
+            p = "__OTR__icon_item_static_yar/gItemIconSwampDeedTex";
+        else if (itemId == ITEM_MM_DEED_MOUNTAIN)
+            p = "__OTR__icon_item_static_yar/gItemIconMountainDeedTex";
+        else if (itemId == ITEM_MM_DEED_OCEAN)
+            p = "__OTR__icon_item_static_yar/gItemIconOceanDeedTex";
+        else if (itemId == ITEM_MM_ROOM_KEY)
+            p = "__OTR__icon_item_static_yar/gItemIconRoomKeyTex";
+        else if (itemId == ITEM_MM_LETTER_KAFEI)
+            p = "__OTR__icon_item_static_yar/gItemIconLetterToKafeiTex";
+        else if (itemId == ITEM_MM_SPECIAL_DELIVERY)
+            p = "__OTR__icon_item_static_yar/gItemIconLetterToMamaTex";
+        if (p && MmAssets_LoadResource(p))
+            return (void*)p; // PATH -> HD-pack aware
     }
 
-    if (itemId < 156) {
+    // Skijer's NEI boss_remains: MUST be resolved BEFORE the `itemId < 156` vanilla-array shortcut
+    // below. Three of the four remains ids reclaim low slots (Odolwa 0x80=128, Goht 0x81=129,
+    // Twinmold 0x89=137) that fall inside that range, so the shortcut used to hand back an unrelated
+    // gItemIcons[] entry — which is why only Gyorg (0x9C = 156, just past the cutoff) looked right.
+    // Their art exists only in mm.o2r; returning the PATH keeps HD packs working.
+    switch (itemId) {
+        case ITEM_MM_REMAINS_ODOLWA:
+            return (void*)"__OTR__icon_item_static_yar/gItemIconOdolwasRemainsTex";
+        case ITEM_MM_REMAINS_GOHT:
+            return (void*)"__OTR__icon_item_static_yar/gItemIconGohtsRemainsTex";
+        case ITEM_MM_REMAINS_GYORG:
+            return (void*)"__OTR__icon_item_static_yar/gItemIconGyorgsRemainsTex";
+        case ITEM_MM_REMAINS_TWINMOLD:
+            return (void*)"__OTR__icon_item_static_yar/gItemIconTwinmoldsRemainsTex";
+        default:
+            break;
+    }
+
+    // El corte estaba escrito a mano como `< 156`, pero gItemIcons tiene 158 entradas: la pluma
+    // SHIP-VANILLA (ITEM_ROCS_FEATHER = 0x9D = 157) quedaba JUSTO fuera, se escapaba a las ramas de
+    // abajo, no encajaba en ninguna y acababa en el `gItemIcons[0]` de fallback — por eso se veía
+    // como Deku Stick. Se usa ARRAY_COUNT para que no vuelva a desfasarse al crecer el array, y se
+    // salta la entrada vacía (hay huecos "" en 0x82..0x9B) para no mandar basura a la RSP.
+    if (itemId < ARRAY_COUNT(gItemIcons) && gItemIcons[itemId] != NULL &&
+        ((const char*)gItemIcons[itemId])[0] != '\0') {
         return gItemIcons[itemId];
+    }
+    // ITEM_EXT_BOOTS_2 is the one shared id: as an INVENTORY / trade-wheel / C-button item it is the
+    // Pendant of Memories, while grid slot (BOOTS, 2) is the Climb Boots (whose icon the kaleido reads
+    // straight from ExtEquip_GetIcon, not from here). Skijer 2026-07-29
+    if (itemId == ITEM_EXT_BOOTS_2) {
+        void* pendantIcon = ExtEquip_GetPendantIcon();
+        if (pendantIcon != NULL) {
+            return pendantIcon;
+        }
     }
     // Extended equipment items (0xE0-0xEB): return ext equip icon
     // Must check BEFORE MM masks since ranges overlap
@@ -556,15 +733,23 @@ void* ExtInv_GetItemIcon(uint16_t itemId) {
         }
     }
     switch (itemId) {
+        // (boss_remains handled earlier — before the `itemId < 156` shortcut.)
+
         // Prop Hunt button icons (0xD7-0xDC). Shown only while a hider is
         // in "prop mode" — the C-buttons + D-pad display these cycling/
         // category hints instead of vanilla item art.
-        case ITEM_PH_ICON_POT:    return (void*)gItemIconPropHuntPotTex;
-        case ITEM_PH_ICON_ENEMY:  return (void*)gItemIconPropHuntEnemyTex;
-        case ITEM_PH_ICON_NPC:    return (void*)gItemIconPropHuntNpcTex;
-        case ITEM_PH_ICON_CHANGE: return (void*)gItemIconPropHuntChangeTex;
-        case ITEM_PH_ICON_PREV:   return (void*)gItemIconPropHuntPrevTex;
-        case ITEM_PH_ICON_NEXT:   return (void*)gItemIconPropHuntNextTex;
+        case ITEM_PH_ICON_POT:
+            return (void*)gItemIconPropHuntPotTex;
+        case ITEM_PH_ICON_ENEMY:
+            return (void*)gItemIconPropHuntEnemyTex;
+        case ITEM_PH_ICON_NPC:
+            return (void*)gItemIconPropHuntNpcTex;
+        case ITEM_PH_ICON_CHANGE:
+            return (void*)gItemIconPropHuntChangeTex;
+        case ITEM_PH_ICON_PREV:
+            return (void*)gItemIconPropHuntPrevTex;
+        case ITEM_PH_ICON_NEXT:
+            return (void*)gItemIconPropHuntNextTex;
 
         case ITEM_LANTERN: { // 0xB4
             extern u8 Lantern_GetFireType(void);
@@ -598,19 +783,13 @@ void* ExtInv_GetItemIcon(uint16_t itemId) {
         case ITEM_MEDALLION_LIGHT:
             return (void*)"__OTR__textures/icon_item_24_static/gQuestIconMedallionLightTex";
 
-        // SW97 Arrow items (arrow mode — SAME medallion icons)
-        case ITEM_SW97_ARROW_FIRE:
-            return (void*)"__OTR__textures/icon_item_24_static/gQuestIconMedallionFireTex";
-        case ITEM_SW97_ARROW_ICE:
-            return (void*)"__OTR__textures/icon_item_24_static/gQuestIconMedallionWaterTex";
-        case ITEM_SW97_ARROW_LIGHT:
-            return (void*)"__OTR__textures/icon_item_24_static/gQuestIconMedallionLightTex";
-        case ITEM_SW97_ARROW_DARK:
-            return (void*)"__OTR__textures/icon_item_24_static/gQuestIconMedallionShadowTex";
-        case ITEM_SW97_ARROW_SOUL:
-            return (void*)"__OTR__textures/icon_item_24_static/gQuestIconMedallionSpiritTex";
-        case ITEM_SW97_ARROW_WIND:
-            return (void*)"__OTR__textures/icon_item_24_static/gQuestIconMedallionForestTex";
+        // SW97 elemental shots no longer have item ids — the element is a flag and the medallion
+        // icon is fetched directly via Sw97_ElementIcon(), which lands on the ITEM_MEDALLION_*
+        // cases above.
+
+        // Elemental Wand: one icon per rod, picked by the active mode.
+        case ITEM_ELEMENTAL_WAND:
+            return Wand_ModeIcon(Wand_GetMode());
 
         case ITEM_CHATEAU_ROMANI: { // 0xB5
             const char* path = MmAssets_GetChateauIconPath();
@@ -649,9 +828,462 @@ void ExtInv_KeepMmMaskOrSell(PlayState* play, uint16_t maskItem) {
     }
 }
 
+// ── SW97 primed element + Elemental Wand (Skijer's NEI) ──────────────────────────────────────────
+// Single source of truth for "which element is the bow/slingshot primed with" and "which rod is the
+// wand showing". Hosted here (not in nei_save.cpp) because this file is plain C, already includes
+// z64item.h + nei_save.h, already owns the element->medallion icon map, and every consumer — both
+// kaleido overlays, z_parameter.c and ArrowCycle.cpp — already links against it. No new .c file
+// means no .vcxproj edit.
+//
+// The element used to be encoded as WHICH item id sat on the C-button. It is a flag now; the button
+// always holds the plain weapon. See the SW97_ELEM_* block in nei_save.h for why the order matters.
+
+// Element -> medallion item id, for the icon composited behind the weapon.
+static const uint16_t sSw97ElemIcon[SW97_ELEM_COUNT] = {
+    ITEM_NONE,             // SW97_ELEM_NONE
+    ITEM_MEDALLION_FIRE,   // SW97_ELEM_FIRE
+    ITEM_MEDALLION_WATER,  // SW97_ELEM_ICE
+    ITEM_MEDALLION_LIGHT,  // SW97_ELEM_LIGHT
+    ITEM_MEDALLION_SHADOW, // SW97_ELEM_DARK
+    ITEM_MEDALLION_SPIRIT, // SW97_ELEM_SOUL
+    ITEM_MEDALLION_FOREST, // SW97_ELEM_WIND
+    ITEM_BOMB_ARROWS,      // SW97_ELEM_BOMB
+};
+// Element -> quest flag that unlocks it. ONE ENTRY PER LINE on purpose: this table was briefly
+// written wrapped across two lines with an extra leading 0, which shifted every element onto the
+// WRONG medallion (owning Forest unlocked "fire", owning Light unlocked "dark", and so on) — which
+// in turn let the wheel offer elemental arrows the player does not own. Skijer's NEI
+static const uint8_t sSw97ElemQuest[SW97_ELEM_COUNT] = {
+    0,                      // SW97_ELEM_NONE  (unused — NONE is always available)
+    QUEST_MEDALLION_FIRE,   // SW97_ELEM_FIRE
+    QUEST_MEDALLION_WATER,  // SW97_ELEM_ICE
+    QUEST_MEDALLION_LIGHT,  // SW97_ELEM_LIGHT
+    QUEST_MEDALLION_SHADOW, // SW97_ELEM_DARK
+    QUEST_MEDALLION_SPIRIT, // SW97_ELEM_SOUL
+    QUEST_MEDALLION_FOREST, // SW97_ELEM_WIND
+    0,                      // SW97_ELEM_BOMB  (unused — ownership is Sw97_BombArrowsOwned)
+};
+// Vanilla elemental arrow that ALSO unlocks the element (-1 = no vanilla equivalent). Kept from the
+// old ArrowWheel_Build so a player with fire arrows but no medallion still gets the fire entry.
+static const int16_t sSw97ElemVanillaArrow[SW97_ELEM_COUNT] = {
+    -1, ITEM_ARROW_FIRE, ITEM_ARROW_ICE, ITEM_ARROW_LIGHT, -1, -1, -1, -1,
+};
+
+uint16_t Sw97_ElementIcon(uint8_t elem) {
+    return (elem < SW97_ELEM_COUNT) ? sSw97ElemIcon[elem] : ITEM_NONE;
+}
+
+// Which of the three randomizer treatments the seed picked for Bomb Arrows.
+uint8_t BombArrows_RandoMode(void) {
+    return (uint8_t)CVarGetInteger("gMods.BombArrows.Mode", BOMB_ARROWS_RANDO_OFF);
+}
+
+uint8_t Sw97_BombArrowsOwned(void) {
+    extern u8 TwilightUpgrade_HasBombArrows(void);
+    if (Nei_Save()->bombArrowsOwned || TwilightUpgrade_HasBombArrows()) {
+        return 1;
+    }
+    // "Bomb Bag" mode: owning any bomb bag is the unlock. Evaluated live rather than latched so
+    // toggling the option mid-file behaves.
+    return (BombArrows_RandoMode() == BOMB_ARROWS_RANDO_BOMB_BAG) && (CUR_UPG_VALUE(UPG_BOMB_BAG) > 0);
+}
+
+uint8_t Sw97_ElementOwned(uint8_t elem) {
+    if (elem == SW97_ELEM_NONE) {
+        return 1; // the plain weapon is always an option
+    }
+    if (elem == SW97_ELEM_BOMB) {
+        return Sw97_BombArrowsOwned();
+    }
+    if (elem >= SW97_ELEM_COUNT) {
+        return 0;
+    }
+    if (CHECK_QUEST_ITEM(sSw97ElemQuest[elem])) {
+        return 1;
+    }
+    // Vanilla-arrow fallback (fire/ice/light only).
+    return (sSw97ElemVanillaArrow[elem] >= 0) &&
+           (INV_CONTENT((uint16_t)sSw97ElemVanillaArrow[elem]) == (uint8_t)sSw97ElemVanillaArrow[elem]);
+}
+
+// Is `elem` a legal value for this weapon at all? Bombs never ride the slingshot.
+static uint8_t Sw97_ElementAllowed(uint8_t isSling, uint8_t elem) {
+    if (isSling && (elem == SW97_ELEM_BOMB)) {
+        return 0;
+    }
+    return Sw97_ElementOwned(elem);
+}
+
+uint8_t Sw97_ElementCount(uint8_t isSling) {
+    uint8_t n = 0;
+    for (uint8_t e = 0; e < SW97_ELEM_COUNT; e++) {
+        if (Sw97_ElementAllowed(isSling, e)) {
+            n++;
+        }
+    }
+    return n;
+}
+
+uint8_t Sw97_ElementAt(uint8_t isSling, uint8_t index) {
+    uint8_t n = 0;
+    for (uint8_t e = 0; e < SW97_ELEM_COUNT; e++) {
+        if (Sw97_ElementAllowed(isSling, e)) {
+            if (n == index) {
+                return e;
+            }
+            n++;
+        }
+    }
+    return SW97_ELEM_NONE;
+}
+
+uint8_t Sw97_GetElement(uint8_t isSling) {
+    NeiSaveData* nei = Nei_Save();
+    uint8_t e = isSling ? nei->sw97SlingElement : nei->sw97BowElement;
+    if (!Sw97_ElementAllowed(isSling, e)) {
+        // Self-heal: a medallion can be lost (or the option toggled) after the flag was set.
+        e = SW97_ELEM_NONE;
+        if (isSling) {
+            nei->sw97SlingElement = e;
+        } else {
+            nei->sw97BowElement = e;
+        }
+    }
+    return e;
+}
+
+void Sw97_SetElement(uint8_t isSling, uint8_t elem) {
+    if (!Sw97_ElementAllowed(isSling, elem)) {
+        return;
+    }
+    if (isSling) {
+        Nei_Save()->sw97SlingElement = elem;
+    } else {
+        Nei_Save()->sw97BowElement = elem;
+    }
+}
+
+uint8_t Sw97_ElementNeighbor(uint8_t isSling, uint8_t elem, int32_t dir) {
+    uint8_t n = Sw97_ElementCount(isSling);
+    if (n <= 1) {
+        return elem;
+    }
+    for (uint8_t i = 0; i < n; i++) {
+        if (Sw97_ElementAt(isSling, i) == elem) {
+            return Sw97_ElementAt(isSling, (uint8_t)((i + n + (dir > 0 ? 1 : -1)) % n));
+        }
+    }
+    return Sw97_ElementAt(isSling, 0);
+}
+
+// THE accessor. Everything downstream — the arrow-type decode, the item action, the HUD composite,
+// the pause grid — goes through this and nothing else, so the "CVar off" path stays byte-identical
+// to the pre-refactor behavior and the bow-only rule for bombs lives in exactly one place.
+uint8_t Sw97_EffectiveElement(uint8_t isSling) {
+    if (!SW97_MEDALLIONS_ENABLED()) {
+        return SW97_ELEM_NONE;
+    }
+    return Sw97_GetElement(isSling);
+}
+
+uint8_t Sw97_IsBowItem(uint16_t item) {
+    return item == ITEM_BOW;
+}
+uint8_t Sw97_IsSlingItem(uint16_t item) {
+    return item == ITEM_SLINGSHOT;
+}
+
+// The composite HUD icon is built from iconItemSegment[], which only refreshes when the button's
+// item is (re)loaded. Changing the element does not change the item, so every setter has to ask for
+// the reload by hand — otherwise layer 1 keeps the previous weapon and it reads as a texture bug.
+void Sw97_RefreshButtonIcons(PlayState* play) {
+    // i < 8, NOT i <= 8: buttonItems is u8[8] and iconItemSegment is exactly 8 pages of 0x1000, so
+    // index 8 reads past the array and makes Interface_LoadItemIcon1 DMA a full page past the end of
+    // the icon buffer — a silent heap smash. Skijer's NEI
+    for (int32_t i = 1; i < ARRAY_COUNT(gSaveContext.equips.buttonItems); i++) {
+        uint8_t item = gSaveContext.equips.buttonItems[i];
+        if (Sw97_IsBowItem(item) || Sw97_IsSlingItem(item)) {
+            Interface_LoadItemIcon1(play, i);
+        }
+    }
+}
+
+// Is Bomb Arrows the primed element on some button right now? Replaces the old
+// IsItemEquipped(ITEM_BOMB_ARROWS), which scanned for a literal id that no longer lands there.
+uint8_t Sw97_BombArrowsOnButton(void) {
+    for (int32_t i = 0; i < ARRAY_COUNT(gSaveContext.equips.buttonItems); i++) {
+        uint8_t item = gSaveContext.equips.buttonItems[i];
+        if ((Sw97_IsBowItem(item) || Sw97_IsSlingItem(item)) &&
+            (Sw97_EffectiveElement(Sw97_IsSlingItem(item)) == SW97_ELEM_BOMB)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// One-shot save migration off the per-element item ids. Idempotent via sw97LayoutVersion.
+//
+// The legacy ids are GONE from z64item.h, so they are spelled as raw values here on purpose — this
+// function is the only place that must still recognise them, and hard-coding them keeps the enum
+// free of ghosts. 0xD0..0xD5 were ITEM_SW97_ARROW_FIRE..WIND (0xD0 is the Elemental Wand now, which
+// is exactly why an unmigrated save must not be left holding one).
+void Sw97_MigrateLayout(PlayState* play) {
+    NeiSaveData* nei = Nei_Save();
+    if (nei->sw97LayoutVersion >= 1) {
+        return;
+    }
+
+    // Buttons: B + 3 C + 4 D-pad.
+    for (int32_t i = 0; i < 8; i++) {
+        uint8_t item = gSaveContext.equips.buttonItems[i];
+        if (item >= 0xD0 && item <= 0xD5) {
+            nei->sw97BowElement = (uint8_t)(SW97_ELEM_FIRE + (item - 0xD0));
+            gSaveContext.equips.buttonItems[i] = ITEM_BOW;
+        } else if (item == ITEM_BOMB_ARROWS) {
+            nei->sw97BowElement = SW97_ELEM_BOMB;
+            gSaveContext.equips.buttonItems[i] = ITEM_BOW;
+        } else {
+            continue;
+        }
+        // The wheel used to mark these slots 0xFF ("not from inventory"). The button holds a real
+        // inventory item now, so clear the marker or the slot stays unbindable.
+        if (i >= 1 && i <= 3) {
+            gSaveContext.equips.cButtonSlots[i - 1] = SLOT_BOW;
+        }
+    }
+
+    // Page-2 slot 27 held ITEM_BOMB_ARROWS; the cell belongs to the Elemental Wand now.
+    if (Nei_GetOwnedItem(SLOT_BOMB_ARROWS) == ITEM_BOMB_ARROWS) {
+        nei->bombArrowsOwned = 1;
+        Nei_SetOwnedItem(SLOT_BOMB_ARROWS, ITEM_NONE);
+    }
+
+    nei->sw97LayoutVersion = 1;
+    Sw97_RefreshButtonIcons(play);
+}
+
+// ── Elemental Wand — six rods in one page-2 cell ─────────────────────────────────────────────────
+static const uint8_t sWandQuest[WAND_MODE_COUNT] = {
+    QUEST_MEDALLION_SPIRIT, // Sand Rod
+    QUEST_MEDALLION_FOREST, // Tornado Rod
+    QUEST_MEDALLION_WATER,  // Water Rod
+    QUEST_MEDALLION_FIRE,   // Meteor Rod
+    QUEST_MEDALLION_LIGHT,  // Storm Rod
+    QUEST_MEDALLION_SHADOW, // Shadow Scepter
+};
+static const uint16_t sWandMedallion[WAND_MODE_COUNT] = {
+    ITEM_MEDALLION_SPIRIT, ITEM_MEDALLION_FOREST, ITEM_MEDALLION_WATER,
+    ITEM_MEDALLION_FIRE,   ITEM_MEDALLION_LIGHT,  ITEM_MEDALLION_SHADOW,
+};
+
+// Placeholder art note: until the six real PNGs land, dropping the rod texture files in place is
+// the only change needed — these paths are already the final ones.
+static void* const sWandIcon[WAND_MODE_COUNT] = {
+    (void*)gItemIconSandRodTex,   (void*)gItemIconTornadoRodTex, (void*)gItemIconWaterRodTex,
+    (void*)gItemIconMeteorRodTex, (void*)gItemIconStormRodTex,   (void*)gItemIconShadowScepterTex,
+};
+static void* const sWandNameTex[WAND_MODE_COUNT] = {
+    (void*)gSandRodNameTex,   (void*)gTornadoRodNameTex, (void*)gWaterRodNameTex,
+    (void*)gMeteorRodNameTex, (void*)gStormRodNameTex,   (void*)gShadowScepterNameTex,
+};
+
+void* Wand_ModeIcon(uint8_t mode) {
+    return (mode < WAND_MODE_COUNT) ? sWandIcon[mode] : sWandIcon[0];
+}
+void* Wand_ModeNameTex(uint8_t mode) {
+    return (mode < WAND_MODE_COUNT) ? sWandNameTex[mode] : sWandNameTex[0];
+}
+
+uint8_t Wand_RandoMode(void) {
+    return (uint8_t)CVarGetInteger("gRandoSettings.ElementalWandShuffle", WAND_RANDO_MEDALLIONS);
+}
+
+uint16_t Wand_ModeMedallion(uint8_t mode) {
+    return (mode < WAND_MODE_COUNT) ? sWandMedallion[mode] : ITEM_NONE;
+}
+
+// Which rods are usable. All three randomizer treatments share the SAME slot flag; they differ only
+// in what unlocks an individual mode.
+uint8_t Wand_ModeOwned(uint8_t mode) {
+    if (mode >= WAND_MODE_COUNT) {
+        return 0;
+    }
+    switch (Wand_RandoMode()) {
+        case WAND_RANDO_SINGLE:
+            return Nei_Save()->wandRodsOwned != 0; // one item lights all six
+        case WAND_RANDO_ELEMENTAL:
+            return (Nei_Save()->wandRodsOwned & (1 << mode)) != 0;
+        case WAND_RANDO_MEDALLIONS:
+        default:
+            return CHECK_QUEST_ITEM(sWandQuest[mode]) != 0;
+    }
+}
+
+void Wand_GrantMode(uint8_t mode) {
+    if (mode >= WAND_MODE_COUNT) {
+        return;
+    }
+    if (Wand_RandoMode() == WAND_RANDO_SINGLE) {
+        Nei_Save()->wandRodsOwned = (1 << WAND_MODE_COUNT) - 1;
+    } else {
+        Nei_Save()->wandRodsOwned |= (1 << mode);
+    }
+    // Obtaining ANY rod hands over the slot if it isn't there yet.
+    ExtInv_SetSlotItem(SLOT_ELEMENTAL_WAND, ITEM_ELEMENTAL_WAND);
+}
+
+uint8_t Wand_ModeCount(void) {
+    uint8_t n = 0;
+    for (uint8_t m = 0; m < WAND_MODE_COUNT; m++) {
+        if (Wand_ModeOwned(m)) {
+            n++;
+        }
+    }
+    return n;
+}
+
+uint8_t Wand_ModeAt(uint8_t index) {
+    uint8_t n = 0;
+    for (uint8_t m = 0; m < WAND_MODE_COUNT; m++) {
+        if (Wand_ModeOwned(m)) {
+            if (n == index) {
+                return m;
+            }
+            n++;
+        }
+    }
+    return WAND_MODE_SAND;
+}
+
+uint8_t Wand_GetMode(void) {
+    uint8_t m = Nei_Save()->wandMode;
+    if (!Wand_ModeOwned(m)) {
+        m = Wand_ModeAt(0);
+        Nei_Save()->wandMode = m;
+    }
+    return m;
+}
+
+void Wand_SetMode(uint8_t mode) {
+    if (Wand_ModeOwned(mode)) {
+        Nei_Save()->wandMode = mode;
+    }
+}
+
+uint8_t Wand_ModeNeighbor(uint8_t mode, int32_t dir) {
+    uint8_t n = Wand_ModeCount();
+    if (n <= 1) {
+        return mode;
+    }
+    for (uint8_t i = 0; i < n; i++) {
+        if (Wand_ModeAt(i) == mode) {
+            return Wand_ModeAt((uint8_t)((i + n + (dir > 0 ? 1 : -1)) % n));
+        }
+    }
+    return Wand_ModeAt(0);
+}
+
+// ── Sheikah Slate — four runes in one page-2 cell (wand idiom, no rando-mode split: each rune is
+// always its own sibling item, "random" order comes from where the seed hides them) ──────────────
+static void* const sSlateRuneMiniIcon[SLATE_RUNE_COUNT] = {
+    (void*)"__OTR__textures/icon_item_custom/gItemIconSlateRuneBombTex",
+    (void*)"__OTR__textures/icon_item_custom/gItemIconSlateRuneStasisTex",
+    (void*)"__OTR__textures/icon_item_custom/gItemIconSlateRuneCryonisTex",
+    (void*)"__OTR__textures/icon_item_custom/gItemIconSlateRuneMasterCycleTex",
+};
+static void* const sSlateRuneIcon[SLATE_RUNE_COUNT] = {
+    (void*)"__OTR__textures/icon_item_custom/gItemIconSheikahSlateBombTex",
+    (void*)"__OTR__textures/icon_item_custom/gItemIconSheikahSlateStasisTex",
+    (void*)"__OTR__textures/icon_item_custom/gItemIconSheikahSlateCryonisTex",
+    (void*)"__OTR__textures/icon_item_custom/gItemIconSheikahSlateMasterCycleTex",
+};
+
+void* Slate_RuneMiniIcon(uint8_t rune) {
+    return (rune < SLATE_RUNE_COUNT) ? sSlateRuneMiniIcon[rune] : sSlateRuneMiniIcon[0];
+}
+void* Slate_RuneIcon(uint8_t rune) {
+    return (rune < SLATE_RUNE_COUNT) ? sSlateRuneIcon[rune] : sSlateRuneIcon[0];
+}
+
+uint8_t Slate_RuneOwned(uint8_t rune) {
+    if (rune >= SLATE_RUNE_COUNT) {
+        return 0;
+    }
+    return (Nei_Save()->slateRunesOwned & (1 << rune)) != 0;
+}
+
+void Slate_GrantRune(uint8_t rune) {
+    if (rune >= SLATE_RUNE_COUNT) {
+        return;
+    }
+    Nei_Save()->slateRunesOwned |= (1 << rune);
+    // The freshly obtained rune becomes the active one — this is also what makes the get-item
+    // textbox icon (resolved through Slate_GetRune) show the rune that was just granted.
+    Nei_Save()->slateMode = rune;
+    // Obtaining ANY rune hands over the slate itself if it isn't there yet.
+    ExtInv_GiveItem(SLOT_SHEIKAH_SLATE, EXT_ITEM_SHEIKAH_SLATE);
+}
+
+uint8_t Slate_RuneCount(void) {
+    uint8_t n = 0;
+    for (uint8_t r = 0; r < SLATE_RUNE_COUNT; r++) {
+        if (Slate_RuneOwned(r)) {
+            n++;
+        }
+    }
+    return n;
+}
+
+uint8_t Slate_RuneAt(uint8_t index) {
+    uint8_t n = 0;
+    for (uint8_t r = 0; r < SLATE_RUNE_COUNT; r++) {
+        if (Slate_RuneOwned(r)) {
+            if (n == index) {
+                return r;
+            }
+            n++;
+        }
+    }
+    return SLATE_RUNE_BOMB;
+}
+
+uint8_t Slate_GetRune(void) {
+    uint8_t r = Nei_Save()->slateMode;
+    if (!Slate_RuneOwned(r)) {
+        r = Slate_RuneAt(0);
+        Nei_Save()->slateMode = r;
+    }
+    return r;
+}
+
+void Slate_SetRune(uint8_t rune) {
+    if (Slate_RuneOwned(rune)) {
+        Nei_Save()->slateMode = rune;
+    }
+}
+
+uint8_t Slate_RuneNeighbor(uint8_t rune, int32_t dir) {
+    uint8_t n = Slate_RuneCount();
+    if (n <= 1) {
+        return rune;
+    }
+    for (uint8_t i = 0; i < n; i++) {
+        if (Slate_RuneAt(i) == rune) {
+            return Slate_RuneAt((uint8_t)((i + n + (dir > 0 ? 1 : -1)) % n));
+        }
+    }
+    return Slate_RuneAt(0);
+}
+
 uint8_t ExtInv_GetItemSlot(uint16_t itemId) {
     if (itemId < 52) {
         return gItemSlots[itemId];
+    }
+    // Rito Mask has no cell of its own: it lives in the Farore's Wind cell and is
+    // reached by cycling there, the same shared-slot idea as Roc's Feather in the
+    // Nayru's Love cell. Skijer's NEI
+    if (itemId == ITEM_RITO_MASK) {
+        return SLOT_FARORES_WIND;
     }
     // Page 2 items (incl. ROCS_CAPE -> shared SLOT_ROCS): unified NEI registry. Skijer's NEI
     const NeiItem* it = Nei_FindByItem(itemId);

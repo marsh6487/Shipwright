@@ -38,15 +38,15 @@ extern "C" {
 extern void func_80B8FE00(ObjBean*); // trigger planting
 // MM trade/quest grant APIs (Skijer's NEI) — same calls the debug/give-all menu uses (SohMenuNEI.cpp):
 // trade_items.c (adult-trade wheel bitmask), picto_box.c (pictoboxOwned), power_keg.c (kegOwned+count).
-extern void TradeAdult_GiveItem(unsigned char item);         // sets Nei_Save()->tradeAdultOwned bit
-extern void Picto_SetOwned(unsigned char on);                // sets Nei_Save()->pictoboxOwned
-extern void PowerKeg_SetOwned(unsigned char on);             // sets Nei_Save()->powerKegOwned
-extern unsigned char PowerKeg_GetCount(void);                // Nei_Save()->powerKegCount
-extern void PowerKeg_SetCount(unsigned char n);              // clamps to PowerKeg_MaxCount()
+extern void TradeAdult_GiveItem(unsigned char item); // sets Nei_Save()->tradeAdultOwned bit
+extern void Picto_SetOwned(unsigned char on);        // sets Nei_Save()->pictoboxOwned
+extern void PowerKeg_SetOwned(unsigned char on);     // sets Nei_Save()->powerKegOwned
+extern unsigned char PowerKeg_GetCount(void);        // Nei_Save()->powerKegCount
+extern void PowerKeg_SetCount(unsigned char n);      // clamps to PowerKeg_MaxCount()
 // Bottle Randomizer ownership (custom_bottles.cpp): once set, mm_bottle_items.cpp projects the
 // item into SLOT_BOTTLE_3/4 (+ any C-button) every frame — the give only needs the flag.
-extern void Bottle_SetNetOwned(unsigned char owned);         // Nei_Save()->netEquipped
-extern void Bottle_SetBottomlessOwned(unsigned char owned);  // Nei_Save()->bottomlessBottleMode
+extern void Bottle_SetNetOwned(unsigned char owned);        // Nei_Save()->netEquipped
+extern void Bottle_SetBottomlessOwned(unsigned char owned); // Nei_Save()->bottomlessBottleMode
 // FleetSync: while ApplyFcRegistryToNatives() is granting the FC deficit it calls Randomizer_Item_Give,
 // which would re-enter the record hook below and double-count. This flag lets the hook skip recording
 // during that apply pass (see FleetSync.cpp ApplyFcRegistryToNatives).
@@ -72,6 +72,14 @@ bool generated;
 // CUSTOM ITEMS RANDOMIZER MESSAGES
 // ============================================================================
 // Helper structure for custom item messages (defined inline to avoid linker issues)
+// Dual Cane skill state (mods/items/logic/item_cane_of_somaria.c) — used by the per-skill
+// obtainability and give arms below.
+extern "C" u8 Cane_GiveSkill(u8 skill);
+extern "C" u8 Cane_HasSkill(u8 skill);
+// Clawshot ownership (mods/items/logic/twilight_upgrade.c) — the Clawshot shares the hookshot cell.
+extern "C" u8 TwilightUpgrade_HasClawshot(void);
+extern "C" void TwilightUpgrade_SetClawshot(u8 on);
+
 struct CustomItemMessageEntry {
     s16 rgId;
     ItemID itemId;
@@ -92,7 +100,8 @@ static const CustomItemMessageEntry customItemMessages[] = {
       "press&to perform a high jump.&It even works in water!",
       "Du hast %rRocs Feder%w erhalten!&Diese magische Feder lässt&dich höher springen.^Weise sie %y\xA1%w zu und "
       "drücke&um hoch zu springen.&Funktioniert auch im Wasser!",
-      "Vous obtenez la %rPlume de Roc%w!&Cette plume magique vous&permet de sauter plus haut.^Assignez-la à %y\xA1%w et "
+      "Vous obtenez la %rPlume de Roc%w!&Cette plume magique vous&permet de sauter plus haut.^Assignez-la à %y\xA1%w "
+      "et "
       "appuyez&pour faire un grand saut.&Fonctionne même dans l'eau!" },
 
     // Vanilla rando Roc's Feather (shares the Nayru's Love slot, RSK_ROCS_FEATHER)
@@ -112,81 +121,302 @@ static const CustomItemMessageEntry customItemMessages[] = {
     // Extended Equipment (12 items, equipment page 2 - toggled via [L] in pause)
     // ─────────────────────────────────────────────────────────────────────────
     { RG_EXT_CANE_OF_BYRNA, static_cast<ItemID>(ITEM_EXT_SWORD_1),
-      "You got the %cCane of Byrna%w!&A blue cane of legend.^Equip on the %ysword slot%w&(%y\xA2%w toggles equipment pages).^Wields like the %cBiggoron Sword%w&(long range, two-handed). %gSpin%w&and %gcharge attacks%w always work.^Every melee hit %crestores HP%w&and %crefills Magic%w!",
-      "Du hast den %cStab von Byrna%w!&Ein blauer Stab der Legenden.^Rüste ihn am %ySchwert-Platz%w aus&(%y\xA2%w wechselt Seiten).^Führt sich wie das %cBiggoron-Schwert%w&(lange Reichweite, beidhändig). %gKreisangriffe%w&und %gAufladeangriffe%w gehen immer.^Jeder Treffer %cstellt HP%w und&%cMagie%w wieder her!",
-      "Vous obtenez la %cCanne de Byrna%w!&Une canne bleue de légende.^Équipez-la dans l'%yemplacement épée%w&(%y\xA2%w change de page).^Se manie comme l'%cÉpée de Biggoron%w&(longue portée, à deux mains).&%gAttaques tournoyantes%w et %gchargées%w&fonctionnent toujours.^Chaque coup %crestaure des PV%w&et %crecharge la Magie%w!" },
+      "You got the %cCane of Byrna%w!&A blue cane of legend.^Equip on the %ysword slot%w&(%y\xA2%w toggles equipment "
+      "pages).^Wields like the %cBiggoron Sword%w&(long range, two-handed). %gSpin%w&and %gcharge attacks%w always "
+      "work.^Every melee hit %crestores HP%w&and %crefills Magic%w!",
+      "Du hast den %cStab von Byrna%w!&Ein blauer Stab der Legenden.^Rüste ihn am %ySchwert-Platz%w aus&(%y\xA2%w "
+      "wechselt Seiten).^Führt sich wie das %cBiggoron-Schwert%w&(lange Reichweite, beidhändig). %gKreisangriffe%w&und "
+      "%gAufladeangriffe%w gehen immer.^Jeder Treffer %cstellt HP%w und&%cMagie%w wieder her!",
+      "Vous obtenez la %cCanne de Byrna%w!&Une canne bleue de légende.^Équipez-la dans l'%yemplacement "
+      "épée%w&(%y\xA2%w change de page).^Se manie comme l'%cÉpée de Biggoron%w&(longue portée, à deux "
+      "mains).&%gAttaques tournoyantes%w et %gchargées%w&fonctionnent toujours.^Chaque coup %crestaure des PV%w&et "
+      "%crecharge la Magie%w!" },
 
     { RG_EXT_FOUR_SWORD, static_cast<ItemID>(ITEM_EXT_SWORD_2),
-      "You got the %gFour Sword%w!&A blade that splits its wielder&into four heroes.^Equip on the %ysword slot%w (%y\xA2%w toggles).^Hold %y\xA3%w + %y\xA0%w for 15 frames ->&%g3 colored clones%w (Red/Blue/Purple)&spawn around you in a triangle.^Each clone costs %g12 Magic%w.&Clones %gmirror your swings%w and copy&your %garrows%w, %gbombs%w and %gboomerang%w.^Enemy hits kill them.",
-      "Du hast das %gVier-Schwert%w!&Eine Klinge die ihren Träger&in vier Helden teilt.^Rüste es am %ySchwert-Platz%w aus.^Halte %y\xA3%w + %y\xA0%w 15 Frames ->&%g3 farbige Klone%w (Rot/Blau/Violett)&erscheinen im Dreieck.^Jeder Klon kostet %g12 Magie%w.&Klone %gspiegeln deine Schwerthiebe%w und&kopieren %gPfeile%w, %gBomben%w und %gBumerang%w.^Feindtreffer töten sie.",
-      "Vous obtenez l'%gÉpée de Quatre%w!&Une lame qui divise son porteur&en quatre héros.^Équipez-la dans l'%yemplacement épée%w.^Maintenez %y\xA3%w + %y\xA0%w 15 frames ->&%g3 clones colorés%w (Rouge/Bleu/Violet)&apparaissent en triangle.^Chaque clone coûte %g12 Magie%w.&Les clones %gimitent vos coups%w et copient&%gflèches%w, %gbombes%w et %gboomerang%w.^Les ennemis les tuent au contact." },
+      "You got the %gFour Sword%w!&A blade that splits its wielder&into four heroes.^Equip on the %ysword slot%w "
+      "(%y\xA2%w toggles).^Hold %y\xA3%w + %y\xA0%w for 15 frames ->&%g3 colored clones%w (Red/Blue/Purple)&spawn "
+      "around you in a triangle.^Each clone costs %g12 Magic%w.&Clones %gmirror your swings%w and copy&your "
+      "%garrows%w, %gbombs%w and %gboomerang%w.^Enemy hits kill them.",
+      "Du hast das %gVier-Schwert%w!&Eine Klinge die ihren Träger&in vier Helden teilt.^Rüste es am %ySchwert-Platz%w "
+      "aus.^Halte %y\xA3%w + %y\xA0%w 15 Frames ->&%g3 farbige Klone%w (Rot/Blau/Violett)&erscheinen im Dreieck.^Jeder "
+      "Klon kostet %g12 Magie%w.&Klone %gspiegeln deine Schwerthiebe%w und&kopieren %gPfeile%w, %gBomben%w und "
+      "%gBumerang%w.^Feindtreffer töten sie.",
+      "Vous obtenez l'%gÉpée de Quatre%w!&Une lame qui divise son porteur&en quatre héros.^Équipez-la dans "
+      "l'%yemplacement épée%w.^Maintenez %y\xA3%w + %y\xA0%w 15 frames ->&%g3 clones colorés%w "
+      "(Rouge/Bleu/Violet)&apparaissent en triangle.^Chaque clone coûte %g12 Magie%w.&Les clones %gimitent vos coups%w "
+      "et copient&%gflèches%w, %gbombes%w et %gboomerang%w.^Les ennemis les tuent au contact." },
 
     { RG_PROGRESSIVE_HAMMER, static_cast<ItemID>(ITEM_HAMMER),
-      "You got a %rProgressive Hammer%w!&First the %rMegaton Hammer%w, then the&%rIron Knuckle's Axe%w - %gdouble damage%w,&%gdouble reach%w, and a tomahawk&%rthrow%w (C-Up to aim) that&boomerangs back to your hand.",
-      "Du hast das %rHammer-Upgrade%w!&Dein %rStahlhammer%w wird zur&%rEisenknöchel-Axt%w - dem massiven&Tomahawk der Ritter Ganons.^Schwerer chunky Schwung:&%gdoppelter Schaden%w, %gdoppelte Reichweite%w,&langsameres Gehen.^Halte %y\xA3%w + %y\xA0%w 15 Frames um die&Axt zu %rwerfen%w - fliegt nach vorn,&kommt dann zu dir zurück.",
-      "Vous obtenez l'%rAmélioration de Masse%w!&Votre %rMasse des Titans%w devient la&%rHache d'Iron Knuckle%w - le tomahawk&massif des chevaliers de Ganon.^Coups lourds:&%gdouble dégâts%w, %gdouble portée%w,&marche plus lente.^Maintenez %y\xA3%w + %y\xA0%w 15 frames pour&%rlancer%w la hache - elle revient&en boomerang." },
+      "You got a %rProgressive Hammer%w!&First the %rMegaton Hammer%w, then the&%rIron Knuckle's Axe%w - %gdouble "
+      "damage%w,&%gdouble reach%w, and a tomahawk&%rthrow%w (C-Up to aim) that&boomerangs back to your hand.",
+      "Du hast das %rHammer-Upgrade%w!&Dein %rStahlhammer%w wird zur&%rEisenknöchel-Axt%w - dem massiven&Tomahawk der "
+      "Ritter Ganons.^Schwerer chunky Schwung:&%gdoppelter Schaden%w, %gdoppelte Reichweite%w,&langsameres "
+      "Gehen.^Halte %y\xA3%w + %y\xA0%w 15 Frames um die&Axt zu %rwerfen%w - fliegt nach vorn,&kommt dann zu dir "
+      "zurück.",
+      "Vous obtenez l'%rAmélioration de Masse%w!&Votre %rMasse des Titans%w devient la&%rHache d'Iron Knuckle%w - le "
+      "tomahawk&massif des chevaliers de Ganon.^Coups lourds:&%gdouble dégâts%w, %gdouble portée%w,&marche plus "
+      "lente.^Maintenez %y\xA3%w + %y\xA0%w 15 frames pour&%rlancer%w la hache - elle revient&en boomerang." },
 
     { RG_PROGRESSIVE_KOKIRI_SWORD, static_cast<ItemID>(ITEM_SWORD_KOKIRI),
-      "You got a %gKokiri Sword Upgrade%w!&Sharpens your %gKokiri Sword%w&into the %gRazor Sword%w, then the&%gGilded Sword%w.",
-      "Du hast ein %gKokiri-Schwert-Upgrade%w!&Schärft dein %gKokiri-Schwert%w&zum %gElfenschwert%w, dann zur&%gSchmirgelklinge%w.",
-      "Vous obtenez une %gAmélioration d'Épée Kokiri%w!&Aiguise votre %gÉpée Kokiri%w&en %gLame Rasoir%w, puis en&%gExcalibur%w." },
+      "You got a %gKokiri Sword Upgrade%w!&Sharpens your %gKokiri Sword%w&into the %gRazor Sword%w, then the&%gGilded "
+      "Sword%w.",
+      "Du hast ein %gKokiri-Schwert-Upgrade%w!&Schärft dein %gKokiri-Schwert%w&zum %gElfenschwert%w, dann "
+      "zur&%gSchmirgelklinge%w.",
+      "Vous obtenez une %gAmélioration d'Épée Kokiri%w!&Aiguise votre %gÉpée Kokiri%w&en %gLame Rasoir%w, puis "
+      "en&%gExcalibur%w." },
 
     { RG_PROGRESSIVE_MASTER_SWORD, static_cast<ItemID>(ITEM_SWORD_MASTER),
-      "You got a %cProgressive Master Sword%w!&First the %cMaster Sword%w, then the&%cReal Master Sword%w - at full health&a swing fires a thunder beam.",
+      "You got a %cProgressive Master Sword%w!&First the %cMaster Sword%w, then the&%cReal Master Sword%w - at full "
+      "health&a swing fires a thunder beam.",
       "Du hast das %cWahre Master-Schwert%w!&Dein %cMaster-Schwert%w erwacht zu&seiner wahren Kraft.",
       "Vous obtenez la %cVéritable Épée de Légende%w!&Votre %cÉpée de Légende%w révèle&son vrai pouvoir." },
 
     { RG_PROGRESSIVE_BGS, static_cast<ItemID>(ITEM_SWORD_BGS),
-      "You got a %pProgressive Biggoron's Sword%w!&First the %yBiggoron Sword%w, then the&%pGreat Fairy's Sword%w - long reach&that restores HP and Magic on hit.",
-      "Du hast das %pSchwert der Großen Fee%w!&Dein %yBiggoron-Schwert%w wird zur&legendären Klinge der Großen Fee&umgeschmiedet.",
-      "Vous obtenez l'%pÉpée de la Grande Fée%w!&Votre %yÉpée de Biggoron%w est reforgée&en lame légendaire bénie par&la Grande Fée." },
+      "You got a %pProgressive Biggoron's Sword%w!&First the %yBiggoron Sword%w, then the&%pGreat Fairy's Sword%w - "
+      "long reach&that restores HP and Magic on hit.",
+      "Du hast das %pSchwert der Großen Fee%w!&Dein %yBiggoron-Schwert%w wird zur&legendären Klinge der Großen "
+      "Fee&umgeschmiedet.",
+      "Vous obtenez l'%pÉpée de la Grande Fée%w!&Votre %yÉpée de Biggoron%w est reforgée&en lame légendaire bénie "
+      "par&la Grande Fée." },
+
+    // Per-level chain identities: the progressive resolution (item.cpp) lands on these, so each
+    // give reads as the level actually received. Skijer's NEI
+    { RG_RAZOR_SWORD, static_cast<ItemID>(ITEM_SWORD_KOKIRI),
+      "You got the %gRazor Sword%w!&Your Kokiri Sword has been&sharpened into a keener blade -&%gdouble damage%w on "
+      "every slash.",
+      "Du hast das %gElfenschwert%w!&Dein Kokiri-Schwert wurde zu&einer schärferen Klinge geschliffen -&%gdoppelter "
+      "Schaden%w.",
+      "Vous obtenez la %gLame Rasoir%w!&Votre Épée Kokiri a été aiguisée -&%gdégâts doublés%w à chaque coup." },
+
+    { RG_GILDED_SWORD, static_cast<ItemID>(ITEM_SWORD_KOKIRI),
+      "You got the %yGilded Sword%w!&Reforged with gold dust, the&final form of your Kokiri blade -&%ydouble damage%w "
+      "and it never dulls.",
+      "Du hast die %ySchmirgelklinge%w!&Mit Goldstaub neu geschmiedet -&die finale Form deiner Kokiri-Klinge.",
+      "Vous obtenez %yExcalibur%w!&Reforgée avec de la poudre d'or -&la forme finale de votre lame Kokiri." },
+
+    { RG_TRUE_MASTER_SWORD, static_cast<ItemID>(ITEM_SWORD_MASTER),
+      "The %cMaster Sword%w has awakened as&the %cTrue Master Sword%w!&At full health, a swing fires a&%cthunder "
+      "beam%w at your foes.",
+      "Das %cMaster-Schwert%w ist als&%cWahres Master-Schwert%w erwacht!&Bei voller Energie feuert jeder&Schwung einen "
+      "%cDonnerstrahl%w.",
+      "L'%cÉpée de Légende%w s'éveille en&%cVéritable Épée de Légende%w!&Pleine vie: chaque coup tire&un %crayon de "
+      "tonnerre%w." },
+
+    { RG_GREAT_FAIRY_SWORD, static_cast<ItemID>(ITEM_SWORD_BGS),
+      "You got the %pGreat Fairy's Sword%w!&Your Biggoron Sword reforged into&the fairy blade - hits %prestore&HP and "
+      "Magic%w.",
+      "Du hast das %pSchwert der Großen Fee%w!&Dein Biggoron-Schwert, neu geschmiedet -&Treffer %pstellen Herzen und "
+      "Magie&wieder her%w.",
+      "Vous obtenez l'%pÉpée de la Grande Fée%w!&Votre Épée de Biggoron reforgée -&les coups %prestaurent vie et "
+      "magie%w." },
+
+    { RG_IRON_KNUCKLE_AXE, static_cast<ItemID>(ITEM_HAMMER),
+      "You got the %rIron Knuckle's Axe%w!&The massive tomahawk of Ganon's&knights - %gdouble damage%w, %gdouble "
+      "reach%w,&and hold %y\xA3%w + %y\xA0%w to %rthrow%w it.",
+      "Du hast die %rEisenknöchel-Axt%w!&Der massive Tomahawk der Ritter&Ganons - %gdoppelter Schaden%w,&%gdoppelte "
+      "Reichweite%w, werfbar.",
+      "Vous obtenez la %rHache d'Iron Knuckle%w!&Le tomahawk massif des chevaliers&de Ganon - %gdouble "
+      "dégâts%w,&%gdouble portée%w, lançable." },
+
+    { RG_ULTRASHOT, static_cast<ItemID>(ITEM_LONGSHOT),
+      "You got the %yUltrashot%w!&Your Longshot surges with light -&%y4x reach%w and %y2x speed%w.&Nothing is out of "
+      "range now.",
+      "Du hast den %yUltraschot%w!&Dein Enterhaken pulsiert vor Licht -&%y4-fache Reichweite%w, "
+      "%y2-fache&Geschwindigkeit%w.",
+      "Vous obtenez l'%yUltra-Grappin%w!&Votre grappin déborde de lumière -&%yportée x4%w et %yvitesse x2%w." },
+
+    { RG_QUARTZ_OF_MOTION, static_cast<ItemID>(ITEM_STONE_OF_AGONY),
+      "Your Stone of Agony crystallized&into the %pQuartz of Motion%w!&Press %yA%w on its pause slot&to attune to "
+      "hidden movement.",
+      "Dein Stein der Qualen wurde zum&%pBewegungsquarz%w!&Drücke %yA%w auf seinem Menüplatz&um verborgene Bewegung zu "
+      "spüren.",
+      "Votre Pierre de Souffrance devient&le %pQuartz du Mouvement%w!&Appuyez sur %yA%w dans le menu&pour sentir les "
+      "mouvements cachés." },
+
+    { RG_ROCS_CAPE, static_cast<ItemID>(ITEM_ROCS_CAPE),
+      "Your feather grew into the&%rRoc's Cape%w!&Jump, then hold the button to&%rglide%w gently to the ground.",
+      "Deine Feder wurde zum&%rRocs Umhang%w!&Springe und halte die Taste&um sanft zu %rgleiten%w.",
+      "Votre plume devient la&%rCape de Roc%w!&Sautez puis maintenez pour&%rplaner%w doucement." },
+
+    // Dual Cane per-skill textboxes (order: Statue keeps RG_CANE_OF_SOMARIA's own message).
+    { RG_CANE_PACCI_FLIP, static_cast<ItemID>(ITEM_CANE_OF_SOMARIA),
+      "You got the %yCane of Pacci%w!&Its charge %yflips objects%w and&%ylaunches you%w from holes.&It shares the "
+      "cane's slot.",
+      "Du hast den %yStab von Pacci%w!&Seine Ladung %ydreht Objekte um%w&und %ykatapultiert dich%w aus Löchern.",
+      "Vous obtenez la %yCanne de Pacci%w!&Sa charge %yretourne les objets%w&et vous %ypropulse%w des trous." },
+
+    { RG_CANE_SOMARIA_BLOCK, static_cast<ItemID>(ITEM_CANE_OF_SOMARIA),
+      "Your Cane of Somaria learned&%rBlock%w!&Conjure a %rsolid block%w to push,&weigh switches, or climb on.",
+      "Dein Stab von Somaria lernte&%rBlock%w!&Beschwöre einen %rfesten Block%w&für Schalter und Kletterei.",
+      "Votre Canne de Somaria apprend&%rBloc%w!&Créez un %rbloc solide%w à pousser&ou pour grimper." },
+
+    { RG_CANE_PACCI_STONE, static_cast<ItemID>(ITEM_CANE_OF_SOMARIA),
+      "Your Cane of Pacci learned&%yStone%w!&%yPetrify enemies%w and use them&as stepping stones.",
+      "Dein Stab von Pacci lernte&%yStein%w!&%yVersteinere Gegner%w und nutze&sie als Trittsteine.",
+      "Votre Canne de Pacci apprend&%yPierre%w!&%yPétrifiez les ennemis%w et&servez-vous-en de marches." },
+
+    { RG_CANE_SOMARIA_PLATFORM, static_cast<ItemID>(ITEM_CANE_OF_SOMARIA),
+      "Your Cane of Somaria learned&%rPlatform%w!&Conjure a %rfloating platform%w&that carries you across gaps.",
+      "Dein Stab von Somaria lernte&%rPlattform%w!&Beschwöre eine %rschwebende&Plattform%w über Abgründe.",
+      "Votre Canne de Somaria apprend&%rPlateforme%w!&Créez une %rplateforme flottante%w&pour franchir les vides." },
+
+    { RG_CANE_PACCI_ULTRAHAND, static_cast<ItemID>(ITEM_CANE_OF_SOMARIA),
+      "Your Cane of Pacci learned&%yUltrahand%w!&%yGrab, move and attach%w distant&objects with the glowing hand.",
+      "Dein Stab von Pacci lernte&%yUltrahand%w!&%yGreife und bewege%w ferne Objekte&mit der leuchtenden Hand.",
+      "Votre Canne de Pacci apprend&%yUltrahand%w!&%ySaisissez et déplacez%w des objets&avec la main lumineuse." },
 
     { RG_EXT_DIVINE_SHIELD, static_cast<ItemID>(ITEM_EXT_SHIELD_1),
-      "You got the %yDivine Shield%w!&A blessed wooden shield said to&repel even the wrath of fire.^Equip on the %yshield slot%w (%y\xA2%w toggles).^Light wooden shield BUT %rfireproof%w -&fire breath, Dodongo flames and&torches will not burn it.^%cPerfect Parry%w (%y\xA3%w + block within&10 frames of an attack):&%cfreezes ALL enemies%w on screen!",
-      "Du hast den %yGötterschild%w!&Ein gesegneter Holzschild der selbst&dem Zorn des Feuers widersteht.^Rüste ihn am %ySchild-Platz%w aus.^Leichter Holzschild ABER %rfeuerfest%w -&Feueratem, Dodongo-Flammen und&Fackeln verbrennen ihn nicht.^%cPerfekte Parade%w (%y\xA3%w + block in&den ersten 10 Frames eines Angriffs):&%cfriert ALLE Feinde%w auf dem Schirm ein!",
-      "Vous obtenez le %yBouclier Divin%w!&Un bouclier en bois béni qui&résiste à la colère du feu.^Équipez-le dans l'%yemplacement bouclier%w.^Bouclier en bois MAIS %rignifuge%w -&souffle de feu, flammes de Dodongo&et torches ne le brûlent pas.^%cParade Parfaite%w (%y\xA3%w + bloquer dans&les 10 premières frames d'une attaque):&%cgèle TOUS les ennemis%w à l'écran!" },
+      "You got the %yDivine Shield%w!&A blessed wooden shield said to&repel even the wrath of fire.^Equip on the "
+      "%yshield slot%w (%y\xA2%w toggles).^Light wooden shield BUT %rfireproof%w -&fire breath, Dodongo flames "
+      "and&torches will not burn it.^%cPerfect Parry%w (%y\xA3%w + block within&10 frames of an attack):&%cfreezes ALL "
+      "enemies%w on screen!",
+      "Du hast den %yGötterschild%w!&Ein gesegneter Holzschild der selbst&dem Zorn des Feuers widersteht.^Rüste ihn am "
+      "%ySchild-Platz%w aus.^Leichter Holzschild ABER %rfeuerfest%w -&Feueratem, Dodongo-Flammen und&Fackeln "
+      "verbrennen ihn nicht.^%cPerfekte Parade%w (%y\xA3%w + block in&den ersten 10 Frames eines Angriffs):&%cfriert "
+      "ALLE Feinde%w auf dem Schirm ein!",
+      "Vous obtenez le %yBouclier Divin%w!&Un bouclier en bois béni qui&résiste à la colère du feu.^Équipez-le dans "
+      "l'%yemplacement bouclier%w.^Bouclier en bois MAIS %rignifuge%w -&souffle de feu, flammes de Dodongo&et torches "
+      "ne le brûlent pas.^%cParade Parfaite%w (%y\xA3%w + bloquer dans&les 10 premières frames d'une attaque):&%cgèle "
+      "TOUS les ennemis%w à l'écran!" },
 
     { RG_EXT_SHEIKAH_SHIELD, static_cast<ItemID>(ITEM_EXT_SHIELD_2),
-      "You got the %cSheikah Shield%w!&A ceremonial shield bearing the&eye of the Sheikah tribe.^Equip on the %yshield slot%w (%y\xA2%w toggles).^Hold %y\xA3%w to block normally.&Currently a %ycosmetic shield%w -&no special effect.",
-      "Du hast den %cSheikah-Schild%w!&Ein zeremonieller Schild mit dem&Auge des Sheikah-Stammes.^Rüste ihn am %ySchild-Platz%w aus.^%y\xA3%w zum normalen Blocken.&Derzeit ein %ykosmetischer Schild%w -&kein besonderer Effekt.",
-      "Vous obtenez le %cBouclier Sheikah%w!&Un bouclier cérémoniel portant&l'œil de la tribu Sheikah.^Équipez-le dans l'%yemplacement bouclier%w.^Maintenez %y\xA3%w pour parer normalement.&Actuellement un %ybouclier cosmétique%w -&pas d'effet particulier." },
+      "You got the %cSheikah Shield%w!&A ceremonial shield bearing the&eye of the Sheikah tribe.^Equip on the %yshield "
+      "slot%w (%y\xA2%w toggles).^Hold %y\xA3%w to block normally.&Currently a %ycosmetic shield%w -&no special "
+      "effect.",
+      "Du hast den %cSheikah-Schild%w!&Ein zeremonieller Schild mit dem&Auge des Sheikah-Stammes.^Rüste ihn am "
+      "%ySchild-Platz%w aus.^%y\xA3%w zum normalen Blocken.&Derzeit ein %ykosmetischer Schild%w -&kein besonderer "
+      "Effekt.",
+      "Vous obtenez le %cBouclier Sheikah%w!&Un bouclier cérémoniel portant&l'œil de la tribu Sheikah.^Équipez-le dans "
+      "l'%yemplacement bouclier%w.^Maintenez %y\xA3%w pour parer normalement.&Actuellement un %ybouclier cosmétique%w "
+      "-&pas d'effet particulier." },
 
     { RG_EXT_SHIELD_OF_IKANA, static_cast<ItemID>(ITEM_EXT_SHIELD_3),
-      "You got the %pShield of Ikana%w!&A cursed mirror shield from the&fallen kingdom of Ikana.^Equip on the %yshield slot%w (%y\xA2%w toggles).^%cSoul Drain%w (%y\xA3%w + block within&12 frames of an attack):&drains the attacker's %rHP%w and&heals you for half a heart.^%pDeath Save%w: when struck dead,&%previves once per scene%w with&3 hearts and a dark aura.",
-      "Du hast den %pSchild von Ikana%w!&Ein verfluchter Spiegelschild aus&dem gefallenen Reich Ikana.^Rüste ihn am %ySchild-Platz%w aus.^%cSeelenraub%w (%y\xA3%w + block in&den ersten 12 Frames eines Angriffs):&saugt %rHP%w des Angreifers und&heilt dich um ein halbes Herz.^%pTodesrettung%w: bei tödlichem Treffer&%pwiederbelebt einmal pro Szene%w mit&3 Herzen und dunkler Aura.",
-      "Vous obtenez le %pBouclier d'Ikana%w!&Un bouclier-miroir maudit du&royaume déchu d'Ikana.^Équipez-le dans l'%yemplacement bouclier%w.^%cVol d'Âme%w (%y\xA3%w + bloquer dans&les 12 premières frames d'une attaque):&vole les %rPV%w de l'attaquant et&vous soigne d'un demi-cœur.^%pSauvegarde de Mort%w: ressuscite&%pune fois par scène%w avec 3 cœurs&et une aura sombre." },
+      "You got the %pShield of Ikana%w!&A cursed mirror shield from the&fallen kingdom of Ikana.^Equip on the %yshield "
+      "slot%w (%y\xA2%w toggles).^%cSoul Drain%w (%y\xA3%w + block within&12 frames of an attack):&drains the "
+      "attacker's %rHP%w and&heals you for half a heart.^%pDeath Save%w: when struck dead,&%previves once per scene%w "
+      "with&3 hearts and a dark aura.",
+      "Du hast den %pSchild von Ikana%w!&Ein verfluchter Spiegelschild aus&dem gefallenen Reich Ikana.^Rüste ihn am "
+      "%ySchild-Platz%w aus.^%cSeelenraub%w (%y\xA3%w + block in&den ersten 12 Frames eines Angriffs):&saugt %rHP%w "
+      "des Angreifers und&heilt dich um ein halbes Herz.^%pTodesrettung%w: bei tödlichem Treffer&%pwiederbelebt einmal "
+      "pro Szene%w mit&3 Herzen und dunkler Aura.",
+      "Vous obtenez le %pBouclier d'Ikana%w!&Un bouclier-miroir maudit du&royaume déchu d'Ikana.^Équipez-le dans "
+      "l'%yemplacement bouclier%w.^%cVol d'Âme%w (%y\xA3%w + bloquer dans&les 12 premières frames d'une attaque):&vole "
+      "les %rPV%w de l'attaquant et&vous soigne d'un demi-cœur.^%pSauvegarde de Mort%w: ressuscite&%pune fois par "
+      "scène%w avec 3 cœurs&et une aura sombre." },
 
+    // (2026-08-07: texto legacy corregido — la capa ya NO ocupa el slot de túnica; es una pieza
+    // propia de la columna de upgrades que se activa sola al poseerla.)
     { RG_EXT_MAGIC_CAPE, static_cast<ItemID>(ITEM_EXT_TUNIC_1),
-      "You got the %pMagic Cape%w!&Ganondorf's enchanted cloak,&woven of pure dark mantle cloth.^Equip on the %ytunic slot%w (%y\xA2%w toggles).^Real %pcloth physics%w - the cape&drapes from your shoulders and&sways with movement and wind.^All magic %ccosts are halved%w&(rounded down) while you own it -&cheap items become free.",
-      "Du hast den %pZauberumhang%w!&Ganondorfs verzauberter Mantel,&gewebt aus dunklem Mantelstoff.^Rüste ihn am %yTunika-Platz%w aus.^Echte %pStoff-Physik%w - der Umhang&fällt von deinen Schultern und&schwingt mit Bewegung und Wind.^Du %cerhältst die halbe Magie%w&zurück die du verbrauchst&(aufgerundet).",
-      "Vous obtenez la %pCape Magique%w!&Le manteau enchanté de Ganondorf,&tissé de pure étoffe sombre.^Équipez-la dans l'%yemplacement tunique%w.^%pPhysique de tissu%w réelle - la cape&pend de vos épaules et ondule&avec le mouvement et le vent.^Vous %crécupérez la moitié de la Magie%w&dépensée chaque frame (arrondi&au supérieur)." },
+      "You got the %pMagic Cape%w!&Ganondorf's enchanted cloak,&woven of pure dark mantle cloth.^It %phangs from your "
+      "shoulders%w the&moment you own it - real %pcloth&physics%w sway with movement and wind.^All magic %ccosts are "
+      "halved%w&(rounded down) while you own it -&cheap items become free.",
+      "Du hast den %pZauberumhang%w!&Ganondorfs verzauberter Mantel,&gewebt aus dunklem Mantelstoff.^Er %phängt von "
+      "deinen Schultern%w&sobald du ihn besitzt - echte&%pStoff-Physik%w schwingt mit Bewegung.^Alle Magie%ckosten "
+      "sind halbiert%w&(abgerundet) solange du ihn hast.",
+      "Vous obtenez la %pCape Magique%w!&Le manteau enchanté de Ganondorf,&tissé de pure étoffe sombre.^Elle %ppend de "
+      "vos épaules%w dès que&vous la possédez - %pphysique de&tissu%w réelle au vent.^Tous les %ccoûts de magie sont "
+      "réduits&de moitié%w (arrondi vers le bas)." },
 
     { RG_EXT_SPIRIT_BREASTPLATE, static_cast<ItemID>(ITEM_EXT_TUNIC_2),
-      "You got the %ySpirit Breastplate%w!&The golden armor of the Iron&Knuckle Nabooru.^Equip on the %ytunic slot%w (%y\xA2%w toggles).^Damage costs %gRupees%w instead&of hearts (1 HP = 1 Rupee).&%gPassive drain%w: 1 Rupee every&30 frames while equipped.^If your wallet runs %rempty%w,&you take damage normally and&move at half speed.",
-      "Du hast den %ySpirit-Brustpanzer%w!&Die goldene Rüstung der Eisenknöchel&Nabooru.^Rüste ihn am %yTunika-Platz%w aus.^Schaden kostet %gRupien%w statt&Herzen (1 HP = 1 Rupie).&%gPassiver Verbrauch%w: 1 Rupie alle&30 Frames im Tragen.^Wenn dein Beutel %rleer%w ist,&erleidest du Schaden normal und&bewegst dich halb so schnell.",
-      "Vous obtenez le %yPlastron Spirituel%w!&L'armure dorée de l'Iron Knuckle&Nabooru.^Équipez-le dans l'%yemplacement tunique%w.^Les dégâts coûtent des %gRubis%w au&lieu de cœurs (1 PV = 1 Rubis).&%gDrain passif%w: 1 Rubis toutes&les 30 frames tant que porté.^Si votre bourse est %rvide%w,&vous prenez les dégâts normalement&et bougez à mi-vitesse." },
+      "You got the %ySpirit Breastplate%w!&The golden armor of the Iron&Knuckle Nabooru.^Equip on the %ytunic slot%w "
+      "(%y\xA2%w toggles).^Damage costs %gRupees%w instead&of hearts (1 HP = 1 Rupee).&%gPassive drain%w: 1 Rupee "
+      "every&30 frames while equipped.^If your wallet runs %rempty%w,&you take damage normally and&move at half speed.",
+      "Du hast den %ySpirit-Brustpanzer%w!&Die goldene Rüstung der Eisenknöchel&Nabooru.^Rüste ihn am %yTunika-Platz%w "
+      "aus.^Schaden kostet %gRupien%w statt&Herzen (1 HP = 1 Rupie).&%gPassiver Verbrauch%w: 1 Rupie alle&30 Frames im "
+      "Tragen.^Wenn dein Beutel %rleer%w ist,&erleidest du Schaden normal und&bewegst dich halb so schnell.",
+      "Vous obtenez le %yPlastron Spirituel%w!&L'armure dorée de l'Iron Knuckle&Nabooru.^Équipez-le dans "
+      "l'%yemplacement tunique%w.^Les dégâts coûtent des %gRubis%w au&lieu de cœurs (1 PV = 1 Rubis).&%gDrain "
+      "passif%w: 1 Rubis toutes&les 30 frames tant que porté.^Si votre bourse est %rvide%w,&vous prenez les dégâts "
+      "normalement&et bougez à mi-vitesse." },
 
     { RG_EXT_CHAMPIONS_TUNIC, static_cast<ItemID>(ITEM_EXT_TUNIC_1),
-      "You got the %cChampion's Tunic%w!&The blue garb of Hyrule's chosen,&blessed with battle aura.^Equip on the %ytunic slot%w (%y\xA2%w toggles).&Dyes your tunic %cchampion blue%w.^%gFlurry Rush%w: sidehop or backflip&past a nearby attack -> world slows&to 33% with iframes for ~2s or&until you land 7 hits.^%cBullet Time%w: aim while airborne&with bow/slingshot/hookshot/boomerang&-> time slows and you float while&the normal aim controls stay active.",
-      "Du hast die %cRüstung des Helden%w!&Die blaue Tracht des Auserwählten&Hyrules, mit Kampfaura gesegnet.^Rüste sie am %yTunika-Platz%w aus.^Färbt deine Tunika %cheldenblau%w.^%gFlurry Rush%w: Weiche einem nahen&Angriff per Seitsprung oder Backflip aus&-> Welt auf 33% verlangsamt, mit&i-Frames für ~2s oder bis zu 7 Treffer.^%cBullet Time%w: Ziele in der Luft mit&Bogen/Schleuder/Greifhaken/Bumerang&-> Zeit verlangsamt, du schwebst und&die normale Zielsteuerung bleibt aktiv.",
-      "Vous obtenez la %cTunique du Héros%w!&Le vêtement bleu de l'élu d'Hyrule,&béni d'une aura de combat.^Équipez-la dans l'%yemplacement tunique%w.^Teint votre tunique en %cbleu du héros%w.^%gFlurry Rush%w: esquivez une attaque&proche d'un saut latéral ou arrière&-> monde ralenti à 33%, invincible&~2 s ou jusqu'à 7 coups.^%cBullet Time%w: visez en l'air avec&arc/lance-pierre/grappin/boomerang&-> le temps ralentit, vous flottez et&la visée normale reste active." },
+      "You got the %cChampion's Tunic%w!&The blue garb of Hyrule's chosen,&blessed with battle aura.^Equip on the "
+      "%ytunic slot%w (%y\xA2%w toggles).&Dyes your tunic %cchampion blue%w.^%gFlurry Rush%w: sidehop or backflip&past "
+      "a nearby attack -> world slows&to 33% with iframes for ~2s or&until you land 7 hits.^%cBullet Time%w: aim while "
+      "airborne&with bow/slingshot/hookshot/boomerang&-> time slows and you float while&the normal aim controls stay "
+      "active.",
+      "Du hast die %cRüstung des Helden%w!&Die blaue Tracht des Auserwählten&Hyrules, mit Kampfaura gesegnet.^Rüste "
+      "sie am %yTunika-Platz%w aus.^Färbt deine Tunika %cheldenblau%w.^%gFlurry Rush%w: Weiche einem nahen&Angriff per "
+      "Seitsprung oder Backflip aus&-> Welt auf 33% verlangsamt, mit&i-Frames für ~2s oder bis zu 7 Treffer.^%cBullet "
+      "Time%w: Ziele in der Luft mit&Bogen/Schleuder/Greifhaken/Bumerang&-> Zeit verlangsamt, du schwebst und&die "
+      "normale Zielsteuerung bleibt aktiv.",
+      "Vous obtenez la %cTunique du Héros%w!&Le vêtement bleu de l'élu d'Hyrule,&béni d'une aura de combat.^Équipez-la "
+      "dans l'%yemplacement tunique%w.^Teint votre tunique en %cbleu du héros%w.^%gFlurry Rush%w: esquivez une "
+      "attaque&proche d'un saut latéral ou arrière&-> monde ralenti à 33%, invincible&~2 s ou jusqu'à 7 "
+      "coups.^%cBullet Time%w: visez en l'air avec&arc/lance-pierre/grappin/boomerang&-> le temps ralentit, vous "
+      "flottez et&la visée normale reste active." },
 
     { RG_EXT_PEGASUS_ANKLET, static_cast<ItemID>(ITEM_EXT_BOOTS_1),
-      "You got the %rPegasus Anklet%w!&Winged anklets that grant the&speed of the legendary Pegasus.^Equip on the %yboots slot%w (%y\xA2%w toggles).^Hold %y\xA0%w after a sword swing&(intercepts the spin attack charge):&Link %glunges forward%w with sword&extended, dealing damage on contact.^A %gwind cone barrier%w forms in&front while you have Magic&(1 MP per 15 frames).&Walls cause a %rbonk%w recovery.",
-      "Du hast den %rPegasus-Fußreif%w!&Geflügelte Fußreifen mit der&Geschwindigkeit des Pegasus.^Rüste sie am %yStiefel-Platz%w aus.^Halte %y\xA0%w nach einem Schwertschlag&(unterbricht den Aufladeangriff):&Link %gstürmt vor%w mit ausgestrecktem&Schwert, Schaden bei Kontakt.^Ein %gWindkegel%w bildet sich vor dir&solange du Magie hast (1 MP pro&15 Frames). Wände lösen einen&%rZusammenstoß%w aus.",
-      "Vous obtenez le %rBracelet de Pégase%w!&Des bracelets ailés qui octroient&la vitesse du légendaire Pégase.^Équipez-le dans l'%yemplacement bottes%w.^Maintenez %y\xA0%w après un coup d'épée&(intercepte la charge tournoyante):&Link %ss'élance%w l'épée tendue,&infligeant des dégâts au contact.^Un %gcône de vent%w protecteur se forme&devant tant que vous avez de la Magie&(1 MP toutes les 15 frames).&Les murs causent un %rchoc%w." },
+      "You got the %rPegasus Anklet%w!&Winged anklets that grant the&speed of the legendary Pegasus.^Equip on the "
+      "%yboots slot%w (%y\xA2%w toggles).^Hold %y\xA0%w after a sword swing&(intercepts the spin attack charge):&Link "
+      "%glunges forward%w with sword&extended, dealing damage on contact.^A %gwind cone barrier%w forms in&front while "
+      "you have Magic&(1 MP per 15 frames).&Walls cause a %rbonk%w recovery.",
+      "Du hast den %rPegasus-Fußreif%w!&Geflügelte Fußreifen mit der&Geschwindigkeit des Pegasus.^Rüste sie am "
+      "%yStiefel-Platz%w aus.^Halte %y\xA0%w nach einem Schwertschlag&(unterbricht den Aufladeangriff):&Link %gstürmt "
+      "vor%w mit ausgestrecktem&Schwert, Schaden bei Kontakt.^Ein %gWindkegel%w bildet sich vor dir&solange du Magie "
+      "hast (1 MP pro&15 Frames). Wände lösen einen&%rZusammenstoß%w aus.",
+      "Vous obtenez le %rBracelet de Pégase%w!&Des bracelets ailés qui octroient&la vitesse du légendaire "
+      "Pégase.^Équipez-le dans l'%yemplacement bottes%w.^Maintenez %y\xA0%w après un coup d'épée&(intercepte la charge "
+      "tournoyante):&Link %ss'élance%w l'épée tendue,&infligeant des dégâts au contact.^Un %gcône de vent%w protecteur "
+      "se forme&devant tant que vous avez de la Magie&(1 MP toutes les 15 frames).&Les murs causent un %rchoc%w." },
 
     { RG_EXT_PENDANT_OF_MEMORIES, static_cast<ItemID>(ITEM_EXT_BOOTS_2),
-      "You got the %pPendant of Memories%w!&A pendant carrying the techniques&of heroes past.^Equip on the %yboots slot%w (%y\xA2%w toggles).^Three combat techniques unlock:^%c#1 Mortal Draw%w (TP): %y\xA0%w near an&enemy + sheathed + still + NOT&%y\xA5%w-targeting -> devastating draw&slash, often a one-hit kill.^%c#2 Ground Pound%w (Smash): %y\xA0%w in&air with sword -> fast fall ->&pogo bounce on hit, shockwave on landing.^%c#3 Parry Leap%w (WW): %y\xA5%w-target +&3 sidehops + %y\xA0%w -> parabolic arc&over the foe, land behind them.",
-      "Du hast das %pAmulett der Erinnerungen%w!&Ein Anhänger mit Techniken vergangener&Helden.^Rüste es am %yStiefel-Platz%w aus.^Drei Kampftechniken werden frei:^%c#1 Mortal Draw%w (TP): %y\xA0%w bei einem&Feind + eingesteckt + still + NICHT&%y\xA5%w-fokussieren -> vernichtender Hieb,&oft One-Hit-Kill.^%c#2 Ground Pound%w (Smash): %y\xA0%w in&der Luft mit Schwert -> schneller Fall&-> Bounce bei Treffer, Schockwelle beim&Landen.^%c#3 Parry Leap%w (WW): %y\xA5%w-fokussieren&+ 3 Seitsprünge + %y\xA0%w -> parabolischer&Bogen über den Feind, hinter ihm landen.",
-      "Vous obtenez le %pPendentif des Souvenirs%w!&Un pendentif portant les techniques&des héros passés.^Équipez-le dans l'%yemplacement bottes%w.^Trois techniques de combat:^%c#1 Mortal Draw%w (TP): %y\xA0%w près d'un&ennemi + rengainé + immobile + PAS&en %y\xA5%w-cible -> tranche dévastatrice,&souvent un one-shot.^%c#2 Ground Pound%w (Smash): %y\xA0%w en l'air&avec épée -> chute rapide -> rebond&sur impact, onde de choc à l'atterrissage.^%c#3 Parry Leap%w (WW): %y\xA5%w-cible +&3 esquives + %y\xA0%w -> arc parabolique&par-dessus l'ennemi, atterrir derrière." },
+      "You got the %pPendant of Memories%w!&A pendant carrying the techniques&of heroes past.^Equip on the %yboots "
+      "slot%w (%y\xA2%w toggles).^Three combat techniques unlock:^%c#1 Mortal Draw%w (TP): %y\xA0%w near an&enemy + "
+      "sheathed + still + NOT&%y\xA5%w-targeting -> devastating draw&slash, often a one-hit kill.^%c#2 Ground Pound%w "
+      "(Smash): %y\xA0%w in&air with sword -> fast fall ->&pogo bounce on hit, shockwave on landing.^%c#3 Parry Leap%w "
+      "(WW): %y\xA5%w-target +&3 sidehops + %y\xA0%w -> parabolic arc&over the foe, land behind them.",
+      "Du hast das %pAmulett der Erinnerungen%w!&Ein Anhänger mit Techniken vergangener&Helden.^Rüste es am "
+      "%yStiefel-Platz%w aus.^Drei Kampftechniken werden frei:^%c#1 Mortal Draw%w (TP): %y\xA0%w bei einem&Feind + "
+      "eingesteckt + still + NICHT&%y\xA5%w-fokussieren -> vernichtender Hieb,&oft One-Hit-Kill.^%c#2 Ground Pound%w "
+      "(Smash): %y\xA0%w in&der Luft mit Schwert -> schneller Fall&-> Bounce bei Treffer, Schockwelle "
+      "beim&Landen.^%c#3 Parry Leap%w (WW): %y\xA5%w-fokussieren&+ 3 Seitsprünge + %y\xA0%w -> parabolischer&Bogen "
+      "über den Feind, hinter ihm landen.",
+      "Vous obtenez le %pPendentif des Souvenirs%w!&Un pendentif portant les techniques&des héros passés.^Équipez-le "
+      "dans l'%yemplacement bottes%w.^Trois techniques de combat:^%c#1 Mortal Draw%w (TP): %y\xA0%w près d'un&ennemi + "
+      "rengainé + immobile + PAS&en %y\xA5%w-cible -> tranche dévastatrice,&souvent un one-shot.^%c#2 Ground Pound%w "
+      "(Smash): %y\xA0%w en l'air&avec épée -> chute rapide -> rebond&sur impact, onde de choc à l'atterrissage.^%c#3 "
+      "Parry Leap%w (WW): %y\xA5%w-cible +&3 esquives + %y\xA0%w -> arc parabolique&par-dessus l'ennemi, atterrir "
+      "derrière." },
 
-    { RG_EXT_WATER_DRAGON_SCALE, static_cast<ItemID>(ITEM_EXT_BOOTS_3),
-      "You got the %bWater Dragon Scale%w!&A blessed scale of the Water Dragon,&master of the depths.^Equip on the %yboots slot%w (%y\xA2%w toggles).^Adult Link only - no effect&on Young Link.^Activates real %bZora swim mechanics%w&1:1 from MM: surface walk,&%bfast dolphin swim%w, %bswim dash%w (%y\xA0%w),&%bdolphin jump%w arcs out of water.^%cIron Boots%w let you sink while&wearing the Scale.",
-      "Du hast die %bWasserdrachen-Schuppe%w!&Eine gesegnete Schuppe des&Wasserdrachen, Herrscher der Tiefen.^Rüste sie am %yStiefel-Platz%w aus.^Nur erwachsener Link - bei jungem&Link kein Effekt.^Aktiviert echte %bZora-Schwimmmechanik%w&1:1 aus MM: Wasserlauf,&%bschneller Delfinschwimmen%w, %bSchwimm-Dash%w&(%y\xA0%w), %bDelfinsprung%w aus dem Wasser.^%cEisenstiefel%w lassen dich sinken&während du die Schuppe trägst.",
-      "Vous obtenez l'%bÉcaille du Dragon d'Eau%w!&Une écaille bénie du Dragon d'Eau,&maître des profondeurs.^Équipez-la dans l'%yemplacement bottes%w.^Link adulte uniquement - aucun&effet sur Jeune Link.^Active les vraies %bmécaniques Zora%w&1:1 de MM: marche en surface,&%bnage dauphin rapide%w, %bdash de nage%w&(%y\xA0%w), %bsaut de dauphin%w hors de l'eau.^%cBottes de Plomb%w pour couler&en portant l'écaille." },
+    { RG_EXT_WATER_DRAGON_SCALE, static_cast<ItemID>(ITEM_EXT_TUNIC_3),
+      "You got the %wSage's Tunic%w!&Equip it on the %ytunic slot%w.^Its passive resistances follow your&owned "
+      "medallions: %bice%w, %rfire%w,&%ythunder%w, %pstun%w, fall and wind.",
+      "Du hast das %wOrni-Gewand%w!&Rüste es am %yTunika-Platz%w aus.^Seine Resistenzen folgen deinen&Medaillons: "
+      "%bEis%w, %rFeuer%w, %yBlitz%w,&%pBetäubung%w, Sturz und Wind.",
+      "Vous obtenez la %wTunique des Piafs%w!&Équipez-la dans l'%yemplacement tunique%w.^Ses résistances suivent vos "
+      "médaillons:&%bglace%w, %rfeu%w, %yfoudre%w, %pétourdissement%w,&chute et vent." },
 
-    
+    // Sheikah Slate runes — one textbox per sibling pickup (wand idiom). The icon is the slate
+    // composite with the rune's badge; the flame on the get-item model matches the color named here.
+    { RG_SLATE_RUNE_BOMB, static_cast<ItemID>(EXT_ITEM_SHEIKAH_SLATE),
+      "Your %cSheikah Slate%w learned the&%bRemote Bomb%w rune!&An ancient rune glows cyan on&the slate's face.^Select "
+      "it with %y\xA0%w on the slate's&cell in the pause menu.&Its power is still %rdormant%w.",
+      "Dein %cSheikah-Stein%w hat das&%bFernzündbomben%w-Modul gelernt!&Eine uralte Rune leuchtet cyan&auf dem "
+      "Stein.^Wähle sie mit %y\xA0%w auf der Zelle&im Pausenmenü.&Ihre Kraft %rschlummert%w noch.",
+      "Votre %cTablette Sheikah%w apprend le&module %bBombe à Distance%w!&Une rune ancienne brille en cyan&sur la "
+      "tablette.^Sélectionnez-la avec %y\xA0%w sur sa&case du menu pause.&Son pouvoir est encore %rendormi%w." },
+    { RG_SLATE_RUNE_MASTER_CYCLE, static_cast<ItemID>(EXT_ITEM_SHEIKAH_SLATE),
+      "Your %cSheikah Slate%w learned the&%gMaster Cycle%w rune!&An ancient rune glows teal on&the slate's "
+      "face.^Select it with %y\xA0%w on the slate's&cell in the pause menu.&Its power is still %rdormant%w.",
+      "Dein %cSheikah-Stein%w hat das&%gMaster Cycle%w-Modul gelernt!&Eine uralte Rune leuchtet türkis&auf dem "
+      "Stein.^Wähle sie mit %y\xA0%w auf der Zelle&im Pausenmenü.&Ihre Kraft %rschlummert%w noch.",
+      "Votre %cTablette Sheikah%w apprend le&module %gMaster Cycle%w!&Une rune ancienne brille en turquoise&sur la "
+      "tablette.^Sélectionnez-la avec %y\xA0%w sur sa&case du menu pause.&Son pouvoir est encore %rendormi%w." },
+    { RG_SLATE_RUNE_STASIS, static_cast<ItemID>(EXT_ITEM_SHEIKAH_SLATE),
+      "Your %cSheikah Slate%w learned the&%yStasis%w rune!&An ancient rune glows gold on&the slate's face.^Select it "
+      "with %y\xA0%w on the slate's&cell in the pause menu.&Its power is still %rdormant%w.",
+      "Dein %cSheikah-Stein%w hat das&%yStasis%w-Modul gelernt!&Eine uralte Rune leuchtet golden&auf dem Stein.^Wähle "
+      "sie mit %y\xA0%w auf der Zelle&im Pausenmenü.&Ihre Kraft %rschlummert%w noch.",
+      "Votre %cTablette Sheikah%w apprend le&module %yCinetis%w!&Une rune ancienne brille en or&sur la "
+      "tablette.^Sélectionnez-la avec %y\xA0%w sur sa&case du menu pause.&Son pouvoir est encore %rendormi%w." },
+    { RG_SLATE_RUNE_CRYONIS, static_cast<ItemID>(EXT_ITEM_SHEIKAH_SLATE),
+      "Your %cSheikah Slate%w learned the&%bCryonis%w rune!&An ancient rune glows ice-blue on&the slate's face.^Select "
+      "it with %y\xA0%w on the slate's&cell in the pause menu.&Its power is still %rdormant%w.",
+      "Dein %cSheikah-Stein%w hat das&%bCryonis%w-Modul gelernt!&Eine uralte Rune leuchtet eisblau&auf dem "
+      "Stein.^Wähle sie mit %y\xA0%w auf der Zelle&im Pausenmenü.&Ihre Kraft %rschlummert%w noch.",
+      "Votre %cTablette Sheikah%w apprend le&module %bGlaciera%w!&Une rune ancienne brille en bleu&glacé sur la "
+      "tablette.^Sélectionnez-la avec %y\xA0%w sur sa&case du menu pause.&Son pouvoir est encore %rendormi%w." },
 };
 static constexpr size_t customItemMessageCount = sizeof(customItemMessages) / sizeof(customItemMessages[0]);
 
@@ -577,6 +807,8 @@ ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerGet(RandomizerGe
                 case ITEM_HOOKSHOT:
                     return CAN_OBTAIN;
                 case ITEM_LONGSHOT:
+                    // NEI chain level 3: the Longshot still upgrades into the Ultrashot.
+                    return Nei_UltrashotOwned() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
                 default:
                     return CANT_OBTAIN_ALREADY_HAVE;
             }
@@ -598,6 +830,42 @@ ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerGet(RandomizerGe
             return WeaponUpgrade_HasTrueMaster() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
         case RG_PROGRESSIVE_BGS:
             return WeaponUpgrade_HasGreatFairy() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        // Per-level chain identities (explicit gives / give_all dedup).
+        case RG_RAZOR_SWORD:
+            return WeaponUpgrade_HasRazor() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_GILDED_SWORD:
+            return WeaponUpgrade_HasGilded() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_TRUE_MASTER_SWORD:
+            return WeaponUpgrade_HasTrueMaster() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_GREAT_FAIRY_SWORD:
+            return WeaponUpgrade_HasGreatFairy() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_IRON_KNUCKLE_AXE:
+            return WeaponUpgrade_HasHammerAxe() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_ULTRASHOT:
+            return Nei_UltrashotOwned() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_QUARTZ_OF_MOTION:
+            return Nei_Save()->quartzOwned ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_CLAWSHOT:
+            return TwilightUpgrade_HasClawshot() ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_CANE_OF_SOMARIA: {
+            // Obtainable until all 6 skills are lit (the walk queues 6 copies).
+            for (u8 s = 0; s < 6; s++) {
+                if (!Cane_HasSkill(s)) {
+                    return CAN_OBTAIN;
+                }
+            }
+            return CANT_OBTAIN_ALREADY_HAVE;
+        }
+        case RG_CANE_PACCI_FLIP:
+            return Cane_HasSkill(3) ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_CANE_SOMARIA_BLOCK:
+            return Cane_HasSkill(1) ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_CANE_PACCI_STONE:
+            return Cane_HasSkill(4) ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_CANE_SOMARIA_PLATFORM:
+            return Cane_HasSkill(2) ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
+        case RG_CANE_PACCI_ULTRAHAND:
+            return Cane_HasSkill(5) ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
         case RG_FIRE_ARROWS:
             return INV_CONTENT(ITEM_ARROW_FIRE) == ITEM_NONE ? CAN_OBTAIN : CANT_OBTAIN_ALREADY_HAVE;
         case RG_ICE_ARROWS:
@@ -663,7 +931,9 @@ ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerGet(RandomizerGe
                        ? CANT_OBTAIN_ALREADY_HAVE
                        : CAN_OBTAIN;
         case RG_STONE_OF_AGONY:
-            return !CHECK_QUEST_ITEM(QUEST_STONE_OF_AGONY) ? CAN_OBTAIN : CANT_OBTAIN_ALREADY_HAVE;
+            // 2-level progressive: the stone, then the Quartz of Motion. Only
+            // once both are in do further copies become dead weight.
+            return !Nei_Save()->quartzOwned ? CAN_OBTAIN : CANT_OBTAIN_ALREADY_HAVE;
         case RG_GERUDO_MEMBERSHIP_CARD:
             return !CHECK_QUEST_ITEM(QUEST_GERUDO_CARD) ? CAN_OBTAIN : CANT_OBTAIN_ALREADY_HAVE;
         case RG_DOUBLE_DEFENSE:
@@ -1303,6 +1573,11 @@ void Randomizer_GameplayStats_SetTimestamp(uint16_t item) {
 }
 
 extern "C" u8 Return_Item_Entry(GetItemEntry itemEntry, u8 returnItem);
+// item_cane_of_somaria.c (Skijer's NEI Dual Cane) — lights one of the six skill bits and,
+// on the first one obtained, also puts the cane into SLOT_CANE_OF_SOMARIA. Returns 1 when
+// the skill was newly granted. CANE_SKILL_* order: 0 Statue, 1 Block, 2 Platform,
+// 3 Flip, 4 Stone, 5 Ultrahand.
+extern "C" u8 Cane_GiveSkill(u8 skill);
 
 // The child trade slot can be displaced (e.g. chicken consumed waking Talon,
 // letter shown to the guard), leaving an item there the player no longer owns.
@@ -1332,6 +1607,11 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
     // programmatic give choke; it is skipped while ApplyFcRegistryToNatives is itself granting the
     // FC deficit (its Randomizer_Item_Give calls re-enter here), which would otherwise double-count.
     if (!FleetSync_IsApplyingFc()) {
+        // NOTE: progressive chains arrive here already resolved to their TIER (RG_MAGIC_SINGLE, wallets,
+        // strength...) and deliberately do NOT fold back into the chain's FC row: those natives cross
+        // through the shared-state sync (FleetSync ExtractShared/ApplyShared: inventory, upgrades,
+        // magic flags), and counting them here as well would make the FC deficit grant a SECOND
+        // tier on the other side. Skijer's NEI
         int fc = FcCombo_ItemForNative((int)item);
         if (fc != FCI_NO_ITEM && fc >= 0 && fc < FC_COMBO_OBTAINED_FC_SIZE) {
             NeiSaveData* nei = Nei_Save();
@@ -1665,6 +1945,21 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         // folded into the registry-driven default below (Nei_FindByRg(item)->item). RG_ROCS_CAPE,
         // the 24 page-2 items, and the cosmetic MM masks all flow through it. Arms doing extra work
         // (Roc progressive above; the 5 trade masks below that also set OOT trade flags) stay explicit.
+        // Dual Cane (Somaria / Pacci) — six skills sharing ONE inventory slot, so the
+        // registry-driven default ("put ITEM_CANE_OF_SOMARIA in its slot") is not enough:
+        // each copy of this check has to light the NEXT skill bit. Cane_GiveSkill also
+        // drops the cane into the slot on the first one, so the slot still fills itself.
+        // Order alternates the two canes so the yellow one shows up early:
+        // Statue -> Flip -> Block -> Stone -> Platform -> Ultrahand.
+        case RG_CANE_OF_SOMARIA: {
+            static const uint8_t kCaneOrder[6] = { 0, 3, 1, 4, 2, 5 };
+            for (int i = 0; i < 6; i++) {
+                if (Cane_GiveSkill(kCaneOrder[i])) {
+                    break;
+                }
+            }
+            break;
+        }
         // Extended Equipment (ownership bits in upper 16 of inventory.equipment)
         case RG_EXT_CANE_OF_BYRNA:
             ExtEquip_GiveItem(EQUIP_TYPE_SWORD, 1);
@@ -1680,6 +1975,16 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
                 INV_CONTENT(ITEM_HAMMER) = ITEM_HAMMER;
             } else {
                 WeaponUpgrade_SetHammerAxe(1);
+            }
+            break;
+        // Stone of Agony, 2 levels. Level 1 is the vanilla quest item (keeps its
+        // grotto rumble); level 2 is the Quartz of Motion, used from the kaleido
+        // (A on the stone's slot) — see mods/quartz_of_motion/quartz_kaleido.cpp.
+        case RG_STONE_OF_AGONY:
+            if (!CHECK_QUEST_ITEM(QUEST_STONE_OF_AGONY)) {
+                gSaveContext.inventory.questItems |= gBitFlags[QUEST_STONE_OF_AGONY];
+            } else {
+                Nei_Save()->quartzOwned = 1;
             }
             break;
         case RG_PROGRESSIVE_KOKIRI_SWORD:
@@ -1704,6 +2009,68 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
                 WeaponUpgrade_SetGreatFairy(1);
             }
             break;
+        // Per-level chain identities — the resolved form of the RG_PROGRESSIVE_* entries above
+        // (item.cpp GetGIEntry). Each also heals the levels below it so an explicit console give
+        // can't strand the chain. Skijer's NEI
+        case RG_RAZOR_SWORD:
+            gSaveContext.inventory.equipment |= OWNED_EQUIP_FLAG(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_KOKIRI);
+            WeaponUpgrade_SetRazor(1);
+            break;
+        case RG_GILDED_SWORD:
+            gSaveContext.inventory.equipment |= OWNED_EQUIP_FLAG(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_KOKIRI);
+            WeaponUpgrade_SetRazor(1);
+            WeaponUpgrade_SetGilded(1);
+            break;
+        case RG_TRUE_MASTER_SWORD:
+            gSaveContext.inventory.equipment |= OWNED_EQUIP_FLAG(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_MASTER);
+            WeaponUpgrade_SetTrueMaster(1);
+            break;
+        case RG_GREAT_FAIRY_SWORD:
+            if (!CHECK_OWNED_EQUIP(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_BIGGORON)) {
+                gSaveContext.inventory.equipment |= OWNED_EQUIP_FLAG(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_BIGGORON);
+                gSaveContext.bgsFlag = 1;
+            }
+            WeaponUpgrade_SetGreatFairy(1);
+            break;
+        case RG_IRON_KNUCKLE_AXE:
+            if (INV_CONTENT(ITEM_HAMMER) == ITEM_NONE) {
+                INV_CONTENT(ITEM_HAMMER) = ITEM_HAMMER;
+            }
+            WeaponUpgrade_SetHammerAxe(1);
+            break;
+        case RG_ULTRASHOT:
+            INV_CONTENT(ITEM_HOOKSHOT) = ITEM_LONGSHOT; // the Ultrashot rides the Longshot
+            Nei_Save()->ultrashotOwned = 1;
+            break;
+        case RG_QUARTZ_OF_MOTION:
+            gSaveContext.inventory.questItems |= gBitFlags[QUEST_STONE_OF_AGONY]; // chain heal
+            Nei_Save()->quartzOwned = 1;
+            break;
+        // Clawshot: a real owned item in OoT too, not just a cross-collection trophy. It has no slot
+        // of its own — it rides the hookshot/longshot cell, and A there opens the vanilla<->clawshot
+        // flip (Clawshot_HandleKaleidoSelector), exactly the Lens/Pictograph Box arrangement. All the
+        // machinery already existed; the give was simply never lighting the ownership bit.
+        // Skijer's NEI
+        case RG_CLAWSHOT:
+            TwilightUpgrade_SetClawshot(1);
+            break;
+        // Dual Cane per-skill identities (resolution targets of RG_CANE_OF_SOMARIA). Skill ids:
+        // 0 Statue, 1 Block, 2 Platform (Somaria) / 3 Flip, 4 Stone, 5 Ultrahand (Pacci).
+        case RG_CANE_PACCI_FLIP:
+            Cane_GiveSkill(3);
+            break;
+        case RG_CANE_SOMARIA_BLOCK:
+            Cane_GiveSkill(1);
+            break;
+        case RG_CANE_PACCI_STONE:
+            Cane_GiveSkill(4);
+            break;
+        case RG_CANE_SOMARIA_PLATFORM:
+            Cane_GiveSkill(2);
+            break;
+        case RG_CANE_PACCI_ULTRAHAND:
+            Cane_GiveSkill(5);
+            break;
         case RG_EXT_DIVINE_SHIELD:
             ExtEquip_GiveItem(EQUIP_TYPE_SHIELD, 1);
             break;
@@ -1713,7 +2080,7 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         case RG_EXT_SHIELD_OF_IKANA:
             ExtEquip_GiveItem(EQUIP_TYPE_SHIELD, 3);
             break;
-        // Tunic slots remapped 2026-07-16: 1=Champion, 2=Spirit, 3=Snowquill. The Magic Cape is no
+        // Tunic slots remapped 2026-07-16: 1=Champion, 2=Spirit, 3=Sage's. The Magic Cape is no
         // longer a grid slot — it grants via its dedicated ownership flag.
         case RG_EXT_MAGIC_CAPE:
             ExtEquip_GiveCape();
@@ -1727,11 +2094,54 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         case RG_EXT_PEGASUS_ANKLET:
             ExtEquip_GiveItem(EQUIP_TYPE_BOOTS, 1);
             break;
+        // The last three grid cells. Playable in both games but with no randomizer identity, so the
+        // save editor was the only way to own them — and nothing for FleetSync to carry. Skijer's NEI
+        case RG_EXT_TRIDENT:
+            ExtEquip_GiveItem(EQUIP_TYPE_SWORD, 3); // bit 18
+            break;
+        case RG_EXT_CLIMB_BOOTS:
+            ExtEquip_GiveItem(EQUIP_TYPE_BOOTS, 2); // bit 26
+            break;
+        case RG_EXT_ROC_BOOTS:
+            ExtEquip_GiveItem(EQUIP_TYPE_BOOTS, 3); // bit 27
+            break;
+        // The four 2026-08-06 page-2 additions — EXT (u16) inventory ids into the widened page-2
+        // store. Behaviorless-for-now real items (cell + icon + get-item model). Skijer's NEI
+        case RG_SHEIKAH_SLATE:
+            ExtInv_GiveItem(SLOT_SHEIKAH_SLATE, EXT_ITEM_SHEIKAH_SLATE);
+            break;
+        // Sheikah Slate runes — sibling items over the slate cell (wand idiom). Each lights its
+        // slateRunesOwned bit; the first one also hands over the slate itself (Slate_GrantRune).
+        case RG_SLATE_RUNE_BOMB:
+            Slate_GrantRune(SLATE_RUNE_BOMB);
+            break;
+        case RG_SLATE_RUNE_MASTER_CYCLE:
+            Slate_GrantRune(SLATE_RUNE_MASTER_CYCLE);
+            break;
+        case RG_SLATE_RUNE_STASIS:
+            Slate_GrantRune(SLATE_RUNE_STASIS);
+            break;
+        case RG_SLATE_RUNE_CRYONIS:
+            Slate_GrantRune(SLATE_RUNE_CRYONIS);
+            break;
+        case RG_PHANTOM_HOURGLASS:
+            ExtInv_GiveItem(SLOT_PHANTOM_HOURGLASS, EXT_ITEM_PHANTOM_HOURGLASS);
+            break;
+        case RG_SHADOW_CRYSTAL:
+            ExtInv_GiveItem(SLOT_SHADOW_CRYSTAL, EXT_ITEM_SHADOW_CRYSTAL);
+            break;
+        case RG_ROD_OF_SEASONS:
+            ExtInv_GiveItem(SLOT_ROD_OF_SEASONS, EXT_ITEM_ROD_OF_SEASONS);
+            break;
         case RG_EXT_PENDANT_OF_MEMORIES:
-            ExtEquip_GiveItem(EQUIP_TYPE_BOOTS, 2);
+            // ONE grant: the adult trade wheel. The old dual-grant also lit the ExtEquip BOOTS-2 bit
+            // as a "moveset" flag — that slot is the CLIMB BOOTS since 2026-07-29, so granting it
+            // would hand out a pair of boots. equip_pendant.c keys off ExtEquip_PendantActive(), which
+            // reads the trade bit. Idempotent with RG_MM_PENDANT_OF_MEMORIES. Skijer's NEI
+            TradeAdult_GiveItem(ITEM_EXT_BOOTS_2);
             break;
         case RG_EXT_WATER_DRAGON_SCALE:
-            ExtEquip_GiveItem(EQUIP_TYPE_BOOTS, 3);
+            ExtEquip_GiveItem(EQUIP_TYPE_TUNIC, 3);
             break;
         // MM Masks (Third Inventory Page) — only the masks that ALSO set an OOT trade flag stay
         // explicit. The 19 cosmetic-only masks fold into the registry default below. Skijer's NEI
@@ -1897,9 +2307,7 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
             TradeAdult_GiveItem(ITEM_MM_SPECIAL_DELIVERY);
             break;
         case RG_MM_PENDANT_OF_MEMORIES:
-            // Trade index 19 dual-grants: trade-wheel entry + the C-equippable pendant moveset
-            // (ExtEquip BOOTS 2) — same coupling equip_pendant.c expects. Idempotent with
-            // RG_EXT_PENDANT_OF_MEMORIES (both set the same ownership bits).
+            // Trade index 19 is the pendant's only ownership flag (see RG_EXT_PENDANT_OF_MEMORIES).
             TradeAdult_GiveItem(ITEM_EXT_BOOTS_2);
             break;
         case RG_MM_PICTOGRAPH_BOX:
@@ -1927,8 +2335,34 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         case RG_MM_SONG_LULLABY:
             Nei_Save()->mmQuestItems |= FC_MMQ_SONG_GORON_LULLABY;
             break;
+        // Progressive Goron Lullaby, MM's default shape for this song: copy 1 is the Intro (which has
+        // no quest-page icon of its own, exactly like RG_MM_SONG_LULLABY_INTRO), copy 2 completes it.
+        // Escalating on the quest bit keeps it idempotent if the copies arrive out of order.
+        case RG_MM_SONG_LULLABY_PROGRESSIVE:
+            // Copy 1 is the Intro, which has no quest-page icon of its own (same as
+            // RG_MM_SONG_LULLABY_INTRO above); copy 2 completes the song and lights the icon. The
+            // level comes from the FC registry, which the record hook at the top of this function has
+            // ALREADY bumped for this pickup — so >= 2 means "this is the second copy". There is no
+            // separate intro bit to read, and adding one would touch the save layout for nothing.
+            if (Nei_Save()->comboObtainedFc[FCI_MM_SONG_LULLABY_PROGRESSIVE] >= 2) {
+                Nei_Save()->mmQuestItems |= FC_MMQ_SONG_GORON_LULLABY;
+            }
+            break;
         case RG_MM_SONG_NOVA:
             Nei_Save()->mmQuestItems |= FC_MMQ_SONG_NEW_WAVE;
+            break;
+        // The 3 NEI custom songs. Each one OWNS the MM quest-page row of the song it replaces, so it
+        // sets that row's bit — Command Melody takes Song of Time's, Fugue of Home takes Epona's,
+        // Ballad of the Hero takes Song of Storms' (sMmPageSongs, z_kaleido_collect.c). They exist
+        // precisely so those three rows are not duplicates of songs OoT already has.
+        case RG_NEI_SONG_FUGUE_OF_HOME:
+            Nei_Save()->mmQuestItems |= FC_MMQ_SONG_EPONA;
+            break;
+        case RG_NEI_SONG_COMMAND_MELODY:
+            Nei_Save()->mmQuestItems |= FC_MMQ_SONG_TIME;
+            break;
+        case RG_NEI_SONG_BALLAD_OF_HERO:
+            Nei_Save()->mmQuestItems |= FC_MMQ_SONG_STORMS;
             break;
         case RG_MM_SONG_ELEGY:
             Nei_Save()->mmQuestItems |= FC_MMQ_SONG_ELEGY;
@@ -1981,9 +2415,6 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         case RG_MM_TINGLE_MAP_ROMANI_RANCH:
         case RG_MM_TINGLE_MAP_GREAT_BAY:
         case RG_MM_TINGLE_MAP_STONE_TOWER:
-        // MM Clawshot expressed in OoT for cross-collection — model + message only, no OoT clawshot
-        // mechanic, so give is a no-op. The real effect is MM-side; cross-collection carries it there.
-        case RG_CLAWSHOT:
         // Final MM cross items with no OoT store: healed frogs (Don Gero's choir), Great Spin
         // (WEEKEVENTREG is MM-side) and the 6 clock-shuffle halves — model + message only; the FC
         // record hook above already counted the pickup for the cross-game registry.
@@ -1998,6 +2429,10 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         case RG_MM_TIME_NIGHT_1:
         case RG_MM_TIME_NIGHT_2:
         case RG_MM_TIME_NIGHT_3:
+        // Progressive clock halves: identical no-op here. Which half each copy stands for is MM's
+        // call (ClockItems), and the FC record hook above already counted the pickup for the cross
+        // registry, which is the whole mechanism by which it reaches Termina. Skijer's NEI
+        case RG_MM_TIME_PROGRESSIVE:
         // Gold Dust normally grants in the bottle-slot block ABOVE the switch; the obtainability
         // gate keeps it from firing with full bottles. This case only stops the default-assert if
         // it ever falls through anyway (content lost, matching the mushroom's failure mode).
@@ -2031,6 +2466,33 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         case RG_BOTTOMLESS_BOTTLE:
             Bottle_SetBottomlessOwned(1);
             break;
+        // Skijer's NEI — Bomb Arrows owns no inventory cell any more (it is the bow's element flag),
+        // so the generic ExtInv_SetItemById arm below would silently no-op. Set the save flag.
+        case RG_BOMB_ARROWS:
+            Nei_Save()->bombArrowsOwned = 1;
+            break;
+        // Elemental Wand: whichever rod lands grants that mode AND the slot. In "Single item" mode
+        // one pickup lights all six; in "Elemental shuffle" each rod is its own check. Wand_GrantMode
+        // handles both, so the six arms are identical by design.
+        case RG_ELEMENTAL_WAND:
+        case RG_WAND_SAND_ROD:
+            Wand_GrantMode(WAND_MODE_SAND);
+            break;
+        case RG_WAND_TORNADO_ROD:
+            Wand_GrantMode(WAND_MODE_TORNADO);
+            break;
+        case RG_WAND_WATER_ROD:
+            Wand_GrantMode(WAND_MODE_WATER);
+            break;
+        case RG_WAND_METEOR_ROD:
+            Wand_GrantMode(WAND_MODE_METEOR);
+            break;
+        case RG_WAND_STORM_ROD:
+            Wand_GrantMode(WAND_MODE_STORM);
+            break;
+        case RG_WAND_SHADOW_SCEPTER:
+            Wand_GrantMode(WAND_MODE_SCEPTER);
+            break;
         default: {
             // Skijer's NEI: generic give for uniform custom-item + MM-mask arms. The registry row
             // (keyed by RG) names the page-2/3 inventory item; identical to the old per-RG
@@ -2038,10 +2500,11 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
             const NeiItem* neiGive = Nei_FindByRg((int16_t)item);
             // Masks carry slot=NEI_NO_SLOT; ExtInv_SetItemById resolves their page-3 slot. Skijer's NEI
             if (neiGive != NULL && neiGive->item != NEI_NO_ITEM) {
-                ExtInv_SetItemById((uint8_t)neiGive->item);
+                ExtInv_SetItemById((uint16_t)neiGive->item); // u8 would truncate the EXT ids (0x220+)
                 break;
             }
-            LUSLOG_WARN("Randomizer_Item_Give didn't have behaviour specified for getItemId=%d", item);
+            // The check is already marked collected, so a missing arm eats the item in silence.
+            LUSLOG_ERROR("Randomizer_Item_Give didn't have behaviour specified for getItemId=%d", item);
             assert(false);
             return -1;
         }

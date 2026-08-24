@@ -12,7 +12,7 @@
  *
  * Usage:
  *   1. O2rLoader_Init() at startup
- *   2. O2rLoader_Register("garo", "__OTR__objects/garo/gGaroSkel")
+ *   2. O2rLoader_Register("garo", "__OTR__objects/forms/garo/gGaroSkel")
  *   3. O2rLoader_ForceModel("garo") to activate, NULL to clear
  *   4. Engine's Player_Draw hook calls SwapSkeleton/RestoreSkeleton automatically
  */

@@ -28,7 +28,7 @@ namespace {
 
 struct ProjectileEntry {
     uint32_t projId;
-    Actor*   actor;
+    Actor* actor;
     uint32_t ownerCid;
     HarpoonCombat::HarpoonWeaponId source;
 };
@@ -38,9 +38,9 @@ uint32_t sLocalCounter = 1;
 
 nlohmann::json Envelope(const char* evt, nlohmann::json data) {
     nlohmann::json p;
-    p["type"]       = "ROOM.BROADCAST_EVENT";
+    p["type"] = "ROOM.BROADCAST_EVENT";
     p["event_name"] = evt;
-    p["data"]       = std::move(data);
+    p["data"] = std::move(data);
     return p;
 }
 
@@ -84,56 +84,64 @@ int16_t ActorIdForSource(HarpoonCombat::HarpoonWeaponId source) {
     }
 }
 
-}  // anon
+} // namespace
 
-uint32_t BroadcastSpawn(HarpoonCombat::HarpoonWeaponId source,
-                        float px, float py, float pz,
-                        float vx, float vy, float vz,
-                        float yaw, uint16_t charge) {
-    if (Harpoon::Instance == nullptr) return 0;
+uint32_t BroadcastSpawn(HarpoonCombat::HarpoonWeaponId source, float px, float py, float pz, float vx, float vy,
+                        float vz, float yaw, uint16_t charge) {
+    if (Harpoon::Instance == nullptr)
+        return 0;
     uint32_t projId = (OwnCid() << 16) | (sLocalCounter++ & 0xFFFF);
     nlohmann::json d;
-    d["projId"]   = projId;
+    d["projId"] = projId;
     d["ownerCid"] = OwnCid();
-    d["source"]   = (int)source;
-    d["px"] = px; d["py"] = py; d["pz"] = pz;
-    d["vx"] = vx; d["vy"] = vy; d["vz"] = vz;
-    d["yaw"]      = yaw;
-    d["charge"]   = (int)charge;
+    d["source"] = (int)source;
+    d["px"] = px;
+    d["py"] = py;
+    d["pz"] = pz;
+    d["vx"] = vx;
+    d["vy"] = vy;
+    d["vz"] = vz;
+    d["yaw"] = yaw;
+    d["charge"] = (int)charge;
     Harpoon::Instance->SendJsonToRemote(Envelope("COMBAT.PROJECTILE_SPAWN", std::move(d)));
     return projId;
 }
 
-void BroadcastHit(uint32_t projId, uint32_t targetCid,
-                  float hitX, float hitY, float hitZ) {
-    if (Harpoon::Instance == nullptr) return;
+void BroadcastHit(uint32_t projId, uint32_t targetCid, float hitX, float hitY, float hitZ) {
+    if (Harpoon::Instance == nullptr)
+        return;
     nlohmann::json d;
-    d["projId"]    = projId;
+    d["projId"] = projId;
     d["targetCid"] = targetCid;
-    d["hitX"] = hitX; d["hitY"] = hitY; d["hitZ"] = hitZ;
+    d["hitX"] = hitX;
+    d["hitY"] = hitY;
+    d["hitZ"] = hitZ;
     Harpoon::Instance->SendJsonToRemote(Envelope("COMBAT.PROJECTILE_HIT", std::move(d)));
 }
 
-void BroadcastReflect(uint32_t projId, float newVx, float newVy, float newVz,
-                      uint32_t newOwnerCid) {
-    if (Harpoon::Instance == nullptr) return;
+void BroadcastReflect(uint32_t projId, float newVx, float newVy, float newVz, uint32_t newOwnerCid) {
+    if (Harpoon::Instance == nullptr)
+        return;
     nlohmann::json d;
-    d["projId"]      = projId;
-    d["newVx"] = newVx; d["newVy"] = newVy; d["newVz"] = newVz;
+    d["projId"] = projId;
+    d["newVx"] = newVx;
+    d["newVy"] = newVy;
+    d["newVz"] = newVz;
     d["newOwnerCid"] = newOwnerCid;
     Harpoon::Instance->SendJsonToRemote(Envelope("COMBAT.PROJECTILE_REFLECT", std::move(d)));
 }
 
 void HandleSpawn(const nlohmann::json& data) {
-    if (Harpoon::Instance == nullptr || gPlayState == nullptr) return;
-    uint32_t projId   = data.value("projId", 0u);
+    if (Harpoon::Instance == nullptr || gPlayState == nullptr)
+        return;
+    uint32_t projId = data.value("projId", 0u);
     uint32_t ownerCid = data.value("ownerCid", 0u);
-    if (ownerCid == OwnCid()) return;  // we ARE the owner — local actor already exists
+    if (ownerCid == OwnCid())
+        return; // we ARE the owner — local actor already exists
     HarpoonCombat::HarpoonWeaponId source =
-        (HarpoonCombat::HarpoonWeaponId)data.value("source",
-                                                    (int)HarpoonCombat::HARPOON_WEAPON_UNKNOWN);
+        (HarpoonCombat::HarpoonWeaponId)data.value("source", (int)HarpoonCombat::HARPOON_WEAPON_UNKNOWN);
     f32 px = data.value("px", 0.0f), py = data.value("py", 0.0f), pz = data.value("pz", 0.0f);
-    (void)data;  // vx/vy/vz/yaw/charge consumed below
+    (void)data; // vx/vy/vz/yaw/charge consumed below
     f32 vx = data.value("vx", 0.0f), vy = data.value("vy", 0.0f), vz = data.value("vz", 0.0f);
     f32 yaw = data.value("yaw", 0.0f);
     uint16_t charge = (uint16_t)data.value("charge", 0);
@@ -146,10 +154,8 @@ void HandleSpawn(const nlohmann::json& data) {
         return;
     }
 
-    Actor* a = Actor_Spawn(&gPlayState->actorCtx, gPlayState,
-                            actorId, px, py, pz,
-                            0, (s16)(yaw * 0x8000 / 3.14159f), 0,
-                            charge | REMOTE_PROJECTILE_BIT);
+    Actor* a = Actor_Spawn(&gPlayState->actorCtx, gPlayState, actorId, px, py, pz, 0, (s16)(yaw * 0x8000 / 3.14159f), 0,
+                           charge | REMOTE_PROJECTILE_BIT);
     if (a != nullptr) {
         // Apply initial velocity so the mirrored actor's update tracks
         // close-to-identical trajectory to the owner's local copy.
@@ -158,17 +164,15 @@ void HandleSpawn(const nlohmann::json& data) {
         a->velocity.z = vz;
     }
     sRegistry[projId] = { projId, a, ownerCid, source };
-    SPDLOG_DEBUG("[HarpoonCombat][ProjMirror] spawn projId={:#x} src={} actorId={}",
-                 projId, (int)source, (int)actorId);
+    SPDLOG_DEBUG("[HarpoonCombat][ProjMirror] spawn projId={:#x} src={} actorId={}", projId, (int)source, (int)actorId);
 }
 
 void HandleHit(const nlohmann::json& data) {
-    uint32_t projId   = data.value("projId", 0u);
+    uint32_t projId = data.value("projId", 0u);
     uint32_t targetCid = data.value("targetCid", 0u);
     auto it = sRegistry.find(projId);
     HarpoonCombat::HarpoonWeaponId source =
-        (it != sRegistry.end()) ? it->second.source
-                                : HarpoonCombat::HARPOON_WEAPON_UNKNOWN;
+        (it != sRegistry.end()) ? it->second.source : HarpoonCombat::HARPOON_WEAPON_UNKNOWN;
     uint32_t ownerCid = (it != sRegistry.end()) ? it->second.ownerCid : 0;
 
     // Apply damage / status to the local player if we are the target.
@@ -185,7 +189,8 @@ void HandleHit(const nlohmann::json& data) {
 void HandleReflect(const nlohmann::json& data) {
     uint32_t projId = data.value("projId", 0u);
     auto it = sRegistry.find(projId);
-    if (it == sRegistry.end()) return;
+    if (it == sRegistry.end())
+        return;
     if (it->second.actor != nullptr) {
         it->second.actor->velocity.x = data.value("newVx", 0.0f);
         it->second.actor->velocity.y = data.value("newVy", 0.0f);
@@ -204,4 +209,4 @@ void ClearRegistry() {
     sRegistry.clear();
 }
 
-}  // namespace HarpoonProjectileMirror
+} // namespace HarpoonProjectileMirror

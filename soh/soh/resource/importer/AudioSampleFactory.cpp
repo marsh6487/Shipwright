@@ -170,8 +170,8 @@ static void OggDecoderWorker(std::shared_ptr<SOH::AudioSample> audioSample, std:
             fileData.pos = 0;
             int ret = ov_open_callbacks(&fileData, &vf, nullptr, 0, vorbisCallbacks);
             if (ret != 0) {
-                SPDLOG_ERROR("Audio sample '{}' failed ov_open_callbacks ({}) — skipping (silent).",
-                             initData->Path, ret);
+                SPDLOG_ERROR("Audio sample '{}' failed ov_open_callbacks ({}) — skipping (silent).", initData->Path,
+                             ret);
                 break;
             }
 

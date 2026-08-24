@@ -81,23 +81,3 @@ void DivineShield_OnShieldBlock(Player* player, PlayState* play) {
         HarpoonCombat_BroadcastShieldParry_C(4, 1);
     }
 }
-
-// ---------------------------------------------------------------------------
-// Shield type override — called from z_player_lib.c
-// Returns 1 if Divine Shield should use COLTYPE_WOOD
-// ---------------------------------------------------------------------------
-u8 DivineShield_IsWoodType(void) {
-    if (!ExtEquip_IsEnabled())
-        return 0;
-    return (ExtEquip_GetCurrent(EQUIP_TYPE_SHIELD) == 1) ? 1 : 0;
-}
-
-// ---------------------------------------------------------------------------
-// Fire immunity — called from z_player.c func_8083819C
-// Returns 1 if fire should NOT destroy the shield
-// ---------------------------------------------------------------------------
-u8 DivineShield_IsFireproof(void) {
-    if (!ExtEquip_IsEnabled())
-        return 0;
-    return (ExtEquip_GetCurrent(EQUIP_TYPE_SHIELD) == 1) ? 1 : 0;
-}

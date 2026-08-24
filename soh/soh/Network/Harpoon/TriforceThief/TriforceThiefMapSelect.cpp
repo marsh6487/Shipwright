@@ -29,41 +29,38 @@ struct TTMapDef {
 };
 
 constexpr TTMapDef kTTMaps[] = {
-    { "Death Mountain Trail", "Rocky mountainside trail with cliffs and caves.",
-      317, "map_select/thumbnail_death_mountain.png" },
-    { "Zora's River",         "Winding river with cliffs and waterfalls.",
-      234, "map_select/thumbnail_zora_river.png" },
-    { "Gerudo Fortress",      "Desert compound with rooftops and corridors.",
-      297, "map_select/thumbnail_gerudo_fortress.png" },
-    { "Kokiri Forest",        "Peaceful village with bridges and trees.",
-      238, "map_select/thumbnail_kokiri_forest.png" },
-    { "Kakariko Village",     "Mountain village with rooftops and alleys.",
-      219, "map_select/thumbnail_kakariko_village.png" },
-    { "Goron City",           "Multi-level rocky village with platforms.",
-      333, "map_select/thumbnail_goron_city.png" },
-    { "Desert Colossus",      "Open desert ruins around the Spirit Temple.",
-      291, "map_select/thumbnail_desert_colossus.png" },
-    { "Zora's Domain",        "Underwater cavern around the great waterfall.",
-      264, "map_select/thumbnail_zora_domain.png" },
+    { "Death Mountain Trail", "Rocky mountainside trail with cliffs and caves.", 317,
+      "map_select/thumbnail_death_mountain.png" },
+    { "Zora's River", "Winding river with cliffs and waterfalls.", 234, "map_select/thumbnail_zora_river.png" },
+    { "Gerudo Fortress", "Desert compound with rooftops and corridors.", 297,
+      "map_select/thumbnail_gerudo_fortress.png" },
+    { "Kokiri Forest", "Peaceful village with bridges and trees.", 238, "map_select/thumbnail_kokiri_forest.png" },
+    { "Kakariko Village", "Mountain village with rooftops and alleys.", 219,
+      "map_select/thumbnail_kakariko_village.png" },
+    { "Goron City", "Multi-level rocky village with platforms.", 333, "map_select/thumbnail_goron_city.png" },
+    { "Desert Colossus", "Open desert ruins around the Spirit Temple.", 291,
+      "map_select/thumbnail_desert_colossus.png" },
+    { "Zora's Domain", "Underwater cavern around the great waterfall.", 264, "map_select/thumbnail_zora_domain.png" },
 };
 constexpr s32 kTTMapCount = (s32)(sizeof(kTTMaps) / sizeof(kTTMaps[0]));
 constexpr int kTTGridCols = 4;
 constexpr int kTTGridRows = 2;
 
 bool sTTTexturesLoaded = false;
-s32  sTTStickDebounce  = 0;
-bool sTTHasVoted       = false;
+s32 sTTStickDebounce = 0;
+bool sTTHasVoted = false;
 
 void SafeLoadTexture(const char* name, const char* path) {
     auto archMgr = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
-    if (!archMgr->HasFile(path)) return;
+    if (!archMgr->HasFile(path))
+        return;
     auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
     gui->LoadTextureFromRawImage(name, path);
 }
 
 void LoadTTTextures() {
-    SafeLoadTexture("tt-bg",         "map_select/bg.png");
-    SafeLoadTexture("tt-navi",       "map_select/navi.png");
+    SafeLoadTexture("tt-bg", "map_select/bg.png");
+    SafeLoadTexture("tt-navi", "map_select/navi.png");
     SafeLoadTexture("tt-navi-white", "map_select/navi_white.png");
     for (int i = 0; i < kTTMapCount; i++) {
         if (kTTMaps[i].thumbnailPath) {
@@ -76,15 +73,21 @@ void LoadTTTextures() {
 class TriforceThiefMapSelectWindow final : public Ship::GuiWindow {
   public:
     using GuiWindow::GuiWindow;
-    void InitElement() override {}
-    void DrawElement() override {}
-    void UpdateElement() override {}
+    void InitElement() override {
+    }
+    void DrawElement() override {
+    }
+    void UpdateElement() override {
+    }
 
     void Draw() override {
         auto harpoon = Harpoon::Instance;
-        if (!harpoon || !harpoon->isConnected) return;
-        if (harpoon->gameState != HARPOON_STATE_MAP_SELECT) return;
-        if (harpoon->currentRoomGameMode != "triforce_thief") return;
+        if (!harpoon || !harpoon->isConnected)
+            return;
+        if (harpoon->gameState != HARPOON_STATE_MAP_SELECT)
+            return;
+        if (harpoon->currentRoomGameMode != "triforce_thief")
+            return;
 
         bool isHost = (harpoon->ownClientId == harpoon->hostClientId);
         // Everybody sees the overlay regardless of mode. Non-hosts in
@@ -93,22 +96,23 @@ class TriforceThiefMapSelectWindow final : public Ship::GuiWindow {
         // the bottom of Draw() gates the confirm on `isHost`.
 
         static HarpoonGameState sPrevState = HARPOON_STATE_LOBBY;
-        if (sPrevState != HARPOON_STATE_MAP_SELECT) sTTHasVoted = false;
+        if (sPrevState != HARPOON_STATE_MAP_SELECT)
+            sTTHasVoted = false;
         sPrevState = harpoon->gameState;
 
-        if (!sTTTexturesLoaded) LoadTTTextures();
+        if (!sTTTexturesLoaded)
+            LoadTTTextures();
 
         auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
         auto vp = ImGui::GetMainViewport();
         float vpW = vp->Size.x, vpH = vp->Size.y;
-        float vpX = vp->Pos.x,  vpY = vp->Pos.y;
+        float vpX = vp->Pos.x, vpY = vp->Pos.y;
 
-        ImGuiWindowFlags flags =
-            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking |
-            ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoNav |
-            ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBackground;
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings |
+                                 ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoScrollWithMouse |
+                                 ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing |
+                                 ImGuiWindowFlags_NoBackground;
 
         ImGui::SetNextWindowPos(vp->Pos);
         ImGui::SetNextWindowSize(vp->Size);
@@ -117,13 +121,15 @@ class TriforceThiefMapSelectWindow final : public Ship::GuiWindow {
         ImGui::Begin("##TriforceThiefMapSelect", nullptr, flags);
         ImDrawList* dl = ImGui::GetWindowDrawList();
         s32 localSel = harpoon->selectedMapIndex;
-        if (localSel < 0 || localSel >= kTTMapCount) localSel = 0;
+        if (localSel < 0 || localSel >= kTTMapCount)
+            localSel = 0;
 
         // Background
         ImTextureID bgTex = gui->GetTextureByName("tt-bg");
-        if (bgTex) dl->AddImage(bgTex, vp->Pos, ImVec2(vpX + vpW, vpY + vpH));
-        else       dl->AddRectFilled(vp->Pos, ImVec2(vpX + vpW, vpY + vpH),
-                                     IM_COL32(10, 10, 30, 245));
+        if (bgTex)
+            dl->AddImage(bgTex, vp->Pos, ImVec2(vpX + vpW, vpY + vpH));
+        else
+            dl->AddRectFilled(vp->Pos, ImVec2(vpX + vpW, vpY + vpH), IM_COL32(10, 10, 30, 245));
 
         // Layout: 3x2 grid top
         float gridW = vpW * 0.96f, gridH = vpH * 0.54f;
@@ -146,19 +152,21 @@ class TriforceThiefMapSelectWindow final : public Ship::GuiWindow {
 
             if (kTTMaps[i].thumbnailPath) {
                 ImTextureID thumb = gui->GetTextureByName(kTTMaps[i].thumbnailPath);
-                if (thumb) dl->AddImage(thumb, tl, br);
-                else       dl->AddRectFilled(tl, br, IM_COL32(40, 40, 60, 200));
+                if (thumb)
+                    dl->AddImage(thumb, tl, br);
+                else
+                    dl->AddRectFilled(tl, br, IM_COL32(40, 40, 60, 200));
             } else {
                 dl->AddRectFilled(tl, br, IM_COL32(40, 40, 60, 200));
             }
-            if (i != localSel) dl->AddRectFilled(tl, br, IM_COL32(0, 0, 0, 120));
+            if (i != localSel)
+                dl->AddRectFilled(tl, br, IM_COL32(0, 0, 0, 120));
 
             ImGui::SetWindowFontScale(0.85f);
             const char* name = kTTMaps[i].name;
             ImVec2 ns = ImGui::CalcTextSize(name);
             float nx = x + (cellW - ns.x) * 0.5f, ny = br.y - ns.y - 3.0f;
-            dl->AddRectFilled(ImVec2(tl.x, ny - 2), ImVec2(br.x, br.y),
-                              IM_COL32(0, 0, 0, 170));
+            dl->AddRectFilled(ImVec2(tl.x, ny - 2), ImVec2(br.x, br.y), IM_COL32(0, 0, 0, 170));
             dl->AddText(ImVec2(nx + 1, ny + 1), IM_COL32(0, 0, 0, 255), name);
             dl->AddText(ImVec2(nx, ny), IM_COL32(255, 255, 255, 255), name);
             ImGui::SetWindowFontScale(1.0f);
@@ -166,8 +174,8 @@ class TriforceThiefMapSelectWindow final : public Ship::GuiWindow {
             // Selection border — gold (TT theme).
             if (i == localSel) {
                 dl->AddRect(tl, br, IM_COL32(255, 215, 0, 255), 0, 0, 3.5f);
-                dl->AddRect(ImVec2(tl.x - 2, tl.y - 2), ImVec2(br.x + 2, br.y + 2),
-                            IM_COL32(255, 230, 50, 120), 0, 0, 2.0f);
+                dl->AddRect(ImVec2(tl.x - 2, tl.y - 2), ImVec2(br.x + 2, br.y + 2), IM_COL32(255, 230, 50, 120), 0, 0,
+                            2.0f);
             }
         }
 
@@ -175,7 +183,8 @@ class TriforceThiefMapSelectWindow final : public Ship::GuiWindow {
         ImVec2 pTL(prevX, prevY), pBR(prevX + prevW, prevY + prevH);
         if (localSel < kTTMapCount && kTTMaps[localSel].thumbnailPath) {
             ImTextureID prev = gui->GetTextureByName(kTTMaps[localSel].thumbnailPath);
-            if (prev) dl->AddImage(prev, pTL, pBR);
+            if (prev)
+                dl->AddImage(prev, pTL, pBR);
             dl->AddRect(pTL, pBR, IM_COL32(200, 170, 50, 200), 0, 0, 2.0f);
         }
         if (localSel < kTTMapCount) {
@@ -184,8 +193,7 @@ class TriforceThiefMapSelectWindow final : public Ship::GuiWindow {
             ImVec2 ds = ImGui::CalcTextSize(desc);
             float dx = prevX + (prevW - ds.x) * 0.5f;
             float dy = pBR.y - ds.y - 6.0f;
-            dl->AddRectFilled(ImVec2(pTL.x, dy - 3), ImVec2(pBR.x, pBR.y),
-                              IM_COL32(0, 0, 0, 180));
+            dl->AddRectFilled(ImVec2(pTL.x, dy - 3), ImVec2(pBR.x, pBR.y), IM_COL32(0, 0, 0, 180));
             dl->AddText(ImVec2(dx + 1, dy + 1), IM_COL32(0, 0, 0, 200), desc);
             dl->AddText(ImVec2(dx, dy), IM_COL32(255, 255, 200, 255), desc);
             ImGui::SetWindowFontScale(1.0f);
@@ -210,19 +218,14 @@ class TriforceThiefMapSelectWindow final : public Ship::GuiWindow {
             float bX = rcCenterX - bW * 0.5f, bY = afterTitleY;
             ImVec2 bTL(bX, bY), bBR(bX + bW, bY + bH);
             dl->AddRectFilled(bTL, bBR, IM_COL32(160, 120, 20, 235), 8.0f);
-            dl->AddRectFilled(ImVec2(bX + 3, bY + 3),
-                              ImVec2(bX + bW - 3, bY + bH - 3),
-                              IM_COL32(210, 170, 50, 210), 6.0f);
+            dl->AddRectFilled(ImVec2(bX + 3, bY + 3), ImVec2(bX + bW - 3, bY + bH - 3), IM_COL32(210, 170, 50, 210),
+                              6.0f);
             dl->AddRect(bTL, bBR, IM_COL32(240, 200, 80, 255), 8.0f, 0, 2.5f);
             float aw = 16.0f, amY = bY + bH * 0.5f;
-            dl->AddTriangleFilled(ImVec2(bX - aw, amY),
-                                   ImVec2(bX + 2, bY + 2),
-                                   ImVec2(bX + 2, bY + bH - 2),
-                                   IM_COL32(200, 160, 40, 230));
-            dl->AddTriangleFilled(ImVec2(bX + bW + aw, amY),
-                                   ImVec2(bX + bW - 2, bY + 2),
-                                   ImVec2(bX + bW - 2, bY + bH - 2),
-                                   IM_COL32(200, 160, 40, 230));
+            dl->AddTriangleFilled(ImVec2(bX - aw, amY), ImVec2(bX + 2, bY + 2), ImVec2(bX + 2, bY + bH - 2),
+                                  IM_COL32(200, 160, 40, 230));
+            dl->AddTriangleFilled(ImVec2(bX + bW + aw, amY), ImVec2(bX + bW - 2, bY + 2),
+                                  ImVec2(bX + bW - 2, bY + bH - 2), IM_COL32(200, 160, 40, 230));
             float nX = bX + bpX, nY = bY + bpY;
             dl->AddText(ImVec2(nX + 1, nY + 1), IM_COL32(80, 50, 0, 200), sn);
             dl->AddText(ImVec2(nX, nY), IM_COL32(255, 255, 255, 255), sn);
@@ -243,15 +246,17 @@ class TriforceThiefMapSelectWindow final : public Ship::GuiWindow {
         }
 
         // Player navi cursors on grid
-        ImTextureID naviTex      = gui->GetTextureByName("tt-navi");
+        ImTextureID naviTex = gui->GetTextureByName("tt-navi");
         ImTextureID naviWhiteTex = gui->GetTextureByName("tt-navi-white");
         float naviSize = cellH * 0.30f;
         for (auto& [cid, c] : harpoon->clients) {
-            if (!c.online) continue;
-            if (harpoon->mapSelectMode == MAP_SELECT_HOST_CHOOSES &&
-                cid != harpoon->hostClientId) continue;
+            if (!c.online)
+                continue;
+            if (harpoon->mapSelectMode == MAP_SELECT_HOST_CHOOSES && cid != harpoon->hostClientId)
+                continue;
             s32 idx = c.self ? localSel : c.mapSelectIndex;
-            if (idx < 0 || idx >= kTTMapCount) idx = 0;
+            if (idx < 0 || idx >= kTTMapCount)
+                idx = 0;
             int col = idx % kTTGridCols, row = idx / kTTGridCols;
             float cx = gridStartX + col * cellW + cellW * 0.5f;
             float cy = gridStartY + row * cellH + cellH * 0.30f;
@@ -271,13 +276,11 @@ class TriforceThiefMapSelectWindow final : public Ship::GuiWindow {
 
         // Post-vote dim overlay for everyone-votes
         if (sTTHasVoted && harpoon->mapSelectMode == MAP_SELECT_EVERYONE_CHOOSES) {
-            dl->AddRectFilled(ImVec2(vpX, vpY), ImVec2(vpX + vpW, vpY + vpH),
-                              IM_COL32(0, 0, 0, 160));
+            dl->AddRectFilled(ImVec2(vpX, vpY), ImVec2(vpX + vpW, vpY + vpH), IM_COL32(0, 0, 0, 160));
             ImGui::SetWindowFontScale(2.0f);
             const char* w = "Waiting for other players...";
             ImVec2 ws = ImGui::CalcTextSize(w);
-            dl->AddText(ImVec2(vpX + (vpW - ws.x) * 0.5f, vpY + (vpH - ws.y) * 0.5f),
-                        IM_COL32(255, 230, 100, 255), w);
+            dl->AddText(ImVec2(vpX + (vpW - ws.x) * 0.5f, vpY + (vpH - ws.y) * 0.5f), IM_COL32(255, 230, 100, 255), w);
             ImGui::SetWindowFontScale(1.0f);
         }
 
@@ -291,22 +294,28 @@ class TriforceThiefMapSelectWindow final : public Ship::GuiWindow {
             Input* input = &gPlayState->state.input[0];
             s8 sx = input->cur.stick_x;
             s8 sy = input->cur.stick_y;
-            if (sTTStickDebounce > 0) sTTStickDebounce--;
+            if (sTTStickDebounce > 0)
+                sTTStickDebounce--;
             if (sTTStickDebounce == 0 && (abs(sx) > 30 || abs(sy) > 30)) {
                 int col = localSel % kTTGridCols;
                 int row = localSel / kTTGridCols;
-                if (sx >  30) col = (col + 1) % kTTGridCols;
-                if (sx < -30) col = (col + kTTGridCols - 1) % kTTGridCols;
-                if (sy >  30) row = (row + kTTGridRows - 1) % kTTGridRows;
-                if (sy < -30) row = (row + 1) % kTTGridRows;
+                if (sx > 30)
+                    col = (col + 1) % kTTGridCols;
+                if (sx < -30)
+                    col = (col + kTTGridCols - 1) % kTTGridCols;
+                if (sy > 30)
+                    row = (row + kTTGridRows - 1) % kTTGridRows;
+                if (sy < -30)
+                    row = (row + 1) % kTTGridRows;
                 s32 newSel = row * kTTGridCols + col;
-                if (newSel >= kTTMapCount) newSel = kTTMapCount - 1;
+                if (newSel >= kTTMapCount)
+                    newSel = kTTMapCount - 1;
                 if (newSel != harpoon->selectedMapIndex) {
                     harpoon->selectedMapIndex = newSel;
                     nlohmann::json env;
-                    env["type"]       = "ROOM.BROADCAST_EVENT";
+                    env["type"] = "ROOM.BROADCAST_EVENT";
                     env["event_name"] = "TRIFORCE_THIEF.MAP_HOVER";
-                    env["data"]       = { {"mapIndex", newSel} };
+                    env["data"] = { { "mapIndex", newSel } };
                     harpoon->SendJsonToRemote(env);
                 }
                 sTTStickDebounce = 9;
@@ -317,17 +326,16 @@ class TriforceThiefMapSelectWindow final : public Ship::GuiWindow {
             //     parity with PropHunt's simplified vote input).
             //   - Peer in HOST_CHOOSES: ignored.
             bool everyoneMode = (harpoon->mapSelectMode == MAP_SELECT_EVERYONE_CHOOSES);
-            bool aPress       = CHECK_BTN_ALL(input->press.button, BTN_A);
-            bool trigger      = isHost ? aPress
-                                       : (everyoneMode ? aPress : false);
+            bool aPress = CHECK_BTN_ALL(input->press.button, BTN_A);
+            bool trigger = isHost ? aPress : (everyoneMode ? aPress : false);
             if (trigger) {
                 s32 idx = harpoon->selectedMapIndex;
                 if (everyoneMode) {
                     sTTHasVoted = true;
                     nlohmann::json env;
-                    env["type"]       = "ROOM.BROADCAST_EVENT";
+                    env["type"] = "ROOM.BROADCAST_EVENT";
                     env["event_name"] = "TRIFORCE_THIEF.MAP_VOTE";
-                    env["data"]       = { {"mapIndex", idx} };
+                    env["data"] = { { "mapIndex", idx } };
                     harpoon->SendJsonToRemote(env);
                     auto myIt = harpoon->clients.find(harpoon->ownClientId);
                     if (myIt != harpoon->clients.end()) {
@@ -346,20 +354,21 @@ class TriforceThiefMapSelectWindow final : public Ship::GuiWindow {
 
 std::shared_ptr<TriforceThiefMapSelectWindow> sTTWindow;
 
-}  // namespace
+} // namespace
 
 namespace HarpoonTriforceThief {
 
 void RegisterMapSelectWindow() {
     auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
-    if (gui == nullptr) return;
+    if (gui == nullptr)
+        return;
     static const char* kName = "TriforceThiefMapSelect";
-    if (gui->GetGuiWindow(kName) != nullptr) return;
-    sTTWindow = std::make_shared<TriforceThiefMapSelectWindow>(
-        "gOpenWindows.TriforceThiefMapSelect", kName);
+    if (gui->GetGuiWindow(kName) != nullptr)
+        return;
+    sTTWindow = std::make_shared<TriforceThiefMapSelectWindow>("gOpenWindows.TriforceThiefMapSelect", kName);
     gui->AddGuiWindow(sTTWindow);
     sTTWindow->Show();
     SPDLOG_INFO("[Harpoon][TriforceThief] map select window registered");
 }
 
-}  // namespace HarpoonTriforceThief
+} // namespace HarpoonTriforceThief

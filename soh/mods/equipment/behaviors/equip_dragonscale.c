@@ -60,7 +60,11 @@ static void DScale_Draw(Player* p, PlayState* play) {
 static void DragonScale_Behavior(Player* player, PlayState* play) {
     // ZORA TUNIC is the activation condition now (the Water Dragon Scale item is gone). When the
     // tunic comes off mid-swim, exit cleanly back to OoT swimming.
-    if (CUR_EQUIP_VALUE(EQUIP_TYPE_TUNIC) != EQUIP_VALUE_TUNIC_ZORA) {
+    // Skijer's NEI boss_remains: GYORG'S REMAINS grants the same free Zora swim (MM's Nei_IsZoraSwim ||
+    // BossRemains_IsGyorgWorn). This is the right seam — IsZoraSwimEnabled() is the "already swimming"
+    // state flag, so the capability has to widen the gate here, not that accessor.
+    extern s32 BossRemains_IsGyorgWorn(void);
+    if ((CUR_EQUIP_VALUE(EQUIP_TYPE_TUNIC) != EQUIP_VALUE_TUNIC_ZORA) && !BossRemains_IsGyorgWorn()) {
         if (TransformMasks_IsZoraSwimEnabled())
             TransformMasks_DragonScaleExitSwim(player);
         return;
@@ -68,6 +72,19 @@ static void DragonScale_Behavior(Player* player, PlayState* play) {
 
     // If a real transformation mask is active, don't interfere
     if (TransformMasks_IsTransformed()) {
+        if (TransformMasks_IsZoraSwimEnabled())
+            TransformMasks_DragonScaleExitSwim(player);
+        return;
+    }
+
+    // IRON BOOTS lock the Zora swim out entirely (Skijer 2026-07-28). Iron Boots mean
+    // "sink and walk the floor" — no dash, no barrel roll, no dolphin jump. Bailing here
+    // (instead of only refusing the A-press) also fixes the boots being silently
+    // unequipped: MmForm_Action_SwimIdle's enter_fast_swim path force-writes
+    // currentBoots = PLAYER_BOOTS_KOKIRI, which is MM-canon for the full Zora form but
+    // stripped Link's real Iron Boots when the tunic swim reached it. Putting the boots
+    // on mid-swim exits cleanly back to OOT's swimming on the same frame.
+    if (player->currentBoots == PLAYER_BOOTS_IRON) {
         if (TransformMasks_IsZoraSwimEnabled())
             TransformMasks_DragonScaleExitSwim(player);
         return;

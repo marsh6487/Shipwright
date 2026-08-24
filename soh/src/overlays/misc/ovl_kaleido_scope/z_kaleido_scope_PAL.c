@@ -252,20 +252,13 @@ static void* sQuestStatusTexs[] = {
 // The paths resolve through the resource manager, so texture packs can retexture them (mod support).
 // Mirror of 2ship's sNeiOotQuestPageBgTextures/KaleidoNei_GetQuestPageBgTextures.
 static void* sNeiMmQuestPageBgTexs[] = {
-    "__OTR__icon_item_jpn_static/gPauseQuestStatus00ENGTex",
-    "__OTR__icon_item_static_yar/gPauseQuestStatus01Tex",
-    "__OTR__icon_item_static_yar/gPauseQuestStatus02Tex",
-    "__OTR__icon_item_static_yar/gPauseQuestStatus03Tex",
-    "__OTR__icon_item_static_yar/gPauseQuestStatus04Tex",
-    "__OTR__icon_item_jpn_static/gPauseQuestStatus10ENGTex",
-    "__OTR__icon_item_static_yar/gPauseQuestStatus11Tex",
-    "__OTR__icon_item_static_yar/gPauseQuestStatus12Tex",
-    "__OTR__icon_item_static_yar/gPauseQuestStatus13Tex",
-    "__OTR__icon_item_static_yar/gPauseQuestStatus14Tex",
-    "__OTR__icon_item_jpn_static/gPauseQuestStatus20ENGTex",
-    "__OTR__icon_item_static_yar/gPauseQuestStatus21Tex",
-    "__OTR__icon_item_static_yar/gPauseQuestStatus22Tex",
-    "__OTR__icon_item_static_yar/gPauseQuestStatus23Tex",
+    "__OTR__icon_item_jpn_static/gPauseQuestStatus00ENGTex", "__OTR__icon_item_static_yar/gPauseQuestStatus01Tex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus02Tex",    "__OTR__icon_item_static_yar/gPauseQuestStatus03Tex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus04Tex",    "__OTR__icon_item_jpn_static/gPauseQuestStatus10ENGTex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus11Tex",    "__OTR__icon_item_static_yar/gPauseQuestStatus12Tex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus13Tex",    "__OTR__icon_item_static_yar/gPauseQuestStatus14Tex",
+    "__OTR__icon_item_jpn_static/gPauseQuestStatus20ENGTex", "__OTR__icon_item_static_yar/gPauseQuestStatus21Tex",
+    "__OTR__icon_item_static_yar/gPauseQuestStatus22Tex",    "__OTR__icon_item_static_yar/gPauseQuestStatus23Tex",
     "__OTR__icon_item_static_yar/gPauseQuestStatus24Tex",
 };
 
@@ -1459,7 +1452,6 @@ void KaleidoScope_DrawPages(PlayState* play, GraphicsContext* gfxCtx) {
                 }
                 break;
         }
-
     }
 
     Gfx_SetupDL_42Opa(gfxCtx);
@@ -1621,8 +1613,7 @@ static const char* KaleidoScope_GetWeaponUpgradeNameOverride(s32 namedItem) {
     static const char sGfsName[] = "__OTR__item_name_static/gItemNameGreatFairysSwordENGTex";
     static const char sAxeName[] = "__OTR__textures/item_name_custom/gIronKnuckleAxeNameTex";
     if (namedItem == ITEM_SWORD_KOKIRI && WeaponUpgrade_KokiriLevel() >= 1) {
-        u8 showGilded =
-            WeaponUpgrade_HasGilded() && CVarGetInteger("gEnhancements.SkijerNEI.GildedUsesGildedLook", 1);
+        u8 showGilded = WeaponUpgrade_HasGilded() && CVarGetInteger("gEnhancements.SkijerNEI.GildedUsesGildedLook", 1);
         return showGilded ? sGildedName : sRazorName;
     }
     // ITEM_HEART_PIECE_2 is the OOT sentinel the EQUIP page uses for the Biggoron Sword slot when
@@ -2060,9 +2051,8 @@ void KaleidoScope_DrawInfoPanel(PlayState* play) {
                 (CVarGetInteger(CVAR_ENHANCEMENT("PauseAnyCursor"), 0) == PAUSE_ANY_CURSOR_RANDO_ONLY && IS_RANDO) ||
                 (CVarGetInteger(CVAR_ENHANCEMENT("PauseAnyCursor"), 0) == PAUSE_ANY_CURSOR_ALWAYS_ON);
             if (!pauseCtx->pageIndex &&
-                (!pauseAnyCursor ||
-                 (ExtInv_GetSlotItem(ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])) !=
-                  ITEM_NONE))) { // pageIndex == PAUSE_ITEM // Skijer's NEI
+                (!pauseAnyCursor || (ExtInv_GetSlotItem(ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])) !=
+                                     ITEM_NONE))) { // pageIndex == PAUSE_ITEM // Skijer's NEI
                 pauseCtx->infoPanelVtx[16].v.ob[0] = pauseCtx->infoPanelVtx[18].v.ob[0] = WREG(49 + languageOffset);
 
                 pauseCtx->infoPanelVtx[17].v.ob[0] = pauseCtx->infoPanelVtx[19].v.ob[0] =
@@ -2226,7 +2216,8 @@ void KaleidoScope_UpdateNamePanel(PlayState* play) {
               !CHECK_OWNED_EQUIP(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP] - 1) &&
               !(ExtEquip_GetPage() == 1)) ||
              (pauseCtx->pageIndex == PAUSE_ITEM &&
-              ExtInv_GetSlotItem(ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])) == ITEM_NONE))) { // Skijer's NEI
+              ExtInv_GetSlotItem(ExtInv_GetInventorySlot(pauseCtx->cursorPoint[PAUSE_ITEM])) ==
+                  ITEM_NONE))) { // Skijer's NEI
             pauseCtx->namedItem = PAUSE_ITEM_NONE;
         }
 
@@ -2256,8 +2247,12 @@ void KaleidoScope_UpdateNamePanel(PlayState* play) {
                 u16 originalItemId = sp2A;
                 extern unsigned char TradeAdult_IsMmTradeUseItem(int item); // Skijer's NEI
 
-                // Custom items: use OTR name textures like vanilla
-                if (originalItemId >= ITEM_ROCS_FEATHER_SKIJER && originalItemId <= ITEM_POKEBALL) {
+                // Custom items: use OTR name textures like vanilla.
+                // ITEM_RITO_MASK sits outside the page-2 block (it took a free id in
+                // the 0xD1-0xD5 gap because it lives in the Farore's Wind cell, not on
+                // page 2), so it is named explicitly. Skijer's NEI
+                if ((originalItemId >= ITEM_ROCS_FEATHER_SKIJER && originalItemId <= ITEM_POKEBALL) ||
+                    originalItemId == ITEM_RITO_MASK) {
                     textureName = (const char*)ExtInv_GetCustomItemNameTex(originalItemId, gSaveContext.language);
                     if (textureName == NULL) {
                         textureName = iconNameTextures[0];
@@ -2962,8 +2957,7 @@ void KaleidoScope_InitVertices(PlayState* play, GraphicsContext* gfxCtx) {
 
     for (phi_t3 = 1; phi_t3 < ARRAY_COUNT(gSaveContext.equips.buttonItems); phi_t3++, phi_t2 += 4) {
         u8 equippedSlot = gSaveContext.equips.cButtonSlots[phi_t3 - 1];
-        if (equippedSlot != ITEM_NONE &&
-            ((phi_t3 < 4) || CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0)) &&
+        if (equippedSlot != ITEM_NONE && ((phi_t3 < 4) || CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0)) &&
             ExtInv_IsSlotOnCurrentPage(equippedSlot)) {
             // Calculate screen position (visual slot 0-23)
             u8 currentPageStart = ExtInv_GetCurrentPage() * 24;
@@ -4231,6 +4225,15 @@ void KaleidoScope_Update(PlayState* play) {
                         pauseCtx->unk_1E4 = 0;
                     }
                     break;
+
+                case 11: { // Quartz of Motion category list (Stone of Agony L2)
+                    // Owning a non-zero sub-state is what keeps the state-0
+                    // branch — the one that closes the pause menu on B/START —
+                    // from running while the list is up.
+                    extern void Quartz_UpdateModal(PlayState * play, Input * input);
+                    Quartz_UpdateModal(play, input);
+                    break;
+                }
 
                 default:
                     pauseCtx->unk_1E4 = 0;

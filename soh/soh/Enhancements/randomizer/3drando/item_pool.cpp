@@ -66,9 +66,8 @@ void AddFixedItemToPool(RandomizerGet item, int count = 1, bool iceTrapModel = t
 }
 
 static bool IceTrapsAllowed() {
-    return ctx->GetOption(RSK_BASE_ICE_TRAPS).Get() != 0
-        || ctx->GetOption(RSK_ADDITIONAL_ICE_TRAPS).Get() > 0
-        || ctx->GetOption(RSK_ICE_TRAP_PERCENT).Get() > 0;
+    return ctx->GetOption(RSK_BASE_ICE_TRAPS).Get() != 0 || ctx->GetOption(RSK_ADDITIONAL_ICE_TRAPS).Get() > 0 ||
+           ctx->GetOption(RSK_ICE_TRAP_PERCENT).Get() > 0;
 }
 
 static RandomizerGet RandomJunkExcludingTraps() {
@@ -206,7 +205,9 @@ void GenerateItemPool() {
     if (!ctx->GetOption(RSK_STARTING_ZORA_TUNIC))     AddItemToPool(RG_ZORA_TUNIC, 2, 1, 1, 1);
     if (!ctx->GetOption(RSK_STARTING_HOVER_BOOTS))    AddItemToPool(RG_HOVER_BOOTS, 2, 1, 1, 1);
     if (!ctx->GetOption(RSK_STARTING_MIRROR_SHIELD))  AddItemToPool(RG_MIRROR_SHIELD, 2, 1, 1, 1);
-    if (!ctx->GetOption(RSK_STARTING_STONE_OF_AGONY)) AddItemToPool(RG_STONE_OF_AGONY, 2, 1, 1, 1);
+    // Stone of Agony is a 2-level progressive: 1st copy = the stone, 2nd = the
+    // Quartz of Motion (the tracking sensor). Two copies in every pool setting.
+    if (!ctx->GetOption(RSK_STARTING_STONE_OF_AGONY)) AddItemToPool(RG_STONE_OF_AGONY, 3, 2, 2, 2);
     if (!removeVanillaMajors && !ctx->GetOption(RSK_STARTING_FIRE_ARROWS))  AddItemToPool(RG_FIRE_ARROWS, 2, 1, 1, 1);
     if (!removeVanillaMajors && !ctx->GetOption(RSK_STARTING_ICE_ARROWS))   AddItemToPool(RG_ICE_ARROWS, 2, 1, 1, 1);
     if (!removeVanillaMajors && !ctx->GetOption(RSK_STARTING_LIGHT_ARROWS)) AddItemToPool(RG_LIGHT_ARROWS, 2, 1, 1, 1);
@@ -556,13 +557,48 @@ void GenerateItemPool() {
         AddItemToPool(RG_MM_MASK_FIERCE_DEITY, 2, 1, 1, 1);
     }
 
+    // 2026-08-06 symmetric cross-game category: MM's own songs in a SOLO OoT pool (in combo they
+    // cross through the combo's supply — this checkbox is the standalone half, mirroring 2ship's
+    // "Add OoT Songs & Quest Items"). Only the MM-unique seven: the songs MM shares with OoT
+    // (Epona/Saria/Storms/Sun/Time) already exist natively here. No OoT location requires any of
+    // them, so seeds stay beatable. Skijer's NEI
+    if (ctx->GetOption(RSK_MM_SONGS)) {
+        SPDLOG_INFO("[NEI] MM_SONGS block ENTERED — adding 7 MM songs");
+        AddItemToPool(RG_MM_SONG_SONATA, 2, 1, 1, 1);
+        AddItemToPool(RG_MM_SONG_LULLABY, 2, 1, 1, 1);
+        AddItemToPool(RG_MM_SONG_NOVA, 2, 1, 1, 1);
+        AddItemToPool(RG_MM_SONG_ELEGY, 2, 1, 1, 1);
+        AddItemToPool(RG_MM_SONG_OATH, 2, 1, 1, 1);
+        AddItemToPool(RG_MM_SONG_HEALING, 2, 1, 1, 1);
+        AddItemToPool(RG_MM_SONG_SOARING, 2, 1, 1, 1);
+    }
+
     // Skijer's Custom Items (Second Inventory Page) - 24 items
     if (ctx->GetOption(RSK_SKIJER_CUSTOM_ITEMS)) {
         SPDLOG_INFO("[NEI] SKIJER_CUSTOM_ITEMS block ENTERED — adding 24 custom items, itemPool.size() before = {}", itemPool.size());
         AddItemToPool(RG_PROGRESSIVE_ROCS, 3, 2, 2, 2);
         AddItemToPool(RG_WHIP, 2, 1, 1, 1);
         AddItemToPool(RG_SPINNER, 2, 1, 1, 1);
-        AddItemToPool(RG_BOMB_ARROWS, 2, 1, 1, 1);
+        // Bomb Arrows only enters the pool in "Shuffled" mode — the other two modes hand it out for
+        // free (Off = Twilight Upgrade only, Bomb Bag = the moment you own a bomb bag), so placing a
+        // check for something you already have would waste a location. Skijer's NEI
+        if (ctx->GetOption(RSK_SHUFFLE_BOMB_ARROWS).Get() == RO_BOMB_ARROWS_SHUFFLED) {
+            AddItemToPool(RG_BOMB_ARROWS, 2, 1, 1, 1);
+        }
+        // Elemental Wand — same slot flag in all three modes, different pool shape:
+        //   Medallions / Single item -> ONE item (the wand); the medallions or that single pickup
+        //                               decide which rods work.
+        //   Elemental shuffle        -> SIX items, one per rod; the first found grants the slot.
+        if (ctx->GetOption(RSK_ELEMENTAL_WAND_SHUFFLE).Get() == RO_WAND_ELEMENTAL_SHUFFLE) {
+            AddItemToPool(RG_WAND_SAND_ROD, 2, 1, 1, 1);
+            AddItemToPool(RG_WAND_TORNADO_ROD, 2, 1, 1, 1);
+            AddItemToPool(RG_WAND_WATER_ROD, 2, 1, 1, 1);
+            AddItemToPool(RG_WAND_METEOR_ROD, 2, 1, 1, 1);
+            AddItemToPool(RG_WAND_STORM_ROD, 2, 1, 1, 1);
+            AddItemToPool(RG_WAND_SHADOW_SCEPTER, 2, 1, 1, 1);
+        } else {
+            AddItemToPool(RG_ELEMENTAL_WAND, 2, 1, 1, 1);
+        }
         AddItemToPool(RG_FIRE_ROD, 2, 1, 1, 1);
         AddItemToPool(RG_DEMISE_DESTRUCTION, 2, 1, 1, 1);
         AddItemToPool(RG_DEKU_LEAF, 2, 1, 1, 1);
@@ -575,11 +611,28 @@ void GenerateItemPool() {
         AddItemToPool(RG_GUST_JAR, 2, 1, 1, 1);
         AddItemToPool(RG_BALL_AND_CHAIN, 2, 1, 1, 1);
         AddItemToPool(RG_LIGHT_ROD, 2, 1, 1, 1);
-        AddItemToPool(RG_HYLIAS_GRACE, 2, 1, 1, 1);
+        // RG_HYLIAS_GRACE REMOVED from the pool (user 2026-08-06): the item is retired outright —
+        // its noclip moves to the Soul spell (TODO). The RG stays defined and its logic.cpp CanUse
+        // cases still compile; an unobtainable item simply evaluates false there, and every use is
+        // an OR-alternative, so no location becomes unreachable.
+        // The four 2026-08-06 page-2 additions (behaviorless-for-now real items):
+        // Sheikah Slate: the pool item is gone — the FOUR RUNES are the placeable siblings now
+        // (wand idiom: any order, each with its own textbox; the first found hands over the slate).
+        AddItemToPool(RG_SLATE_RUNE_BOMB, 2, 1, 1, 1);
+        AddItemToPool(RG_SLATE_RUNE_MASTER_CYCLE, 2, 1, 1, 1);
+        AddItemToPool(RG_SLATE_RUNE_STASIS, 2, 1, 1, 1);
+        AddItemToPool(RG_SLATE_RUNE_CRYONIS, 2, 1, 1, 1);
+        AddItemToPool(RG_PHANTOM_HOURGLASS, 2, 1, 1, 1);
+        AddItemToPool(RG_SHADOW_CRYSTAL, 2, 1, 1, 1);
+        AddItemToPool(RG_ROD_OF_SEASONS, 2, 1, 1, 1);
         AddItemToPool(RG_LANTERN, 2, 1, 1, 1);
         AddItemToPool(RG_MINISH_CAP, 2, 1, 1, 1);
         AddItemToPool(RG_POKEBALL, 2, 1, 1, 1);
-        AddItemToPool(RG_CANE_OF_SOMARIA, 2, 1, 1, 1);
+        // Dual Cane (Skijer's NEI): SIX copies, because the cane is six separate
+        // skills sharing one slot and each copy unlocks the next one (see the
+        // RG_CANE_OF_SOMARIA arm in randomizer.cpp). Scarce/minimal pools still
+        // hand out fewer, which just means fewer skills that seed.
+        AddItemToPool(RG_CANE_OF_SOMARIA, 7, 6, 3, 1);
         AddItemToPool(RG_SHOVEL, 2, 1, 1, 1);
         AddItemToPool(RG_DOMINION_ROD, 2, 1, 1, 1);
         AddItemToPool(RG_DESIRE_SENSOR, 2, 1, 1, 1);
@@ -587,7 +640,7 @@ void GenerateItemPool() {
 
     // Extended Equipment (equipment page 2) - 12 items
     if (ctx->GetOption(RSK_EXT_EQUIPMENT)) {
-        SPDLOG_INFO("[NEI] EXT_EQUIPMENT block ENTERED — adding 12 ext equipment items, itemPool.size() before = {}", itemPool.size());
+        SPDLOG_INFO("[NEI] EXT_EQUIPMENT block ENTERED — adding 15 ext equipment items, itemPool.size() before = {}", itemPool.size());
         AddItemToPool(RG_EXT_CANE_OF_BYRNA, 2, 1, 1, 1);
         AddItemToPool(RG_EXT_FOUR_SWORD, 2, 1, 1, 1);
         AddItemToPool(RG_EXT_DIVINE_SHIELD, 2, 1, 1, 1);
@@ -599,6 +652,10 @@ void GenerateItemPool() {
         AddItemToPool(RG_EXT_PEGASUS_ANKLET, 2, 1, 1, 1);
         AddItemToPool(RG_EXT_PENDANT_OF_MEMORIES, 2, 1, 1, 1);
         AddItemToPool(RG_EXT_WATER_DRAGON_SCALE, 2, 1, 1, 1);
+        // The last three cells: playable but unplaceable until they got a randomizer id. Skijer's NEI
+        AddItemToPool(RG_EXT_TRIDENT, 2, 1, 1, 1);
+        AddItemToPool(RG_EXT_CLIMB_BOOTS, 2, 1, 1, 1);
+        AddItemToPool(RG_EXT_ROC_BOOTS, 2, 1, 1, 1);
     }
 
     // NEI Weapon Upgrades are NOT a separate fixed block — the four progressive weapons replace
@@ -1061,8 +1118,21 @@ void GenerateItemPool() {
         AddFixedItemToPool(RG_ARROWS_30);
     }
 
-    // Add 4 total bottles
-    uint8_t bottleCount = 4;
+    // 8 bottles, one per slot of NEI's bottle system (NeiSaveData.bottleSlots[8] = two kaleido cells,
+    // each a wheel over 4 slots). Vanilla's 4 left the second cell empty.
+    //
+    // In a COMBO these 8 are the shared total, not 8 more: bottleSlots is synced by FleetSync, so the
+    // two games share ONE 8-slot inventory. MM's own bottle names are covered by FC rows and skipped
+    // from its pool, so these 8 are what gets split across the two worlds - any split is fine.
+    //
+    // Contents are free. MM's logic only ever asks HAS_BOTTLE (never a specific content), and OoT's
+    // bottle contents all resolve to "have a bottle AND can reach that source" - they are refills.
+    // The two that are NOT free are handled above as fixed adds that consume a slot: Ruto's Letter
+    // (unique, opens Zora's Fountain) and the Blue Potion bottle when merchants are shuffled.
+    // In a combo, MM's exclusive contents (Gold Dust, Chateau Romani) are extra on top of these, so
+    // make room for them or the shared 8-slot inventory overflows and the surplus is lost.
+    int FleetCombo_MmOnlyBottleCount();
+    uint8_t bottleCount = (uint8_t)std::max(0, 8 - FleetCombo_MmOnlyBottleCount());
     if (ctx->GetOption(RSK_ZORAS_FOUNTAIN).IsNot(RO_ZF_OPEN)) {
         // When the letter is started with, a normal bottle takes its pool slot instead.
         if (ctx->GetOption(RSK_STARTING_BOTTLE_1).IsNot(RO_STARTING_BOTTLE_RUTOS_LETTER)) {

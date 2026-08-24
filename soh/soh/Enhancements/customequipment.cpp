@@ -17,10 +17,10 @@ extern "C" {
 #include "variables.h"
 #include "mods/transformation_masks/transformation_masks.h"
 // Skijer's NEI: draw-fork subsystems
-#include "mods/pak_loader/pak_loader.h"     // PakLoader_FrameBegin
-#include "expansions/sm64/sm64_mario.h"     // Sm64Mario_HasMesh/Draw/ShouldHideLink
-#include "mods/items/custom_items.h"        // CustomItems_OverrideDraw
-#include "mods/extended_equipment.h"        // ExtEquip_DrawBehavior
+#include "mods/pak_loader/pak_loader.h" // PakLoader_FrameBegin
+#include "expansions/sm64/sm64_mario.h" // Sm64Mario_HasMesh/Draw/ShouldHideLink
+#include "mods/items/custom_items.h"    // CustomItems_OverrideDraw
+#include "mods/extended_equipment.h"    // ExtEquip_DrawBehavior
 extern SaveContext gSaveContext;
 
 // Harpoon Prop Hunt local-prop draw intercept. Forward-declared (matching the
@@ -44,6 +44,13 @@ void Sw97_DrawCuccoForm(PlayState* play, Player* player);
 // and its horizontal speed is clamped to CUCCO_EGG_SPEED_MAX.
 void Sw97_TagCuccoEgg(Actor* arrow);
 void Sw97_TickCuccoEggClamp(Actor* arrow);
+
+// Cucco shield / aim state, needed by the input strip and the VB guards below.
+s32 Sw97_CuccoShieldIsUp(void);
+s32 Sw97_CuccoEggAimActive(void);
+// 0 = soul-arrow form (30s, no items), 1 = CVar form (persistent, items OK).
+extern s32 gSw97CuccoModeSource;
+void Sw97_EndCuccoMode(void);
 }
 
 static const char* ResolveCustomChain(std::initializer_list<const char*> paths) {
@@ -695,9 +702,11 @@ static void RegisterPlayerDrawForkNEI() {
     // Skijer's NEI: held item is two-handed for the FD-skin sword + custom Fire/Ice/Light rods (BGS-style)
     REGISTER_VB_SHOULD(VB_PLAYER_HOLDS_TWO_HANDED_WEAPON, {
         Player* player = (Player*)va_arg(args, void*);
-        if ((TransformMasks_IsFDSkinMode() && Player_ActionToMeleeWeapon(player->heldItemAction) > 0) ||
-            player->heldItemAction == PLAYER_IA_ROD_FIRE || player->heldItemAction == PLAYER_IA_ROD_ICE ||
-            player->heldItemAction == PLAYER_IA_ROD_LIGHT) {
+        // FD wields the Deity sword two-handed no matter which sword is equipped, and
+        // nothing at all when no sword is in hand — Player_IsFDHoldingSword is that gate
+        // (swords only: a Deku Stick / Hammer in FD's hands keeps its own identity).
+        if (Player_IsFDHoldingSword(player) || player->heldItemAction == PLAYER_IA_ROD_FIRE ||
+            player->heldItemAction == PLAYER_IA_ROD_ICE || player->heldItemAction == PLAYER_IA_ROD_LIGHT) {
             *should = true;
         }
     });
@@ -809,36 +818,65 @@ static void RegisterCuccoArrowEggHooks() {
             Sw97_TagCuccoEgg((Actor*)actorPtr);
         }
     });
-    COND_ID_HOOK(OnActorUpdate, ACTOR_EN_ARROW, true, [](void* actorPtr) {
-        Sw97_TickCuccoEggClamp((Actor*)actorPtr);
+    COND_ID_HOOK(OnActorUpdate, ACTOR_EN_ARROW, true, [](void* actorPtr) { Sw97_TickCuccoEggClamp((Actor*)actorPtr); });
+
+    // The cucco shield forces player->currentShield to Deku so vanilla
+    // projectiles will reflect off it (EnNutsball / EnOkuta both gate on that
+    // field). The side effect to shut down is fire: a burning block would run
+    // Inventory_DeleteEquipment and destroy a shield the player does not own.
+    REGISTER_VB_SHOULD(VB_BURN_SHIELD, {
+        if (Sw97_CuccoShieldIsUp()) {
+            *should = false;
+        }
+    });
+
+    // Cucco eggs are free. Without this, fire and light eggs would bill the
+    // player for magic they never spent on a bow.
+    REGISTER_VB_SHOULD(VB_EN_ARROW_MAGIC_CONSUMPTION, {
+        if (Sw97_IsCuccoModeActive()) {
+            *should = false;
+        }
+    });
+
+    // Soul-arrow cucco is a movement-only form: reaching for any item drops
+    // the transformation instead of using it. The CVar form keeps its items.
+    REGISTER_VB_SHOULD(VB_CHANGE_HELD_ITEM_AND_USE_ITEM, {
+        if (Sw97_IsCuccoModeActive() && gSw97CuccoModeSource == 0) {
+            Sw97_EndCuccoMode();
+            *should = false;
+        }
     });
 }
 static RegisterShipInitFunc initFuncCuccoArrowEggHooks(RegisterCuccoArrowEggHooks, {});
 
-static void RegisterSnowquillHooks() {
+static void RegisterSagesTunicHooks() {
     REGISTER_VB_SHOULD(VB_RECIEVE_FALL_DAMAGE, {
-        if (ExtEquip_HasSnowquillResistance(SNOWQUILL_RESIST_FALL)) {
+        if (ExtEquip_HasSagesResistance(SAGES_RESIST_FALL)) {
+            ExtEquip_SagesFlash(SAGES_RESIST_FALL);
             *should = false;
         }
     });
     REGISTER_VB_SHOULD(VB_LIKE_LIKE_GRAB_PLAYER, {
-        if (ExtEquip_HasSnowquillResistance(SNOWQUILL_RESIST_STUN)) {
+        if (ExtEquip_HasSagesResistance(SAGES_RESIST_STUN)) {
+            ExtEquip_SagesFlash(SAGES_RESIST_STUN);
             *should = false;
         }
     });
     REGISTER_VB_SHOULD(VB_REDEAD_GIBDO_FREEZE_LINK, {
-        if (ExtEquip_HasSnowquillResistance(SNOWQUILL_RESIST_STUN)) {
+        if (ExtEquip_HasSagesResistance(SAGES_RESIST_STUN)) {
+            ExtEquip_SagesFlash(SAGES_RESIST_STUN);
             *should = false;
         }
     });
     REGISTER_VB_SHOULD(VB_ENEMY_GRAB_PLAYER, {
-        if (ExtEquip_HasSnowquillResistance(SNOWQUILL_RESIST_STUN)) {
+        if (ExtEquip_HasSagesResistance(SAGES_RESIST_STUN)) {
+            ExtEquip_SagesFlash(SAGES_RESIST_STUN);
             *should = false;
         }
     });
 }
 
-static RegisterShipInitFunc initFuncSnowquillHooks(RegisterSnowquillHooks, {});
+static RegisterShipInitFunc initFuncSagesTunicHooks(RegisterSagesTunicHooks, {});
 
 extern "C" u8 Champion_AllowsMidairAim(Player* player);
 
@@ -848,13 +886,19 @@ static void RegisterChampionHooks() {
         if (Champion_AllowsMidairAim(player)) {
             *should = true;
         }
+        // A flying cucco needs to be able to aim its eggs. Without this,
+        // Player_ActionHandler_13 refuses midair and the mirilla dies on the
+        // frame it opens.
+        if (Sw97_CuccoEggAimActive()) {
+            *should = true;
+        }
     });
 }
 
 static RegisterShipInitFunc initFuncChampionHooks(RegisterChampionHooks, {});
 
 // Skijer's NEI: SM64 pre-UpdateCommon pre-pass (z_player pieces 1-2,5-7; 3-4 stay inline)
-#define SM64_SWAP_AB(b) (((b) & ~(BTN_A | BTN_B)) | (((b) & BTN_A) ? BTN_B : 0) | (((b) & BTN_B) ? BTN_A : 0))
+#define SM64_SWAP_AB(b) (((b) & ~(BTN_A | BTN_B)) | (((b)&BTN_A) ? BTN_B : 0) | (((b)&BTN_B) ? BTN_A : 0))
 static void RegisterSm64PreUpdateCommonNEI() {
     // Pieces 1-2: tick transition-suspend (before any IsActive/IsReady check),
     // then the (now no-op) Mario-mask C-Down force/toggle.
@@ -876,13 +920,32 @@ static void RegisterSm64PreUpdateCommonNEI() {
         if (MmForm_IsPikachuActive()) {
             PikachuForm_InterceptStatus(play, player);
         }
-        // SW97 cucco mode: strip A from Link's input so his actionFunc doesn't
-        // roll on the ground / attack in air / trigger the sword slash. Our
-        // Sw97_TickCuccoMode reads the raw A press from play->state.input[0]
-        // (unaffected by this) to drive the flap burst on velocity.y.
+        // SW97 cucco mode: strip the buttons the cucco moveset owns from
+        // Link's input, so his actionFunc doesn't roll, jump-slash or raise a
+        // shield a cucco isn't carrying. Sw97_TickCuccoMode reads the raw
+        // presses from play->state.input[0] (unaffected by this) instead.
+        //
+        // A and B are always ours (flap/glide, Wing Whack/spin, egg fire).
+        // R is conditional: with a real shield equipped AND on the ground it
+        // is left alone so Link's own shield AI takes over — that fallback is
+        // the whole reason this isn't a flat strip. Airborne R stays ours so
+        // the ground pound survives regardless of equipment.
+        //
+        // Stripping A/B/R also keeps the first-person aim alive: the vanilla
+        // aim state bails on any A/B/R press (z_player.c:14753), and it reads
+        // this same stripped copy.
         if (Sw97_IsCuccoModeActive()) {
-            in->cur.button   &= ~BTN_A;
-            in->press.button &= ~BTN_A;
+            u16 strip = BTN_A | BTN_B;
+            // Read the EQUIPMENT, never player->currentShield — the cucco
+            // shield overwrites that field to Deku while it is up.
+            bool hasShield = SHIELD_EQUIP_TO_PLAYER(CUR_EQUIP_VALUE(EQUIP_TYPE_SHIELD)) != PLAYER_SHIELD_NONE;
+            bool grounded = (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) != 0;
+            if (!(hasShield && grounded)) {
+                strip |= BTN_R;
+            }
+            in->cur.button &= ~strip;
+            in->press.button &= ~strip;
+            in->rel.button &= ~strip;
         }
         if (Sm64Mario_IsReady()) {
             in->cur.button = SM64_SWAP_AB(in->cur.button);
@@ -908,13 +971,46 @@ LinkAnimationHeader* MmForm_GetZoraBoomerangAnim(s32 phase);
 static void RegisterPlayerAnimOverrideNEI() {
     REGISTER_VB_SHOULD(VB_PLAYER_ANIM_OVERRIDE, {
         s32 siteId = va_arg(args, s32);
-        // siteArg still has to be consumed from the va_list even though no surviving case
-        // reads it — the hook's argument order is fixed.
-        (void)va_arg(args, s32);
+        s32 siteArg = va_arg(args, s32);
         LinkAnimationHeader** animOut = va_arg(args, LinkAnimationHeader**);
         Player* player = va_arg(args, Player*);
 
         switch (siteId) {
+            case VB_PLAYER_ANIM_SITE_DODGE_HOP: {
+                // Gerudo's sidehops and backflip. siteArg is the direction; the clip
+                // is resampled to the vanilla one's length inside the getter, so the
+                // hop keeps exactly OOT's timing and travel.
+                LinkAnimationHeader* gerudoHop = GerudoMhr_GetHopAnim(siteArg);
+                if (gerudoHop != nullptr) {
+                    *animOut = gerudoHop;
+                }
+                break;
+            }
+            case VB_PLAYER_ANIM_SITE_SHIELD_RAISE: {
+                // Gerudo blade guard: the raise slice (1-20 of the flourish, x2).
+                // The Trident does NOT override this: its guard is vanilla's shield
+                // stance now, and R+B is a guard dash instead of a crouch stab.
+                LinkAnimationHeader* gerudoRaise = GerudoMhr_GetGuardAnim(player, 0);
+                if (gerudoRaise != nullptr) {
+                    *animOut = gerudoRaise;
+                }
+                break;
+            }
+            case VB_PLAYER_ANIM_SITE_SHIELD_LOOP: {
+                LinkAnimationHeader* gerudoLoop = GerudoMhr_GetGuardAnim(player, 1);
+                if (gerudoLoop != nullptr) {
+                    *animOut = gerudoLoop;
+                }
+                break;
+            }
+            case VB_PLAYER_ANIM_SITE_FALL_WAIT: {
+                // Gerudo falls with the blades out.
+                LinkAnimationHeader* gerudoFall = GerudoMhr_GetFallAnim(player);
+                if (gerudoFall != nullptr) {
+                    *animOut = gerudoFall;
+                }
+                break;
+            }
             case VB_PLAYER_ANIM_SITE_ZORA_BOOMERANG_WAIT: {
                 // Zora boomerang phase 0, transformed only
                 LinkAnimationHeader* formAnim =
@@ -933,10 +1029,18 @@ static void RegisterPlayerAnimOverrideNEI() {
                 }
                 break;
             }
+            case VB_PLAYER_ANIM_SITE_ROLL: {
+                // Gerudo rolls with a dual-blades tumble. OOT's roll action is
+                // untouched — this only changes which clip it plays.
+                LinkAnimationHeader* gerudoRoll = GerudoMhr_GetRollAnim();
+                if (gerudoRoll != nullptr) {
+                    *animOut = gerudoRoll;
+                }
+                break;
+            }
             case VB_PLAYER_ANIM_SITE_JUMPSLASH_RECOVERY: {
                 // Jump-slash recovery: transformed + mwa in [FLIPSLASH_FINISH, JUMPSLASH_FINISH]
-                if (TransformMasks_IsTransformed() &&
-                    (player->meleeWeaponAnimation >= PLAYER_MWA_FLIPSLASH_FINISH) &&
+                if (TransformMasks_IsTransformed() && (player->meleeWeaponAnimation >= PLAYER_MWA_FLIPSLASH_FINISH) &&
                     (player->meleeWeaponAnimation <= PLAYER_MWA_JUMPSLASH_FINISH)) {
                     LinkAnimationHeader* formAnim = MmForm_GetJumpSlashAnim(player->meleeWeaponAnimation);
                     if (formAnim != nullptr) {

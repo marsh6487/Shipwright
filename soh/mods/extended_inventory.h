@@ -18,14 +18,27 @@
 extern "C" {
 #endif
 
+// Skijer's NEI — layout of the UNIFIED trade wheel (trade_items.c / sTradeAdultItems).
+// SLOT_TRADE_ADULT is a grid over every non-mask trade item the player owns, in this bit order
+// (the order is also the tradeAdultOwned bit layout in nei_save.h, so entries may only be APPENDED):
+//   0..10  OoT adult trade chain (Pocket Egg .. Claim Check)  — genuinely adult-only
+//   11..18 MM trade items (Moon's Tear, 4 Title Deeds, Room Key, Letter to Kafei, Special Delivery)
+//   19     Pendant of Memories (== ITEM_EXT_BOOTS_2)
+//   20..22 OoT child trade chain (Weird Egg, Cucco, Zelda's Letter)
+// Only 0..10 keep AGE_REQ_ADULT; everything above is age-free (see ExtInv_GetSlotAgeReq).
+#define TRADE_ADULT_OOT_LAST 10
+
 // Skijer's NEI — custom inventory slots 24..71 live in gNeiSave (NOT in the
 // vanilla SaveContext, which only has items[0..23]). These dispatch helpers
 // read/write the right backing store by slot index. Use them anywhere a slot
 // could be >= 24.
-static inline uint8_t ExtInv_GetSlotItem(int slot) {
+// u16, not u8: page-2 slots live in the widened NeiSaveData.ownedItems and can hold an EXT id above
+// 0xFF. Page-1 slots (0..23) are still u8 values from the vanilla inventory, just returned widened.
+// Skijer's NEI
+static inline uint16_t ExtInv_GetSlotItem(int slot) {
     extern SaveContext gSaveContext;
     if (slot >= 0 && slot < 24) {
-        uint8_t item = gSaveContext.inventory.items[slot];
+        uint16_t item = gSaveContext.inventory.items[slot];
         // Pictograph Box shares the Lens of Truth slot: when owned, the slot is selectable AND
         // equippable even without the real Lens (the in-game C-button routes to the pictobox, and the
         // icon swaps via ExtInv_GetItemIcon). Without this, an empty Lens slot can't be equipped at all.
@@ -36,14 +49,27 @@ static inline uint8_t ExtInv_GetSlotItem(int slot) {
                 return ITEM_LENS;
             }
         }
+        // Power Keg rides the Bomb cell and its ownership lives in its own flag, so owning ONLY the
+        // keg (no bomb bag yet) left the cell empty — and an empty cell is skipped by the kaleido
+        // cursor, which made the keg unreachable. Synthesise ITEM_BOMB, not a keg id: every piece of
+        // the keg (icon swap in ExtInv_GetItemIcon, the C-button in z_parameter.c, the mode wheel in
+        // z_kaleido_item.c) keys off `item == ITEM_BOMB && PowerKeg_IsOwned()`. Real bombs stay
+        // unusable meanwhile — with no bag the ammo is 0. Skijer's NEI
+        if (slot == SLOT_BOMB && item == ITEM_NONE) {
+            extern unsigned char PowerKeg_IsOwned(void);
+            if (PowerKeg_IsOwned()) {
+                return ITEM_BOMB;
+            }
+        }
         return item;
     }
     return Nei_GetOwnedItem((uint8_t)slot);
 }
-static inline void ExtInv_SetSlotItem(int slot, uint8_t itemId) {
+// An EXT id (>0xFF) only fits in a page-2 slot; the vanilla range truncates, hence the explicit cast.
+static inline void ExtInv_SetSlotItem(int slot, uint16_t itemId) {
     extern SaveContext gSaveContext;
     if (slot >= 0 && slot < 24) {
-        gSaveContext.inventory.items[slot] = itemId;
+        gSaveContext.inventory.items[slot] = (uint8_t)itemId;
     } else {
         Nei_SetOwnedItem((uint8_t)slot, itemId);
     }
@@ -96,6 +122,51 @@ typedef struct {
 const NeiItem* Nei_FindByItem(int32_t item);
 const NeiItem* Nei_FindBySlot(uint8_t slot);
 const NeiItem* Nei_FindByRg(int16_t rg); // Skijer's NEI
+
+// ── SW97 primed element (Skijer's NEI) ───────────────────────────────────────
+// The bow/slingshot element is a FLAG, not the item on the button. Everything downstream reads
+// Sw97_EffectiveElement() and nothing else — that is where the CVar gate and the "bombs are
+// bow-only" rule live. `isSling` is 0 for the bow, 1 for the slingshot; the two carry independent
+// elements on purpose (spirit arrows and wind bullets may be primed at the same time).
+uint8_t Sw97_ElementOwned(uint8_t elem);
+uint8_t Sw97_ElementCount(uint8_t isSling);
+uint8_t Sw97_ElementAt(uint8_t isSling, uint8_t index);
+uint8_t Sw97_GetElement(uint8_t isSling);
+void Sw97_SetElement(uint8_t isSling, uint8_t elem);
+uint8_t Sw97_ElementNeighbor(uint8_t isSling, uint8_t elem, int32_t dir);
+uint16_t Sw97_ElementIcon(uint8_t elem);
+uint8_t Sw97_EffectiveElement(uint8_t isSling);
+uint8_t Sw97_IsBowItem(uint16_t item);
+uint8_t Sw97_IsSlingItem(uint16_t item);
+uint8_t Sw97_BombArrowsOwned(void);
+uint8_t Sw97_BombArrowsOnButton(void);
+uint8_t BombArrows_RandoMode(void);
+void Sw97_RefreshButtonIcons(struct PlayState* play);
+void Sw97_MigrateLayout(struct PlayState* play); // one-shot, gated by NeiSaveData.sw97LayoutVersion
+
+// ── Elemental Wand (Skijer's NEI) ────────────────────────────────────────────
+uint8_t Wand_RandoMode(void);
+uint8_t Wand_ModeOwned(uint8_t mode);
+void Wand_GrantMode(uint8_t mode);
+uint8_t Wand_ModeCount(void);
+uint8_t Wand_ModeAt(uint8_t index);
+uint8_t Wand_GetMode(void);
+void Wand_SetMode(uint8_t mode);
+uint8_t Wand_ModeNeighbor(uint8_t mode, int32_t dir);
+uint16_t Wand_ModeMedallion(uint8_t mode);
+void* Wand_ModeIcon(uint8_t mode);
+void* Wand_ModeNameTex(uint8_t mode);
+
+// ── Sheikah Slate runes (Skijer's NEI) — wand idiom over SLOT_SHEIKAH_SLATE ──
+uint8_t Slate_RuneOwned(uint8_t rune);
+void Slate_GrantRune(uint8_t rune); // also hands over the slot on the first rune
+uint8_t Slate_RuneCount(void);      // owned runes
+uint8_t Slate_RuneAt(uint8_t index);
+uint8_t Slate_GetRune(void); // active rune (self-healing to an owned one)
+void Slate_SetRune(uint8_t rune);
+uint8_t Slate_RuneNeighbor(uint8_t rune, int32_t dir);
+void* Slate_RuneMiniIcon(uint8_t rune); // 24x24 rune glyph (wheel previews / textbox)
+void* Slate_RuneIcon(uint8_t rune);     // 32x32 slate-with-rune-badge (cell / HUD)
 
 typedef struct {
     int currentPage;         // 0 = vanilla, 1 = custom items, 2 = MM masks
@@ -246,7 +317,13 @@ extern const uint8_t gPage2ItemAgeReqs[24];
 #define SLOT_ROCS_CAPE 24           // Now same slot as Feather (upgrade replaces it)
 #define SLOT_WHIP 25
 #define SLOT_SPINNER 26
-#define SLOT_BOMB_ARROWS 27
+// Slot 27 used to be Bomb Arrows. Bomb Arrows are the 7th value of the bow's element flag now
+// (SW97_ELEM_BOMB) and own no cell; the Elemental Wand took the freed cell. SLOT_BOMB_ARROWS is
+// KEPT as a reserved marker because call sites still reference the name — it must never be used to
+// store an item again, and gPage2Items[3] must never be shifted (each index maps to a
+// NeiSaveData::ownedItems byte, so shifting corrupts every existing save).
+#define SLOT_BOMB_ARROWS 27 // RESERVED — do not store into
+#define SLOT_ELEMENTAL_WAND 27
 #define SLOT_FIRE_ROD 28
 #define SLOT_DEMISE_DESTRUCTION 29
 #define SLOT_DEKU_LEAF 30
@@ -258,6 +335,21 @@ extern const uint8_t gPage2ItemAgeReqs[24];
 #define SLOT_MOGMA_MITTS 36
 #define SLOT_GUST_JAR 37
 #define SLOT_BALL_AND_CHAIN 38
+// The four EXT (u16) page-2 item ids added by the 2026-08-06 re-layout. Values must stay
+// byte-identical with the MM side (mm/include/z64item.h). First inventory consumers of the u16
+// space — the u8 id space is exhausted. Skijer's NEI
+#ifndef EXT_ITEM_SHEIKAH_SLATE
+#define EXT_ITEM_SHEIKAH_SLATE 0x0220
+#define EXT_ITEM_PHANTOM_HOURGLASS 0x0221
+#define EXT_ITEM_SHADOW_CRYSTAL 0x0222
+#define EXT_ITEM_ROD_OF_SEASONS 0x0223
+#endif
+// 2026-08-06 re-layout cell owners (same numbers as MM). The old defines below keep their values so
+// existing code compiles; the CELL belongs to the new item.
+#define SLOT_SHEIKAH_SLATE 39
+#define SLOT_PHANTOM_HOURGLASS 41
+#define SLOT_SHADOW_CRYSTAL 44
+#define SLOT_ROD_OF_SEASONS 47
 #define SLOT_DESIRE_SENSOR 39
 #define SLOT_LIGHT_ROD 40
 #define SLOT_HYLIAS_GRACE 41
@@ -321,12 +413,14 @@ static inline void ExtInv_ClearPage2Items(void) { // Skijer's NEI
         Nei_SetOwnedItem((uint8_t)i, ITEM_NONE);
     }
 }
-static inline void ExtInv_GiveItem(uint8_t slot, uint8_t itemId) { // Skijer's NEI
+// itemId is u16 so a page-2 slot can be given an EXT id (>0xFF); the store behind it is u16 too.
+// Skijer's NEI
+static inline void ExtInv_GiveItem(uint8_t slot, uint16_t itemId) {
     if (slot >= 24 && slot < 48) {
         Nei_SetOwnedItem(slot, itemId);
     }
 }
-static inline void ExtInv_SetItemById(uint8_t itemId) { // Skijer's NEI
+static inline void ExtInv_SetItemById(uint16_t itemId) { // Skijer's NEI
     uint8_t slot = ExtInv_GetItemSlot(itemId);
     if (slot != 0xFF) {
         ExtInv_SetSlotItem(slot, itemId);

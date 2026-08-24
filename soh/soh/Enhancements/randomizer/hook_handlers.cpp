@@ -23,6 +23,9 @@ extern "C" {
 #include "variables.h"
 #include "soh/Enhancements/randomizer/ShuffleTradeItems.h"
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
+#include "mods/nei_save.h"                     // Skijer's NEI — shared combo goal flags
+#include "soh/FleetShipCombo/FleetComboIds.h"  // FC_GOAL_*
+#include "soh/FleetShipCombo/FleetShipCombo.h" // FleetCombo_BeatBothBosses
 #include "soh/Enhancements/randomizer/randomizer_grotto.h"
 #include "src/overlays/actors/ovl_Bg_Treemouth/z_bg_treemouth.h"
 #include "src/overlays/actors/ovl_Bg_Jya_Bigmirror/z_bg_jya_bigmirror.h"
@@ -1889,6 +1892,30 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
             break;
         }
         case VB_SLAY_GANON:
+            // Fleet Ship Combo, Beat Both Bosses: the goal spans two games, so Ganon falling is only
+            // half of it. Record the win in the SHARED flags, and if Majora is still standing, take
+            // the same road the non-Ganon win conditions already take — no slaying cutscene, the
+            // check is handed over, and Link is put back outside the castle to keep playing. The run
+            // ends on whichever boss dies second, in whichever game that happens to be.
+            if (FleetCombo_BeatBothBosses()) {
+                NeiSaveData* nei = Nei_Save();
+                nei->comboGoalFlags |= FC_GOAL_GANON_BEATEN;
+                if (!(nei->comboGoalFlags & FC_GOAL_MAJORA_BEATEN)) {
+                    *should = false;
+                    Flags_SetRandomizerInf(RAND_INF_DUNGEONS_DONE_GANONS_TOWER);
+                    randomizerQueuedChecks.push(RC_GANON);
+                    CheckTriggers();
+                    // Save on the spot: the shared flag has to survive even if the player quits here,
+                    // or Termina would never learn that Ganon is already down.
+                    SaveManager::Instance->SaveFile(gSaveContext.fileNum);
+                    gPlayState->nextEntranceIndex = ENTR_OUTSIDE_GANONS_CASTLE_1_2;
+                    gPlayState->transitionTrigger = TRANS_TRIGGER_START;
+                    gPlayState->transitionType = TRANS_TYPE_FADE_WHITE;
+                    gSaveContext.nextTransitionType = TRANS_TYPE_FADE_WHITE_SLOW;
+                    break;
+                }
+                // Majora already fell: this IS the end of the run, so let the vanilla path run.
+            }
             if (RAND_GET_OPTION(RSK_WINCON).IsNot(RO_WINCON_DEFEAT_GANON)) {
                 *should = false;
                 Flags_SetRandomizerInf(RAND_INF_DUNGEONS_DONE_GANONS_TOWER);

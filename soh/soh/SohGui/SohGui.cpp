@@ -166,8 +166,8 @@ void SetupGuiElements() {
     mDLViewerWindow =
         std::make_shared<DLViewerWindow>(CVAR_WINDOW("DisplayListViewer"), "Display List Viewer", ImVec2(520, 600));
     gui->AddGuiWindow(mDLViewerWindow);
-    mAnimationViewerWindow = std::make_shared<AnimationViewerWindow>(CVAR_WINDOW("AnimationViewer"),
-                                                                     "Animation Viewer", ImVec2(520, 600));
+    mAnimationViewerWindow =
+        std::make_shared<AnimationViewerWindow>(CVAR_WINDOW("AnimationViewer"), "Animation Viewer", ImVec2(520, 600));
     gui->AddGuiWindow(mAnimationViewerWindow);
     mValueViewerWindow =
         std::make_shared<ValueViewerWindow>(CVAR_WINDOW("ValueViewer"), "Value Viewer", ImVec2(520, 600));

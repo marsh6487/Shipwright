@@ -50,7 +50,6 @@ typedef enum {
     HARPOON_STATE_FINISHED,
 } HarpoonGameState;
 
-
 typedef enum {
     MAP_SELECT_HOST_CHOOSES = 0,
     MAP_SELECT_EVERYONE_CHOOSES = 1,
@@ -109,13 +108,13 @@ typedef struct {
     // to pick the right hand/item DLs at draw time. Without these synced
     // the dummy's hands stay in their default pose even when the remote is
     // running, drawing a bow, holding an item, or in first-person.
-    f32 speedXZ;            // controls open→closed hand transition when running
-    s8  meleeWeaponState;   // sword swing state — drives weapon trail effect
-    u8  fpModeFlag;         // unk_6AD — first-person flag, hides limbs when set
-    f32 bowStringDraw;      // unk_858 — bow string stretch (0–1)
-    s16 bowArrowState;      // unk_860 — arrow nocking state
-    s16 bowDrawAnimFrame;   // unk_834 — bow draw animation frame
-    Vec3s headLimbRot;      // head rotation
+    f32 speedXZ;               // controls open→closed hand transition when running
+    s8 meleeWeaponState;       // sword swing state — drives weapon trail effect
+    u8 fpModeFlag;             // unk_6AD — first-person flag, hides limbs when set
+    f32 bowStringDraw;         // unk_858 — bow string stretch (0–1)
+    s16 bowArrowState;         // unk_860 — arrow nocking state
+    s16 bowDrawAnimFrame;      // unk_834 — bow draw animation frame
+    Vec3s headLimbRot;         // head rotation
     s16 upperLimbYawSecondary; // secondary upper-body yaw
     s8 invincibilityTimer;
     f32 unk_85C;
@@ -123,16 +122,16 @@ typedef struct {
     s8 actionVar1;
 
     // Transformation data
-    u8 transformation; // MM_PLAYER_FORM_GORON, etc. (0 = human/no transform).
-                       // HARPOON_MODELTYPE_MARIO (6) = SM64 Mario via libsm64.
-    s32 marioAnimId;   // libsm64 anim ID  (only meaningful when transformation==MARIO)
+    u8 transformation;  // MM_PLAYER_FORM_GORON, etc. (0 = human/no transform).
+                        // HARPOON_MODELTYPE_MARIO (6) = SM64 Mario via libsm64.
+    s32 marioAnimId;    // libsm64 anim ID  (only meaningful when transformation==MARIO)
     s16 marioAnimFrame; // libsm64 anim frame
-    u32 marioFlags;    // libsm64 cap flags + SOH Fire bit (drives cap/transformation)
-    s16 cylRadius;     // Form-specific collider radius
-    s16 cylHeight;     // Form-specific collider height
-    s16 cylYShift;     // Form-specific collider Y offset
-    u32 mmStateFlags3; // MM stateFlags3 (spike mode, roll active, etc.)
-    f32 mmSpeedXZ;     // MM horizontal speed
+    u32 marioFlags;     // libsm64 cap flags + SOH Fire bit (drives cap/transformation)
+    s16 cylRadius;      // Form-specific collider radius
+    s16 cylHeight;      // Form-specific collider height
+    s16 cylYShift;      // Form-specific collider Y offset
+    u32 mmStateFlags3;  // MM stateFlags3 (spike mode, roll active, etc.)
+    f32 mmSpeedXZ;      // MM horizontal speed
 
     // Model type for rendering (transformation masks, prop hunt)
     u8 modelType;     // 0=Link, 1=Goron, 2=Zora, 3=Deku, 4=FierceDeity, 5+=props
@@ -215,43 +214,43 @@ typedef struct {
 
     // ── Phase 1 sync additions — items previously missing from sync ───
     // Roc's Feather / Cape
-    u8  ciRocsFeatherJumpActive;
-    u8  ciRocsJumpCount;
+    u8 ciRocsFeatherJumpActive;
+    u8 ciRocsJumpCount;
     s16 ciRocsMmAnimTimer;
     // Bomb Arrows
-    u8  ciBombArrowActive;
-    u8  ciBombArrowState;
+    u8 ciBombArrowActive;
+    u8 ciBombArrowState;
     // Demise Destruction
-    u8  ciDemiseDestructionActive;
+    u8 ciDemiseDestructionActive;
     // Hylia's Grace
-    u8  ciHyliasGraceActive;
-    u8  ciHyliasGraceState;
-    u8  ciHyliasGraceSubPhase;
+    u8 ciHyliasGraceActive;
+    u8 ciHyliasGraceState;
+    u8 ciHyliasGraceSubPhase;
     s16 ciHyliasGraceTimer;
-    u8  ciHyliasGraceForcedBySpell;
+    u8 ciHyliasGraceForcedBySpell;
     // Zonai Permafrost
-    u8  ciZonaiPermafrostActive;
-    u8  ciZonaiPermafrostState;
-    u8  ciZonaiPermafrostSubPhase;
+    u8 ciZonaiPermafrostActive;
+    u8 ciZonaiPermafrostState;
+    u8 ciZonaiPermafrostSubPhase;
     s16 ciZonaiPermafrostTimer;
     // Lantern
-    u8  ciLanternFireType;
-    u8  ciLanternSwinging;
-    u8  ciLanternEquipped;
+    u8 ciLanternFireType;
+    u8 ciLanternSwinging;
+    u8 ciLanternEquipped;
     s16 ciLanternSwingFrame;
     // Minish Cap
-    u8  ciMinishCapWarpMode;
-    u8  ciMinishCapShrinking;
-    u8  ciMinishCapGrowing;
+    u8 ciMinishCapWarpMode;
+    u8 ciMinishCapShrinking;
+    u8 ciMinishCapGrowing;
     // Postman Hat
-    u8  ciPostmanHatDashing;
-    u8  ciPostmanHatArriving;
+    u8 ciPostmanHatDashing;
+    u8 ciPostmanHatArriving;
     s16 ciPostmanHatTransitionTimer;
     // Desire Sensor
-    u8  ciDesireSensorActive;
-    u8  ciDesireSensorState;
+    u8 ciDesireSensorActive;
+    u8 ciDesireSensorState;
     s16 ciDesireSensorTimer;
-    u8  ciDesireSensorResult;
+    u8 ciDesireSensorResult;
 
     // Prop Hunt state (from Scooter)
     std::string role; // "seeker" or "hider" (empty = no game)
@@ -307,15 +306,15 @@ typedef struct {
     // frame. Broadcasted from attackers via COMBAT.APPLY_STATUS / COMBAT.
     // PROJECTILE_HIT and applied locally to the LOCAL player only (we
     // index by ownClientId).
-    uint16_t combatBurnDotFrames;       // Fire DOT: 1♥ per 20 frames
-    uint16_t combatFreezeFrames;        // Ice freeze: no input, no actions
-    uint16_t combatBlindnessFrames;     // Dark-spell blackout overlay
-    uint16_t combatMaskEquipFrames;     // Mask-don animation duration
-    uint8_t  combatShieldRaiseFrames;   // Counts up while shielding
-    uint8_t  combatParryWindowActive;   // 1 if inside a perfect-parry frame
-    uint16_t combatLastParryWeapon;     // HarpoonWeaponId of the last parried attack
-    uint8_t  combatIkanaDeathSaveUsedThisScene;
-    uint8_t  combatZoraBarrierActive;   // 1 while Water Dragon Zora Barrier is up
+    uint16_t combatBurnDotFrames;    // Fire DOT: 1♥ per 20 frames
+    uint16_t combatFreezeFrames;     // Ice freeze: no input, no actions
+    uint16_t combatBlindnessFrames;  // Dark-spell blackout overlay
+    uint16_t combatMaskEquipFrames;  // Mask-don animation duration
+    uint8_t combatShieldRaiseFrames; // Counts up while shielding
+    uint8_t combatParryWindowActive; // 1 if inside a perfect-parry frame
+    uint16_t combatLastParryWeapon;  // HarpoonWeaponId of the last parried attack
+    uint8_t combatIkanaDeathSaveUsedThisScene;
+    uint8_t combatZoraBarrierActive;    // 1 while Water Dragon Zora Barrier is up
     uint16_t combatInvisSuppressFrames; // > 0 = mask invisibility temporarily revealed
 
     // Remote somaria cubes
@@ -457,143 +456,143 @@ class Harpoon : public Network {
     // layer wraps it. The strings below are the `type` field of the envelope.
 
     // HARPOON.* — connection lifecycle
-    inline static const std::string HPN_HANDSHAKE          = "HARPOON.HANDSHAKE";
-    inline static const std::string HPN_HANDSHAKE_ACK      = "HARPOON.HANDSHAKE_ACK";
-    inline static const std::string HPN_RESUME             = "HARPOON.RESUME";
-    inline static const std::string HPN_SERVER_INFO        = "HARPOON.SERVER_INFO";
-    inline static const std::string HPN_ERROR              = "HARPOON.ERROR";
+    inline static const std::string HPN_HANDSHAKE = "HARPOON.HANDSHAKE";
+    inline static const std::string HPN_HANDSHAKE_ACK = "HARPOON.HANDSHAKE_ACK";
+    inline static const std::string HPN_RESUME = "HARPOON.RESUME";
+    inline static const std::string HPN_SERVER_INFO = "HARPOON.SERVER_INFO";
+    inline static const std::string HPN_ERROR = "HARPOON.ERROR";
 
     // ROOM.* — lobby
-    inline static const std::string HPN_ROOM_CREATE        = "ROOM.CREATE";
-    inline static const std::string HPN_ROOM_JOIN          = "ROOM.JOIN";
-    inline static const std::string HPN_ROOM_LEAVE         = "ROOM.LEAVE";
-    inline static const std::string HPN_ROOM_LIST          = "ROOM.LIST";
+    inline static const std::string HPN_ROOM_CREATE = "ROOM.CREATE";
+    inline static const std::string HPN_ROOM_JOIN = "ROOM.JOIN";
+    inline static const std::string HPN_ROOM_LEAVE = "ROOM.LEAVE";
+    inline static const std::string HPN_ROOM_LIST = "ROOM.LIST";
     inline static const std::string HPN_ROOM_LIST_RESPONSE = "ROOM.LIST_RESPONSE";
-    inline static const std::string HPN_ROOM_JOINED        = "ROOM.JOINED";
-    inline static const std::string HPN_ROOM_LEFT          = "ROOM.LEFT";
-    inline static const std::string HPN_ROOM_MEMBERS       = "ROOM.MEMBERS_UPDATED";
-    inline static const std::string HPN_ROOM_SET_PHASE     = "ROOM.SET_PHASE";
+    inline static const std::string HPN_ROOM_JOINED = "ROOM.JOINED";
+    inline static const std::string HPN_ROOM_LEFT = "ROOM.LEFT";
+    inline static const std::string HPN_ROOM_MEMBERS = "ROOM.MEMBERS_UPDATED";
+    inline static const std::string HPN_ROOM_SET_PHASE = "ROOM.SET_PHASE";
     inline static const std::string HPN_ROOM_PHASE_CHANGED = "ROOM.PHASE_CHANGED";
-    inline static const std::string HPN_ROOM_BROADCAST     = "ROOM.BROADCAST_EVENT";
-    inline static const std::string HPN_ROOM_EVENT         = "ROOM.EVENT";
-    inline static const std::string HPN_ROOM_MANIFEST      = "ROOM.GAMEMODE_MANIFEST";
-    inline static const std::string HPN_ROOM_GM_CONFIG     = "ROOM.GAMEMODE_CONFIG";
-    inline static const std::string HPN_ROOM_TIMER         = "ROOM.TIMER";
-    inline static const std::string HPN_ROOM_START_GAME    = "ROOM.START_GAME";
-    inline static const std::string HPN_ROOM_MAP_BEGIN     = "ROOM.MAP_SELECT_BEGIN";
-    inline static const std::string HPN_ROOM_MAP_SELECT    = "ROOM.SELECT_MAP";
+    inline static const std::string HPN_ROOM_BROADCAST = "ROOM.BROADCAST_EVENT";
+    inline static const std::string HPN_ROOM_EVENT = "ROOM.EVENT";
+    inline static const std::string HPN_ROOM_MANIFEST = "ROOM.GAMEMODE_MANIFEST";
+    inline static const std::string HPN_ROOM_GM_CONFIG = "ROOM.GAMEMODE_CONFIG";
+    inline static const std::string HPN_ROOM_TIMER = "ROOM.TIMER";
+    inline static const std::string HPN_ROOM_START_GAME = "ROOM.START_GAME";
+    inline static const std::string HPN_ROOM_MAP_BEGIN = "ROOM.MAP_SELECT_BEGIN";
+    inline static const std::string HPN_ROOM_MAP_SELECT = "ROOM.SELECT_MAP";
     inline static const std::string HPN_ROOM_MAP_CONFIRMED = "ROOM.MAP_CONFIRMED";
 
     // VOTING.* — used by everyone_chooses map mode and other player votes
-    inline static const std::string HPN_VOTING_START       = "VOTING.START_VOTE";
-    inline static const std::string HPN_VOTING_CAST        = "VOTING.CAST_VOTE";
-    inline static const std::string HPN_VOTING_END         = "VOTING.END_VOTE";
-    inline static const std::string HPN_VOTING_STARTED     = "VOTING.STARTED";
-    inline static const std::string HPN_VOTING_TALLY       = "VOTING.TALLY";
-    inline static const std::string HPN_VOTING_RESULT      = "VOTING.RESULT";
+    inline static const std::string HPN_VOTING_START = "VOTING.START_VOTE";
+    inline static const std::string HPN_VOTING_CAST = "VOTING.CAST_VOTE";
+    inline static const std::string HPN_VOTING_END = "VOTING.END_VOTE";
+    inline static const std::string HPN_VOTING_STARTED = "VOTING.STARTED";
+    inline static const std::string HPN_VOTING_TALLY = "VOTING.TALLY";
+    inline static const std::string HPN_VOTING_RESULT = "VOTING.RESULT";
 
     // PLAYER.* — granular per-frame updates
-    inline static const std::string HPN_PLAYER_TRANSFORM       = "PLAYER.UPDATE_TRANSFORM";
-    inline static const std::string HPN_PLAYER_SKELETON        = "PLAYER.UPDATE_SKELETON";
-    inline static const std::string HPN_PLAYER_LIMB_ROT        = "PLAYER.UPDATE_LIMB_ROTATIONS";
-    inline static const std::string HPN_PLAYER_ANIM_FLAGS      = "PLAYER.UPDATE_ANIMATION_FLAGS";
-    inline static const std::string HPN_PLAYER_MOTION_VARS     = "PLAYER.UPDATE_MOTION_VARS";
-    inline static const std::string HPN_PLAYER_BOW_STATE       = "PLAYER.UPDATE_BOW_STATE";
-    inline static const std::string HPN_PLAYER_HAND_TYPES      = "PLAYER.UPDATE_HAND_TYPES";
-    inline static const std::string HPN_PLAYER_VISUAL_STATE    = "PLAYER.UPDATE_VISUAL_STATE";
-    inline static const std::string HPN_PLAYER_EQUIP_VISIBLE   = "PLAYER.UPDATE_EQUIP_VISIBLE";
-    inline static const std::string HPN_PLAYER_FACE            = "PLAYER.UPDATE_FACE";
-    inline static const std::string HPN_PLAYER_SCALE           = "PLAYER.UPDATE_SCALE";
-    inline static const std::string HPN_PLAYER_TRANSFORMATION  = "PLAYER.SET_TRANSFORMATION";
-    inline static const std::string HPN_PLAYER_GORON_STATE     = "PLAYER.UPDATE_GORON_STATE";
-    inline static const std::string HPN_PLAYER_INVINCIBILITY   = "PLAYER.SET_INVINCIBILITY_TIMER";
-    inline static const std::string HPN_PLAYER_CUSTOM_ITEM     = "PLAYER.UPDATE_CUSTOM_ITEM_STATE";
-    inline static const std::string HPN_PLAYER_FULL_STATE      = "PLAYER.UPDATE_FULL_STATE";
-    inline static const std::string HPN_PLAYER_KILL            = "PLAYER.KILL";
+    inline static const std::string HPN_PLAYER_TRANSFORM = "PLAYER.UPDATE_TRANSFORM";
+    inline static const std::string HPN_PLAYER_SKELETON = "PLAYER.UPDATE_SKELETON";
+    inline static const std::string HPN_PLAYER_LIMB_ROT = "PLAYER.UPDATE_LIMB_ROTATIONS";
+    inline static const std::string HPN_PLAYER_ANIM_FLAGS = "PLAYER.UPDATE_ANIMATION_FLAGS";
+    inline static const std::string HPN_PLAYER_MOTION_VARS = "PLAYER.UPDATE_MOTION_VARS";
+    inline static const std::string HPN_PLAYER_BOW_STATE = "PLAYER.UPDATE_BOW_STATE";
+    inline static const std::string HPN_PLAYER_HAND_TYPES = "PLAYER.UPDATE_HAND_TYPES";
+    inline static const std::string HPN_PLAYER_VISUAL_STATE = "PLAYER.UPDATE_VISUAL_STATE";
+    inline static const std::string HPN_PLAYER_EQUIP_VISIBLE = "PLAYER.UPDATE_EQUIP_VISIBLE";
+    inline static const std::string HPN_PLAYER_FACE = "PLAYER.UPDATE_FACE";
+    inline static const std::string HPN_PLAYER_SCALE = "PLAYER.UPDATE_SCALE";
+    inline static const std::string HPN_PLAYER_TRANSFORMATION = "PLAYER.SET_TRANSFORMATION";
+    inline static const std::string HPN_PLAYER_GORON_STATE = "PLAYER.UPDATE_GORON_STATE";
+    inline static const std::string HPN_PLAYER_INVINCIBILITY = "PLAYER.SET_INVINCIBILITY_TIMER";
+    inline static const std::string HPN_PLAYER_CUSTOM_ITEM = "PLAYER.UPDATE_CUSTOM_ITEM_STATE";
+    inline static const std::string HPN_PLAYER_FULL_STATE = "PLAYER.UPDATE_FULL_STATE";
+    inline static const std::string HPN_PLAYER_KILL = "PLAYER.KILL";
 
     // COMBAT.* — damage / status / effects
-    inline static const std::string HPN_COMBAT_DAMAGE          = "COMBAT.DEAL_DAMAGE";
-    inline static const std::string HPN_COMBAT_APPLY_STATUS    = "COMBAT.APPLY_STATUS";
-    inline static const std::string HPN_COMBAT_DECOY_HIT       = "COMBAT.DECOY_HIT";
-    inline static const std::string HPN_COMBAT_SPAWN_DECOY     = "COMBAT.SPAWN_DECOY";
-    inline static const std::string HPN_COMBAT_DESTROY_DECOY   = "COMBAT.DESTROY_DECOY";
-    inline static const std::string HPN_COMBAT_CUSTOM_EFFECT   = "COMBAT.CUSTOM_EFFECT";
+    inline static const std::string HPN_COMBAT_DAMAGE = "COMBAT.DEAL_DAMAGE";
+    inline static const std::string HPN_COMBAT_APPLY_STATUS = "COMBAT.APPLY_STATUS";
+    inline static const std::string HPN_COMBAT_DECOY_HIT = "COMBAT.DECOY_HIT";
+    inline static const std::string HPN_COMBAT_SPAWN_DECOY = "COMBAT.SPAWN_DECOY";
+    inline static const std::string HPN_COMBAT_DESTROY_DECOY = "COMBAT.DESTROY_DECOY";
+    inline static const std::string HPN_COMBAT_CUSTOM_EFFECT = "COMBAT.CUSTOM_EFFECT";
 
     // INVENTORY.* + SAVE.*
-    inline static const std::string HPN_INV_GIVE_ITEM          = "INVENTORY.GIVE_ITEM";
-    inline static const std::string HPN_INV_DUNGEON_ITEMS      = "INVENTORY.SET_DUNGEON_ITEMS";
-    inline static const std::string HPN_INV_AMMO               = "INVENTORY.SET_AMMO";
-    inline static const std::string HPN_SAVE_SET_FLAG          = "SAVE.SET_FLAG";
-    inline static const std::string HPN_SAVE_UNSET_FLAG        = "SAVE.UNSET_FLAG";
-    inline static const std::string HPN_SAVE_QUEST_STATE       = "SAVE.SET_QUEST_STATE";
-    inline static const std::string HPN_SAVE_TEAM_STATE        = "SAVE.UPDATE_TEAM_STATE";
-    inline static const std::string HPN_SAVE_TEAM_REQUEST      = "SAVE.REQUEST_TEAM_STATE";
-    inline static const std::string HPN_SAVE_CUTSCENE          = "SAVE.CUTSCENE_TRIGGER";
-    inline static const std::string HPN_SAVE_GAME_COMPLETE     = "SAVE.GAME_COMPLETE";
-    inline static const std::string HPN_AUDIO_OCARINA          = "AUDIO.OCARINA_SFX";
+    inline static const std::string HPN_INV_GIVE_ITEM = "INVENTORY.GIVE_ITEM";
+    inline static const std::string HPN_INV_DUNGEON_ITEMS = "INVENTORY.SET_DUNGEON_ITEMS";
+    inline static const std::string HPN_INV_AMMO = "INVENTORY.SET_AMMO";
+    inline static const std::string HPN_SAVE_SET_FLAG = "SAVE.SET_FLAG";
+    inline static const std::string HPN_SAVE_UNSET_FLAG = "SAVE.UNSET_FLAG";
+    inline static const std::string HPN_SAVE_QUEST_STATE = "SAVE.SET_QUEST_STATE";
+    inline static const std::string HPN_SAVE_TEAM_STATE = "SAVE.UPDATE_TEAM_STATE";
+    inline static const std::string HPN_SAVE_TEAM_REQUEST = "SAVE.REQUEST_TEAM_STATE";
+    inline static const std::string HPN_SAVE_CUTSCENE = "SAVE.CUTSCENE_TRIGGER";
+    inline static const std::string HPN_SAVE_GAME_COMPLETE = "SAVE.GAME_COMPLETE";
+    inline static const std::string HPN_AUDIO_OCARINA = "AUDIO.OCARINA_SFX";
 
     // WORLD.*
-    inline static const std::string HPN_WORLD_TRANSPORT        = "WORLD.TRANSPORT_SCENE";
-    inline static const std::string HPN_WORLD_TELEPORT         = "WORLD.TELEPORT";
+    inline static const std::string HPN_WORLD_TRANSPORT = "WORLD.TRANSPORT_SCENE";
+    inline static const std::string HPN_WORLD_TELEPORT = "WORLD.TELEPORT";
 
     // MAP.*
-    inline static const std::string HPN_MAP_ENTRANCE           = "MAP.ENTRANCE_DISCOVERED";
+    inline static const std::string HPN_MAP_ENTRANCE = "MAP.ENTRANCE_DISCOVERED";
 
     // AUDIO.*
-    inline static const std::string HPN_AUDIO_SFX              = "AUDIO.PLAY_SFX";
-    inline static const std::string HPN_AUDIO_BGM              = "AUDIO.PLAY_BGM";
+    inline static const std::string HPN_AUDIO_SFX = "AUDIO.PLAY_SFX";
+    inline static const std::string HPN_AUDIO_BGM = "AUDIO.PLAY_BGM";
 
     // UI.*
-    inline static const std::string HPN_UI_MESSAGE             = "UI.SHOW_MESSAGE";
-    inline static const std::string HPN_UI_BANNER              = "UI.SHOW_BANNER";
+    inline static const std::string HPN_UI_MESSAGE = "UI.SHOW_MESSAGE";
+    inline static const std::string HPN_UI_BANNER = "UI.SHOW_BANNER";
 
     // CHAT.*
-    inline static const std::string HPN_CHAT_MESSAGE           = "CHAT.MESSAGE";
-    inline static const std::string HPN_CHAT_PING              = "CHAT.PING";
+    inline static const std::string HPN_CHAT_MESSAGE = "CHAT.MESSAGE";
+    inline static const std::string HPN_CHAT_PING = "CHAT.PING";
 
     // APPEARANCE.* — skin sync
-    inline static const std::string HPN_SKIN_ANNOUNCE          = "APPEARANCE.SKIN_SYNC.ANNOUNCE_CATALOG";
-    inline static const std::string HPN_SKIN_UPDATE_SLOTS      = "APPEARANCE.SKIN_SYNC.UPDATE_SLOTS";
-    inline static const std::string HPN_APPEARANCE_TINT        = "APPEARANCE.SET_TINT";
-    inline static const std::string HPN_APPEARANCE_SCALE       = "APPEARANCE.SET_SCALE";
-    inline static const std::string HPN_APPEARANCE_HIDE_OBS    = "APPEARANCE.HIDE_FROM_OBSERVER";
-    inline static const std::string HPN_APPEARANCE_SHOW_OBS    = "APPEARANCE.SHOW_TO_OBSERVER";
-    inline static const std::string HPN_APPEARANCE_SPAWN_VFX   = "APPEARANCE.SPAWN_VFX_ACTOR";
+    inline static const std::string HPN_SKIN_ANNOUNCE = "APPEARANCE.SKIN_SYNC.ANNOUNCE_CATALOG";
+    inline static const std::string HPN_SKIN_UPDATE_SLOTS = "APPEARANCE.SKIN_SYNC.UPDATE_SLOTS";
+    inline static const std::string HPN_APPEARANCE_TINT = "APPEARANCE.SET_TINT";
+    inline static const std::string HPN_APPEARANCE_SCALE = "APPEARANCE.SET_SCALE";
+    inline static const std::string HPN_APPEARANCE_HIDE_OBS = "APPEARANCE.HIDE_FROM_OBSERVER";
+    inline static const std::string HPN_APPEARANCE_SHOW_OBS = "APPEARANCE.SHOW_TO_OBSERVER";
+    inline static const std::string HPN_APPEARANCE_SPAWN_VFX = "APPEARANCE.SPAWN_VFX_ACTOR";
 
     // ADMIN.*
-    inline static const std::string HPN_ADMIN_PROMOTE          = "ADMIN.PROMOTE";
-    inline static const std::string HPN_ADMIN_DEMOTE           = "ADMIN.DEMOTE";
-    inline static const std::string HPN_ADMIN_SET_HOST         = "ADMIN.SET_HOST";
-    inline static const std::string HPN_ADMIN_KICK             = "ADMIN.KICK";
+    inline static const std::string HPN_ADMIN_PROMOTE = "ADMIN.PROMOTE";
+    inline static const std::string HPN_ADMIN_DEMOTE = "ADMIN.DEMOTE";
+    inline static const std::string HPN_ADMIN_SET_HOST = "ADMIN.SET_HOST";
+    inline static const std::string HPN_ADMIN_KICK = "ADMIN.KICK";
 
     // === Legacy aliases (kept so older parts of the code compile during migration) ===
-    inline static const std::string HPN_ALL_CLIENTS         = HPN_ROOM_MEMBERS;
-    inline static const std::string HPN_PLAYER_UPDATE       = HPN_PLAYER_FULL_STATE;
-    inline static const std::string HPN_DAMAGE              = HPN_COMBAT_DAMAGE;
-    inline static const std::string HPN_PLAYER_DIED         = HPN_PLAYER_KILL;
-    inline static const std::string HPN_PLAYER_SFX          = HPN_AUDIO_SFX;
-    inline static const std::string HPN_SERVER_MSG          = HPN_UI_MESSAGE;
-    inline static const std::string HPN_GIVE_ITEM           = HPN_INV_GIVE_ITEM;
-    inline static const std::string HPN_UPDATE_TEAM_STATE   = HPN_SAVE_TEAM_STATE;
-    inline static const std::string HPN_GAME_STATE          = HPN_ROOM_PHASE_CHANGED;
-    inline static const std::string HPN_CHEST_OPENED        = "ROOM.BROADCAST_EVENT";
-    inline static const std::string HPN_READY               = "ROOM.BROADCAST_EVENT";
-    inline static const std::string HPN_START_GAME          = HPN_ROOM_SET_PHASE;
-    inline static const std::string HPN_WINNER              = "ROOM.BROADCAST_EVENT";
-    inline static const std::string HPN_MAP_CONFIRM         = "ROOM.BROADCAST_EVENT";
-    inline static const std::string HPN_ROLE_CHANGE         = "ROOM.BROADCAST_EVENT";
-    inline static const std::string HPN_MAP_VOTE            = "ROOM.BROADCAST_EVENT";
-    inline static const std::string HPN_DECOY_HIT           = HPN_COMBAT_DECOY_HIT;
-    inline static const std::string HPN_CUSTOM_DAMAGE       = HPN_COMBAT_DAMAGE;
-    inline static const std::string HPN_CUSTOM_EFFECT       = HPN_COMBAT_CUSTOM_EFFECT;
-    inline static const std::string HPN_SET_FLAG            = HPN_SAVE_SET_FLAG;
-    inline static const std::string HPN_UNSET_FLAG          = HPN_SAVE_UNSET_FLAG;
-    inline static const std::string HPN_SET_CHECK_STATUS    = HPN_SAVE_QUEST_STATE;
+    inline static const std::string HPN_ALL_CLIENTS = HPN_ROOM_MEMBERS;
+    inline static const std::string HPN_PLAYER_UPDATE = HPN_PLAYER_FULL_STATE;
+    inline static const std::string HPN_DAMAGE = HPN_COMBAT_DAMAGE;
+    inline static const std::string HPN_PLAYER_DIED = HPN_PLAYER_KILL;
+    inline static const std::string HPN_PLAYER_SFX = HPN_AUDIO_SFX;
+    inline static const std::string HPN_SERVER_MSG = HPN_UI_MESSAGE;
+    inline static const std::string HPN_GIVE_ITEM = HPN_INV_GIVE_ITEM;
+    inline static const std::string HPN_UPDATE_TEAM_STATE = HPN_SAVE_TEAM_STATE;
+    inline static const std::string HPN_GAME_STATE = HPN_ROOM_PHASE_CHANGED;
+    inline static const std::string HPN_CHEST_OPENED = "ROOM.BROADCAST_EVENT";
+    inline static const std::string HPN_READY = "ROOM.BROADCAST_EVENT";
+    inline static const std::string HPN_START_GAME = HPN_ROOM_SET_PHASE;
+    inline static const std::string HPN_WINNER = "ROOM.BROADCAST_EVENT";
+    inline static const std::string HPN_MAP_CONFIRM = "ROOM.BROADCAST_EVENT";
+    inline static const std::string HPN_ROLE_CHANGE = "ROOM.BROADCAST_EVENT";
+    inline static const std::string HPN_MAP_VOTE = "ROOM.BROADCAST_EVENT";
+    inline static const std::string HPN_DECOY_HIT = HPN_COMBAT_DECOY_HIT;
+    inline static const std::string HPN_CUSTOM_DAMAGE = HPN_COMBAT_DAMAGE;
+    inline static const std::string HPN_CUSTOM_EFFECT = HPN_COMBAT_CUSTOM_EFFECT;
+    inline static const std::string HPN_SET_FLAG = HPN_SAVE_SET_FLAG;
+    inline static const std::string HPN_UNSET_FLAG = HPN_SAVE_UNSET_FLAG;
+    inline static const std::string HPN_SET_CHECK_STATUS = HPN_SAVE_QUEST_STATE;
     inline static const std::string HPN_ENTRANCE_DISCOVERED = HPN_MAP_ENTRANCE;
-    inline static const std::string HPN_UPDATE_DUNGEON_ITEMS= HPN_INV_DUNGEON_ITEMS;
-    inline static const std::string HPN_TELEPORT_TO         = HPN_WORLD_TRANSPORT;
-    inline static const std::string HPN_UPDATE_BEANS_COUNT  = HPN_INV_AMMO;
-    inline static const std::string HPN_O2R_MOD_LIST        = HPN_SKIN_ANNOUNCE;
+    inline static const std::string HPN_UPDATE_DUNGEON_ITEMS = HPN_INV_DUNGEON_ITEMS;
+    inline static const std::string HPN_TELEPORT_TO = HPN_WORLD_TRANSPORT;
+    inline static const std::string HPN_UPDATE_BEANS_COUNT = HPN_INV_AMMO;
+    inline static const std::string HPN_O2R_MOD_LIST = HPN_SKIN_ANNOUNCE;
 
     static Harpoon* Instance;
     std::map<uint32_t, HarpoonClient> clients;
@@ -639,10 +638,10 @@ class Harpoon : public Network {
     //                      runs the "all hiders found / win condition met"
     //                      check, host re-starts manually from lobby.
     // ---------------------------------------------------------------------
-    bool supportsVoting     = false;
-    bool supportsMapSelect  = false;
-    bool supportsZTarget    = false;
-    bool supportsRoundFlow  = false;
+    bool supportsVoting = false;
+    bool supportsMapSelect = false;
+    bool supportsZTarget = false;
+    bool supportsRoundFlow = false;
     bool isProcessingIncomingPacket = false;
     bool isHandlingUpdateTeamState = false;
     bool justLoadedSave = false;
@@ -737,33 +736,33 @@ class Harpoon : public Network {
     void SendPacket_Resume(const std::string& token);
 
     // Game lifecycle (host-driven)
-    void SendPacket_StartGameNew();                       // ROOM.START_GAME
-    void SendPacket_SelectMap(s32 mapIndex);              // ROOM.SELECT_MAP
-    void SendPacket_StartMapVote(s32 durationSeconds);    // VOTING.START_VOTE for map
-    void SendPacket_CastMapVote(s32 optionIndex);         // VOTING.CAST_VOTE
-    void SendPacket_RandomMapPick();                      // host helper for "random" mode
+    void SendPacket_StartGameNew();                    // ROOM.START_GAME
+    void SendPacket_SelectMap(s32 mapIndex);           // ROOM.SELECT_MAP
+    void SendPacket_StartMapVote(s32 durationSeconds); // VOTING.START_VOTE for map
+    void SendPacket_CastMapVote(s32 optionIndex);      // VOTING.CAST_VOTE
+    void SendPacket_RandomMapPick();                   // host helper for "random" mode
 
     // Player state — granular per-frame primitives. SendPacket_PlayerUpdate()
     // calls all of these in sequence; you can also call them individually if
     // you only want to broadcast a subset.
-    void SendPacket_PlayerUpdate();           // bundles all of below
-    void SendPacket_PlayerTransform();         // PLAYER.UPDATE_TRANSFORM
-    void SendPacket_PlayerSkeleton();          // PLAYER.UPDATE_SKELETON
-    void SendPacket_PlayerLimbRotations();     // PLAYER.UPDATE_LIMB_ROTATIONS
-    void SendPacket_PlayerAnimationFlags();    // PLAYER.UPDATE_ANIMATION_FLAGS
-    void SendPacket_PlayerMotionVars();        // PLAYER.UPDATE_MOTION_VARS
-    void SendPacket_PlayerBowState();          // PLAYER.UPDATE_BOW_STATE
-    void SendPacket_PlayerHandTypes();         // PLAYER.UPDATE_HAND_TYPES
-    void SendPacket_PlayerVisualState();       // PLAYER.UPDATE_VISUAL_STATE
-    void SendPacket_PlayerEquipVisible();      // PLAYER.UPDATE_EQUIP_VISIBLE
-    void SendPacket_PlayerFace();              // PLAYER.UPDATE_FACE
-    void SendPacket_PlayerScale();             // PLAYER.UPDATE_SCALE
-    void SendPacket_PlayerTransformation();    // PLAYER.SET_TRANSFORMATION
-    void SendPacket_PlayerGoronState();        // PLAYER.UPDATE_GORON_STATE
-    void SendPacket_PlayerCustomItemState();   // PLAYER.UPDATE_CUSTOM_ITEM_STATE
-    void SendPacket_PlayerInvincibility();     // PLAYER.SET_INVINCIBILITY_TIMER
-    void SendPacket_PlayerKill();              // PLAYER.KILL — alias of SendPacket_PlayerDied
-    void SendPacket_PlayerDied();              // legacy name, equivalent
+    void SendPacket_PlayerUpdate();          // bundles all of below
+    void SendPacket_PlayerTransform();       // PLAYER.UPDATE_TRANSFORM
+    void SendPacket_PlayerSkeleton();        // PLAYER.UPDATE_SKELETON
+    void SendPacket_PlayerLimbRotations();   // PLAYER.UPDATE_LIMB_ROTATIONS
+    void SendPacket_PlayerAnimationFlags();  // PLAYER.UPDATE_ANIMATION_FLAGS
+    void SendPacket_PlayerMotionVars();      // PLAYER.UPDATE_MOTION_VARS
+    void SendPacket_PlayerBowState();        // PLAYER.UPDATE_BOW_STATE
+    void SendPacket_PlayerHandTypes();       // PLAYER.UPDATE_HAND_TYPES
+    void SendPacket_PlayerVisualState();     // PLAYER.UPDATE_VISUAL_STATE
+    void SendPacket_PlayerEquipVisible();    // PLAYER.UPDATE_EQUIP_VISIBLE
+    void SendPacket_PlayerFace();            // PLAYER.UPDATE_FACE
+    void SendPacket_PlayerScale();           // PLAYER.UPDATE_SCALE
+    void SendPacket_PlayerTransformation();  // PLAYER.SET_TRANSFORMATION
+    void SendPacket_PlayerGoronState();      // PLAYER.UPDATE_GORON_STATE
+    void SendPacket_PlayerCustomItemState(); // PLAYER.UPDATE_CUSTOM_ITEM_STATE
+    void SendPacket_PlayerInvincibility();   // PLAYER.SET_INVINCIBILITY_TIMER
+    void SendPacket_PlayerKill();            // PLAYER.KILL — alias of SendPacket_PlayerDied
+    void SendPacket_PlayerDied();            // legacy name, equivalent
 
     // Combat
     void SendPacket_Damage(u32 clientId, u8 damageEffect, u8 damage);
@@ -820,21 +819,19 @@ class Harpoon : public Network {
     // Used for sw97 medallion arrows / spells / FD beam / fin throw / etc.
     // `vfxKind` lets the receiving client filter by category (e.g. clients
     // without the sw97 pack ignore "sw97_*" kinds).
-    void SendPacket_SpawnVfxActor(int16_t actorId, float posX, float posY, float posZ,
-                                   int16_t rotX, int16_t rotY, int16_t rotZ,
-                                   int16_t params, const char* vfxKind,
-                                   bool attachedToOwner);
+    void SendPacket_SpawnVfxActor(int16_t actorId, float posX, float posY, float posZ, int16_t rotX, int16_t rotY,
+                                  int16_t rotZ, int16_t params, const char* vfxKind, bool attachedToOwner);
     void HandlePacket_SpawnVfxActor(nlohmann::json payload);
 
     // Owner registry for spawned VFX actors. Key = Actor*, value = ownerClientId.
     // Used by collision hooks (Phase 4) to route PvP damage through to the
     // actual attacker, and to suppress friendly-fire on the owner's own VFX.
-    void  SetVfxActorOwner(const Actor* actor, uint32_t ownerClientId);
+    void SetVfxActorOwner(const Actor* actor, uint32_t ownerClientId);
     uint32_t GetVfxActorOwner(const Actor* actor);
     // Drop every entry in the VFX-actor → owner map. Called on scene
     // transitions and on disconnect to prevent unbounded growth + stale
     // Actor* collisions across long sessions.
-    void  ClearVfxActorOwners();
+    void ClearVfxActorOwners();
 
     // Story sync helpers
     bool syncCutscenes = false;
@@ -858,10 +855,10 @@ typedef enum {
     HARPOON_HIT_RESPONSE_FIRE,
     HARPOON_HIT_RESPONSE_NORMAL,
     HARPOON_HIT_RESPONSE_WIND_BLOW,
-    HARPOON_HIT_RESPONSE_LIGHT,        //  9
-    HARPOON_HIT_RESPONSE_DARK,         // 10
-    HARPOON_HIT_RESPONSE_SOUL_DRAIN,   // 11
-    HARPOON_HIT_RESPONSE_WIND_PUSH,    // 12
+    HARPOON_HIT_RESPONSE_LIGHT,      //  9
+    HARPOON_HIT_RESPONSE_DARK,       // 10
+    HARPOON_HIT_RESPONSE_SOUL_DRAIN, // 11
+    HARPOON_HIT_RESPONSE_WIND_PUSH,  // 12
 } HarpoonDamageResponseType;
 
 #endif // __cplusplus

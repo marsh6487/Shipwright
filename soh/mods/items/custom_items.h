@@ -52,10 +52,10 @@ typedef struct {
     u8 ballAndChainFirstPersonActive;
     ColliderCylinder ballAndChainCollider;
     // TP ballistic-throw state (arc + floor bounces + wall ricochet + retract) — Skijer's NEI
-    Vec3f ballAndChainVel;      // thrown-ball velocity
-    u8 ballAndChainPhase;       // thrown sub-phase (FLY/REST/RETRACT)
-    u8 ballAndChainBounces;     // floor bounces this throw
-    s16 ballAndChainRestTimer;  // rest beat / retract clink counter
+    Vec3f ballAndChainVel;     // thrown-ball velocity
+    u8 ballAndChainPhase;      // thrown sub-phase (FLY/REST/RETRACT)
+    u8 ballAndChainBounces;    // floor bounces this throw
+    s16 ballAndChainRestTimer; // rest beat / retract clink counter
     // Spin/throw motion trail (EffectBlure) — Skijer's NEI
     s32 ballAndChainTrailIndex; // EffectBlure effect index (-1 = inactive)
     u8 ballAndChainTrailActive; // 1 = trail effect allocated
@@ -82,9 +82,9 @@ typedef struct {
     u16 gustJarButtonMask;
     s8 gustJarPrevInvincibility;
     Actor* gustJarPotActor;
-    u8 gustJarBlowDir;        // Direction toggle: 0 = SUCK (hold C absorbs, release C blows
-                              // proportional to charge), 1 = BLOW (hold C directly blows
-                              // with current element). Toggled by L+R combo.
+    u8 gustJarBlowDir; // Direction toggle: 0 = SUCK (hold C absorbs, release C blows
+                       // proportional to charge), 1 = BLOW (hold C directly blows
+                       // with current element). Toggled by L+R combo.
 
     // Shovel
     u8 shovelActive;
@@ -273,6 +273,18 @@ typedef struct {
     u8 somariaAnimating;
     s16 somariaAnimTimer;
     u8 somariaActionType;
+    // Dual Cane (Somaria / Pacci) — hold-to-open radial wheel + placement preview.
+    // Skijer's NEI. The OWNED skills and the persistent selection live in
+    // NeiSaveData (caneSkills / caneType / caneSkillSel); everything here is
+    // per-frame session state.
+    s16 caneHoldTimer;    // frames the equipped C button has been held
+    s16 caneSelectTimer;  // frames L has been held (tap = swap cane, hold = wheel)    // frames the equipped button has
+                          // been held
+    u8 caneWheelSpoke;    // CANE_SPOKE_* currently under the stick
+    u8 canePreviewValid;  // 1 = the aimed placement is legal (blue), 0 = red
+    Vec3f canePreviewPos; // where the block/platform would land
+    s16 canePreviewYaw;   // its facing (camera-relative)
+    u8 canePendingSkill;  // skill the running cast animation will fire
 
     // Hylia's Grace
     u8 hyliasGraceActive;
@@ -372,7 +384,7 @@ typedef struct {
     u8 postmanHatInputSkip;        // Skip input on first kaleido frame (same-frame A guard)
 
     // ── Mask of Scents (Lost Woods mushroom spots) ───────────────────────
-    u8 mushroomSpotsCollected;     // Bit N = Lost Woods mushroom spot N collected (5 bits used)
+    u8 mushroomSpotsCollected; // Bit N = Lost Woods mushroom spot N collected (5 bits used)
 
     // ── Lantern ──────────────────────────────────────────────────────────
     u8 lanternFireType;    // LanternFireType enum (0-4)
@@ -418,15 +430,15 @@ extern CustomItemState gCustomItemState;
 #define CI_FLAG_ICE_ROD (1 << 13)
 #define CI_FLAG_LIGHT_ROD (1 << 14)
 // Phase 1 additions — items previously missing from the visual sync.
-#define CI_FLAG_ROCS_FEATHER       (1 << 15)
-#define CI_FLAG_BOMB_ARROW         (1 << 16)
+#define CI_FLAG_ROCS_FEATHER (1 << 15)
+#define CI_FLAG_BOMB_ARROW (1 << 16)
 #define CI_FLAG_DEMISE_DESTRUCTION (1 << 17)
-#define CI_FLAG_HYLIAS_GRACE       (1 << 18)
-#define CI_FLAG_ZONAI_PERMAFROST   (1 << 19)
-#define CI_FLAG_LANTERN            (1 << 20)
-#define CI_FLAG_MINISH_CAP         (1 << 21)
-#define CI_FLAG_POSTMAN_HAT        (1 << 22)
-#define CI_FLAG_DESIRE_SENSOR      (1 << 23)
+#define CI_FLAG_HYLIAS_GRACE (1 << 18)
+#define CI_FLAG_ZONAI_PERMAFROST (1 << 19)
+#define CI_FLAG_LANTERN (1 << 20)
+#define CI_FLAG_MINISH_CAP (1 << 21)
+#define CI_FLAG_POSTMAN_HAT (1 << 22)
+#define CI_FLAG_DESIRE_SENSOR (1 << 23)
 
 /**
  * Compact visual state for network sync.
@@ -520,8 +532,8 @@ typedef struct {
 
     // ── Phase 1 additions ──────────────────────────────────────────────
     // Roc's Feather / Cape — extra-jump animation state.
-    u8  rocsFeatherJumpActive;
-    u8  rocsJumpCount;
+    u8 rocsFeatherJumpActive;
+    u8 rocsJumpCount;
     s16 rocsMmAnimTimer;
 
     // Bomb Arrows — render of bomb-on-arrow + reticle suppressed remotely.
@@ -533,20 +545,20 @@ typedef struct {
     // Hylia's Grace — fairy companion + spell phase. The fairy actor itself
     // is spawned via APPEARANCE.SPAWN_VFX_ACTOR (Phase 2); these fields
     // describe the caster's spell-active aura.
-    u8  hyliasGraceState;
-    u8  hyliasGraceSubPhase;
+    u8 hyliasGraceState;
+    u8 hyliasGraceSubPhase;
     s16 hyliasGraceTimer;
-    u8  hyliasGraceForcedBySpell;
+    u8 hyliasGraceForcedBySpell;
 
     // Zonai Permafrost — frost effect around the caster.
-    u8  zonaiPermafrostState;
-    u8  zonaiPermafrostSubPhase;
+    u8 zonaiPermafrostState;
+    u8 zonaiPermafrostSubPhase;
     s16 zonaiPermafrostTimer;
 
     // Lantern — visible flame + swing animation in hand.
-    u8  lanternFireType;
-    u8  lanternSwinging;
-    u8  lanternEquipped;
+    u8 lanternFireType;
+    u8 lanternSwinging;
+    u8 lanternEquipped;
     s16 lanternSwingFrame;
 
     // Minish Cap — shrink/grow scale for fast travel.
@@ -555,14 +567,14 @@ typedef struct {
     u8 minishCapGrowing;
 
     // Postman Hat — fade-in/fade-out streak animation.
-    u8  postmanHatDashing;
-    u8  postmanHatArriving;
+    u8 postmanHatDashing;
+    u8 postmanHatArriving;
     s16 postmanHatTransitionTimer;
 
     // Desire Sensor — visible meter glow.
-    u8  desireSensorState;
+    u8 desireSensorState;
     s16 desireSensorTimer;
-    u8  desireSensorResult;
+    u8 desireSensorResult;
 } CustomItemVisualSync;
 
 /**
@@ -639,7 +651,7 @@ void CustomItems_DrawBallChain(Player* player, PlayState* play);
 void CustomItems_DrawShovel(Player* player, PlayState* play);
 void CustomItems_DrawDemiseDestruction(Player* player, PlayState* play);
 void CustomItems_DrawBeetle(Player* player, PlayState* play);
-void Beetle_DrawOffer(Player* player, PlayState* play); // sets the offer arrow (targetCtx.arrowPointedActor)
+void Beetle_DrawOffer(Player* player, PlayState* play);     // sets the offer arrow (targetCtx.arrowPointedActor)
 void Beetle_DrawTargetVfx(Player* player, PlayState* play); // our own billboarded target ring (offer + lock)
 void CustomItems_DrawBombArrowsReticle(Player* player, PlayState* play);
 void CustomItems_DrawFireRod(Player* player, PlayState* play);
@@ -679,6 +691,15 @@ extern Gfx* gLightRodGlowDL;
 s32 Player_UpperAction_Shovel(Player* player, PlayState* play);
 s32 Player_UpperAction_DemiseDestruction(Player* player, PlayState* play);
 s32 Player_UpperAction_SwitchHook(Player* player, PlayState* play);
+// Net: the vanilla sword upper action with the melee quads disarmed afterwards, so
+// Link swings it — and so other items can take it out of his hands — without it
+// dealing damage or cutting anything. Defined in items/logic/custom_items.c.
+s32 Player_UpperAction_Net(Player* player, PlayState* play);
+// Net equip/unequip bookkeeping. It has no cast of its own — catching lives in the
+// bottle code — but without a handler nothing watches the action buttons and the
+// net can never be put away.
+void Handle_Net(Player* player, PlayState* play);
+u8 Net_IsActive(void);
 
 // Init functions
 void Player_InitSpinnerIA(PlayState* play, Player* player);

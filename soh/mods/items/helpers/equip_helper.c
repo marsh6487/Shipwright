@@ -9,6 +9,7 @@
 #include "variables.h"
 #include "libultraship/bridge.h"
 #include "transformation_masks/transformation_masks.h"
+#include "extended_inventory.h" // Sw97_* — Bomb Arrows rides the bow's element flag (Skijer's NEI)
 
 typedef struct {
     u32 frameCount;
@@ -39,6 +40,13 @@ static void EquipCache_Update(PlayState* play) {
         if (itemId != ITEM_NONE && itemId < 256) {
             sEquipCache.cachedButtons[itemId] = sButtonMasks[slot];
         }
+        // Skijer's NEI — Bomb Arrows has no inventory slot and never reaches a button; it is the
+        // 7th value of the bow's element flag. Everything in item_bombarrows.c asks this cache
+        // "which button is ITEM_BOM_ARROWS on?", so aliasing it onto the bow's button here is what
+        // keeps that whole state machine (baButtonMask, press edges, cleanup) working untouched.
+        if (Sw97_IsBowItem(itemId) && (Sw97_EffectiveElement(0) == SW97_ELEM_BOMB)) {
+            sEquipCache.cachedButtons[ITEM_BOMB_ARROWS] = sButtonMasks[slot];
+        }
     }
 }
 
@@ -47,9 +55,24 @@ u16 ItemInput_GetEquippedButton(u8 itemId, PlayState* play) {
     return sEquipCache.cachedButtons[itemId];
 }
 
+// mods/actors/cane_pacci.c — while Ultrahand mode is up the D-pad rotates and moves
+// the held object.
+u8 Pacci_UltrahandModeActive(void);
+
 void ItemInput_Update(ItemInputState* out, u8 itemId, Player* player, PlayState* play) {
     out->equippedButton = ItemInput_GetEquippedButton(itemId, play);
     out->wasEquipped = (out->equippedButton != 0);
+
+    // Custom items never go through Player_GetItemOnButton — they find themselves in
+    // buttonItems and read the raw pad here — so the guard placed in that engine
+    // function did nothing for them. Roc's Cape on a D-pad slot kept firing right
+    // through Ultrahand mode because of exactly this second path. An item sitting on
+    // the D-pad is simply not usable while the mode owns those buttons.
+    if (out->wasEquipped && Pacci_UltrahandModeActive() &&
+        (out->equippedButton & (BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT))) {
+        out->isPressed = out->isHeld = out->isReleased = out->otherButtonPressed = out->damageTaken = 0;
+        return;
+    }
 
     if (!out->wasEquipped) {
         out->isPressed = out->isHeld = out->isReleased = out->otherButtonPressed = out->damageTaken = 0;

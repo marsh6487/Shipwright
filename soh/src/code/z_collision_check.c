@@ -8,8 +8,7 @@
 static u8 NEI_PlayerDamageBoostActive(void) {
     extern u8 gIvanPossessActive;
     extern u8 Sm64Mario_IsReady(void);
-    return CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) || gIvanPossessActive ||
-           Sm64Mario_IsReady();
+    return CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) || gIvanPossessActive || Sm64Mario_IsReady();
 }
 
 typedef s32 (*ColChkResetFunc)(PlayState*, Collider*);
@@ -22,7 +21,6 @@ void TimeCtl_NoteAcCollider(Collider* collider);
 // is sweeping past Link. It has to be taken HERE because ClearContext wipes the AT list
 // before Actor_UpdateAll, so this is the only point in the frame where the list is whole.
 void Champion_NoteIncomingAttacks(PlayState* play);
-
 
 typedef void (*ColChkBloodFunc)(PlayState*, Collider*, Vec3f*);
 typedef void (*ColChkApplyFunc)(PlayState*, CollisionCheckContext*, Collider*);

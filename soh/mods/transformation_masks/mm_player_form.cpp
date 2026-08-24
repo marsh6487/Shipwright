@@ -16,7 +16,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <exception>
-#include <vector> // was transitively via OTRGlobals.h before upstream #6636 cleanup
+#include <vector>          // was transitively via OTRGlobals.h before upstream #6636 cleanup
 #include <spdlog/spdlog.h> // SPDLOG_INFO — also transitive via OTRGlobals.h before #6636
 
 // C headers - NOT wrapped in extern "C" because they already have their own
@@ -28,6 +28,8 @@
 #include "variables.h"
 #include "mods/transformation_masks/transformation_masks.h"
 #include "mods/transformation_masks/assets/mm_asset_loader.h"
+#include "mods/transformation_masks/custom_forms.h" // CustomForms_ActiveSkin (extern "C")
+#include "mods/transformation_masks/wolf_link_form.h"
 #include "mods/extended_inventory.h"
 #include "mods/extended_equipment.h"
 #include "mods/anim_translator/mm_anim_loader.h"
@@ -42,6 +44,8 @@
 #include "mods/items/helpers/equip_helper.h"
 #include "mods/items/custom_items.h"
 #include "mods/actors/deku_flower_assets.h"
+// C++ header (no extern "C"): OnOcarinaNote hook registration for the gakki note driver.
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
 
 // Static helpers (all functions are static, no linkage issue)
 // NOTE: mm_form_combat.c is text-included LATER in this file (after the
@@ -104,7 +108,23 @@ extern "C" void FB_WriteFramebufferSliceToCPU(Gfx** gfxp, void* buffer, u8 byteS
 // MmForm_GerudoMhrReset clears its state on detransform.
 extern "C" {
 static u8 MmForm_GerudoMhrUpdate(Player* player, PlayState* play);
-static void MmForm_GerudoMhrReset(void);
+static u8 MmForm_RitoFlightUpdate(Player* player, PlayState* play); // rito_flight.inc.c
+static u8 MmForm_RitoBowUpdate(Player* player, PlayState* play);    // rito_bow.inc.c
+static void MmForm_GerudoMhrReset(void);                            // abort the running clip (yield / detransform)
+static void MmForm_GerudoFormExit(void); // full reset incl. the rage meter (detransform only)
+}
+// Install / restore the Gerudo dual-blades animation tables. Gerudo is a
+// Link-rigged form (willCopyOoT paints Link's joints onto the gerudo skeleton),
+// so re-skinning her moveset means changing which animation OOT itself plays —
+// see the long note above the tables in gerudo_mhr_combat.inc.c. Restore is
+// mandatory on every exit: these are global engine tables.
+//
+// extern "C" is REQUIRED, not decorative: gerudo_mhr_combat.inc.c is text-included
+// at :17563, inside the extern "C" block that opens at :15073, so its definitions
+// have C linkage. Declaring these with C++ linkage here is error C2732.
+extern "C" {
+void MmForm_GerudoInstallAnims(void);
+void MmForm_GerudoRestoreAnims(void);
 }
 
 // Jump parameters (from OOT REG(19)/100 = 500/100 = 5.0)
@@ -188,9 +208,19 @@ void Player_PlayVoiceSfx(Player* this_, u16 sfxId);
 // O2rLoader C API — used by Gerudo MmForm_LoadFormSkeleton and the inline
 // Garo MaskUse handler. extern "C" must live at file scope, not inside a
 // function body.
+// Rito flight controller (rito_flight.inc.c, text-included at the end of this
+// file). Declared here because MmForm_Reset below runs before that include.
+extern "C" void MmForm_RitoResetFlight(void);
+extern "C" void MmForm_RitoRestoreLanding(void);
+extern "C" f32 MmForm_RitoDrawYOffset(Player* player);
+extern "C" void MmForm_RitoBowReset(void);
+extern "C" void MmForm_RitoBowRestoreRun(void);
+extern "C" u8 MmForm_RitoBowIsOut(void);
+extern "C" u8 MmForm_RitoBowIsAiming(void);
+
 extern "C" void O2rLoader_ForceModel(const char* name);
 extern "C" void O2rLoader_ClearForcedModel(void);
-extern "C" u8   O2rLoader_HasActiveModel(void);
+extern "C" u8 O2rLoader_HasActiveModel(void);
 extern "C" const char* O2rLoader_GetForcedName(void);
 
 // Gerudo dual-scimitar DL accessors — implemented in gerudo_form.cpp.
@@ -206,8 +236,10 @@ extern "C" Gfx* GerudoForm_GetSwordDL_R(void);
 // from MmForm_GoronAction_Idle/Walk/Run can never soft-lock an NPC textbox,
 // liftable object, ladder, etc. Inline so all three handlers share the gate.
 static inline u8 MmForm_GerudoCanStartGroundCombo(Player* player) {
-    if (player == NULL) return 0;
-    if (!MMFORM_ON_GROUND(player)) return 0;
+    if (player == NULL)
+        return 0;
+    if (!MMFORM_ON_GROUND(player))
+        return 0;
     // Blocking state flags — any of these means OOT vanilla wouldn't let Link
     // swing the master sword either. SHIELDING is critical here: when Link is
     // holding up the Mirror Shield, vanilla B = shield-thrust attack (a totally
@@ -215,16 +247,18 @@ static inline u8 MmForm_GerudoCanStartGroundCombo(Player* player) {
     // the stationary 5-hit anims at the wrong moment ("ataque parado que nada
     // que ver"). Block the combo so OOT's vanilla shield-thrust runs instead.
     const u32 blockState1 = PLAYER_STATE1_TALKING | PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_IN_CUTSCENE |
-                            PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_CARRYING_ACTOR |
-                            PLAYER_STATE1_DAMAGED | PLAYER_STATE1_DEAD | PLAYER_STATE1_HOOKSHOT_FALLING |
-                            PLAYER_STATE1_INPUT_DISABLED | PLAYER_STATE1_LOADING |
-                            PLAYER_STATE1_SHIELDING;
-    if (player->stateFlags1 & blockState1) return 0;
+                            PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_DAMAGED |
+                            PLAYER_STATE1_DEAD | PLAYER_STATE1_HOOKSHOT_FALLING | PLAYER_STATE1_INPUT_DISABLED |
+                            PLAYER_STATE1_LOADING | PLAYER_STATE1_SHIELDING;
+    if (player->stateFlags1 & blockState1)
+        return 0;
     // Grab/lift offer in progress — pressing B here picks up the rock/sign/etc.
     const u32 blockState2 = PLAYER_STATE2_DO_ACTION_GRAB | PLAYER_STATE2_GRABBING_DYNAPOLY;
-    if (player->stateFlags2 & blockState2) return 0;
+    if (player->stateFlags2 & blockState2)
+        return 0;
     // Csaction blocks — anything OOT scripted (ocarina, freeze-frame, etc.)
-    if (player->csAction != 0) return 0;
+    if (player->csAction != 0)
+        return 0;
     return 1;
 }
 
@@ -345,24 +379,48 @@ static const MmFormProperties sFormProps[MM_PLAYER_FORM_MAX] = {
     // limbCount=23 (Armature from pikachu_skel.c: ROOT_POS/ROT + 21 body limbs).
     // cameraHeight: Pikachu is ~52 units tall at scale 0.05.
     { NULL, 23, NULL, 10, NULL, 6, NULL, 6, 44.0f, 50.0f, 16.0f, 40, 18.0f, 50.0f, 0.0f, 1.0f, 52.0f },
-    // GARO (index 6) - external skeleton from nei/garo.o2r (loaded via GaroForm_LoadSkeleton).
+    // GARO (index 6) - external skeleton from soh.o2r (loaded via GaroForm_LoadSkeleton).
     // skelPath=NULL → routed to GaroForm_LoadSkeleton in MmForm_LoadFormSkeleton.
-    // 21 limbs matching OOT Link rig. Idle = garo_idle (from garo.o2r); walk/run
-    // use Link vanilla (garo.o2r has no locomotion anims).
-    { NULL, 21,
-      "objects/garo/gPlayerAnim_garo_idle", 0,  // 0 = derived at runtime from PlayerAnimation size
+    // 21 limbs matching OOT Link rig. Idle = garo_idle (from soh.o2r); walk/run
+    // use Link vanilla (soh.o2r has no locomotion anims).
+    { NULL, 21, "objects/forms/garo/gPlayerAnim_garo_idle", 0, // 0 = derived at runtime from PlayerAnimation size
       "misc/link_animetion/gPlayerAnim_link_normal_walk_free_Data", 17,
-      "misc/link_animetion/gPlayerAnim_link_normal_run_free_Data", 17,
-      60.0f, 70.0f, 18.0f, 70, 18.0f, 60.0f, 0.0f, 1.0f, 60.0f },
-    // GERUDO (index 7) - skel from gerudo.o2r via O2rLoader_ForceModel("gerudo").
+      "misc/link_animetion/gPlayerAnim_link_normal_run_free_Data", 17, 60.0f, 70.0f, 18.0f, 70, 18.0f, 60.0f, 0.0f,
+      1.0f, 60.0f },
+    // GERUDO (index 7) - skel from soh.o2r via O2rLoader_ForceModel("gerudo").
     // skelPath=NULL → MmForm_LoadFormSkeleton early-returns successfully after forcing the model.
     // Uses Link's vanilla idle/walk/run anims (gerudo is bipedal humanoid with same rig as Link).
     // Cylinder/camera matched to human Link — gerudo is the same height/build.
-    { NULL, 21,
-      "misc/link_animetion/gPlayerAnim_link_normal_wait_free_Data", 72,
+    { NULL, 21, "misc/link_animetion/gPlayerAnim_link_normal_wait_free_Data", 72,
       "misc/link_animetion/gPlayerAnim_link_normal_walk_free_Data", 17,
-      "misc/link_animetion/gPlayerAnim_link_normal_run_free_Data", 17,
-      40.0f, 60.0f, 14.0f, 55, 12.0f, 50.0f, 0.0f, 1.0f, 44.0f },
+      "misc/link_animetion/gPlayerAnim_link_normal_run_free_Data", 17, 40.0f, 60.0f, 14.0f, 55, 12.0f, 50.0f, 0.0f,
+      1.0f, 44.0f },
+    // RITO (index 8) - skel from soh.o2r via O2rLoader_ForceModel("rito"), exactly
+    // like Gerudo above: skelPath=NULL, the loader forces the model and fetches the
+    // skeleton by path. Link's own idle/walk/run — the rito rig IS Link's 21 bones.
+    // rootAnimScale 0.7036: the mesh is rigged to MM's human skeleton, whose root
+    // sits at 2376 while an ADULT animation drives it to 3377 (= it would float by
+    // a third of its height). Scaling the root position is how every MM form solves
+    // this (Deku 0.3, Goron 0.74) — one model, both ages. As CHILD the rig already
+    // matches 1:1, so MmForm_OverrideLimbDraw overrides this back to 1.0f there.
+    { NULL, 21, "misc/link_animetion/gPlayerAnim_link_normal_wait_free_Data", 72,
+      "misc/link_animetion/gPlayerAnim_link_normal_walk_free_Data", 17,
+      "misc/link_animetion/gPlayerAnim_link_normal_run_free_Data", 17, 38.0f, 55.0f, 14.0f, 35, 12.0f, 55.0f, 0.0f,
+      0.7036f, 40.0f },
+    // KEATON (index 9) - same arrangement as RITO above: skel forced from soh.o2r,
+    // Link's own idle/walk/run.
+    // rootAnimScale 0.335, NOT the rito's 0.7036: this rig has deliberately short
+    // legs (shins 225 and feet 235 against Link's 697/825), so its body only hangs
+    // 1091 below the root where Link's hangs 2336. With 0.7036 the feet ended up
+    // 1330 units in the air — half of Link's height — and the legs disappeared up
+    // inside the body. 0.335 puts the lowest vertex at +40..+55 through idle and
+    // run, dipping to -13 only on a footfall, which is what Link himself does.
+    // Deku does exactly this with 0.3. Measure it, never inherit it: the value is
+    // (how far the body hangs) / (root height the animation drives).
+    { NULL, 21, "misc/link_animetion/gPlayerAnim_link_normal_wait_free_Data", 72,
+      "misc/link_animetion/gPlayerAnim_link_normal_walk_free_Data", 17,
+      "misc/link_animetion/gPlayerAnim_link_normal_run_free_Data", 17, 40.0f, 60.0f, 14.0f, 50, 12.0f, 50.0f, 0.0f,
+      0.335f, 44.0f },
 };
 
 // =============================================================================
@@ -370,7 +428,11 @@ static const MmFormProperties sFormProps[MM_PLAYER_FORM_MAX] = {
 //
 // Each array maps inventory slot (0-71) to allowed (1) or blocked (0).
 // Page 1 (0-23): vanilla OOT items, Page 2 (24-47): custom items,
-// Page 3 (48-71): MM masks (only transform masks 53/59/65/71 allowed).
+// Page 3 (48-71): MM masks (only transformation masks allowed — the four
+//   vanilla ones at 53/59/65/71 plus Garo at 68). A transformation mask has to
+//   stay equipped while you are wearing it: blocking its own slot made
+//   MmForm_SaveAndRestrictEquips strip the Garo mask off the C-button the
+//   instant you turned into Garo.
 // Used by MmForm_IsSlotAllowed() and MmForm_IsItemAllowed().
 // =============================================================================
 // clang-format off
@@ -380,7 +442,7 @@ static const u8 sSlotAllowedFD[72] = {
     // Page 2: ROCS WHIP SPIN BARR FROD DEM  DLEF TGAT BEET SWHO IROD ZPER MOGM GJAR BCHN DSEN LROD HYLS PND2 PND1 PND3 CSOM SHVL DROD
                 1,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   1,   0,   1,   0,   0,   0,   0,   0,   0,   0,
     // Page 3: POST ANGT BLST STON GFRY DEKU KEAT BREM BUNA DONG SCEN GORN ROMN CIRC KAFE COUP TRTH ZORA KAMA GIBD GARO CAPT GIAN FIER
-                0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,
+                0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   1,   0,   0,   1,
 };
 static const u8 sSlotAllowedGoron[72] = {
     // Page 1: STICK NUT  BOMB BOW  FIRE DIN  SLING OCA  BCHU HOOK ICE  FAR  BOOM LENS BEAN HAM  LITE NAY  BTL1 BTL2 BTL3 BTL4 TRD_A TRD_C
@@ -388,7 +450,7 @@ static const u8 sSlotAllowedGoron[72] = {
     // Page 2: ROCS WHIP SPIN BARR FROD DEM  DLEF TGAT BEET SWHO IROD ZPER MOGM GJAR BCHN DSEN LROD HYLS PND2 PND1 PND3 CSOM SHVL DROD
                 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   1,   0,   1,   0,   0,   0,   0,   0,   0,   0,   1,   0,
     // Page 3: POST ANGT BLST STON GFRY DEKU KEAT BREM BUNA DONG SCEN GORN ROMN CIRC KAFE COUP TRTH ZORA KAMA GIBD GARO CAPT GIAN FIER
-                0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,
+                0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   1,   0,   0,   1,
 };
 static const u8 sSlotAllowedZora[72] = {
     // Page 1: STICK NUT  BOMB BOW  FIRE DIN  SLING OCA  BCHU HOOK ICE  FAR  BOOM LENS BEAN HAM  LITE NAY  BTL1 BTL2 BTL3 BTL4 TRD_A TRD_C
@@ -396,7 +458,7 @@ static const u8 sSlotAllowedZora[72] = {
     // Page 2: ROCS WHIP SPIN BARR FROD DEM  DLEF TGAT BEET SWHO IROD ZPER MOGM GJAR BCHN DSEN LROD HYLS PND2 PND1 PND3 CSOM SHVL DROD
                 0,   1,   0,   0,   0,   0,   0,   0,   1,   1,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   1,   0,   1,
     // Page 3: POST ANGT BLST STON GFRY DEKU KEAT BREM BUNA DONG SCEN GORN ROMN CIRC KAFE COUP TRTH ZORA KAMA GIBD GARO CAPT GIAN FIER
-                0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,
+                0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   1,   0,   0,   1,
 };
 static const u8 sSlotAllowedDeku[72] = {
     // Page 1: STICK NUT  BOMB BOW  FIRE DIN  SLING OCA  BCHU HOOK ICE  FAR  BOOM LENS BEAN HAM  LITE NAY  BTL1 BTL2 BTL3 BTL4 TRD_A TRD_C
@@ -404,7 +466,7 @@ static const u8 sSlotAllowedDeku[72] = {
     // Page 2: ROCS WHIP SPIN BARR FROD DEM  DLEF TGAT BEET SWHO IROD ZPER MOGM GJAR BCHN DSEN LROD HYLS PND2 PND1 PND3 CSOM SHVL DROD
                 1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
     // Page 3: POST ANGT BLST STON GFRY DEKU KEAT BREM BUNA DONG SCEN GORN ROMN CIRC KAFE COUP TRTH ZORA KAMA GIBD GARO CAPT GIAN FIER
-                0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,
+                0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   1,   0,   0,   1,
 };
 static const u8 sSlotAllowedPikachu[72] = {
     // Page 1: STICK NUT  BOMB BOW  FIRE DIN  SLING OCA  BCHU HOOK ICE  FAR  BOOM LENS BEAN HAM  LITE NAY  BTL1 BTL2 BTL3 BTL4 TRD_A TRD_C
@@ -412,7 +474,7 @@ static const u8 sSlotAllowedPikachu[72] = {
     // Page 2: ROCS WHIP SPIN BARR FROD DEM  DLEF TGAT BEET SWHO IROD ZPER MOGM GJAR BCHN DSEN LROD HYLS PND2 PND1 PND3 CSOM SHVL DROD
                 1,   1,   0,   0,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   0,   0,   0,   0,
     // Page 3: POST ANGT BLST STON GFRY DEKU KEAT BREM BUNA DONG SCEN GORN ROMN CIRC KAFE COUP TRTH ZORA KAMA GIBD GARO CAPT GIAN FIER
-                0,   0,   0,   0,   0,   1,   1,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,
+                0,   0,   0,   0,   0,   1,   1,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   1,   0,   0,   1,
 };
 // Garo: humanoid Link-rig form. Allowlist initialized as a copy of sSlotAllowedZora
 // (per user spec — both forms share the "humanoid ninja with ranged tools" profile).
@@ -423,7 +485,7 @@ static const u8 sSlotAllowedGaro[72] = {
     // Page 2: ROCS WHIP SPIN BARR FROD DEM  DLEF TGAT BEET SWHO IROD ZPER MOGM GJAR BCHN DSEN LROD HYLS PND2 PND1 PND3 CSOM SHVL DROD
                 0,   1,   0,   0,   0,   0,   0,   0,   1,   1,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   1,   0,   1,
     // Page 3: POST ANGT BLST STON GFRY DEKU KEAT BREM BUNA DONG SCEN GORN ROMN CIRC KAFE COUP TRTH ZORA KAMA GIBD GARO CAPT GIAN FIER
-                0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,
+                0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   1,   0,   0,   1,
 };
 // Gerudo: desert warrior. User-chosen lore-based whitelist (see plan file):
 // Allowed: bow + all arrow types (fire/ice/light), bombs, bombchu, megaton
@@ -437,21 +499,23 @@ static const u8 sSlotAllowedGerudo[72] = {
     // Page 2: ROCS WHIP SPIN BARR FROD DEM  DLEF TGAT BEET SWHO IROD ZPER MOGM GJAR BCHN DSEN LROD HYLS PND2 PND1 PND3 CSOM SHVL DROD
                 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
     // Page 3: POST ANGT BLST STON GFRY DEKU KEAT BREM BUNA DONG SCEN GORN ROMN CIRC KAFE COUP TRTH ZORA KAMA GIBD GARO CAPT GIAN FIER
-                0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,
+                0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   1,   0,   0,   1,   0,   0,   1,
 };
 // clang-format on
 static const u8* sFormSlotAllowed[MM_PLAYER_FORM_MAX] = {
-    sSlotAllowedFD,     // FIERCE_DEITY
-    sSlotAllowedGoron,  // GORON
-    sSlotAllowedZora,   // ZORA
-    sSlotAllowedDeku,   // DEKU
-    NULL,               // HUMAN - No restrictions
-    NULL,               // PIKACHU - No restrictions (can use all items)
-    sSlotAllowedGaro,   // GARO
-    NULL,               // GERUDO - No restrictions (vanilla Link with combat
-                        //          + visual overrides only; every other action,
-                        //          including ALL inventory items, falls through
-                        //          to vanilla Link unchanged)
+    sSlotAllowedFD,    // FIERCE_DEITY
+    sSlotAllowedGoron, // GORON
+    sSlotAllowedZora,  // ZORA
+    sSlotAllowedDeku,  // DEKU
+    NULL,              // HUMAN - No restrictions
+    NULL,              // PIKACHU - No restrictions (can use all items)
+    sSlotAllowedGaro,  // GARO
+    NULL,              // GERUDO - No restrictions (vanilla Link with combat
+                       //          + visual overrides only; every other action,
+                       //          including ALL inventory items, falls through
+                       //          to vanilla Link unchanged)
+    NULL,              // RITO - No restrictions (visual form; everything vanilla)
+    NULL,              // KEATON - No restrictions (visual form; everything vanilla)
 };
 
 // =============================================================================
@@ -608,6 +672,8 @@ static const FormItemEntry* sFormItemHandlers[MM_PLAYER_FORM_MAX] = {
     NULL,              // GARO - no special item handling, uses OOT defaults
     NULL,              // GERUDO - no interception (vanilla item use; combat is
                        //          the only Gerudo override, items run vanilla)
+    NULL,              // RITO   - no interception (everything runs vanilla)
+    NULL,              // KEATON - no interception (everything runs vanilla)
 };
 
 // =============================================================================
@@ -665,7 +731,7 @@ static const char* sFormEyeTextures[MM_PLAYER_FORM_MAX][4] = {
     { NULL, NULL, NULL, NULL },
     // PIKACHU - Eye/mouth textures handled in PikachuForm_Draw via pikachuDL.h variant tables
     { NULL, NULL, NULL, NULL },
-    // GARO - eyes baked into head DL (texture in garo.o2r)
+    // GARO - eyes baked into head DL (texture in soh.o2r)
     { NULL, NULL, NULL, NULL },
 };
 
@@ -726,6 +792,10 @@ typedef enum GoronActionId {
     MMFORM_ACT_WATER_VOID,           // Goron entered deep water: curl → ball → void out
     MMFORM_ACT_HAZARD_VOID,          // Form hazard: freeze/lava/fire → void out
     MMFORM_ACT_OOT_ACTION,           // OOT has an active special action (item use, NPC talk, etc.) - yield to OOT
+
+    // Rito flight (rito_flight.inc.c): one id for all of its poses. Appended at the
+    // end so no existing action id shifts.
+    MMFORM_ACT_RITO_FLIGHT,
 } GoronActionId;
 
 // =============================================================================
@@ -1097,12 +1167,19 @@ typedef struct {
 
     // Gerudo dedicated combo system (separate from Goron/Zora 3-slot punchA/B/C).
     // Stationary 5-hit only: normal_kiru → light_bom → Lnormal_kiru → Lpierce_kiru → Wrolling_kiru
-    LinkAnimationHeader* gerudoSlash[5];         // Attack anims
-    LinkAnimationHeader* gerudoSlashEnd[5];      // Recovery anims
+    LinkAnimationHeader* gerudoSlash[5];    // Attack anims
+    LinkAnimationHeader* gerudoSlashEnd[5]; // Recovery anims
     // Bone-attached sword quad activation (set per-frame by GerudoActionPunch,
     // consumed by Player_PostLimbDrawGameplay at L_HAND / R_HAND limbs where the
     // bone matrix is in scope for Matrix_MultVec3f → world-space quad vertices).
     u8 gerudoQuadsActive;
+    // Per-HAND collider gate: bit0 = left blade, bit1 = right blade. The MHR
+    // moveset drives this from the lab-measured per-hand windows; the older
+    // gerudo slash paths keep using the blanket gerudoQuadsActive above, and
+    // PostLimbDraw ORs the two (a set gerudoQuadsActive means "both hands").
+    // Without the split, the resting blade of an alternating cut still damaged
+    // whatever it was pointing at.
+    u8 gerudoQuadMask;
     u8 gerudoQuadDamage;
 
     // Gakki (instrument) state — form-specific ocarina override (from MM z_player.c D_8085D17C)
@@ -1136,6 +1213,18 @@ typedef struct {
 
 static MmFormState gFormState;
 
+// How far Gerudo's body is dropped at the root so her feet reach the floor (model units,
+// 100 per world unit). One number, applied in MmForm_OverrideLimbDraw's root branch, so it
+// corrects every pose at once. Skijer's NEI
+#define GERUDO_ROOT_DROP 200.0f
+
+// Gerudo's RIGHT hand matrix, captured in MmForm_PostLimbDraw. Vanilla only ever keeps
+// ONE hand — player->mf_9E0, written at PLAYER_LIMB_L_HAND because Link holds his sword
+// left-handed. She fights with two blades, so En_M_Thunder needs the other one too.
+// Skijer's NEI
+extern "C" MtxF gGerudoRightHandMtx;
+MtxF gGerudoRightHandMtx;
+
 // === Text-included .c helpers ===
 // In this repo, .c files in mods/ are text-included from a .cpp parent
 // (the .cpp is what's in CMake; the .c files are not standalone compilation
@@ -1152,13 +1241,23 @@ static MmFormState gFormState;
 // Helper: true if Zora swim mechanics should be active (Zora form OR Dragon Scale equipped)
 #define MMFORM_IS_ZORA_SWIM() (gFormState.currentForm == MM_PLAYER_FORM_ZORA || gFormState.zoraSwimEnabled)
 
+// True only for the REAL Zora form, where the "boots" are MM's Zora heavy-boots toggle
+// and the swim code owns player->currentBoots. On the Zora-Tunic swim (zoraSwimEnabled)
+// the player is still Link wearing his own boots, so the swim code must never write
+// currentBoots — Iron Boots simply lock the Zora swim out (see equip_dragonscale.c).
+#define MMFORM_ZORA_OWNS_BOOTS() (gFormState.currentForm == MM_PLAYER_FORM_ZORA && !gFormState.zoraSwimEnabled)
+
 // Static variables to preserve form across scene transitions (survive memset of gFormState)
 static MmPlayerTransformation sPendingReactivateForm = MM_PLAYER_FORM_HUMAN;
 static u8 sPendingReactivate = 0;
 static u8 sForceInstantTransform = 0; // Set to 1 for scene-transition reactivation
-static u8 sPendingSoftReload = 0;     // Set to 1 for seamless scene-transition reload (no flash)
-static s8 sFleetPendingForm = -1;     // Fleet Ship Combo: form to force after a cross-game arrival
-                                      // (-1 none; 0..4 MM playerForm). Consumed in MmForm_Update.
+// 1 while the transformation cutscene is playing MM's cl_setmask on Link's own
+// skeleton (see MmForm_UpdateTransforming phase 0). Tells that phase to keep the
+// action function paused and to tick the animation itself.
+static u8 sCutsceneMaskAnim = 0;
+static u8 sPendingSoftReload = 0; // Set to 1 for seamless scene-transition reload (no flash)
+static s8 sFleetPendingForm = -1; // Fleet Ship Combo: form to force after a cross-game arrival
+                                  // (-1 none; 0..4 MM playerForm). Consumed in MmForm_Update.
 
 // Saved equips for pre-transform state (like vanilla child/adult equip swap)
 static ItemEquips sPreTransformEquips;
@@ -1997,8 +2096,8 @@ static void MmForm_PreloadDekuDLs(void) {
     // dynamic spawn can possibly render. If this logs "FAIL" the DL isn't
     // packed under that name — we need to either (a) re-extract assets with
     // gold deku flower symbols enabled, or (b) use a different OTR path.
-    SPDLOG_INFO("[MmForm] GoldDekuFlowerIdleDL load: {} (cached={}, count={})",
-                sCachedDekuFlowerDL ? "OK" : "FAIL", (void*)sCachedDekuFlowerDL, sDekuFlowerDLCount);
+    SPDLOG_INFO("[MmForm] GoldDekuFlowerIdleDL load: {} (cached={}, count={})", sCachedDekuFlowerDL ? "OK" : "FAIL",
+                (void*)sCachedDekuFlowerDL, sDekuFlowerDLCount);
 }
 
 static void MmForm_PreloadFDHandDLs(void) {
@@ -2120,12 +2219,16 @@ static MmPlayerTransformation MmForm_MaskIdToForm(TransformMaskId maskId) {
             return MM_PLAYER_FORM_DEKU;
         case TRANSFORM_MASK_FIERCE_DEITY:
             return MM_PLAYER_FORM_FIERCE_DEITY;
-        case TRANSFORM_MASK_KEATON:
+        case TRANSFORM_MASK_PIKACHU:
             return MM_PLAYER_FORM_PIKACHU;
         case TRANSFORM_MASK_GARO:
             return MM_PLAYER_FORM_GARO;
         case TRANSFORM_MASK_GERUDO:
             return MM_PLAYER_FORM_GERUDO;
+        case TRANSFORM_MASK_RITO:
+            return MM_PLAYER_FORM_RITO;
+        case TRANSFORM_MASK_KEATON_FORM:
+            return MM_PLAYER_FORM_KEATON;
         default:
             return MM_PLAYER_FORM_HUMAN;
     }
@@ -2136,8 +2239,8 @@ static void MmForm_FreeRootMotion(void);
 static void MmForm_LoadPunchRootMotion(u8 punchIndex, MmAnimId animId);
 
 // Forward decl: defined in garo_form.cpp.
-// Loads g<Garo>Skel from nei/garo.o2r via ResourceMgr_LoadSkeletonByName and
-// returns its FlexSkeletonHeader. Returns NULL if garo.o2r is missing.
+// Loads g<Garo>Skel from soh.o2r via ResourceMgr_LoadSkeletonByName and
+// returns its FlexSkeletonHeader. Returns NULL if soh.o2r is missing.
 extern "C" FlexSkeletonHeader* GaroForm_LoadSkeleton(PlayState* play);
 // Garo behavior + draw entry points, defined in garo_form.cpp.
 // File-scope `extern "C"` so the C linkage matches the definitions; block-scope
@@ -2148,11 +2251,12 @@ extern "C" s32 GaroForm_TryDrawSmoothSkin(PlayState* play, Player* player);
 // shadow tracking, leftHandPos, focus.pos at HEAD, etc.) without drawing
 // any geometry. Defined in garo_post_limb.cpp.
 extern "C" void GaroForm_DrawNullBody(PlayState* play, Player* player, s32 lod);
-// PlayerAnimation wrapper that works with garo.o2r (independent of mm.o2r).
+// PlayerAnimation wrapper that works with soh.o2r (independent of mm.o2r).
 extern "C" LinkAnimationHeader* GaroForm_LoadAnimPublic(const char* path);
-extern "C" u8   GaroForm_GetPrevJumping(void);
+extern "C" u8 GaroForm_GetPrevJumping(void);
 extern "C" void GaroForm_SetPrevJumping(u8 v);
-extern "C" u8   GaroForm_IsRodAiming(void);
+extern "C" u8 GaroForm_IsRodAiming(void);
+extern "C" void GaroForm_DrawProjectiles(PlayState* play);
 // Garo's draw path runs through z_player.c's O2rLoader hook
 // (GaroForm_TryDrawSmoothSkin), NOT through the MM form system — the
 // Garo Mask activates via ITEM_MM_MASK_GARO → O2rLoader_ForceModel("garo")
@@ -2160,9 +2264,10 @@ extern "C" u8   GaroForm_IsRodAiming(void);
 // was dead code for Garo; removed to fix the unresolved-symbol link error.
 
 static u8 MmForm_LoadFormSkeleton(PlayState* play, MmPlayerTransformation form) {
-    // Pikachu uses a local skeleton (not mm.o2r) — route to its own loader
+    // Pikachu and Wolf Link share the internal custom-skeleton slot.  Their
+    // renderers/assets remain separate and the trigger item selects the owner.
     if (form == MM_PLAYER_FORM_PIKACHU) {
-        u8 ok = PikachuForm_LoadSkeleton(play);
+        u8 ok = WolfLinkForm_IsSelected() ? WolfLinkForm_LoadSkeleton(play) : PikachuForm_LoadSkeleton(play);
         if (ok) {
             gFormState.skeletonLoaded = 1;
             gFormState.currentForm = MM_PLAYER_FORM_PIKACHU;
@@ -2170,18 +2275,41 @@ static u8 MmForm_LoadFormSkeleton(PlayState* play, MmPlayerTransformation form) 
         return ok;
     }
 
-    // Gerudo: skel lives in nei/gerudo.o2r under `objects/gerudoPlayer/...`
+    // Gerudo: skel lives in soh.o2r under `objects/forms/gerudo/...`
     // (loaded via O2rLoader, accessible through standard ResourceMgr). The
     // adult / child variant is chosen at runtime from gSaveContext.linkAge.
     // We also fire O2rLoader_ForceModel("gerudo") here so the GerudoForm
     // hooks (VB friendliness, sandstorm-OFF, sword DL override) light up
     // synchronously with the cutscene flash peak.
+    // Rito: same arrangement as Gerudo — Link-rigged body in soh.o2r, forced through
+    // O2rLoader so CustomForms_ResolveVanillaResource redirects equipment/hand DLs to
+    // the rito's copies. ONE skeleton serves both ages (the rito rig is MM's human
+    // skeleton, which is byte-identical to OOT's child skeleton; adult height is
+    // handled by rootAnimScale, not by a second model).
+    FlexSkeletonHeader* ritoSkelHeader = NULL;
+    if (form == MM_PLAYER_FORM_RITO || form == MM_PLAYER_FORM_KEATON) {
+        const char* model = (form == MM_PLAYER_FORM_KEATON) ? "keaton" : "rito";
+        O2rLoader_ForceModel(model);
+        const char* skelPath = (form == MM_PLAYER_FORM_KEATON) ? "objects/forms/keaton/object_link_boy/gLinkAdultSkel"
+                                                               : "objects/forms/rito/object_link_boy/gLinkAdultSkel";
+        try {
+            auto res = ResourceMgr_GetResourceByNameHandlingMQ(skelPath);
+            if (res != nullptr) {
+                ritoSkelHeader = (FlexSkeletonHeader*)res->GetRawPointer();
+            }
+        } catch (...) { ritoSkelHeader = NULL; }
+        if (ritoSkelHeader == NULL) {
+            MMFORM_LOG("[MmForm] FAIL: form skel not found in soh.o2r at %s — rebuild GenerateSohOtr?", skelPath);
+            O2rLoader_ClearForcedModel();
+            return 0;
+        }
+    }
+
     FlexSkeletonHeader* gerudoSkelHeader = NULL;
     if (form == MM_PLAYER_FORM_GERUDO) {
         O2rLoader_ForceModel("gerudo");
-        const char* skelPath = LINK_IS_ADULT
-            ? "objects/gerudoPlayer/object_link_boy/gLinkAdultSkel"
-            : "objects/gerudoPlayer/object_link_child/gLinkChildSkel";
+        const char* skelPath = LINK_IS_ADULT ? "objects/forms/gerudo/object_link_boy/gLinkAdultSkel"
+                                             : "objects/forms/gerudo/object_link_child/gLinkChildSkel";
         // ResourceMgr_GetResourceByNameHandlingMQ returns shared_ptr; raw ptr
         // stays valid while ResourceMgr keeps the resource cached.
         try {
@@ -2191,25 +2319,29 @@ static u8 MmForm_LoadFormSkeleton(PlayState* play, MmPlayerTransformation form) 
             }
         } catch (...) { gerudoSkelHeader = NULL; }
         if (gerudoSkelHeader == NULL) {
-            MMFORM_LOG("[MmForm] FAIL: gerudo skel not found in gerudo.o2r at %s", skelPath);
+            MMFORM_LOG("[MmForm] FAIL: gerudo skel not found in soh.o2r at %s", skelPath);
             return 0;
         }
+        // Re-skin Link's moveset for the duration of the form. Done here, at the
+        // flash peak, so the dual-blade animations are already in OOT's tables
+        // the first frame the gerudo body is on screen.
+        MmForm_GerudoInstallAnims();
     }
 
     const MmFormProperties* props = &sFormProps[form];
 
-    // Garo: skeleton lives in nei/garo.o2r, not mm.o2r. props->skelPath is NULL by design.
-    // Gerudo: skeleton already loaded above from gerudo.o2r — also NULL skelPath by design.
+    // Garo: skeleton lives in soh.o2r, not mm.o2r. props->skelPath is NULL by design.
+    // Gerudo: skeleton already loaded above from soh.o2r — also NULL skelPath by design.
     // We still use the standard anim load + SkelAnime_InitLink flow below.
-    FlexSkeletonHeader* skelHeader = gerudoSkelHeader;
+    FlexSkeletonHeader* skelHeader = (gerudoSkelHeader != NULL) ? gerudoSkelHeader : ritoSkelHeader;
     if (form == MM_PLAYER_FORM_GARO) {
         skelHeader = GaroForm_LoadSkeleton(play);
         if (skelHeader == NULL) {
-            MMFORM_LOG("[MmForm] FAIL: gGaroSkel not found — is garo.o2r in nei/ folder?");
+            MMFORM_LOG("[MmForm] FAIL: gGaroSkel not found in soh.o2r (objects/forms/garo) — regenerate soh.o2r?");
             return 0;
         }
-    } else if (form == MM_PLAYER_FORM_GERUDO) {
-        // skelHeader already loaded from gerudo.o2r above; no mm.o2r fetch needed.
+    } else if (form == MM_PLAYER_FORM_GERUDO || form == MM_PLAYER_FORM_RITO || form == MM_PLAYER_FORM_KEATON) {
+        // skelHeader already loaded from soh.o2r above; no mm.o2r fetch needed.
     } else if (props->skelPath == NULL) {
         MMFORM_LOG("[MmForm] No skeleton for form %d", form);
         return 0;
@@ -2227,11 +2359,11 @@ static u8 MmForm_LoadFormSkeleton(PlayState* play, MmPlayerTransformation form) 
             return 0;
         }
 
-        // Load idle animation. Garo lives in nei/garo.o2r, not mm.o2r —
+        // Load idle animation. Garo lives in soh.o2r, not mm.o2r —
         // MmAnim_LoadByPath gates on MmAnim_IsAvailable() which checks mm.o2r,
-        // so it would refuse the load even when garo.o2r is present. Route
+        // so it would refuse the load even when soh.o2r is present. Route
         // Garo through GaroForm_LoadAnimPublic which wraps the resource manager
-        // path directly (works for any .o2r including garo.o2r).
+        // path directly (works for any .o2r including soh.o2r).
         if (form == MM_PLAYER_FORM_GARO) {
             gFormState.idleAnim = GaroForm_LoadAnimPublic(props->idleAnimPath);
         } else {
@@ -2546,28 +2678,28 @@ static u8 MmForm_LoadFormSkeleton(PlayState* play, MmPlayerTransformation form) 
             //   2. link_normal_light_bom
             //   3. Lpierce_kiru → Lpierce_kiru_finsh → Lpierce_kiru_finsh_end
             //      (sub-chain that plays all 3 anims as one "step" before cycling)
-            gFormState.gerudoSlash[0]    = MmAnim_Load(MM_ANIM_LINK_FIGHTER_NORMAL_KIRU);
+            gFormState.gerudoSlash[0] = MmAnim_Load(MM_ANIM_LINK_FIGHTER_NORMAL_KIRU);
             gFormState.gerudoSlashEnd[0] = MmAnim_Load(MM_ANIM_LINK_FIGHTER_NORMAL_KIRU_FINSH_END);
-            gFormState.gerudoSlash[1]    = MmAnim_Load(MM_ANIM_LINK_NORMAL_LIGHT_BOM);
+            gFormState.gerudoSlash[1] = MmAnim_Load(MM_ANIM_LINK_NORMAL_LIGHT_BOM);
             gFormState.gerudoSlashEnd[1] = MmAnim_Load(MM_ANIM_LINK_NORMAL_LIGHT_BOM_END);
-            gFormState.gerudoSlash[2]    = MmAnim_Load(MM_ANIM_LINK_FIGHTER_LNORMAL_KIRU);
+            gFormState.gerudoSlash[2] = MmAnim_Load(MM_ANIM_LINK_FIGHTER_LNORMAL_KIRU);
             gFormState.gerudoSlashEnd[2] = MmAnim_Load(MM_ANIM_LINK_FIGHTER_LNORMAL_KIRU_END);
-            gFormState.gerudoSlash[3]    = MmAnim_Load(MM_ANIM_LINK_FIGHTER_LPIERCE_KIRU);
+            gFormState.gerudoSlash[3] = MmAnim_Load(MM_ANIM_LINK_FIGHTER_LPIERCE_KIRU);
             gFormState.gerudoSlashEnd[3] = MmAnim_Load(MM_ANIM_LINK_FIGHTER_LPIERCE_KIRU_END);
-            gFormState.gerudoSlash[4]    = MmAnim_Load(MM_ANIM_LINK_FIGHTER_WROLLING_KIRU);
+            gFormState.gerudoSlash[4] = MmAnim_Load(MM_ANIM_LINK_FIGHTER_WROLLING_KIRU);
             gFormState.gerudoSlashEnd[4] = MmAnim_Load(MM_ANIM_LINK_FIGHTER_WROLLING_KIRU_END);
 
             // Legacy punchA/B/C — point to the first 3 Gerudo slashes so the
             // generic StartPunch infra (which still references punchA before any
             // Gerudo branch fires) doesn't see NULL and bail.
-            gFormState.punchA     = gFormState.gerudoSlash[0];
-            gFormState.punchAEnd  = gFormState.gerudoSlashEnd[0];
+            gFormState.punchA = gFormState.gerudoSlash[0];
+            gFormState.punchAEnd = gFormState.gerudoSlashEnd[0];
             gFormState.punchAEndR = gFormState.gerudoSlashEnd[0];
-            gFormState.punchB     = gFormState.gerudoSlash[1];
-            gFormState.punchBEnd  = gFormState.gerudoSlashEnd[1];
+            gFormState.punchB = gFormState.gerudoSlash[1];
+            gFormState.punchBEnd = gFormState.gerudoSlashEnd[1];
             gFormState.punchBEndR = gFormState.gerudoSlashEnd[1];
-            gFormState.punchC     = gFormState.gerudoSlash[2];
-            gFormState.punchCEnd  = gFormState.gerudoSlashEnd[2];
+            gFormState.punchC = gFormState.gerudoSlash[2];
+            gFormState.punchCEnd = gFormState.gerudoSlashEnd[2];
             gFormState.punchCEndR = gFormState.gerudoSlashEnd[2];
 
             // Aerial slash — 4-stage composite (OOT vanilla colliders + landing
@@ -2576,9 +2708,12 @@ static u8 MmForm_LoadFormSkeleton(PlayState* play, MmPlayerTransformation form) 
             //   2. gerudoPowerJumpMid = Lpower_jump_kiru     (sword-overhead transition, fast)
             //   3. fallAnim           = link_normal_fall      (loop until landing)
             //   On landing → jumpKickEnd (heavy power-jump recovery, 2-handed feel).
-            gFormState.jumpKick           = MmAnim_Load(MM_ANIM_LINK_FIGHTER_JUMP_ROLLKIRU);
-            gFormState.gerudoPowerJumpMid = MmAnim_Load(MM_ANIM_LINK_FIGHTER_LPOWER_JUMP_KIRU);
-            gFormState.jumpKickEnd        = MmAnim_Load(MM_ANIM_LINK_FIGHTER_POWER_JUMP_KIRU_END);
+            // Retired (2026-08-18): the jump slash is OOT's own, wearing dual-blade clips
+            // from the melee table. jumpKick MUST stay NULL — a non-NULL one makes
+            // MmForm_GetJumpSlashAnim override the table and Action_Jump/Fall hijack B.
+            gFormState.jumpKick = NULL;
+            gFormState.gerudoPowerJumpMid = NULL;
+            gFormState.jumpKickEnd = NULL;
 
             // Mask-off cutscene anim — shared with Human (gPlayerAnim_cl_setmask)
             gFormState.maskOffStart = MmAnim_Load(MM_ANIM_CL_SETMASK);
@@ -2614,6 +2749,32 @@ static u8 MmForm_LoadFormSkeleton(PlayState* play, MmPlayerTransformation form) 
 
             // Chest animation (from 2Ship ageProperties: clink_demo_Tbox_open)
             gFormState.chestOpen = MmAnim_Load(MM_ANIM_CLINK_DEMO_TBOX_OPEN);
+        }
+
+        // ── Gakki animations: ONE resolution point for EVERY form ────────────────────
+        // The per-form branches above load MM's own clips through MmAnim ids (Goron/Zora/
+        // Deku). Any form whose row in sFormGakkiInstruments names a PlayerAnimation
+        // resource instead — custom forms using clips retargeted onto Link's skeleton by
+        // tools/bake_oot_npc_link_anims.py — is resolved here, overriding whatever the
+        // branch left. That keeps the instrument declaration in a single table: adding a
+        // form is a row, not another `else if` here.
+        {
+            const char* startPath = MmGakki_GetStartAnimPath(form);
+            const char* playPath = MmGakki_GetPlayAnimPath(form);
+            if (startPath != NULL) {
+                gFormState.gakkiStartAnim = ResourceMgr_LoadPlayerAnimAsHeader(startPath);
+            }
+            if (playPath != NULL) {
+                gFormState.gakkiPlayAnim = ResourceMgr_LoadPlayerAnimAsHeader(playPath);
+                if (startPath == NULL) {
+                    // No separate draw-instrument clip: the play clip doubles as the held
+                    // pose (parked on frame 0, one pass per note), so gakki must not wait
+                    // for a start animation that will never arrive.
+                    gFormState.gakkiStartAnim = NULL;
+                }
+            }
+            MMFORM_LOG("[MmForm] Gakki anims: form=%d start=%p play=%p", form, (void*)gFormState.gakkiStartAnim,
+                       (void*)gFormState.gakkiPlayAnim);
         }
 
         // Shared damage/landing animations (all forms use human Link anims)
@@ -2808,16 +2969,18 @@ static void MmForm_ApplyFormProperties(Player* player, MmPlayerTransformation fo
     gFormState.savedTunic = player->currentTunic;
     gFormState.savedTunicEquip = CUR_EQUIP_VALUE(EQUIP_TYPE_TUNIC);
 
-    // Form-specific tunic: change at inventory level so Player_SetEquipmentData picks it up.
-    // Zora = Zora Tunic (breathe underwater), Goron = Goron Tunic (heat resistance).
-    if (form == MM_PLAYER_FORM_ZORA) {
+    // Form tunic (Skijer 2026-07-28): Goron and Zora no longer EQUIP the Goron/Zora
+    // Tunic — they transform wearing the plain Kokiri Tunic. The tunic's two gameplay
+    // effects are properties of the BODY, not of the clothing, so they are granted
+    // through MmForm_HasFireResistance / MmForm_HasWaterBreathing instead (Goron =
+    // fire/heat immunity, Zora = breathes underwater). Consequences of equipping the
+    // real tunic that we explicitly do NOT want: the Zora Tunic now carries the MM
+    // Zora fast-swim behaviour (equip_dragonscale.c), and both tunics recolor the
+    // form's model through the cosmetic tunic-color path.
+    if (form == MM_PLAYER_FORM_ZORA || form == MM_PLAYER_FORM_GORON) {
         gSaveContext.equips.equipment = (gSaveContext.equips.equipment & ~gEquipMasks[EQUIP_TYPE_TUNIC]) |
-                                        (EQUIP_VALUE_TUNIC_ZORA << gEquipShifts[EQUIP_TYPE_TUNIC]);
-        player->currentTunic = PLAYER_TUNIC_ZORA;
-    } else if (form == MM_PLAYER_FORM_GORON) {
-        gSaveContext.equips.equipment = (gSaveContext.equips.equipment & ~gEquipMasks[EQUIP_TYPE_TUNIC]) |
-                                        (EQUIP_VALUE_TUNIC_GORON << gEquipShifts[EQUIP_TYPE_TUNIC]);
-        player->currentTunic = PLAYER_TUNIC_GORON;
+                                        (EQUIP_VALUE_TUNIC_KOKIRI << gEquipShifts[EQUIP_TYPE_TUNIC]);
+        player->currentTunic = PLAYER_TUNIC_KOKIRI;
     }
 
     // Per-form strength override (mirrors MM's body-mass / lifting rules):
@@ -2914,6 +3077,17 @@ static void MmForm_ApplyFormProperties(Player* player, MmPlayerTransformation fo
             // bipedal, same height-class as Link.
             { 60.0f, 1.0f, 71.0f, 50.0f, 49.0f, 39.0f, 27.0f, 19.0f, 22.0f, 32.4f, 32.0f, 48.0f, 70.0f, 18.0f, 12.0f,
               55.0f, 40.0f },
+            // RITO (bipedal, same height-class as Link) — same reasoning as the
+            // GERUDO row above: this table is read by index, so a missing row means
+            // zeros for every size check. Cloned from GERUDO. unk_08 is the movement
+            // scale, kept at 1.0 like Gerudo: only the RENDER root is scaled
+            // (sFormProps.rootAnimScale), the rito moves at Link's speed.
+            { 60.0f, 1.0f, 71.0f, 50.0f, 49.0f, 39.0f, 27.0f, 19.0f, 22.0f, 32.4f, 32.0f, 48.0f, 70.0f, 18.0f, 12.0f,
+              55.0f, 40.0f },
+            // KEATON — cloned from RITO for the same reason: this table is read by
+            // index and a missing row means zeros for every size check.
+            { 60.0f, 1.0f, 71.0f, 50.0f, 49.0f, 39.0f, 27.0f, 19.0f, 22.0f, 32.4f, 32.0f, 48.0f, 70.0f, 18.0f, 12.0f,
+              55.0f, 40.0f },
         };
 
         const auto* mmProps = &sMmAgeProps[form];
@@ -2999,9 +3173,16 @@ static void MmForm_StopGoronRollSfx(void);
 static u8 sRollOwnsPause = 0;
 
 static void MmForm_RestoreOotState(Player* player) {
-    // Clear Gerudo MHR combat state (wirebugs / demon / homing) on every full
-    // form-exit so re-equipping the mask starts clean.
+    // Clear Gerudo combat state on every full form-exit so re-equipping the mask
+    // starts clean. This is the FULL reset (rage meter included); the yield path
+    // uses MmForm_GerudoMhrReset, which only aborts the running clip.
     MmForm_GerudoMhrReset();
+    MmForm_GerudoFormExit();
+    // Put OOT's animation tables back. These are global engine state — leaving
+    // the dual-blade clips installed would give human Link the gerudo moveset.
+    // Unconditional on purpose: it self-guards, and it must survive every exit
+    // path (detransform, death, save load), not just the tidy one.
+    MmForm_GerudoRestoreAnims();
     // Stop any form-specific looping SFX that the seq engine would auto-mute
     // in MM but our MmDirectAudio path leaves running. Called on every full
     // form-exit (detransform cutscene, death, mask-clear) so the loops never
@@ -3014,15 +3195,26 @@ static void MmForm_RestoreOotState(Player* player) {
         // (no FLOWER_ROLL stop — MM never starts it; see glide block in MmForm_Action_DekuFly)
     }
 
-    // Gerudo detransform: clear the O2rLoader skin swap that LoadFormSkeleton set
-    // at the flash peak. Without this, the gerudo body keeps rendering after the
+    // Gerudo / Rito detransform: clear the O2rLoader skin swap that LoadFormSkeleton
+    // set at the flash peak. Without this, the form's body keeps rendering after the
     // form goes INACTIVE.
     {
         const char* cur = O2rLoader_GetForcedName();
-        if (cur != nullptr && strcmp(cur, "gerudo") == 0) {
+        if (cur != nullptr && (strcmp(cur, "gerudo") == 0 || strcmp(cur, "rito") == 0 || strcmp(cur, "keaton") == 0)) {
             O2rLoader_ClearForcedModel();
         }
     }
+
+    // Hand OOT's landing groups back. The rito swaps the clip they point at for as
+    // long as its form is active; without this the swap outlives the form and plain
+    // Link keeps landing on the rito's animation. Reset alone never covered it —
+    // taking the mask off does not go through Reset.
+    MmForm_RitoRestoreLanding();
+    MmForm_RitoBowRestoreRun(); // same leak, same fix: the bow swaps run/walk too
+    // ...and clear the draw offset. It is re-applied per frame while the form is
+    // active, so on exit the last rito value would otherwise stick to the actor
+    // and leave plain Link buried in the floor.
+    player->actor.shape.yOffset = 0.0f;
 
     // Restore original ageProperties pointer (before form override)
     if (gFormState.savedAgeProperties != NULL) {
@@ -3115,7 +3307,7 @@ static void MmForm_RestoreOotState(Player* player) {
     // linearVelocity, but other actions (Player_AnimChangeLoopMorph) use the last-set value.
     player->skelAnime.playSpeed = 1.0f;
     gFormState.formSkelAnime.playSpeed = 1.0f;
-    player->linearVelocity = 0.0f;  // Ensure walk anim formula doesn't use stale high velocity
+    player->linearVelocity = 0.0f; // Ensure walk anim formula doesn't use stale high velocity
 
     // Cleanup punch trail (Zora fin / Gerudo L-sword)
     if (gFormState.punchTrailActive && gPlayState != NULL) {
@@ -3441,6 +3633,10 @@ static void MmForm_StopRootMotion(void) {
 
 // Forward declarations (defined later in this file)
 static void MmForm_StartPunch(Player* player, PlayState* play);
+static u8 MmForm_ZoraBoomerangHoldReady(PlayState* play);
+static u8 MmForm_ZoraGuardCapturesB(PlayState* play);
+static void MmForm_FreezeForGetItem(Player* player); // defined just above MmForm_UpdateActive
+static void MmForm_TrackBoomerangsInFlight(Player* player, PlayState* play);
 static u8 MmForm_IsZTargeting(Player* player);
 static s32 MmForm_GetStickDirection(Player* player);
 static f32 MmForm_GetStickMagnitude(PlayState* play);
@@ -3489,8 +3685,9 @@ static s16 sShieldLockedYaw = 0;
 // form had a parallel shieldCollider cylinder that registered hits but the damage
 // handler never looked at it, so form shields visually engaged but every attack
 // landed. Stamping shieldQuad makes Link's block path work natively — including
-// projectile deflection (e.g. EnNutsball uses player->shieldMf yaw) and shield
-// SFX/colType from currentShield.
+// projectile deflection (e.g. EnNutsball uses player->shieldMf yaw). The collision
+// type is FIXED (metal): it used to be indexed by player->currentShield, but no form
+// reads the equipped shield any more (Skijer 2026-07-28).
 //
 // Also stamps `player->shieldMf` with a yaw rotation matching the player facing.
 // Projectiles that deflect off the shield read this matrix to compute their
@@ -3509,13 +3706,6 @@ static s16 sShieldLockedYaw = 0;
 // attacks that aim at form-specific body widths.
 // Non-static / extern "C" so pikachu_form.cpp and other form units can reuse it.
 extern "C" void MmForm_ActivateFormShieldQuad(Player* player, PlayState* play) {
-    static const u8 sShieldColTypes[] = {
-        COLTYPE_METAL, // PLAYER_SHIELD_NONE
-        COLTYPE_WOOD,  // PLAYER_SHIELD_DEKU
-        COLTYPE_METAL, // PLAYER_SHIELD_HYLIAN
-        COLTYPE_METAL, // PLAYER_SHIELD_MIRROR
-    };
-
     // Refresh shieldMf so projectile-rebound math uses the form's current facing.
     // EnNutsball / similar projectiles compute their rebound as:
     //     Matrix_MtxFToYXZRotS(&player->shieldMf, &sp4C, 0);
@@ -3530,12 +3720,11 @@ extern "C" void MmForm_ActivateFormShieldQuad(Player* player, PlayState* play) {
     // reflections fired at an arbitrary angle — user-reported "deku seeds bounce
     // 90° to Link's right instead of going back to the scrub".
     s16 shieldYaw = player->actor.shape.rot.y + 0x8000;
-    SkinMatrix_SetTranslateRotateYXZScale(&player->shieldMf, 1.0f, 1.0f, 1.0f, 0, shieldYaw, 0,
-                                          0.0f, 0.0f, 0.0f);
+    SkinMatrix_SetTranslateRotateYXZScale(&player->shieldMf, 1.0f, 1.0f, 1.0f, 0, shieldYaw, 0, 0.0f, 0.0f, 0.0f);
 
     f32 sinYaw = Math_SinS(player->actor.shape.rot.y);
     f32 cosYaw = Math_CosS(player->actor.shape.rot.y);
-    f32 rightX = cosYaw;  // perpendicular to forward, on XZ plane
+    f32 rightX = cosYaw; // perpendicular to forward, on XZ plane
     f32 rightZ = -sinYaw;
 
     // Generous geometry — must cover Goron curled (low Y), Deku small, and Zora
@@ -3550,12 +3739,23 @@ extern "C" void MmForm_ActivateFormShieldQuad(Player* player, PlayState* play) {
     f32 py = player->actor.world.pos.y;
 
     Vec3f a, b, c, d;
-    a.x = cx - rightX * halfWidth; a.y = py + topY;    a.z = cz - rightZ * halfWidth;
-    b.x = cx + rightX * halfWidth; b.y = py + topY;    b.z = cz + rightZ * halfWidth;
-    c.x = cx + rightX * halfWidth; c.y = py + bottomY; c.z = cz + rightZ * halfWidth;
-    d.x = cx - rightX * halfWidth; d.y = py + bottomY; d.z = cz - rightZ * halfWidth;
+    a.x = cx - rightX * halfWidth;
+    a.y = py + topY;
+    a.z = cz - rightZ * halfWidth;
+    b.x = cx + rightX * halfWidth;
+    b.y = py + topY;
+    b.z = cz + rightZ * halfWidth;
+    c.x = cx + rightX * halfWidth;
+    c.y = py + bottomY;
+    c.z = cz + rightZ * halfWidth;
+    d.x = cx - rightX * halfWidth;
+    d.y = py + bottomY;
+    d.z = cz - rightZ * halfWidth;
 
-    player->shieldQuad.base.colType = sShieldColTypes[player->currentShield];
+    // Fixed collision type — a form's guard is its own body (Goron shell, Zora fins,
+    // Deku stance), never the equipped shield. Reading currentShield here made the
+    // block SFX/behaviour change with gear the form doesn't even hold.
+    player->shieldQuad.base.colType = COLTYPE_METAL;
     Collider_SetQuadVertices(&player->shieldQuad, &a, &b, &c, &d);
     CollisionCheck_SetAC(play, &play->colChkCtx, &player->shieldQuad.base);
     CollisionCheck_SetAT(play, &play->colChkCtx, &player->shieldQuad.base);
@@ -3597,10 +3797,8 @@ static void MmForm_ZoraZTargetShield(Player* player, PlayState* play) {
     // to shieldQuad.AC_BOUNCED so OOT's damage handler (z_player.c:5233) blocks
     // regardless of incoming angle.
     if (gFormState.shieldColliderInitDone) {
-        static const u8 sZoraShieldColTypes[] = {
-            COLTYPE_METAL, COLTYPE_WOOD, COLTYPE_METAL, COLTYPE_METAL,
-        };
-        gFormState.shieldCollider.base.colType = sZoraShieldColTypes[player->currentShield];
+        // Zora blocks with his fins — fixed metal, never derived from currentShield.
+        gFormState.shieldCollider.base.colType = COLTYPE_METAL;
         Collider_ResetCylinderAC(play, &gFormState.shieldCollider.base);
         Collider_UpdateCylinder(&player->actor, &gFormState.shieldCollider);
         CollisionCheck_SetAC(play, &play->colChkCtx, &gFormState.shieldCollider.base);
@@ -3615,7 +3813,7 @@ static void MmForm_ZoraZTargetShield(Player* player, PlayState* play) {
 static void MmForm_EnterShield(Player* player, PlayState* play) {
     player->linearVelocity = 0.0f;
     player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC; // Block OOT movement during shield
-    gFormState.zoraZTargetShield = 0; // entering the static shield clears the walk-shield flag
+    gFormState.zoraZTargetShield = 0;                       // entering the static shield clears the walk-shield flag
 
     if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.dekuGuardAnim != NULL) {
         // From 2Ship Player_ActionHandler_11 (z_player.c line 8544):
@@ -3668,10 +3866,17 @@ static void MmForm_EnterShield(Player* player, PlayState* play) {
     if (MmSfx_IsAvailable()) {
         u16 sfx = 0;
         switch (gFormState.currentForm) {
-            case MM_PLAYER_FORM_GORON: sfx = MM_NA_SE_PL_GORON_SQUAT;  break;
-            case MM_PLAYER_FORM_ZORA:  sfx = MM_NA_SE_IT_SHIELD_SWING; break;
-            case MM_PLAYER_FORM_DEKU:  sfx = MM_NA_SE_PL_CHANGE_ARMS;  break;
-            default: break;
+            case MM_PLAYER_FORM_GORON:
+                sfx = MM_NA_SE_PL_GORON_SQUAT;
+                break;
+            case MM_PLAYER_FORM_ZORA:
+                sfx = MM_NA_SE_IT_SHIELD_SWING;
+                break;
+            case MM_PLAYER_FORM_DEKU:
+                sfx = MM_NA_SE_PL_CHANGE_ARMS;
+                break;
+            default:
+                break;
         }
         if (sfx != 0) {
             MmSfx_PlayAtPos(sfx, &player->actor.projectedPos);
@@ -3687,7 +3892,10 @@ static void MmForm_EnterShield(Player* player, PlayState* play) {
 // is purely a B-press intercept on top of vanilla Link's full ground/air systems.
 static u8 MmForm_OotHandlesGround(void) {
     return (gFormState.currentForm == MM_PLAYER_FORM_ZORA || gFormState.currentForm == MM_PLAYER_FORM_FIERCE_DEITY ||
-            gFormState.currentForm == MM_PLAYER_FORM_PIKACHU || gFormState.currentForm == MM_PLAYER_FORM_GERUDO);
+            gFormState.currentForm == MM_PLAYER_FORM_PIKACHU || gFormState.currentForm == MM_PLAYER_FORM_GERUDO ||
+            // Rito is purely a visual form: no custom ground physics at all, so OOT
+            // owns walking, running, jumping and everything else.
+            gFormState.currentForm == MM_PLAYER_FORM_RITO || gFormState.currentForm == MM_PLAYER_FORM_KEATON);
 }
 
 // ---------------------------------------------------------------------------
@@ -3712,15 +3920,15 @@ static void MmForm_GoronAction_Idle(Player* player, PlayState* play) {
     // R button → shield stance (from 2Ship Player_ActionHandler_11, line 8391)
     // Goron: ground curl with gLinkGoronShieldingSkel
     // Zora: guard pose with defense anim + barrier on R+B
-    // Gerudo: NOT here — uses OOT's vanilla Mirror Shield (see GerudoForm_Update)
+    // Gerudo: NOT here — R is the wirebug modifier, owned by MmForm_GerudoMhrUpdate
     if (CHECK_BTN_ALL(input->cur.button, BTN_R)) {
         if (gFormState.currentForm == MM_PLAYER_FORM_GORON || gFormState.currentForm == MM_PLAYER_FORM_ZORA ||
             gFormState.currentForm == MM_PLAYER_FORM_DEKU) {
             MmForm_EnterShield(player, play);
             return;
         }
-        // Gerudo R = vanilla Mirror Shield (handled by OOT's ActionHandler_11);
-        // currentShield is forced to MIRROR in GerudoForm_Update. Fall through.
+        // Gerudo R = MHR wirebug (owned by MmForm_GerudoMhrUpdate). OOT's vanilla
+        // shield actions are gated off for it in MmForm_GetShieldMode(). Fall through.
     }
 
     // B button → punch combo / bubble spit / gerudo slash combo
@@ -3734,13 +3942,8 @@ static void MmForm_GoronAction_Idle(Player* player, PlayState* play) {
             MmForm_StartPunch(player, play);
             return;
         } else if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
-            // Gerudo ground combo — only fire when Link would *naturally* swing
-            // his master sword (B-press on ground, not in any blocking state).
-            // Without this guard the combo soft-locks dialogue, grabbing/lifting
-            // (push/pull), item-use, climbing, talking, and other vanilla flows.
-            if (MmForm_GerudoCanStartGroundCombo(player)) {
-                MmForm_StartPunch(player, play);
-            }
+            // Gerudo: B is OOT's own sword pipeline wearing dual-blade clips
+            // (gerudo_mhr_combat.inc.c). Nothing to intercept here.
             return;
         } else if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.dekuBowReady != NULL) {
             // Enter bubble aim (custom action with ItemCamera)
@@ -3760,18 +3963,16 @@ static void MmForm_GoronAction_Idle(Player* player, PlayState* play) {
     // This check also triggers from PUNCH_END and other post-action states (see those handlers).
     if (gFormState.currentForm == MM_PLAYER_FORM_ZORA && gFormState.boomerangState == 0 &&
         gFormState.cutterAttack != NULL) {
-        if (CHECK_BTN_ALL(input->cur.button, BTN_B) && !CHECK_BTN_ALL(input->press.button, BTN_B)) {
-            gFormState.boomerangHoldTimer++;
-            if (gFormState.boomerangHoldTimer >= 30) { // 10 frames at 20fps = 30 at 60fps
-                gFormState.boomerangHoldTimer = 0;
-                Player_StartZoraBoomerang(player, play);
-                // Transition to idle so PAUSE is cleared — OOT's actionFunc runs
-                // Player_UpdateUpperBody which calls our upper action functions.
-                MmForm_SetAction(GORON_ACT_IDLE, play, gFormState.idleAnim, 1.0f, ANIMMODE_LOOP);
-                return;
-            }
-        } else if (!CHECK_BTN_ALL(input->cur.button, BTN_B)) {
-            gFormState.boomerangHoldTimer = 0;
+        // Was: `cur && !press` + a manual counter whose reset was `else if (!cur)`. During a
+        // mash that reset never fired — a fresh press fails the first test but `cur` is still
+        // held, so the counter kept ACCUMULATING across taps until it crossed 30 and threw the
+        // player into aim right after the combo. The helper zeroes on press instead.
+        if (MmForm_ZoraBoomerangHoldReady(play)) {
+            Player_StartZoraBoomerang(player, play);
+            // Transition to idle so PAUSE is cleared — OOT's actionFunc runs
+            // Player_UpdateUpperBody which calls our upper action functions.
+            MmForm_SetAction(GORON_ACT_IDLE, play, gFormState.idleAnim, 1.0f, ANIMMODE_LOOP);
+            return;
         }
     }
 
@@ -3927,8 +4128,8 @@ static void MmForm_GoronAction_Walk(Player* player, PlayState* play) {
             MmForm_EnterShield(player, play);
             return;
         }
-        // Gerudo R = vanilla Mirror Shield (handled by OOT's ActionHandler_11);
-        // currentShield is forced to MIRROR in GerudoForm_Update. Fall through.
+        // Gerudo R = MHR wirebug (owned by MmForm_GerudoMhrUpdate). OOT's vanilla
+        // shield actions are gated off for it in MmForm_GetShieldMode(). Fall through.
     }
 
     // B button → punch/bubble (Zora boomerang is B-HOLD after an action)
@@ -3940,10 +4141,7 @@ static void MmForm_GoronAction_Walk(Player* player, PlayState* play) {
             MmForm_StartPunch(player, play);
             return;
         } else if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
-            // Ground combo only; in air B → jump-slash via Action_Fall.
-            if (MMFORM_ON_GROUND(player)) {
-                MmForm_StartPunch(player, play);
-            }
+            // Gerudo: B is OOT's own sword pipeline (gerudo_mhr_combat.inc.c).
             return;
         } else if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.dekuBowReady != NULL) {
             // Enter bubble aim via OOT's slingshot pipeline (first-person camera)
@@ -4085,8 +4283,8 @@ static void MmForm_GoronAction_Run(Player* player, PlayState* play) {
             MmForm_EnterShield(player, play);
             return;
         }
-        // Gerudo R = vanilla Mirror Shield (handled by OOT's ActionHandler_11);
-        // currentShield is forced to MIRROR in GerudoForm_Update. Fall through.
+        // Gerudo R = MHR wirebug (owned by MmForm_GerudoMhrUpdate). OOT's vanilla
+        // shield actions are gated off for it in MmForm_GetShieldMode(). Fall through.
     }
 
     // B button → punch/bubble (Zora boomerang is B-HOLD after an action)
@@ -4098,10 +4296,7 @@ static void MmForm_GoronAction_Run(Player* player, PlayState* play) {
             MmForm_StartPunch(player, play);
             return;
         } else if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
-            // Ground combo only; in air B → jump-slash via Action_Fall.
-            if (MMFORM_ON_GROUND(player)) {
-                MmForm_StartPunch(player, play);
-            }
+            // Gerudo: B is OOT's own sword pipeline (gerudo_mhr_combat.inc.c).
             return;
         } else if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.dekuBowReady != NULL) {
             // Enter bubble aim via OOT's slingshot pipeline (first-person camera)
@@ -4343,18 +4538,29 @@ static LinkAnimationHeader* MmForm_GerudoGetEndAnim(u8 step);
 static s16 sGerudoComboLockedYaw = 0;
 
 static void MmForm_StartPunch(Player* player, PlayState* play) {
+    // Guarding Zora: B is the barrier, not an attack. Gated here rather than at the dozen
+    // call sites so every entry path (idle, Z-target idle/walk, shield-walk, ocean floor…)
+    // obeys it. Matches MM, where the shield upper-action swallows B outright.
+    if ((gFormState.currentForm == MM_PLAYER_FORM_ZORA) && MmForm_ZoraGuardCapturesB(play)) {
+        return;
+    }
+
     // Gerudo uses its own combo dispatcher (5-hit stationary or 3-hit moving
     // cyclic with sub-chain on Lpierce). Intercept here so all callers of
     // StartPunch (Idle, ZTarget_Idle, etc.) route to the right handler.
     if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
-        MmForm_GerudoStartPunch(player, play);
+        // Gerudo has no form punch: B is OOT's sword pipeline (gerudo_mhr_combat.inc.c).
         return;
     }
 
     if (gFormState.punchA == NULL)
         return;
 
-    gFormState.boomerangHoldTimer = 0;
+    // NOTE: boomerangHoldTimer is deliberately NOT cleared here. It is owned by
+    // MmForm_TickZoraBoomerangHold and must keep accumulating THROUGH the punch, so that
+    // holding B straight through the combo has the aim ready the instant the punch ends
+    // (MM behaviour). Clearing it here reintroduced the "hold takes ages" feel. The B press
+    // that started this punch already reset the counter in the tick this same frame.
     gFormState.comboStep = 0;
     gFormState.comboBPressed = 0;
     gFormState.comboBufferTimer = 0;
@@ -4388,20 +4594,20 @@ static void MmForm_StartPunch(Player* player, PlayState* play) {
             gFormState.punchTrailActive = 0;
         }
         EffectBlureInit2 blure = {
-            0,                          // calcMode
-            8,                          // flags
-            0,                          // addAngleChange
-            { 255, 255, 255, 255 },     // p1StartColor
-            { 255, 255, 255, 64 },      // p2StartColor
-            { 255, 255, 255, 0 },       // p1EndColor
-            { 255, 255, 255, 0 },       // p2EndColor
-            4,                          // elemDuration
-            0,                          // unkFlag
-            2,                          // drawMode (smooth — Master Sword strip)
-            0,                          // mode4Param
-            { 255, 255, 255, 255 },     // altPrimColor
-            { 255, 255, 255, 64 },      // altEnvColor
-            TRAIL_TYPE_SWORDS,          // trailType
+            0,                      // calcMode
+            8,                      // flags
+            0,                      // addAngleChange
+            { 255, 255, 255, 255 }, // p1StartColor
+            { 255, 255, 255, 64 },  // p2StartColor
+            { 255, 255, 255, 0 },   // p1EndColor
+            { 255, 255, 255, 0 },   // p2EndColor
+            4,                      // elemDuration
+            0,                      // unkFlag
+            2,                      // drawMode (smooth — Master Sword strip)
+            0,                      // mode4Param
+            { 255, 255, 255, 255 }, // altPrimColor
+            { 255, 255, 255, 64 },  // altEnvColor
+            TRAIL_TYPE_SWORDS,      // trailType
         };
         Effect_Add(play, &gFormState.punchTrailEffectIndex, EFFECT_BLURE2, 0, 0, &blure);
         gFormState.punchTrailActive = 1;
@@ -4457,9 +4663,9 @@ static void MmForm_StartPunch(Player* player, PlayState* play) {
 //   frame >= endFrame:  combo check → next punch or recovery
 // ---------------------------------------------------------------------------
 static void MmForm_Action_Punch(Player* player, PlayState* play) {
-    // Gerudo combo handler runs its own table-driven path.
+    // Gerudo never enters the form punch any more; a stale PUNCH_* just returns to idle.
     if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
-        MmForm_GerudoActionPunch(player, play);
+        MmForm_SetAction(GORON_ACT_IDLE, play, gFormState.idleAnim, 1.0f, ANIMMODE_LOOP);
         return;
     }
 
@@ -4487,8 +4693,7 @@ static void MmForm_Action_Punch(Player* player, PlayState* play) {
     // moving combo. When that handler is in charge it sets currentComboMode
     // and steps. The fall-through to the generic path below should not happen
     // for Gerudo — pick the stationary table just in case (no crash).
-    const u8(*punchFrames)[2] = isGerudo ? sGerudoStationaryFrames
-                                         : (isGoron ? sGoronPunchFrames : sZoraPunchFrames);
+    const u8(*punchFrames)[2] = isGerudo ? sGerudoStationaryFrames : (isGoron ? sGoronPunchFrames : sZoraPunchFrames);
     u8 hitStart = punchFrames[step][0];
     u8 hitEnd = punchFrames[step][1];
     f32 earlyStart = isGoron ? 5.0f : (f32)hitStart;
@@ -4661,8 +4866,8 @@ static void MmForm_Action_Punch(Player* player, PlayState* play) {
         // skipping the recovery anim entirely (matches MM's clean anim-end transition).
         if (gFormState.currentForm == MM_PLAYER_FORM_ZORA && gFormState.boomerangState == 0 &&
             gFormState.cutterAttack != NULL && !gFormState.comboBPressed) {
-            Input* boomIn = &play->state.input[0];
-            if (CHECK_BTN_ALL(boomIn->cur.button, BTN_B)) {
+            // Held B only — a mashed combo must never fall through into aim here.
+            if (MmForm_ZoraBoomerangHoldReady(play)) {
                 MmForm_StopRootMotion();
                 MmForm_KillTrail(play, &gFormState.punchTrailEffectIndex, &gFormState.punchTrailActive);
                 Player_StartZoraBoomerang(player, play);
@@ -4720,15 +4925,20 @@ static void MmForm_GoronAction_PunchEnd(Player* player, PlayState* play) {
     // stationary) or 0..2 (3-hit moving). Yaw stays locked throughout.
     // =====================================================================
     if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
-        // Keep yaw locked during recovery so a late chain still slides forward
-        // on the original heading rather than snapping to current stick.
+        // Gerudo no longer uses the form punch (her swings are OOT's); a stale
+        // PUNCH_END just returns to idle and lets OOT run.
+        player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
+        MmForm_SetAction(GORON_ACT_IDLE, play, gFormState.idleAnim, 1.0f, ANIMMODE_LOOP);
+        return;
+    }
+    if (0) {
+        // (retired Gerudo PunchEnd body — kept only so the old helpers stay referenced)
         player->actor.shape.rot.y = sGerudoComboLockedYaw;
         player->actor.world.rot.y = sGerudoComboLockedYaw;
         player->yaw = sGerudoComboLockedYaw;
         // Re-stamp PAUSE_ACTION_FUNC during recovery too — stick input must
         // not drive linearVelocity until the combo is fully wrapped up.
         player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
-
 
         // Decelerate fast (no slide during recovery — stop where the last
         // slash placed Link, like Link's stab recovery).
@@ -4742,8 +4952,7 @@ static void MmForm_GoronAction_PunchEnd(Player* player, PlayState* play) {
                 gFormState.comboStep = nextStep;
                 gFormState.comboBPressed = 0;
                 gFormState.comboBufferTimer = 0;
-                GoronActionId act = (nextStep <= 2) ? (GoronActionId)(GORON_ACT_PUNCH_A + nextStep)
-                                                    : GORON_ACT_PUNCH_C;
+                GoronActionId act = (nextStep <= 2) ? (GoronActionId)(GORON_ACT_PUNCH_A + nextStep) : GORON_ACT_PUNCH_C;
                 MmForm_SetAction(act, play, nextAnim, 0.7f, ANIMMODE_ONCE);
                 MmForm_GerudoPushSlashAnim(play, player, nextAnim, 0.7f);
                 MmForm_GerudoSpawnSlashTrails(play);
@@ -4816,7 +5025,7 @@ static void MmForm_GoronAction_PunchEnd(Player* player, PlayState* play) {
     // (MM equivalent: Handler_8 in sActionHandlerListIdle.)
     if (gFormState.currentForm == MM_PLAYER_FORM_ZORA && gFormState.boomerangState == 0 &&
         gFormState.cutterAttack != NULL) {
-        if (CHECK_BTN_ALL(input->cur.button, BTN_B) && !CHECK_BTN_ALL(input->press.button, BTN_B)) {
+        if (MmForm_ZoraBoomerangHoldReady(play)) {
             // Same softlock fix as the jumpkick path (line ~11235). After a mash-
             // chained combo, OOT's actionFunc may not be Player_Action_Idle (it
             // could be Player_Action_808502D0 leftover from an earlier slash
@@ -4927,18 +5136,15 @@ static u8 MmForm_CheckDamage(Player* player, PlayState* play) {
             // Rumble (from 2Ship line 6083: Player_RequestRumble 180, 20, 100)
             Rumble_Request(0.0f, 180, 20, 100);
 
-            // Shield VFX based on equipped shield type
+            // Block VFX: always metal sparks. Used to branch on the equipped shield
+            // (Deku shield → wood splinters), which is exactly the coupling that has
+            // to go — the form is blocking with its own body, not with Link's shield.
             {
                 Vec3f hitPos;
                 hitPos.x = player->actor.world.pos.x;
                 hitPos.y = player->actor.world.pos.y + 30.0f;
                 hitPos.z = player->actor.world.pos.z;
-                if (player->currentShield == PLAYER_SHIELD_DEKU) {
-                    CollisionCheck_SpawnShieldParticlesWood(play, &hitPos, &player->actor.world.pos);
-                } else {
-                    // Hylian, Mirror, or None — metal sparks
-                    CollisionCheck_SpawnShieldParticlesMetal(play, &hitPos);
-                }
+                CollisionCheck_SpawnShieldParticlesMetal(play, &hitPos);
             }
 
             // Knockback (from 2Ship line 6101-6103)
@@ -5568,7 +5774,8 @@ static void MmForm_PlaySfx(Player* player, u16 mmSfxId, u16 ootSfxId) {
 // doesn't — so the loops would play forever. Called from every roll-exit
 // path (uncurl, transform-out, water/hazard void, damage).
 static void MmForm_StopGoronRollSfx(void) {
-    if (!MmSfx_IsAvailable()) return;
+    if (!MmSfx_IsAvailable())
+        return;
     MmSfx_Stop(MM_NA_SE_PL_GORON_ROLL);
     MmSfx_Stop(MM_NA_SE_PL_GORON_ROLL_ICE);
     MmSfx_Stop(MM_NA_SE_PL_GORON_CHG_ROLL);
@@ -5590,7 +5797,8 @@ static u8 MmForm_IsStrongAttack(Player* player) {
 }
 
 static void MmForm_PlayAttackVoice(Player* player) {
-    if (!MmSfx_IsAvailable()) return;
+    if (!MmSfx_IsAvailable())
+        return;
 
     u8 strong = MmForm_IsStrongAttack(player);
     u16 voiceSfx = 0;
@@ -5682,12 +5890,14 @@ static f32 MmForm_GetStickMagnitude(PlayState* play) {
 // Damage interrupts via standard MM pipeline.
 
 static LinkAnimationHeader* MmForm_GerudoGetAttackAnim(u8 step) {
-    if (step >= 5) return NULL;
+    if (step >= 5)
+        return NULL;
     return gFormState.gerudoSlash[step];
 }
 
 static LinkAnimationHeader* MmForm_GerudoGetEndAnim(u8 step) {
-    if (step >= 5) return gFormState.gerudoSlashEnd[4];
+    if (step >= 5)
+        return gFormState.gerudoSlashEnd[4];
     return gFormState.gerudoSlashEnd[step];
 }
 
@@ -5704,20 +5914,20 @@ static void MmForm_SpawnDekuSpinTrails(PlayState* play) {
         gFormState.punchTrailActive = 0;
     }
     EffectBlureInit2 blure = {
-        0,                          // calcMode
-        8,                          // flags
-        0,                          // addAngleChange
-        { 255, 255, 255, 255 },     // p1StartColor
-        { 255, 255, 255, 64 },      // p2StartColor
-        { 255, 255, 255, 0 },       // p1EndColor
-        { 255, 255, 255, 0 },       // p2EndColor
-        8,                          // elemDuration (MM uses 8 for Deku spin)
-        0,                          // unkFlag
-        2,                          // drawMode (smooth — Master Sword strip)
-        0,                          // mode4Param
-        { 255, 255, 255, 255 },     // altPrimColor
-        { 255, 255, 255, 64 },      // altEnvColor
-        TRAIL_TYPE_SWORDS,          // trailType
+        0,                      // calcMode
+        8,                      // flags
+        0,                      // addAngleChange
+        { 255, 255, 255, 255 }, // p1StartColor
+        { 255, 255, 255, 64 },  // p2StartColor
+        { 255, 255, 255, 0 },   // p1EndColor
+        { 255, 255, 255, 0 },   // p2EndColor
+        8,                      // elemDuration (MM uses 8 for Deku spin)
+        0,                      // unkFlag
+        2,                      // drawMode (smooth — Master Sword strip)
+        0,                      // mode4Param
+        { 255, 255, 255, 255 }, // altPrimColor
+        { 255, 255, 255, 64 },  // altEnvColor
+        TRAIL_TYPE_SWORDS,      // trailType
     };
     Effect_Add(play, &gFormState.punchTrailEffectIndex, EFFECT_BLURE2, 0, 0, &blure);
     gFormState.punchTrailActive = 1;
@@ -5739,24 +5949,24 @@ static void MmForm_GerudoSpawnSlashTrails(PlayState* play) {
         gFormState.punchTrailActiveR = 0;
     }
     EffectBlureInit2 blure = {
-        0,                          // calcMode
-        8,                          // flags
-        0,                          // addAngleChange
-        { 255, 255, 255, 255 },     // p1StartColor
-        { 255, 255, 255, 64 },      // p2StartColor
-        { 255, 255, 255, 0 },       // p1EndColor
-        { 255, 255, 255, 0 },       // p2EndColor
-        4,                          // elemDuration
-        0,                          // unkFlag
-        2,                          // drawMode (smooth — the look used by sword swings)
-        0,                          // mode4Param
-        { 255, 255, 255, 255 },     // altPrimColor
-        { 255, 255, 255, 64 },      // altEnvColor
-        TRAIL_TYPE_SWORDS,          // trailType
+        0,                      // calcMode
+        8,                      // flags
+        0,                      // addAngleChange
+        { 255, 255, 255, 255 }, // p1StartColor
+        { 255, 255, 255, 64 },  // p2StartColor
+        { 255, 255, 255, 0 },   // p1EndColor
+        { 255, 255, 255, 0 },   // p2EndColor
+        4,                      // elemDuration
+        0,                      // unkFlag
+        2,                      // drawMode (smooth — the look used by sword swings)
+        0,                      // mode4Param
+        { 255, 255, 255, 255 }, // altPrimColor
+        { 255, 255, 255, 64 },  // altEnvColor
+        TRAIL_TYPE_SWORDS,      // trailType
     };
-    Effect_Add(play, &gFormState.punchTrailEffectIndex,  EFFECT_BLURE2, 0, 0, &blure);
+    Effect_Add(play, &gFormState.punchTrailEffectIndex, EFFECT_BLURE2, 0, 0, &blure);
     Effect_Add(play, &gFormState.punchTrailEffectIndexR, EFFECT_BLURE2, 0, 0, &blure);
-    gFormState.punchTrailActive  = 1;
+    gFormState.punchTrailActive = 1;
     gFormState.punchTrailActiveR = 1;
 }
 
@@ -5768,13 +5978,15 @@ static void MmForm_GerudoSpawnSlashTrails(PlayState* play) {
 // trail and hitbox quads stuck at idle positions (invisible/non-functional).
 // Mirrors the pattern used by the legacy gerudo_form.cpp StartAnim helper.
 static void MmForm_GerudoPushSlashAnim(PlayState* play, Player* player, LinkAnimationHeader* anim, f32 playSpeed) {
-    if (anim == NULL) return;
+    if (anim == NULL)
+        return;
     f32 endFrame = Animation_GetLastFrame(anim);
     LinkAnimation_Change(play, &player->skelAnime, anim, playSpeed, 0.0f, endFrame, ANIMMODE_ONCE, -2.0f);
 }
 
 static void MmForm_GerudoStartPunch(Player* player, PlayState* play) {
-    if (gFormState.gerudoSlash[0] == NULL) return;
+    if (gFormState.gerudoSlash[0] == NULL)
+        return;
     // Master gate for the gerudo dual-scimitar combo — covers every entry point
     // (idle / walk / run / Z-target idle / Z-target walk all funnel here via
     // MmForm_StartPunch). Without this, pressing B during SHIELDING fires the
@@ -5782,7 +5994,8 @@ static void MmForm_GerudoStartPunch(Player* player, PlayState* play) {
     // "anim de ataque parado que nada que ver" bug the user reported. Every
     // gerudo action must fall back to vanilla OoT unless explicitly listed as
     // a Gerudo override — the combo is the override; SHIELDING is not.
-    if (!MmForm_GerudoCanStartGroundCombo(player)) return;
+    if (!MmForm_GerudoCanStartGroundCombo(player))
+        return;
 
     // Zora-style: same 5-hit stationary combo regardless of movement.
     gFormState.comboStep = 0;
@@ -5843,7 +6056,7 @@ static void MmForm_GerudoActionPunch(Player* player, PlayState* play) {
 
     // Damage quad timing — stationary 5-hit table.
     u8 hitStart = sGerudoStationaryFrames[step][0];
-    u8 hitEnd   = sGerudoStationaryFrames[step][1];
+    u8 hitEnd = sGerudoStationaryFrames[step][1];
 
     // Damage tier per step.
     u8 damage = (step == 4) ? GERUDO_FINISHER_DAMAGE : GERUDO_SLASH_DAMAGE;
@@ -5874,9 +6087,9 @@ static void MmForm_GerudoActionPunch(Player* player, PlayState* play) {
         gFormState.shieldCollider.info.toucher.dmgFlags = DMG_SLASH_KOKIRI;
         gFormState.shieldCollider.info.toucher.damage = GERUDO_FINISHER_DAMAGE;
         gFormState.shieldCollider.info.toucherFlags = TOUCH_ON | TOUCH_NEAREST;
-        gFormState.shieldCollider.dim.radius = 60;   // wide spin AoE
-        gFormState.shieldCollider.dim.height = 80;   // covers full body height
-        gFormState.shieldCollider.dim.yShift = -10;  // slightly below feet
+        gFormState.shieldCollider.dim.radius = 60;  // wide spin AoE
+        gFormState.shieldCollider.dim.height = 80;  // covers full body height
+        gFormState.shieldCollider.dim.yShift = -10; // slightly below feet
         Collider_UpdateCylinder(&player->actor, &gFormState.shieldCollider);
         CollisionCheck_SetAT(play, &play->colChkCtx, &gFormState.shieldCollider.base);
     } else if (gFormState.shieldColliderInitDone) {
@@ -6044,8 +6257,7 @@ static void MmForm_Action_Fall(Player* player, PlayState* play) {
 static void MmForm_Action_JumpKick(Player* player, PlayState* play) {
     // Override gravity: Zora/Gerudo = -0.8f (MM Player_Action_29 line 15390 — same
     // float feel for the aerial spin), others = -1.2f vanilla.
-    if (gFormState.currentForm == MM_PLAYER_FORM_ZORA ||
-        gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
+    if (gFormState.currentForm == MM_PLAYER_FORM_ZORA || gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
         player->actor.gravity = -0.8f;
     }
 
@@ -6342,8 +6554,7 @@ static void MmForm_Action_ZTargetIdle(Player* player, PlayState* play) {
         if (gFormState.currentForm == MM_PLAYER_FORM_ZORA) {
             MmForm_ZoraZTargetShield(player, play);
             // fall through to Z-target movement below
-        } else if (gFormState.currentForm == MM_PLAYER_FORM_GORON ||
-                   gFormState.currentForm == MM_PLAYER_FORM_DEKU) {
+        } else if (gFormState.currentForm == MM_PLAYER_FORM_GORON || gFormState.currentForm == MM_PLAYER_FORM_DEKU) {
             MmForm_EnterShield(player, play);
             return;
         }
@@ -6415,8 +6626,7 @@ static void MmForm_Action_ZTargetWalk(Player* player, PlayState* play) {
         if (gFormState.currentForm == MM_PLAYER_FORM_ZORA) {
             MmForm_ZoraZTargetShield(player, play);
             // fall through to Z-target movement below
-        } else if (gFormState.currentForm == MM_PLAYER_FORM_GORON ||
-                   gFormState.currentForm == MM_PLAYER_FORM_DEKU) {
+        } else if (gFormState.currentForm == MM_PLAYER_FORM_GORON || gFormState.currentForm == MM_PLAYER_FORM_DEKU) {
             MmForm_EnterShield(player, play);
             return;
         }
@@ -6446,16 +6656,11 @@ static void MmForm_Action_ZTargetWalk(Player* player, PlayState* play) {
         // B hold → boomerang aim after 10 frames (Zora only, from 2Ship unk_ACC = 0xA)
         if (gFormState.currentForm == MM_PLAYER_FORM_ZORA && gFormState.boomerangState == 0 &&
             gFormState.cutterAttack != NULL) {
-            if (CHECK_BTN_ALL(input->cur.button, BTN_B) && !CHECK_BTN_ALL(input->press.button, BTN_B)) {
-                gFormState.boomerangHoldTimer++;
-                if (gFormState.boomerangHoldTimer >= 30) { // 10 frames at 20fps = 30 at 60fps
-                    gFormState.boomerangHoldTimer = 0;
-                    Player_StartZoraBoomerang(player, play);
-                    MmForm_SetAction(GORON_ACT_IDLE, play, gFormState.idleAnim, 1.0f, ANIMMODE_LOOP);
-                    return;
-                }
-            } else if (!CHECK_BTN_ALL(input->cur.button, BTN_B)) {
-                gFormState.boomerangHoldTimer = 0;
+            // Same accumulating-counter bug as the idle handler — see the note there.
+            if (MmForm_ZoraBoomerangHoldReady(play)) {
+                Player_StartZoraBoomerang(player, play);
+                MmForm_SetAction(GORON_ACT_IDLE, play, gFormState.idleAnim, 1.0f, ANIMMODE_LOOP);
+                return;
             }
         }
     }
@@ -6974,8 +7179,8 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
 
     // MM spin-target carriers (2Ship spDC bookkeeping): set by the grounded core
     // physics, consumed by the common spin-target step after the ground/air split.
-    s32 spinTargetMin = 0;    // var_a0: spin floor from trajectory speed (spBC * 500)
-    u8 spinReverseBrake = 0;  // reversal at av1==4 → spin target forced to -0xFA0
+    s32 spinTargetMin = 0;   // var_a0: spin floor from trajectory speed (spBC * 500)
+    u8 spinReverseBrake = 0; // reversal at av1==4 → spin target forced to -0xFA0
 
     if (gFormState.rollNoInputTimer == 0) {
         f32 stickMag = MmForm_GetStickMagnitude(play);
@@ -7130,7 +7335,9 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
         if (gFormState.rollSpikeActive > 0) {
             gFormState.rollSpikeActive = 0;
             gFormState.rollChargeLevel = 3;
-            Magic_Reset(play);
+            // No Magic_Reset — see MmForm_UpdateBarrier's fade branch. The spikes
+            // drain magic raw and never open a magicState, and OOT's Magic_Reset
+            // would silently kill a pending MAGIC_STATE_ADD (magic-jar refill).
         }
         MmForm_PlaySfx(player, MM_NA_SE_IT_GORON_ROLLING_REFLECTION, NA_SE_PL_BODY_HIT);
     }
@@ -7204,7 +7411,7 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
 
         if (deactivateSpike) {
             if (Math_StepToS(&gFormState.rollSpikeActive, 0, 1)) {
-                Magic_Reset(play);
+                // No Magic_Reset — see MmForm_UpdateBarrier's fade branch.
                 MmForm_PlaySfx(player, MM_NA_SE_PL_GORON_BALL_CHARGE_FAILED, NA_SE_PL_BODY_HIT);
             }
             gFormState.rollChargeLevel = 4;
@@ -7327,7 +7534,7 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
                     // MM also locks stick input for 20 frames (unk_B8E = 0x14,
                     // 2Ship line 20976) so the ball tumbles freely after the cancel.
                     gFormState.rollNoInputTimer = 0x14;
-                    Magic_Reset(play);
+                    // No Magic_Reset — see MmForm_UpdateBarrier's fade branch.
                 }
             }
         }
@@ -7425,8 +7632,7 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
                 // charging spikes (av1 >= 5), 1.0 otherwise.
                 s16 revDiff = player->yaw - spCA;
                 if (ABS(revDiff) > 0x6000) {
-                    if (Math_StepToF(&player->linearVelocity, 0.0f,
-                                     (gFormState.rollChargeLevel >= 5) ? 0.0f : 1.0f)) {
+                    if (Math_StepToF(&player->linearVelocity, 0.0f, (gFormState.rollChargeLevel >= 5) ? 0.0f : 1.0f)) {
                         spCC = 0.0f;
                         spCA = player->yaw;
                     } else {
@@ -7448,8 +7654,7 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
                 // Accel selection (2Ship 20911-20917): slippery surfaces need
                 // spC0 >= 0x7D0 (stick demand beyond current spin), else spin*0.0003.
                 f32 accel;
-                s16 absSpinRate =
-                    (gFormState.rollSpinRate >= 0) ? gFormState.rollSpinRate : -gFormState.rollSpinRate;
+                s16 absSpinRate = (gFormState.rollSpinRate >= 0) ? gFormState.rollSpinRate : -gFormState.rollSpinRate;
                 if ((player->floorSfxOffset == (NA_SE_PL_WALK_ICE - SFX_FLAG) ||
                      player->floorSfxOffset == (NA_SE_PL_WALK_SAND - SFX_FLAG) ||
                      player->floorSfxOffset == (NA_SE_PL_WALK_DIRT - SFX_FLAG)) &&
@@ -7571,8 +7776,7 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
                 ((s32)(prevCounter + increment) * (s32)prevCounter) <= 0) {
                 // MM mode-1 ALWAYS plays the non-charged roll — the spike
                 // variant only fires from mode-2 below.
-                MmSfx_PlayGoronRollWithFloor(&player->actor.projectedPos,
-                                              gFormState.rollBallSpeed, floorOff);
+                MmSfx_PlayGoronRollWithFloor(&player->actor.projectedPos, gFormState.rollBallSpeed, floorOff);
             }
         } else {
             // Mode 2: spinning (from 2Ship line 19774-19783)
@@ -7586,11 +7790,9 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
                 // was suppressed; the new mmsfx engine plays the real seq_0/SF0 sample,
                 // so restore the MM-accurate selection.
                 if (gFormState.rollSpikeActive > 0) {
-                    MmSfx_PlayGoronChgRollWithFloor(&player->actor.projectedPos,
-                                                    gFormState.rollBallSpeed, floorOff);
+                    MmSfx_PlayGoronChgRollWithFloor(&player->actor.projectedPos, gFormState.rollBallSpeed, floorOff);
                 } else {
-                    MmSfx_PlayGoronRollWithFloor(&player->actor.projectedPos,
-                                                 gFormState.rollBallSpeed, floorOff);
+                    MmSfx_PlayGoronRollWithFloor(&player->actor.projectedPos, gFormState.rollBallSpeed, floorOff);
                 }
             }
         }
@@ -7611,8 +7813,7 @@ static void MmForm_Action_GoronRoll(Player* player, PlayState* play) {
             // SUPPRESS in spike mode: SLIP's continuous loop semantics made
             // it persist as the "otro loop" the user reports at max charge.
             // The defensive force-stop above kills any leftover instance.
-            if (skidFactor > 0x1770 && (gFormState.actionTimer & 0x0F) == 0 &&
-                gFormState.rollSpikeActive == 0) {
+            if (skidFactor > 0x1770 && (gFormState.actionTimer & 0x0F) == 0 && gFormState.rollSpikeActive == 0) {
                 MmSfx_PlayAtPos(MM_NA_SE_PL_GORON_SLIP, &player->actor.projectedPos);
             }
 
@@ -8443,8 +8644,7 @@ static void MmForm_DrawChargingBubble3D(Player* player, PlayState* play) {
         FB_WriteFramebufferSliceToCPU(&gfx, play->state.gfxCtx->curFrameBuffer, true);
         POLY_XLU_DISP = gfx;
     }
-    gSPInvalidateTexCache(POLY_XLU_DISP++,
-                          (uintptr_t)play->state.gfxCtx->curFrameBuffer + ((104 * 320 + 144) * 2));
+    gSPInvalidateTexCache(POLY_XLU_DISP++, (uintptr_t)play->state.gfxCtx->curFrameBuffer + ((104 * 320 + 144) * 2));
 
     // MM setup DL (combiner, tile loads — tile 1 intensity, tile 0 framebuffer slice)
     if (sCachedDekuBubbleSetupDL) {
@@ -9014,14 +9214,18 @@ static void MmForm_Action_DekuFly(Player* player, PlayState* play) {
         static u32 sLastFlyLog = 0;
         if (play->gameplayFrames - sLastFlyLog >= 30) {
             const char* animName = "?";
-            if (gFormState.formSkelAnime.animation == gFormState.dekuFlightLaunch)  animName = "LAUNCH";
-            else if (gFormState.formSkelAnime.animation == gFormState.dekuFlightFlutter) animName = "FLUTTER";
-            else if (gFormState.formSkelAnime.animation == gFormState.dekuFlightLand)    animName = "LAND";
-            else if (gFormState.formSkelAnime.animation == gFormState.dekuFlightFall)    animName = "FALL";
-            else if (gFormState.formSkelAnime.animation == NULL)                         animName = "NULL";
-            SPDLOG_INFO("[MmForm] DekuFly tick: anim={} curFrame={:.2f} flags=0x{:02x} timer={} vel.y={:.2f}",
-                        animName, gFormState.formSkelAnime.curFrame,
-                        gFormState.dekuFlightFlags, gFormState.dekuFlightTimer,
+            if (gFormState.formSkelAnime.animation == gFormState.dekuFlightLaunch)
+                animName = "LAUNCH";
+            else if (gFormState.formSkelAnime.animation == gFormState.dekuFlightFlutter)
+                animName = "FLUTTER";
+            else if (gFormState.formSkelAnime.animation == gFormState.dekuFlightLand)
+                animName = "LAND";
+            else if (gFormState.formSkelAnime.animation == gFormState.dekuFlightFall)
+                animName = "FALL";
+            else if (gFormState.formSkelAnime.animation == NULL)
+                animName = "NULL";
+            SPDLOG_INFO("[MmForm] DekuFly tick: anim={} curFrame={:.2f} flags=0x{:02x} timer={} vel.y={:.2f}", animName,
+                        gFormState.formSkelAnime.curFrame, gFormState.dekuFlightFlags, gFormState.dekuFlightTimer,
                         player->actor.velocity.y);
             sLastFlyLog = play->gameplayFrames;
         }
@@ -9199,8 +9403,7 @@ static void MmForm_Action_DekuFly(Player* player, PlayState* play) {
                 // the first frame of kakkufinish, not the last or any later
                 // animated frame). Setting start=end=0 holds Link in that pose
                 // for the bulk of the flight.
-                if (gFormState.formSkelAnime.curFrame >=
-                    Animation_GetLastFrame(gFormState.dekuFlightLaunch) - 0.5f) {
+                if (gFormState.formSkelAnime.curFrame >= Animation_GetLastFrame(gFormState.dekuFlightLaunch) - 0.5f) {
                     LinkAnimation_Change(play, &gFormState.formSkelAnime, gFormState.dekuFlightLand, 1.0f, 0.0f, 0.0f,
                                          ANIMMODE_ONCE, -4.0f);
                 }
@@ -9261,10 +9464,13 @@ static void MmForm_Action_DekuFly(Player* player, PlayState* play) {
             if (sPropellerTimer <= 0) {
                 MmSfx_PlayAtPos(MM_NA_SE_IT_DEKUNUTS_FLOWER_ROLL, &player->actor.projectedPos);
                 f32 lerp = 2.0f * ((f32)gFormState.dekuPetalSpeed * (1.0f / 6000.0f));
-                if (lerp > 2.0f) lerp = 2.0f;
-                if (lerp < 0.0f) lerp = 0.0f;
+                if (lerp > 2.0f)
+                    lerp = 2.0f;
+                if (lerp < 0.0f)
+                    lerp = 0.0f;
                 s32 nextTimer = (s32)(6.0f - 2.0f * lerp);
-                if (nextTimer < 1) nextTimer = 1;
+                if (nextTimer < 1)
+                    nextTimer = 1;
                 sPropellerTimer = nextTimer;
             }
         }
@@ -9515,13 +9721,25 @@ static void MmForm_UpdateBarrier(Player* player, PlayState* play) {
         }
         Math_StepToS(&gFormState.barrierIntensity, (s16)targetIntensity, 50);
     } else {
-        // Fade out (from 2Ship line 2959-2961)
-        if (Math_StepToS(&gFormState.barrierIntensity, 0, 50)) {
-            // Fully faded — reset magic state if needed (from 2Ship: Magic_Reset)
-            if (gSaveContext.magicState != MAGIC_STATE_IDLE) {
-                Magic_Reset(play);
-            }
-        }
+        // Fade out (from 2Ship line 2959-2961).
+        //
+        // NO Magic_Reset HERE. MM's func_8082F1AC calls it to close the
+        // MAGIC_CONSUME_GORON_ZORA state that MM's own barrier opened via
+        // Magic_Consume; and in MM *gaining* magic lives on a separate channel
+        // (isMagicRequested/magicToAdd, drained by Magic_UpdateAddRequest outside
+        // the magicState switch), so Magic_Reset can never eat a refill there.
+        //
+        // Neither holds in OOT. Our barrier drains gSaveContext.magic raw and
+        // never enters ANY magicState, so there is nothing to close. And OOT's
+        // Magic_Reset (z_parameter.c:3171) does NOT guard MAGIC_STATE_ADD — it
+        // kicks it to MAGIC_STATE_RESET → IDLE, and the `magic += 4` refill loop
+        // (z_parameter.c:3511) only runs inside MAGIC_STATE_ADD. Since
+        // Math_StepToS returns true on EVERY frame once the value already equals
+        // the target (z_lib.c:59), this ran every frame with the barrier off and
+        // ate the magic-jar refill one frame after pickup — the reported
+        // "Zora no recibe magia". It also killed Din's/Nayru's/Farore's
+        // (MAGIC_STATE_CONSUME_SETUP) and the Lens (MAGIC_STATE_CONSUME_LENS).
+        Math_StepToS(&gFormState.barrierIntensity, 0, 50);
     }
 
     // Remove light when fully faded
@@ -9650,9 +9868,95 @@ static void MmForm_CheckBootToggle(Player* player, PlayState* play) {
 //   Without:       left = rot.y - 0x190,            right = rot.y + 0x190
 // ===========================================================================
 
-// Helper: check if a spawned boomerang actor is still alive
-static u8 MmForm_IsBoomerangAlive(Actor* boom) {
-    return (boom != NULL && boom->update != NULL);
+// MM's aim entry is a HOLD, timed by unk_ACC = 0xA (2Ship z_player.c:15223) — 10 frames at
+// 20fps, so 30 at 60. The port had five entry points and only two of them counted; the rest
+// entered on `cur & BTN_B` (or `cur && !press`), which is satisfied on the second frame of
+// ANY press. Mashing B for the punch combo therefore dropped you into boomerang aim as soon
+// as the combo ended — exactly the reported bug.
+//
+// The press check is the important half: a fresh press means "combo", so it zeroes the
+// counter. Only uninterrupted holding ever reaches the threshold.
+// 10 ticks, the SAME number MM uses (unk_ACC = 0xA, 2Ship z_player.c:15223) — no conversion.
+//
+// Do NOT "convert 20fps to 60fps" here. OOT's game logic does not run at 60Hz: R_UPDATE_RATE
+// is 3 (game.c:437), i.e. Play_Update — and therefore Player_UpdateCommon and this form
+// update — ticks once every 3 video frames, 20 times a second, exactly like MM. The 60fps
+// part is render interpolation only (see z_lib.c:26, which scales steps by
+// R_UPDATE_RATE * 0.5f). Using 30 here made the hold last 1.5s instead of 0.5s, which is
+// what "el hold tarda un buen rato" was.
+#define MMFORM_BOOMERANG_HOLD_FRAMES 10
+
+// While the Zora guards (R held) on land, B belongs to the electric barrier and to nothing
+// else. This is MM's Player_UpperAction_3 (2Ship z_player.c:15093): with R down it re-asserts
+// the shield and, for the Zora, routes a B press straight into func_8082F164(BTN_R | BTN_B) —
+// the barrier. Because the shield owns the upper body there, that same B never reaches the
+// punch or the boomerang.
+//
+// Deliberately land-only (swimState == 0). Underwater the barrier is R alone and B is the
+// heavy-boot toggle, so capturing B there would break MmForm_CheckBootToggle.
+static u8 MmForm_ZoraGuardCapturesB(PlayState* play) {
+    Input* input = &play->state.input[0];
+
+    return MMFORM_IS_ZORA_SWIM() && (gFormState.swimState == 0) && CHECK_BTN_ALL(input->cur.button, BTN_R);
+}
+
+// Advance the hold counter. MUST be called exactly once per frame, unconditionally, from the
+// top of MmForm_UpdateActive — NOT from the handlers that consume it.
+//
+// Counting inside the consumer was wrong and made the boomerang feel sluggish: pressing B
+// starts the punch, and the only aim-entry handler reachable during a punch is the one in
+// PUNCH_END, so the counter did not even begin until the whole punch animation had played.
+// You paid the punch AND the 30 frames. MM has no such delay because unk_ACC is ticked by the
+// item's upper-action, which Player_UpdateUpperBody runs every frame regardless of what the
+// lower body is doing (2Ship z_player.c:15194) — so the hold accumulates DURING the punch and
+// the aim is ready the moment the punch ends.
+static void MmForm_TickZoraBoomerangHold(PlayState* play) {
+    Input* input = &play->state.input[0];
+
+    // A fresh press means "combo", so it restarts the count. This is what stops mashing from
+    // ever reaching the threshold, and it fires on the punch's own B press too — which is
+    // correct: the hold is measured from that press onward, in parallel with the punch.
+    if (CHECK_BTN_ALL(input->press.button, BTN_B) || !CHECK_BTN_ALL(input->cur.button, BTN_B) ||
+        MmForm_ZoraGuardCapturesB(play)) {
+        gFormState.boomerangHoldTimer = 0;
+        return;
+    }
+
+    if (gFormState.boomerangHoldTimer < MMFORM_BOOMERANG_HOLD_FRAMES) {
+        gFormState.boomerangHoldTimer++;
+    }
+}
+
+// Pure query — no side effects, safe to call from several handlers in the same frame.
+static u8 MmForm_ZoraBoomerangHoldReady(PlayState* play) {
+    if (MmForm_ZoraGuardCapturesB(play)) {
+        return 0;
+    }
+    return (gFormState.boomerangHoldTimer >= MMFORM_BOOMERANG_HOLD_FRAMES);
+}
+
+// Is this boomerang actor still alive?
+//
+// Walks the live actor list instead of dereferencing the stored pointer. The old version
+// read `boom->update` directly, which is a use-after-free the moment the actor is gone:
+// Actor_Remove frees the memory, and on a room or scene change EVERY actor in the room is
+// destroyed while gFormState still holds raw pointers to two of them. Reading freed memory
+// there can hand back a garbage non-NULL `update` and pin the state machine at "in flight"
+// forever — the same stuck state that breaks the fins, the shield and the strafe.
+//
+// En_Boom lives in ACTORCAT_MISC (z_en_boom.c:24). The list is short and this only runs
+// while fins are actually out, so the scan is cheap.
+static u8 MmForm_IsBoomerangAlive(PlayState* play, Actor* boom) {
+    if (boom == NULL) {
+        return 0;
+    }
+
+    for (Actor* it = play->actorCtx.actorLists[ACTORCAT_MISC].head; it != NULL; it = it->next) {
+        if (it == boom) {
+            return (it->id == ACTOR_EN_BOOM) && (it->update != NULL);
+        }
+    }
+    return 0;
 }
 
 // Entry: B hold → aiming mode with cutterwaitanim loop
@@ -9873,12 +10177,34 @@ static void MmForm_Action_BoomerangThrow(Player* player, PlayState* play) {
 // In MM, this is Player_UpperAction_15 which returns false to let the lower body
 // continue whatever action it's in (walk, run, jump attack, etc.).
 static void MmForm_TrackBoomerangsInFlight(Player* player, PlayState* play) {
+    // Abort a half-finished aim/throw whenever OOT takes the body away from us. States 1
+    // and 2 are driven by MMFORM_ACT_BOOMERANG_THROW, which stops being dispatched the
+    // moment the form yields — so without this they pin exactly like state 3 used to, and
+    // every aim-entry point (which all require == 0) refuses to fire again. Damage already
+    // had its own reset in MmForm_CheckDamage; these are the other ways to lose control.
+    if ((gFormState.boomerangState == 1) || (gFormState.boomerangState == 2)) {
+        if (player->stateFlags1 & (PLAYER_STATE1_DAMAGED | PLAYER_STATE1_TALKING | PLAYER_STATE1_GETTING_ITEM |
+                                   PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_DEAD)) {
+            gFormState.boomerangState = 0;
+            gFormState.boomerangHoldTimer = 0;
+            gFormState.boomerangTimer = 0;
+            gFormState.boomerangAimYaw = 0;
+            gFormState.boomerangAimPitch = 0;
+            player->upperLimbRot.x = 0;
+            player->upperLimbRot.y = 0;
+            if (player->unk_6AD == 2) {
+                player->unk_6AD = 0;
+            }
+        }
+        return;
+    }
+
     if (gFormState.boomerangState != 3)
         return;
 
     // Check if both boomerangs have returned (actor killed = update is NULL)
-    u8 leftDone = !MmForm_IsBoomerangAlive(gFormState.boomerangActorL);
-    u8 rightDone = !MmForm_IsBoomerangAlive(gFormState.boomerangActorR);
+    u8 leftDone = !MmForm_IsBoomerangAlive(play, gFormState.boomerangActorL);
+    u8 rightDone = !MmForm_IsBoomerangAlive(play, gFormState.boomerangActorR);
 
     if (leftDone && rightDone) {
         // Both caught! Play catch animation (from 2Ship Player_UpperAction_16: pz_cuttercatch)
@@ -9915,11 +10241,12 @@ static void MmForm_TrackBoomerangsInFlight(Player* player, PlayState* play) {
 
     // Safety timeout: if boomerangs stuck for too long, force cleanup
     gFormState.boomerangTimer++;
-    if (gFormState.boomerangTimer > 540) { // MM: 180 at 20fps = 540 at 60fps (9 sec)
-        if (MmForm_IsBoomerangAlive(gFormState.boomerangActorL)) {
+    if (gFormState.boomerangTimer > 180) { // MM's 180 ticks verbatim (~9s): this update runs at
+                                           // 20Hz like MM's (R_UPDATE_RATE = 3), so no scaling.
+        if (MmForm_IsBoomerangAlive(play, gFormState.boomerangActorL)) {
             Actor_Kill(gFormState.boomerangActorL);
         }
-        if (MmForm_IsBoomerangAlive(gFormState.boomerangActorR)) {
+        if (MmForm_IsBoomerangAlive(play, gFormState.boomerangActorR)) {
             Actor_Kill(gFormState.boomerangActorR);
         }
         gFormState.boomerangActorL = NULL;
@@ -10086,10 +10413,11 @@ static void MmForm_WaterBuoyancy(Player* player) {
 }
 
 static void MmForm_EnterSwimIdle(Player* player, PlayState* play) {
-    // Gerudo: no MM-side swim system — water is a vanilla Link action like
+    // Gerudo / Rito: no MM-side swim system — water is a vanilla Link action like
     // everything else not explicitly overridden. Bail before setting the form's
     // swim state so OOT's swim actionFunc owns the player from here.
-    if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
+    if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO || gFormState.currentForm == MM_PLAYER_FORM_RITO ||
+        gFormState.currentForm == MM_PLAYER_FORM_KEATON) {
         player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
         player->stateFlags2 &= ~(PLAYER_STATE2_DISABLE_ROTATION_ALWAYS | PLAYER_STATE2_DISABLE_ROTATION_Z_TARGET);
         return;
@@ -10149,13 +10477,18 @@ static void MmForm_Action_SwimIdle(Player* player, PlayState* play) {
     MmForm_CheckBarrierInput(player, play);
 
     // Clean up swimState if OOT took us out of water (ledge climb, exit water, etc.)
-    // Always deequip iron boots when leaving water.
+    // Deequip the Zora form's iron boots when leaving water — but ONLY for the real
+    // form. On the Zora-Tunic swim (zoraSwimEnabled) the player is Link and those are
+    // his own real Iron Boots, so clobbering currentBoots here silently unequipped
+    // them. MMFORM_ZORA_OWNS_BOOTS() draws that line everywhere boots are written.
     if (!(player->stateFlags1 & PLAYER_STATE1_IN_WATER) && gFormState.swimState > 0) {
         gFormState.swimState = 0;
         gFormState.fastSwimActive = 0;
-        gFormState.zoraBoots = 0;
-        player->currentBoots = PLAYER_BOOTS_KOKIRI;
-        Player_SetBootData(play, player);
+        if (MMFORM_ZORA_OWNS_BOOTS()) {
+            gFormState.zoraBoots = 0;
+            player->currentBoots = PLAYER_BOOTS_KOKIRI;
+            Player_SetBootData(play, player);
+        }
         MmForm_SetAction(GORON_ACT_IDLE, play, gFormState.idleAnim, 1.0f, ANIMMODE_LOOP);
         return;
     }
@@ -10170,9 +10503,11 @@ static void MmForm_Action_SwimIdle(Player* player, PlayState* play) {
         player->actor.yDistToWater <= ZORA_SWIM_THRESHOLD) {
         gFormState.swimState = 0;
         gFormState.fastSwimActive = 0;
-        gFormState.zoraBoots = 0;
-        player->currentBoots = PLAYER_BOOTS_KOKIRI;
-        Player_SetBootData(play, player);
+        if (MMFORM_ZORA_OWNS_BOOTS()) {
+            gFormState.zoraBoots = 0;
+            player->currentBoots = PLAYER_BOOTS_KOKIRI;
+            Player_SetBootData(play, player);
+        }
         MmForm_SetAction(GORON_ACT_IDLE, play, gFormState.idleAnim, 1.0f, ANIMMODE_LOOP);
         return;
     }
@@ -10203,15 +10538,24 @@ static void MmForm_Action_SwimIdle(Player* player, PlayState* play) {
             }
         }
 
-        // A press = fast swim (instant, deactivates boots, exits floor)
-        // EXCEPT when OOT just started a door action this frame. OOT runs HANDLER_1
-        // before us, so by the time we get here actionFunc is already the door function.
-        // Without this guard, fast_swim would still fire and clobber the door interaction.
-        // (player->doorType can't be used — Player_UpdateCommon clears it every frame
-        // before form code runs. Door action externs declared near MmForm_GakkiInterpScales.)
+        // A press = fast swim (instant, deactivates boots, exits floor) — but ONLY when
+        // the A button is genuinely free (Skijer 2026-07-28). On the sea floor A is a
+        // busy button: grab, speak, check, read, open, climb, enter, drop/throw, and
+        // roll all live there, and fast swim used to steal every one of them.
+        //   - TransformMasks_AButtonIsOffered covers the contextual offers.
+        //   - Standing still is required on top of that, because a moving A-press on the
+        //     ground is OOT's ROLL (Player_ActionHandler_Roll → Player_TryRoll); this is
+        //     the same "must be stationary" rule the punch/boomerang block above uses.
+        //     Stop, then press A to take off.
+        //   - inDoorAction stays as a belt-and-braces: OOT runs HANDLER_1 before us, so
+        //     by the time we get here actionFunc is already the door function and
+        //     player->doorType has been cleared by Player_UpdateCommon. (Door action
+        //     externs declared near MmForm_GakkiInterpScales.)
         u8 inDoorAction =
             (player->actionFunc == Player_Action_80845EF8 || player->actionFunc == Player_Action_80845CA4);
-        if (CHECK_BTN_ALL(input->press.button, BTN_A) && gFormState.waterRoll != NULL && !inDoorAction) {
+        u8 aButtonBusy =
+            inDoorAction || TransformMasks_AButtonIsOffered(player) || (fabsf(player->linearVelocity) >= 1.0f);
+        if (CHECK_BTN_ALL(input->press.button, BTN_A) && gFormState.waterRoll != NULL && !aButtonBusy) {
             goto enter_fast_swim;
         }
         // Moving on floor: OOT handles everything (roll, hookshot, sidehop, backflip, etc.)
@@ -10239,10 +10583,15 @@ static void MmForm_Action_SwimIdle(Player* player, PlayState* play) {
     goto swim_idle_end;
 
 enter_fast_swim:
-    // Deactivate iron boots + take over from OOT for custom fast swim
-    gFormState.zoraBoots = 0;
-    player->currentBoots = PLAYER_BOOTS_KOKIRI;
-    Player_SetBootData(play, player);
+    // Deactivate iron boots + take over from OOT for custom fast swim.
+    // Real Zora form only — on the Zora-Tunic swim these are Link's own Iron Boots and
+    // the dash is blocked outright while they're on (see DragonScale_Behavior), so the
+    // tunic path must never reach in and unequip them.
+    if (MMFORM_ZORA_OWNS_BOOTS()) {
+        gFormState.zoraBoots = 0;
+        player->currentBoots = PLAYER_BOOTS_KOKIRI;
+        Player_SetBootData(play, player);
+    }
     player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
     player->stateFlags2 |= PLAYER_STATE2_DISABLE_ROTATION_ALWAYS;
 
@@ -10398,9 +10747,12 @@ static void MmForm_ExitFastSwim(Player* player, PlayState* play) {
     gFormState.swimYawRate = 0;
     gFormState.swimExitFlag = 0;
     gFormState.swimFloorTimer = 0;
-    // Auto-deactivate iron boots when exiting fast swim
-    gFormState.zoraBoots = 0;
-    player->currentBoots = PLAYER_BOOTS_KOKIRI;
+    // Auto-deactivate iron boots when exiting fast swim (real Zora form only — the
+    // Zora-Tunic swim must not touch Link's own boots; see MMFORM_ZORA_OWNS_BOOTS)
+    if (MMFORM_ZORA_OWNS_BOOTS()) {
+        gFormState.zoraBoots = 0;
+        player->currentBoots = PLAYER_BOOTS_KOKIRI;
+    }
     // Return control to OOT for surface swim (ladders, ledges, interactions).
     // PAUSE was set when entering fast swim; clear it so OOT's swim actionFunc resumes.
     player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
@@ -10988,8 +11340,7 @@ extern "C" void Player_Action_8084E3C4(Player* this_, PlayState* play);
 // OOT idle action + setup helper — used to sync the lower body to idle when entering
 // boomerang aim from a non-idle action (e.g. jumpkick recovery).
 extern "C" void Player_Action_Idle(Player* this_, PlayState* play);
-extern "C" s32 Player_SetupAction(PlayState* play, Player* this_, void (*actionFunc)(Player*, PlayState*),
-                                  s32 flags);
+extern "C" s32 Player_SetupAction(PlayState* play, Player* this_, void (*actionFunc)(Player*, PlayState*), s32 flags);
 
 // Interpolate per-form instrument scales based on current gakki phase and frame.
 // From MM z_player_lib.c PostLimbDraw: each phase uses different keyframe arrays.
@@ -11042,11 +11393,232 @@ static void MmForm_GakkiInterpScales(f32 curFrame) {
     }
 }
 
+// ── Gakki voice plumbing ─────────────────────────────────────────────────────────────
+// Per-frame voice upkeep by voice type (see MmGakkiVoiceType in mm_asset_loader.h):
+//   MM_FONT — silence the engine ocarina (belt & braces; the deterministic kill is in the
+//             OnOcarinaNote hook, same call stack as the trigger).
+//   NATIVE  — MM's own mechanism: keep the engine-voiced ocarina and swap its instrument.
+//             Re-asserted every frame because the message system resets to DEFAULT when it
+//             (re)opens the ocarina; SetInstrument early-returns when unchanged, so this
+//             is a cheap no-op most frames.
+static void MmForm_GakkiTickVoice(void) {
+    switch (MmGakki_GetVoiceType(gFormState.currentForm)) {
+        case GAKKI_VOICE_MM_FONT:
+            Audio_StopSfxById(NA_SE_OC_OCARINA);
+            break;
+        case GAKKI_VOICE_NATIVE:
+            AudioOcarina_SetInstrument((u8)MmGakki_GetNativeInstrument(gFormState.currentForm));
+            break;
+        default:
+            break;
+    }
+}
+
+// Voice teardown when the instrument goes away.
+static void MmForm_GakkiVoiceOff(void) {
+    MmGakki_StopNote();
+    if (MmGakki_GetVoiceType(gFormState.currentForm) == GAKKI_VOICE_NATIVE) {
+        // Defensive: the message system also resets to DEFAULT on close, but if gakki dies
+        // through any other path (damage, form change) the flute must not stick.
+        AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_DEFAULT);
+    }
+}
+
+// Play the form's gakki animation ONCE, from the top — MM's per-note strum/blow/hit.
+// MM (func_80852290, Zora/Deku): the play animation is parked frozen on frame 0 and only
+// runs when a note is actually pressed:
+//     Player_Anim_PlayOnceAdjusted(play, this, D_8085D190[this->transformation]);
+// The Goron is richer still — MM keeps him on gPlayerAnim_pg_gakkiwait and blends
+// per-button drum-hit clips (gakkiplayA/L/D/U/R via D_8085D714 + func_80851EC8/F18) so the
+// correct hand strikes the correct drum. We have neither the wait clip nor the five hit
+// clips imported yet, so every form uses the single-clip behaviour here; when those
+// animations exist, this is the one place that needs to branch per form.
+static void MmForm_GakkiPlayNoteAnim(void) {
+    if (gPlayState == NULL || gFormState.gakkiPlayAnim == NULL) {
+        return; // voice-only form (Garo/Gerudo): keeps its own pose, by design
+    }
+    if (gFormState.gakkiActive != 1 && gFormState.gakkiActive != 2) {
+        return;
+    }
+    LinkAnimation_Change(gPlayState, &gFormState.formSkelAnime, gFormState.gakkiPlayAnim, 1.0f, 0.0f,
+                         Animation_GetLastFrame(gFormState.gakkiPlayAnim), ANIMMODE_ONCE, -4.0f);
+}
+
+// MM_FONT note driver. GameInteractor_ExecuteOnOcarinaNote fires from INSIDE AudioOcarina
+// processing (code_800EC960.c:2087), every frame while ocarina input is enabled, right
+// AFTER the engine (re)triggered NA_SE_OC_OCARINA. That position is what makes it the
+// correct integration point, fixing both reported bugs at once:
+//   * "debajo suena la ocarina": the gakki-loop Audio_StopSfxById raced the trigger
+//     (whoever ran first won). Stopping HERE is deterministic — always after the trigger.
+//   * "no suena 1:1": args carry the REAL pitch (semitones from C4, with the Z/R
+//     sharp/flat modifiers the old buttonIndex map dropped) and the stick bend factor;
+//     and firing per-frame lets us refresh the held note so it sustains like MM instead
+//     of fading on the continuous-slot timeout.
+static void MmForm_RegisterOcarinaNoteHook(void) {
+    static bool sRegistered = false;
+    if (sRegistered) {
+        return;
+    }
+    sRegistered = true;
+
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnOcarinaNote>(
+        [](uint8_t pitch, float bendFreq, int8_t /*instrumentId*/) {
+            if (gFormState.gakkiActive != 1 && gFormState.gakkiActive != 2) {
+                return;
+            }
+
+            const s32 voice = MmGakki_GetVoiceType(gFormState.currentForm);
+            const u8 isNewNote = (pitch != 0xFF /* OCARINA_PITCH_NONE */) && (pitch != gFormState.gakkiLastNoteIdx);
+
+            // Animation first, for EVERY voiced form (native flute included): MM plays the
+            // gakki animation once per note press (func_80852290 →
+            // Player_Anim_PlayOnceAdjusted) and leaves it frozen otherwise.
+            if (isNewNote) {
+                MmForm_GakkiPlayNoteAnim();
+            }
+
+            if (voice != GAKKI_VOICE_MM_FONT) {
+                // NATIVE/NONE: the engine's own voice is the right one — only the animation
+                // above is ours. Track the note so held/released transitions stay in sync.
+                gFormState.gakkiLastNoteIdx = pitch;
+                return;
+            }
+
+            Audio_StopSfxById(NA_SE_OC_OCARINA);
+
+            Player* player = (gPlayState != NULL) ? GET_PLAYER(gPlayState) : NULL;
+            Vec3f* pos = (player != NULL) ? &player->actor.projectedPos : NULL;
+
+            if (pitch == 0xFF /* OCARINA_PITCH_NONE */) {
+                if (gFormState.gakkiLastNoteIdx != 0xFF) {
+                    MmGakki_StopNote(); // note-off on release, like MM
+                }
+                gFormState.gakkiLastNoteIdx = 0xFF;
+            } else if (isNewNote) {
+                MmGakki_PlayPitch(gFormState.currentForm, pitch, bendFreq, pos);
+                gFormState.gakkiLastNoteIdx = pitch;
+            } else {
+                MmGakki_RefreshNote(); // held note: keep it alive past the continuous timeout
+            }
+        });
+}
+
 // Enter gakki mode: play gakkistart animation on formSkelAnime.
 // From MM z_player.c line 7926: Player_Anim_PlayOnceAdjusted(D_8085D17C[transformation])
+// Forms without dedicated gakki animations (Garo, Gerudo, future forms) still enter gakki
+// — they own the VOICE and the pose simply stays whatever the form is doing (per spec:
+// "garo estará en garo idle pose"). They jump straight to the play state.
+// ── Ocarina voice for SKIN forms ────────────────────────────────────────────────────────
+// Kafei is a CUSTOM_FORM_SKIN: he keeps Link's skeleton, animations, moveset and form state
+// (always MMFORM_STATE_INACTIVE), so the gakki table above — which is indexed by form id —
+// can never reach him. That is why every earlier attempt to give him an instrument did
+// nothing, and it is NOT a reason to promote him to a real form: all he needs is a voice.
+//
+// He whistles, and OoT's own sequence 0 already has that instrument (WHISTLE is what Impa
+// uses in Demo_Im), so this is the whole feature: swap the ocarina instrument while the
+// ocarina is out, put it back when it is away. Exactly the mechanism that makes the
+// Gerudo's flute work, minus the table lookup he cannot use.
+//
+// Deliberately audio-only. It never touches the action func, the animation or the draw, so
+// a skin stays 100% vanilla Link to play — which is the whole point of the kind.
+static void MmForm_UpdateSkinOcarinaVoice(Player* player, PlayState* play) {
+    static u8 sVoiceOn = 0;
+
+    const char* skin = CustomForms_ActiveSkin();
+    u8 whistles = (skin != NULL) && (strcmp(skin, "kafei") == 0);
+
+    u8 ocarinaOut =
+        whistles && (player->stateFlags1 & PLAYER_STATE1_IN_ITEM_CS) && (player->actionFunc == Player_Action_8084E3C4);
+
+    if (ocarinaOut) {
+        // ── Pose: Impa's whistling animation, on LINK's own skeleton ────────────────────
+        // A skin form has no formSkelAnime to pose (that is MmForm_Draw's, and a skin draws
+        // through Player_DrawImpl), so the clip goes straight onto player->skelAnime.
+        //
+        // This works because TransformMasks_Update runs AFTER this->actionFunc in
+        // Player_UpdateCommon (z_player.c:14322 vs :13972), so whatever we write here is
+        // what the frame draws. The ocarina action (Player_Action_8084E3C4) re-arms
+        // gPlayerAnim_link_normal_okarina_swing whenever its own animation finishes, so the
+        // check is per-frame and self-healing rather than a one-shot on entry — that is
+        // exactly the "pose fights the action func" problem, solved by simply being last.
+        static LinkAnimationHeader* sWhistleAnim = NULL;
+        static u8 sWhistleAnimLogged = 0;
+        if (sWhistleAnim == NULL) {
+            sWhistleAnim = (LinkAnimationHeader*)ResourceMgr_LoadPlayerAnimAsHeader(
+                "__OTR__misc/link_animetion/gPlayerAnim_mhr_npc_impa_whistling");
+            if (!sWhistleAnimLogged) {
+                sWhistleAnimLogged = 1;
+                // Decisive one-liner: NULL here means the clip is not in the mounted
+                // archives and everything below is moot, whatever the pose looks like.
+                MMFORM_LOG("[MmForm] Kafei whistle anim = %p", (void*)sWhistleAnim);
+            }
+        }
+        if (sWhistleAnim != NULL && player->skelAnime.animation != (void*)sWhistleAnim) {
+            LinkAnimation_Change(play, &player->skelAnime, sWhistleAnim, 1.0f, 0.0f,
+                                 Animation_GetLastFrame(sWhistleAnim), ANIMMODE_LOOP, -6.0f);
+        }
+
+        // ── Face: the "playing" expression lives INSIDE the animation ──────────────────
+        // Player_DrawImpl reads the eye/mouth pair out of jointTable[22].x
+        // (z_player_lib.c:1217): low nibble = eyeIndex + 1, high nibble = mouthIndex + 1,
+        // and a zero nibble means "no face channel, fall back to shape.face". Vanilla's
+        // ocarina clips carry that channel; a clip retargeted from an NPC does not, which is
+        // why Kafei kept his neutral face. Writing it here supplies what the bake cannot.
+        // Eyes open (0) + the open/blowing mouth (2) — the same pair vanilla uses on the
+        // faces that blow into the ocarina. Both are one nibble to change.
+        player->skelAnime.jointTable[22].x = (s16)(((2 + 1) << 4) | (0 + 1));
+
+        // ── Hand a little higher, so it reads as whistling ─────────────────────────────
+        // Applied to the joint table AFTER the animation update, so it is a pose offset on
+        // top of the clip rather than an edit to it. Tunable live without a rebuild: the
+        // two CVars are binang (0x2000 = 45 degrees), and negative flips the direction.
+        // Impa whistles with her right hand, so that is the arm being raised.
+        {
+            s16 shoulder = (s16)CVarGetInteger("gMods.KafeiWhistleShoulder", 0x1400);
+            s16 forearm = (s16)CVarGetInteger("gMods.KafeiWhistleForearm", 0x0C00);
+            player->skelAnime.jointTable[PLAYER_LIMB_R_SHOULDER].z += shoulder;
+            player->skelAnime.jointTable[PLAYER_LIMB_R_FOREARM].z += forearm;
+        }
+
+        // No instrument in hand: Kafei whistles. Player_SetModels picked
+        // PLAYER_MODELTYPE_RH_OCARINA for the ocarina action; overriding it here (again,
+        // after the action func) makes the right hand draw empty, so the ocarina model
+        // disappears without touching the draw path or the item itself. Both hands are
+        // forced open because which hand carries the instrument depends on the model group.
+        player->rightHandType = PLAYER_MODELTYPE_RH_OPEN;
+        player->leftHandType = PLAYER_MODELTYPE_LH_OPEN;
+
+        // Re-applied EVERY frame, not once on the edge.
+        //
+        // The edge-triggered version logged "Kafei whistle on" and still played a plain
+        // ocarina, because setting the instrument once is not enough: the ocarina/message
+        // machinery sets it again after us on the frames around opening, and whoever writes
+        // last wins. Every form that works does exactly this — MmForm_GakkiTickVoice calls
+        // SetInstrument on every gakki frame — and AudioOcarina_SetInstrument early-returns
+        // when the value is unchanged, so the repeat costs nothing.
+        AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_WHISTLE);
+        if (!sVoiceOn) {
+            sVoiceOn = 1;
+            MMFORM_LOG("[MmForm] Kafei whistle on");
+        }
+    } else if (sVoiceOn) {
+        // Restore unconditionally on the way out: if the instrument stuck, every later
+        // ocarina in the run would whistle.
+        AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_DEFAULT);
+        sVoiceOn = 0;
+    }
+}
+
 static void MmForm_EnterGakki(Player* player, PlayState* play) {
-    if (gFormState.gakkiStartAnim == NULL)
+    MmForm_RegisterOcarinaNoteHook();
+
+    gFormState.gakkiLastNoteIdx = 0xFF; // No note playing yet
+
+    if (gFormState.gakkiStartAnim == NULL) {
+        gFormState.gakkiActive = 2; // no instrument-draw animation — voice only
+        MMFORM_LOG("[MmForm] Gakki enter (voice-only): form=%d", gFormState.currentForm);
         return;
+    }
 
     gFormState.gakkiActive = 1;
     // Play gakkistart on formSkelAnime (forward, once)
@@ -11056,7 +11628,6 @@ static void MmForm_EnterGakki(Player* player, PlayState* play) {
     memset(&gFormState.gakkiScale0, 0, sizeof(Vec3f));
     memset(&gFormState.gakkiScale1, 0, sizeof(Vec3f));
     memset(gFormState.gakkiPieceScales, 0, sizeof(gFormState.gakkiPieceScales));
-    gFormState.gakkiLastNoteIdx = 0xFF; // No note playing yet
     MMFORM_LOG("[MmForm] Gakki enter: form=%d", gFormState.currentForm);
 }
 
@@ -11069,14 +11640,20 @@ static void MmForm_UpdateGakki(Player* player, PlayState* play) {
     switch (gFormState.gakkiActive) {
         case 1: { // Start animation playing
             MmForm_GakkiInterpScales(curFrame);
-            Audio_StopSfxById(NA_SE_OC_OCARINA); // Suppress OOT ocarina — MM forms use own instruments
+            MmForm_GakkiTickVoice();
             // Check if start anim finished (from MM Player_Action_63 line 17418)
             if (animDone) {
                 gFormState.gakkiActive = 2;
-                // Transition to play loop (from MM func_808525C4 line 17382-17392)
+                // MM func_808525C4 does NOT loop the play animation: for Zora and Deku it calls
+                // Player_Anim_PlayOnceFreeze(D_8085D190[form]), which is
+                // PlayerAnimation_Change(..., startFrame 0, endFrame 0, ANIMMODE_ONCE) — the
+                // pose sits FROZEN on frame 0. The animation only advances when you actually
+                // press a note (func_80852290 fires Player_Anim_PlayOnceAdjusted on
+                // OCARINA_MODE_ACTIVE + a valid ocarinaButtonIndex). Looping it here made the
+                // forms mime playing non-stop.
                 if (gFormState.gakkiPlayAnim != NULL) {
-                    LinkAnimation_Change(play, &gFormState.formSkelAnime, gFormState.gakkiPlayAnim, 1.0f, 0.0f,
-                                         Animation_GetLastFrame(gFormState.gakkiPlayAnim), ANIMMODE_LOOP, -6.0f);
+                    LinkAnimation_Change(play, &gFormState.formSkelAnime, gFormState.gakkiPlayAnim, 1.0f, 0.0f, 0.0f,
+                                         ANIMMODE_ONCE, -6.0f);
                 }
                 // Set scales to 1.0 for play mode
                 gFormState.gakkiScale0.x = 1.0f;
@@ -11092,21 +11669,12 @@ static void MmForm_UpdateGakki(Player* player, PlayState* play) {
 
         case 2: { // Play loop active
             MmForm_GakkiInterpScales(curFrame);
-            Audio_StopSfxById(NA_SE_OC_OCARINA); // Suppress OOT ocarina — MM forms use own instruments
-
-            // Detect note from playStaff (confirmed working from logs).
-            // playStaff.state=254 when active, buttonIndex=0-4 for buttons, 63 when released.
-            OcarinaStaff* playStaff = AudioOcarina_GetPlayingStaff();
-            u8 curNote = (playStaff->state != 0 && playStaff->buttonIndex < 5) ? playStaff->buttonIndex : 0xFF;
-
-            if (curNote != 0xFF && curNote != gFormState.gakkiLastNoteIdx) {
-                // New note pressed — stop previous, play new instrument sound
-                MmGakki_PlayNote(gFormState.currentForm, curNote, &player->actor.projectedPos);
-            } else if (curNote == 0xFF && gFormState.gakkiLastNoteIdx != 0xFF) {
-                // Button released — stop the gakki note
-                MmSfx_Stop(0x5800);
-            }
-            gFormState.gakkiLastNoteIdx = curNote;
+            MmForm_GakkiTickVoice();
+            // Notes are driven by the OnOcarinaNote hook (MmForm_RegisterOcarinaNoteHook):
+            // it fires inside AudioOcarina processing with the REAL pitch (sharps/flats +
+            // bend included) and refreshes held notes. The old staff polling here only saw
+            // the 5 raw buttons and re-triggered nothing on modifiers — one of the causes
+            // of "no suena 1:1 con MM".
             break;
         }
 
@@ -11116,6 +11684,7 @@ static void MmForm_UpdateGakki(Player* player, PlayState* play) {
             // Done when LinkAnimation_Update returns true (reached endFrame=0)
             if (animDone || curFrame <= 0.5f) {
                 gFormState.gakkiActive = 0;
+                MmForm_GakkiVoiceOff();
                 MMFORM_LOG("[MmForm] Gakki: exit done");
             }
             break;
@@ -11126,6 +11695,11 @@ static void MmForm_UpdateGakki(Player* player, PlayState* play) {
 // Start gakki exit: play gakkistart in reverse (from MM z_player.c line 17441)
 static void MmForm_ExitGakki(Player* player, PlayState* play) {
     if (gFormState.gakkiStartAnim == NULL || gFormState.gakkiActive == 0) {
+        // Voice-only gakki (no put-away animation) or already off: tear the voice down NOW —
+        // this is the only exit these forms get.
+        if (gFormState.gakkiActive != 0) {
+            MmForm_GakkiVoiceOff();
+        }
         gFormState.gakkiActive = 0;
         return;
     }
@@ -11149,48 +11723,168 @@ static void MmForm_ExitGakki(Player* player, PlayState* play) {
 // action dispatch to handle transitions from ANY ground action to air
 // and from ANY air action to landing.
 // ---------------------------------------------------------------------------
-static void MmForm_UpdateActive(Player* player, PlayState* play) {
-    // Pikachu form has its own complete update system
-    if (gFormState.currentForm == MM_PLAYER_FORM_PIKACHU) {
-        player->modelAnimType = PLAYER_ANIMTYPE_0;
+// Hold the body exactly where it is. Used while a get-item plays out in water: OOT's
+// WaitForPutAway / get-item actions never touch actor.velocity or gravity, so whatever
+// the swim last wrote would keep integrating and the Zora would drift up (buoyancy) or
+// sink (heavy boots) with the item over his head.
+static void MmForm_FreezeForGetItem(Player* player) {
+    player->linearVelocity = 0.0f;
+    player->actor.velocity.x = 0.0f;
+    player->actor.velocity.y = 0.0f;
+    player->actor.velocity.z = 0.0f;
+    player->actor.gravity = 0.0f;
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════
+// Unified form-owner table
+//
+// A "form owner" is a form that takes over the whole player frame and returns before the
+// central action dispatch runs. Both entries below are verbatim extractions of the `if`
+// blocks that used to sit inline in MmForm_UpdateActive — same statements, same order —
+// so this is a shape change, not a behaviour change.
+//
+// Order matters and is preserved: Pikachu is evaluated before Garo. Anything that must run
+// for EVERY form (the boomerang tracker, the gakki entry) belongs ABOVE the dispatch call
+// in MmForm_UpdateActive, never in a row here. That distinction is the bug this table
+// exists to make impossible to get wrong again.
+// ════════════════════════════════════════════════════════════════════════════════════════
+
+// Pikachu: complete parallel update system (SSBB engine, pikachu_form.cpp). Stays its own
+// moveset by design — it is one of the two forms explicitly exempted from unification.
+static u8 MmFormOwner_Pikachu(Player* player, PlayState* play) {
+    player->modelAnimType = PLAYER_ANIMTYPE_0;
+    if (WolfLinkForm_IsSelected()) {
+        WolfLinkForm_Update(player, play);
+    } else {
         PikachuForm_Update(player, play);
+    }
+    return 1;
+}
+
+// Garo: Goron-style MmForm with action-func dispatch. Most of the moveset
+// (combo / parry / dash / banish / rod mode) lives in GaroForm_Update.
+// Inside that function, only ACTIVE combat states set PAUSE_ACTION_FUNC —
+// idle / walk / run leave Link's action func running 1:1 so items, swim,
+// jump, etc. work vanilla. modelAnimType stays at PLAYER_ANIMTYPE_0 like
+// other MM forms (no sword-grip anims; Garo uses bare-hand poses).
+static u8 MmFormOwner_Garo(Player* player, PlayState* play) {
+    player->modelAnimType = PLAYER_ANIMTYPE_0;
+    // v10.3: Garo OWNS its combat. Null out Link's sword + shield so
+    // OOT's actionFunc doesn't try to draw a weapon mid-form (the
+    // form's own quads via meleeWeaponQuads[0] are independent of
+    // heldItemAction). User spec: "ignorar la sword y todo el
+    // equipment" — form damage values are constant, not modulated
+    // by Link's equipped class.
+    // v10.11 EXCEPTION: rod aim borrows the OOT slingshot pipeline
+    // (Player_StartDekuBubble) for the EXACT Deku-bubble first-person
+    // aim, which sets heldItemAction = SLINGSHOT. Nulling it here would
+    // break the aim, so skip the null while GaroForm_IsRodAiming().
+    // currentShield is deliberately NOT touched here any more: no form writes the
+    // player's shield equipment. Garo's R is owned by GaroForm_Update, and OOT's
+    // vanilla shield action is kept out by MmForm_GetShieldMode() == BLOCK.
+    if (!GaroForm_IsRodAiming()) {
+        player->heldItemAction = PLAYER_IA_NONE;
+        player->itemAction = PLAYER_IA_NONE;
+    }
+    GaroForm_Update(play, player);
+
+    // v9 design call: Garo keeps vanilla movement (run 1.0x, jump 1.0x).
+    // Earlier drafts scaled linearVelocity per frame, but Link's action
+    // funcs mix direct-assignment (Player_GetMovementSpeedAndYaw) and
+    // Math_AsymStepToF ramps — the ramped paths COMPOUND across frames
+    // (current = ramp(current, target, accel), then we multiply →
+    // current grows above target → next frame ramps from inflated
+    // current). User playtest: walk speed grew exponentially. Glass
+    // cannon stays via 2.0x incoming damage (MmForm_GetIncomingDamageMult);
+    // mobility tradeoff is dropped.
+    return 1;
+}
+
+typedef struct MmFormOwnerEntry {
+    u8 form;                           // MM_PLAYER_FORM_*
+    u8 (*update)(Player*, PlayState*); // returns 1 when the form consumed the frame
+} MmFormOwnerEntry;
+
+static const MmFormOwnerEntry sFormOwners[] = {
+    { MM_PLAYER_FORM_PIKACHU, MmFormOwner_Pikachu },
+    { MM_PLAYER_FORM_GARO, MmFormOwner_Garo },
+};
+
+// Returns 1 if a form owner claimed this frame (caller must return immediately).
+static u8 MmForm_RunFormOwnerUpdate(Player* player, PlayState* play) {
+    for (size_t i = 0; i < (sizeof(sFormOwners) / sizeof(sFormOwners[0])); i++) {
+        if (gFormState.currentForm == sFormOwners[i].form) {
+            return sFormOwners[i].update(player, play);
+        }
+    }
+    return 0;
+}
+
+static void MmForm_UpdateActive(Player* player, PlayState* play) {
+    // Boomerang flight tracking runs FIRST, before every early return and before the
+    // OOT-yield block further down (which `return`s and used to skip it entirely).
+    //
+    // This was the single biggest source of Zora combat jank. The tracker used to be
+    // called near the end of this function, so any yield to OOT — taking damage,
+    // talking, a get-item, a cutscene, climbing, a door — froze boomerangState at 3
+    // forever, even though the fins had long since returned and died. Everything keyed
+    // off that state then broke at once: MmForm_IsZTargeting forced permanent strafe,
+    // the fins stopped being drawn (their gate is boomerangState <= 1), and all five
+    // aim-entry points refused to fire again because they require == 0.
+    MmForm_TrackBoomerangsInFlight(player, play);
+
+    // Boomerang hold counter — once per frame, before any early return, so it accumulates
+    // while the punch plays instead of only inside whichever handler happens to be active.
+    MmForm_TickZoraBoomerangHold(play);
+
+    // ── Gakki (instrument) owns the player while it is out ───────────────────────────────
+    // This mirrors MM: Player_Action_63 IS the action while you play, and nothing else runs
+    // until the instrument is put away.
+    // The gakki update used to be reachable ONLY through the MMFORM_ACT_OOT_ACTION branch
+    // way below, which is a trap: the CS gate rewrites goronAction to IDLE on the very frame
+    // the ocarina opens (the logs show goronAction going 46 -> 0 right at "Display Text
+    // textId: 0x86e"). From that frame on nothing updated the instrument, so the form fell
+    // back to its idle animation AND — because the gakki loop is also what suppresses
+    // NA_SE_OC_OCARINA and calls MmGakki_PlayNote — you kept hearing the plain ocarina.
+    // Running it here, ahead of every action dispatch, makes it independent of whatever
+    // goronAction happens to hold.
+    // ENTRY, also before the per-form early returns. The entry check used to live only in
+    // the OOT-yield block far below, which Pikachu and Garo never reach because they return
+    // early into their own update systems — so the custom forms could never get into their
+    // instrument pose while Goron/Zora/Deku did. The logs showed it precisely: "Gakki enter"
+    // fired for forms 1/2/3 and never for 6/7, with the diagnostic in that block silent
+    // because the block itself was unreachable.
+    if (!gFormState.gakkiActive && (player->stateFlags1 & PLAYER_STATE1_IN_ITEM_CS) &&
+        (player->actionFunc == Player_Action_8084E3C4) && MmGakki_FormHasOwnInstrument(gFormState.currentForm)) {
+        MmForm_EnterGakki(player, play);
+    }
+
+    if (gFormState.gakkiActive != 0) {
+        // "Still playing" = the ocarina textbox is up, or OOT is still in its ocarina action.
+        u8 ocarinaOpen = (play->msgCtx.msgMode != MSGMODE_NONE) || (player->actionFunc == Player_Action_8084E3C4);
+
+        // Ocarina gone but instrument still out → begin the put-away animation (gakkiActive 3),
+        // which MmForm_UpdateGakki below plays to completion and then clears to 0.
+        if (!ocarinaOpen && (gFormState.gakkiActive == 1 || gFormState.gakkiActive == 2)) {
+            MmForm_ExitGakki(player, play);
+        }
+
+        MmForm_UpdateGakki(player, play);
+        player->linearVelocity = 0.0f;
         return;
     }
 
-    // Garo: Goron-style MmForm with action-func dispatch. Most of the moveset
-    // (combo / parry / dash / banish / rod mode) lives in GaroForm_Update.
-    // Inside that function, only ACTIVE combat states set PAUSE_ACTION_FUNC —
-    // idle / walk / run leave Link's action func running 1:1 so items, swim,
-    // jump, etc. work vanilla. modelAnimType stays at PLAYER_ANIMTYPE_0 like
-    // other MM forms (no sword-grip anims; Garo uses bare-hand poses).
-    if (gFormState.currentForm == MM_PLAYER_FORM_GARO) {
-        player->modelAnimType = PLAYER_ANIMTYPE_0;
-        // v10.3: Garo OWNS its combat. Null out Link's sword + shield so
-        // OOT's actionFunc doesn't try to draw a weapon mid-form (the
-        // form's own quads via meleeWeaponQuads[0] are independent of
-        // heldItemAction). User spec: "ignorar la sword y todo el
-        // equipment" — form damage values are constant, not modulated
-        // by Link's equipped class.
-        // v10.11 EXCEPTION: rod aim borrows the OOT slingshot pipeline
-        // (Player_StartDekuBubble) for the EXACT Deku-bubble first-person
-        // aim, which sets heldItemAction = SLINGSHOT. Nulling it here would
-        // break the aim, so skip the null while GaroForm_IsRodAiming().
-        if (!GaroForm_IsRodAiming()) {
-            player->heldItemAction = PLAYER_IA_NONE;
-            player->itemAction     = PLAYER_IA_NONE;
-            player->currentShield  = PLAYER_SHIELD_NONE;
-        }
-        GaroForm_Update(play, player);
-
-        // v9 design call: Garo keeps vanilla movement (run 1.0x, jump 1.0x).
-        // Earlier drafts scaled linearVelocity per frame, but Link's action
-        // funcs mix direct-assignment (Player_GetMovementSpeedAndYaw) and
-        // Math_AsymStepToF ramps — the ramped paths COMPOUND across frames
-        // (current = ramp(current, target, accel), then we multiply →
-        // current grows above target → next frame ramps from inflated
-        // current). User playtest: walk speed grew exponentially. Glass
-        // cannon stays via 2.0x incoming damage (MmForm_GetIncomingDamageMult);
-        // mobility tradeoff is dropped.
+    // ── Unified per-form owner dispatch ──────────────────────────────────────────────────
+    // Single entry point for every form that owns its own frame. Before this table the
+    // ownership test was a chain of hand-written `if (currentForm == X) { ...; return; }`
+    // blocks, and that shape is exactly what produced the gakki bug above: anything added
+    // to MmForm_UpdateActive *after* the chain was silently unreachable for the forms that
+    // returned early. One table = one place to reason about "who owns this frame".
+    //
+    // Behaviour is byte-for-byte what the old chain did: same order (Pikachu, then Garo),
+    // same modelAnimType, same pre-step, same early return. Adding a form here is a row,
+    // not a new branch — which is the whole point for the 2ship port.
+    if (MmForm_RunFormOwnerUpdate(player, play)) {
         return;
     }
 
@@ -11199,7 +11893,11 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // don't have equipped weapons. Without this, OOT selects sword-holding animations
     // (link_normal_walk vs link_normal_walk_free) which look wrong on MM form skeletons.
     // From 2Ship z_player_lib.c:1476: all non-FD/non-Human forms forced to PLAYER_ANIMTYPE_DEFAULT.
-    if (gFormState.currentForm != MM_PLAYER_FORM_FIERCE_DEITY) {
+    // Gerudo is the other exception: she IS Link's sword pipeline in other clips, and
+    // "fighter" is precisely modelAnimType landing on the weapon-drawn column. This
+    // line was forcing her back to column 0 every frame — which is why the fighter
+    // idle/walk/run never showed and R came up as Link's free-hand shield.
+    if (gFormState.currentForm != MM_PLAYER_FORM_FIERCE_DEITY && gFormState.currentForm != MM_PLAYER_FORM_GERUDO) {
         player->modelAnimType = PLAYER_ANIMTYPE_0;
     }
 
@@ -11209,29 +11907,26 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     //   2 = catch animation playing (fins came back)
     if (gFormState.currentForm == MM_PLAYER_FORM_ZORA) {
         // === 1:1 vanilla Link shield pipeline (mirrors GerudoForm fix) ===
-        // OOT's shield-walk path (func_80834758) requires currentShield != NONE
-        // AND heldItemAction == itemAction (where heldItemAction is a one-handed
-        // weapon so the upperActionFunc is Player_UpperAction_Sword which calls
-        // func_80834758). For Zora we want the SAME pipeline Link adult uses —
-        // R + Z raises the upper body via upperSkelAnime (link_normal_defense)
-        // and Player_Action_80840450 strafes the lower body. The joint copy in
-        // MmForm_Draw then carries the upper-body raise onto the Zora skeleton,
-        // so the form's right forearm pulls the special shield blade DL forward.
+        // OOT's shield-walk path (func_80834758) requires heldItemAction == itemAction
+        // (where heldItemAction is a one-handed weapon so the upperActionFunc is
+        // Player_UpperAction_Sword which calls func_80834758). For Zora we want the
+        // SAME pipeline Link adult uses — R + Z raises the upper body via upperSkelAnime
+        // (link_normal_defense) and Player_Action_80840450 strafes the lower body. The
+        // joint copy in MmForm_Draw then carries the upper-body raise onto the Zora
+        // skeleton, so the form's right forearm pulls the special shield blade DL forward.
         //   - If heldItemAction is two-handed (BGS / Hammer), promote to MASTER:
         //     Player_SetModelsForHoldingShield refuses to set RH_SHIELD for
         //     two-handed weapons, which kills the whole shield pipeline.
-        //   - If currentShield is NONE, force MIRROR: only used to satisfy the
-        //     gate. The shield model is never rendered for transformed forms
-        //     (MmForm_Draw owns the body draw and the shield DL comes from the
-        //     Zora forearm fin substitution in PostLimbDraw section 8).
+        //   - The equipped SHIELD is no longer touched. This used to force
+        //     currentShield = MIRROR just to satisfy func_80834758's
+        //     `currentShield != PLAYER_SHIELD_NONE` gate; that gate is now bypassed
+        //     form-side via MmForm_GetShieldMode() == MMFORM_SHIELD_FORM_GUARD, so
+        //     Zora's fins come out identically with any shield or with none, and the
+        //     player's real shield equipment is never rewritten.
         s8 desiredIA = LINK_IS_ADULT ? PLAYER_IA_SWORD_MASTER : PLAYER_IA_SWORD_KOKIRI;
-        if (player->heldItemAction >= PLAYER_IA_SWORD_BIGGORON &&
-            player->heldItemAction <= PLAYER_IA_HAMMER) {
+        if (player->heldItemAction >= PLAYER_IA_SWORD_BIGGORON && player->heldItemAction <= PLAYER_IA_HAMMER) {
             player->heldItemAction = desiredIA;
             player->itemAction = desiredIA;
-        }
-        if (player->currentShield == PLAYER_SHIELD_NONE) {
-            player->currentShield = PLAYER_SHIELD_MIRROR;
         }
 
         Player_ZoraBoomerangCleanup(player);
@@ -11241,8 +11936,8 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
         // Aim phase: USING_BOOMERANG + not yet thrown. Hold cutterWaitAnim looping.
         // Cleanup Phase 1 clears USING_BOOMERANG the moment THROWN sets, so this only
         // runs during actual aim (before throw fires).
-        if (player->heldItemAction == PLAYER_IA_BOOMERANG &&
-            (player->stateFlags1 & PLAYER_STATE1_USING_BOOMERANG) && !throwNow) {
+        if (player->heldItemAction == PLAYER_IA_BOOMERANG && (player->stateFlags1 & PLAYER_STATE1_USING_BOOMERANG) &&
+            !throwNow) {
             // Reset latch so the throw edge below fires cleanly even if a previous
             // boomerang flight left the latch stuck at 1 (e.g. interrupt during flight).
             gFormState.boomerangCatchTimer = 0;
@@ -11337,6 +12032,14 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
         // During OOT yield: let OOT control yOffset freely.
         // Climbing, ledge hang, and climb-over animations all use yOffset.
         // Forcing 0 breaks the visual position during these transitions.
+    } else if (gFormState.currentForm == MM_PLAYER_FORM_RITO) {
+        // Rito sits high on its skeleton, so it draws floating. Same fix the Deku
+        // uses for its flower depth (shape.yOffset = dekuFlowerDepth above): a DRAW
+        // offset applied after everything else, which moves the model without
+        // touching the mesh, the joints or where the actor actually is. Doing it in
+        // the exporter or through rootAnimScale was the wrong place — the model is
+        // correct in Blender, it is only the drawing that needs lowering.
+        player->actor.shape.yOffset = MmForm_RitoDrawYOffset(player);
     } else {
         player->actor.shape.yOffset = 0.0f;
     }
@@ -11365,10 +12068,10 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // ground snapping?" — which only applies once it is actually a rolling ball. The
     // uncurl transition clears the flag explicitly on its way out.
     {
-        u8 inBallState = (gFormState.currentForm == MM_PLAYER_FORM_GORON &&
-                          (gFormState.goronAction == GORON_ACT_GORON_ROLL ||
-                           gFormState.goronAction == GORON_ACT_GORON_ROLL_JUMP ||
-                           gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND));
+        u8 inBallState =
+            (gFormState.currentForm == MM_PLAYER_FORM_GORON &&
+             (gFormState.goronAction == GORON_ACT_GORON_ROLL || gFormState.goronAction == GORON_ACT_GORON_ROLL_JUMP ||
+              gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND));
         if (!inBallState) {
             player->actor.bgCheckFlags &= ~0x800;
             // Hand OOT's actionFunc back. Ownership-tracked so we only release the
@@ -11417,14 +12120,30 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // clear UNDERWATER so OOT runs Player_Action_Idle + HANDLER_2 + the
     // animation setup. The yield section will then take over (GETTING_ITEM
     // is in MMFORM_OOT_YIELD_FLAGS) and copy OOT's pose to the form.
-    if (gFormState.currentForm == MM_PLAYER_FORM_ZORA && player->getItemId > GI_NONE) {
+    //
+    // TWO DISTINCT PHASES, and conflating them is what used to eat the raise-item
+    // animation. This block runs from TransformMasks_Update (z_player.c:13907), i.e.
+    // AFTER MmForm_HandleFormInteractions has already run HANDLER_2 back at :13527.
+    //
+    //   Phase B (GETTING_ITEM set) — HANDLER_2 already fired and installed its own
+    //   actionFunc (Player_SetupWaitForPutAway) plus gPlayerAnim_link_demo_get_itemB.
+    //   Calling Player_SetupAction(Player_Action_Idle) here would OVERWRITE that
+    //   actionFunc in the same frame and the item would be granted with no animation
+    //   at all. So in this phase: only kill the swim physics and yield. Touch nothing
+    //   that OOT owns.
+    //
+    //   Phase A (only getItemId, no GETTING_ITEM) — the offer exists but nothing has
+    //   accepted it yet. Fallback for any path that reaches here without going through
+    //   our hook: force OOT to Player_Action_Idle so its own handler list picks it up
+    //   next frame.
+    if (gFormState.currentForm == MM_PLAYER_FORM_ZORA &&
+        ((player->getItemId > GI_NONE) || (player->stateFlags1 & PLAYER_STATE1_GETTING_ITEM))) {
         s32 act = gFormState.goronAction;
-        u8 inSwim = (act == MMFORM_ACT_SWIM_IDLE || act == MMFORM_ACT_SWIM_MOVE ||
-                     act == MMFORM_ACT_SWIM_FAST || act == MMFORM_ACT_SWIM_DASH ||
-                     act == MMFORM_ACT_SWIM_SURFACE_WALK ||
+        u8 inSwim = (act == MMFORM_ACT_SWIM_IDLE || act == MMFORM_ACT_SWIM_MOVE || act == MMFORM_ACT_SWIM_FAST ||
+                     act == MMFORM_ACT_SWIM_DASH || act == MMFORM_ACT_SWIM_SURFACE_WALK ||
                      act == MMFORM_ACT_SWIM_UNDERWATER_WALK || act == MMFORM_ACT_DOLPHIN_JUMP);
         if (inSwim || (player->stateFlags2 & PLAYER_STATE2_UNDERWATER)) {
-            // Drop swim physics so the body stops in place
+            // Drop swim physics so the body stops in place (both phases)
             gFormState.swimState = 0;
             gFormState.fastSwimActive = 0;
             gFormState.swimPitch = 0;
@@ -11435,14 +12154,20 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
             player->linearVelocity = 0.0f;
             player->actor.velocity.x = 0.0f;
             player->actor.velocity.z = 0.0f;
-            player->stateFlags2 &= ~(PLAYER_STATE2_UNDERWATER | PLAYER_STATE2_DIVING |
-                                      PLAYER_STATE2_DISABLE_ROTATION_ALWAYS);
+            player->stateFlags2 &=
+                ~(PLAYER_STATE2_UNDERWATER | PLAYER_STATE2_DIVING | PLAYER_STATE2_DISABLE_ROTATION_ALWAYS);
             player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
-            // Set OOT to Player_Action_Idle so HANDLER_2 fires and the get-item
-            // cutscene path runs. The yield section below will pick up the
-            // resulting GETTING_ITEM flag and yield the form to OOT.
-            Player_SetupAction(play, player, Player_Action_Idle, 1);
-            MmForm_SetAction(GORON_ACT_IDLE, play, gFormState.idleAnim, 1.0f, ANIMMODE_LOOP);
+
+            if (player->stateFlags1 & PLAYER_STATE1_GETTING_ITEM) {
+                // Phase B: hands off OOT's action/animation. Just yield so MmForm_Draw
+                // mirrors OOT's raise-item pose onto the Zora skeleton.
+                gFormState.goronAction = MMFORM_ACT_OOT_ACTION;
+                gFormState.actionTimer = 0;
+            } else {
+                // Phase A: nothing has accepted the offer yet — hand OOT a clean idle.
+                Player_SetupAction(play, player, Player_Action_Idle, 1);
+                MmForm_SetAction(GORON_ACT_IDLE, play, gFormState.idleAnim, 1.0f, ANIMMODE_LOOP);
+            }
         }
     }
 
@@ -11465,8 +12190,8 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // before the cutscene-anim-change happened). Broaden the gate so any active
     // cutscene mechanism triggers the OOT-yield path below; the form then mirrors
     // OOT's player->skelAnime 1:1 via the joint-copy in MmForm_Draw.
-    u8 inAnyCutscene = (player->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE) != 0 ||
-                       player->csAction != 0 || play->csCtx.state != CS_STATE_IDLE;
+    u8 inAnyCutscene = (player->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE) != 0 || player->csAction != 0 ||
+                       play->csCtx.state != CS_STATE_IDLE;
     // === UNCONDITIONAL CUTSCENE YIELD ===
     // Whenever any cutscene mechanism is active and the form is NOT in a real
     // blocker action, FORCE goronAction = MMFORM_ACT_OOT_ACTION at the very top
@@ -11483,23 +12208,16 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
         u8 isBlocker =
             gFormState.goronAction == GORON_ACT_PUNCH_A || gFormState.goronAction == GORON_ACT_PUNCH_B ||
             gFormState.goronAction == GORON_ACT_PUNCH_C || gFormState.goronAction == GORON_ACT_PUNCH_END ||
-            gFormState.goronAction == MMFORM_ACT_DEKU_SPIN ||
-            gFormState.goronAction == MMFORM_ACT_BOOMERANG_THROW ||
-            gFormState.goronAction == MMFORM_ACT_JUMP_KICK ||
-            gFormState.goronAction == GORON_ACT_ROLL_INIT ||
-            gFormState.goronAction == GORON_ACT_GORON_ROLL ||
-            gFormState.goronAction == GORON_ACT_GORON_ROLL_JUMP ||
-            gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND ||
-            gFormState.goronAction == MMFORM_ACT_DEKU_FLOWER ||
-            gFormState.goronAction == MMFORM_ACT_DEKU_FLY ||
-            gFormState.goronAction == MMFORM_ACT_DEKU_FALL_LOCKED ||
-            gFormState.goronAction == MMFORM_ACT_SHIELD ||
-            gFormState.goronAction == MMFORM_ACT_SWIM_IDLE || gFormState.goronAction == MMFORM_ACT_SWIM_MOVE ||
-            gFormState.goronAction == MMFORM_ACT_SWIM_FAST || gFormState.goronAction == MMFORM_ACT_SWIM_DASH ||
-            gFormState.goronAction == MMFORM_ACT_SWIM_SURFACE_WALK ||
+            gFormState.goronAction == MMFORM_ACT_DEKU_SPIN || gFormState.goronAction == MMFORM_ACT_BOOMERANG_THROW ||
+            gFormState.goronAction == MMFORM_ACT_JUMP_KICK || gFormState.goronAction == GORON_ACT_ROLL_INIT ||
+            gFormState.goronAction == GORON_ACT_GORON_ROLL || gFormState.goronAction == GORON_ACT_GORON_ROLL_JUMP ||
+            gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND || gFormState.goronAction == MMFORM_ACT_DEKU_FLOWER ||
+            gFormState.goronAction == MMFORM_ACT_DEKU_FLY || gFormState.goronAction == MMFORM_ACT_DEKU_FALL_LOCKED ||
+            gFormState.goronAction == MMFORM_ACT_SHIELD || gFormState.goronAction == MMFORM_ACT_SWIM_IDLE ||
+            gFormState.goronAction == MMFORM_ACT_SWIM_MOVE || gFormState.goronAction == MMFORM_ACT_SWIM_FAST ||
+            gFormState.goronAction == MMFORM_ACT_SWIM_DASH || gFormState.goronAction == MMFORM_ACT_SWIM_SURFACE_WALK ||
             gFormState.goronAction == MMFORM_ACT_SWIM_UNDERWATER_WALK ||
-            gFormState.goronAction == MMFORM_ACT_DOLPHIN_JUMP ||
-            gFormState.goronAction == MMFORM_ACT_DOOR ||
+            gFormState.goronAction == MMFORM_ACT_DOLPHIN_JUMP || gFormState.goronAction == MMFORM_ACT_DOOR ||
             gFormState.goronAction == MMFORM_ACT_CHEST;
         if (!isBlocker && gFormState.goronAction != MMFORM_ACT_OOT_ACTION) {
             gFormState.goronAction = MMFORM_ACT_OOT_ACTION;
@@ -11515,12 +12233,10 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
         if (animChanged || play->gameplayFrames - sLastCsLog >= 30) {
             SPDLOG_INFO("[MmForm] CS gate: IN_CUTSCENE={} csAction={} csCtxState={} TALKING={} GETTING_ITEM={} "
                         "goronAction(post-force)={} blocker={} softReloadYield={} ootAnim={} ootCurFrame={:.2f}",
-                        (player->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE) != 0,
-                        player->csAction, play->csCtx.state,
+                        (player->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE) != 0, player->csAction, play->csCtx.state,
                         (player->stateFlags1 & PLAYER_STATE1_TALKING) != 0,
-                        (player->stateFlags1 & PLAYER_STATE1_GETTING_ITEM) != 0,
-                        gFormState.goronAction, isBlocker, gFormState.softReloadYield,
-                        (void*)player->skelAnime.animation, player->skelAnime.curFrame);
+                        (player->stateFlags1 & PLAYER_STATE1_GETTING_ITEM) != 0, gFormState.goronAction, isBlocker,
+                        gFormState.softReloadYield, (void*)player->skelAnime.animation, player->skelAnime.curFrame);
             sLastCsLog = play->gameplayFrames;
             sLastLoggedAnim = (void*)player->skelAnime.animation;
         }
@@ -11561,17 +12277,13 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
             // Combat
             gFormState.goronAction == GORON_ACT_PUNCH_A || gFormState.goronAction == GORON_ACT_PUNCH_B ||
             gFormState.goronAction == GORON_ACT_PUNCH_C || gFormState.goronAction == GORON_ACT_PUNCH_END ||
-            gFormState.goronAction == MMFORM_ACT_DEKU_SPIN ||
-            gFormState.goronAction == MMFORM_ACT_BOOMERANG_THROW ||
+            gFormState.goronAction == MMFORM_ACT_DEKU_SPIN || gFormState.goronAction == MMFORM_ACT_BOOMERANG_THROW ||
             gFormState.goronAction == MMFORM_ACT_JUMP_KICK ||
             // Special modes (Goron roll, Deku flight)
-            gFormState.goronAction == GORON_ACT_ROLL_INIT ||
-            gFormState.goronAction == GORON_ACT_GORON_ROLL ||
+            gFormState.goronAction == GORON_ACT_ROLL_INIT || gFormState.goronAction == GORON_ACT_GORON_ROLL ||
             gFormState.goronAction == GORON_ACT_GORON_ROLL_JUMP ||
-            gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND ||
-            gFormState.goronAction == MMFORM_ACT_DEKU_FLOWER ||
-            gFormState.goronAction == MMFORM_ACT_DEKU_FLY ||
-            gFormState.goronAction == MMFORM_ACT_DEKU_FALL_LOCKED ||
+            gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND || gFormState.goronAction == MMFORM_ACT_DEKU_FLOWER ||
+            gFormState.goronAction == MMFORM_ACT_DEKU_FLY || gFormState.goronAction == MMFORM_ACT_DEKU_FALL_LOCKED ||
             gFormState.goronAction == MMFORM_ACT_SHIELD;
         // Loading zone transition: OOT set LOADING + IN_CUTSCENE but the player
         // action is still walk/run. Yield to OOT so the form keeps copying the
@@ -11676,8 +12388,7 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // From 2Ship func_8083784C (z_player.c line 7247-7260):
     //   velocity.y < 0 (falling) AND depthInWater > 0 (touching water)
     //   AND remainingHopsCounter != 0 AND health != 0
-    if (gFormState.currentForm == MM_PLAYER_FORM_DEKU &&
-        player->actor.yDistToWater > DEKU_SWIM_THRESHOLD &&
+    if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && player->actor.yDistToWater > DEKU_SWIM_THRESHOLD &&
         player->actor.velocity.y < 0.0f && gFormState.dekuHopsRemaining > 0 && gSaveContext.health > 0) {
         MmForm_DekuWaterHop(player, play);
         return;
@@ -11751,16 +12462,16 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // Zora / FD / Gerudo in water: ALWAYS ensure PAUSE is cleared so OOT's swim
     // system works. Gerudo's design rule is "fall back to vanilla unless
     // explicitly overridden" — swim is not overridden, so OOT owns it.
-    if ((gFormState.currentForm == MM_PLAYER_FORM_ZORA ||
-         gFormState.currentForm == MM_PLAYER_FORM_FIERCE_DEITY ||
-         gFormState.currentForm == MM_PLAYER_FORM_GERUDO) &&
+    if ((gFormState.currentForm == MM_PLAYER_FORM_ZORA || gFormState.currentForm == MM_PLAYER_FORM_FIERCE_DEITY ||
+         gFormState.currentForm == MM_PLAYER_FORM_GERUDO || gFormState.currentForm == MM_PLAYER_FORM_RITO ||
+         gFormState.currentForm == MM_PLAYER_FORM_KEATON) &&
         (player->stateFlags1 & PLAYER_STATE1_IN_WATER) && !gFormState.fastSwimActive) {
         player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
         player->stateFlags2 &= ~PLAYER_STATE2_DISABLE_ROTATION_ALWAYS;
     }
 
-    // Zora tunic is equipped on transform and removed on detransform (see MmForm_ApplyFormProperties /
-    // MmForm_RestoreOotState).
+    // Zora does NOT equip the Zora Tunic (it transforms in the Kokiri Tunic). Underwater
+    // breathing comes from MmForm_HasWaterBreathing(); see MmForm_ApplyFormProperties.
 
     // Fierce Deity 1.5x speed multiplier - MOVED to walk/run/strafe action handlers.
     // Applying *= 1.5f here compounded every frame because OOT's actionFunc (still running)
@@ -11912,6 +12623,20 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
                 gFormState.goronAction = MMFORM_ACT_OOT_ACTION;
                 gFormState.actionTimer = 0;
 
+                // Gerudo: hand the player back completely. Yielding means "OOT owns
+                // this frame", but PLAYER_STATE3_PAUSE_ACTION_FUNC is what gates
+                // OOT's actionFunc (z_player.c:13629) — leave it set from whatever
+                // move was running and OOT gets told to take over while being
+                // unable to act. That is why a hit taken mid-move did not interrupt
+                // anything. Goron and Zora get away with it because their yield-time
+                // states are the ones that do not hold the flag; Gerudo's air and
+                // wirebug states do. Her combat state is reset too, so the move does
+                // not resume from the middle once the yield ends.
+                if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
+                    player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
+                    MmForm_GerudoMhrReset();
+                }
+
                 // Don't zero linearVelocity during damage yield — OOT's knockback
                 // system already set the correct knockback speed and we must not override it.
                 if (!(yieldFlags & PLAYER_STATE1_DAMAGED)) {
@@ -11919,15 +12644,48 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
                 }
             }
 
+            // OOT only opens the REAL ocarina from inside Player_Action_8084E3C4: when that
+            // action's animation finishes it calls func_8010BD58(OCARINA_ACTION_FREE_PLAY),
+            // which is what hands the C buttons to the ocarina. But the actionFunc is gated on
+            // PLAYER_STATE3_PAUSE_ACTION_FUNC (z_player.c:13605), and our form actions (shield,
+            // punches, ball...) leave that flag set. With it set the ocarina animation never
+            // advances, so the instrument pose appears while the ocarina never opens — and the
+            // C buttons keep using whatever item is assigned to them. Clear it the same way the
+            // boomerang (z_player.c:7370) and Deku bubble (z_player.c:7474) triggers do.
+            if (player->actionFunc == Player_Action_8084E3C4) {
+                player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
+            }
+
+            // DIAG: the ocarina DOES open — Message_StartOcarina reaches Message_OpenText(0x86E)
+            // ("Play using [A] and [C]", seen in the log) and then sets MSGMODE_OCARINA_STARTING.
+            // Yet by the time the gakki loop reads it, msgMode is back to 0 (MSGMODE_NONE), so
+            // something closes it immediately and we are left with the pose and no ocarina.
+            // Log every msgMode transition while yielded so we can see how many frames it
+            // survives and what it turns into, instead of only sampling the end state.
+            {
+                static u8 sPrevMsgMode = 0xFF;
+                if (play->msgCtx.msgMode != sPrevMsgMode) {
+                    SPDLOG_INFO("[MmForm] msgMode {} -> {} (ocarinaAction={} gakkiActive={} form={} "
+                                "IN_CUTSCENE={} TALKING={})",
+                                (s32)sPrevMsgMode, (s32)play->msgCtx.msgMode, (s32)play->msgCtx.ocarinaAction,
+                                (s32)gFormState.gakkiActive, (s32)gFormState.currentForm,
+                                (player->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE) != 0,
+                                (player->stateFlags1 & PLAYER_STATE1_TALKING) != 0);
+                    sPrevMsgMode = play->msgCtx.msgMode;
+                }
+            }
+
             // Gakki: every frame during yield, try to enter gakki if not yet active.
             // Must be OUTSIDE first-entry block because Player_Action_8084E3C4 may not be
             // set on the first yield frame (OOT may still be in a transition action).
             // From MM z_player.c line 7926: entering Player_Action_63 plays gakkistart.
-            if (!gFormState.gakkiActive && (yieldFlags & PLAYER_STATE1_IN_ITEM_CS) &&
-                (player->actionFunc == Player_Action_8084E3C4) && (gFormState.currentForm >= MM_PLAYER_FORM_GORON) &&
-                (gFormState.currentForm <= MM_PLAYER_FORM_DEKU) && (gFormState.gakkiStartAnim != NULL)) {
-                MmForm_EnterGakki(player, play);
-            }
+            // Gated on the form OWNING a voice (MM's sPlayerFormOcarinaInstruments model),
+            // not on the Goron..Deku range or on having instrument animations: Garo and
+            // Gerudo have a voice but no gakki anims (they keep their pose, voice-only),
+            // and NONE-voice forms (Human/FD/Pikachu) simply play the plain ocarina.
+            // (Gakki entry now happens at the top of this function, before the per-form
+            // early returns, so every form reaches it — not just the ones that fall through
+            // to this yield block.)
 
             // Gakki: update instrument animation each frame while yielded.
             // This runs the form's own animation on formSkelAnime so MmForm_Draw
@@ -11962,7 +12720,18 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
             // can't move him through → he stays idle on the original side.
             u8 inDoorActionYield =
                 (player->actionFunc == Player_Action_80845EF8 || player->actionFunc == Player_Action_80845CA4);
-            if (MMFORM_IS_ZORA_SWIM() && player->actor.yDistToWater > ZORA_SWIM_THRESHOLD && !inDoorActionYield) {
+            // Same kind of exception for the get-item: the player must hold still where he
+            // is while raising the item. MmForm_WaterBuoyancy would fight that every frame
+            // — it re-applies velocity.y AND re-sets PLAYER_STATE2_UNDERWATER (:10075),
+            // the very flag the pickup path had to clear.
+            u8 inGetItemYield = (player->stateFlags1 & PLAYER_STATE1_GETTING_ITEM) != 0;
+            if (MMFORM_IS_ZORA_SWIM() && player->actor.yDistToWater > ZORA_SWIM_THRESHOLD && inGetItemYield) {
+                // Hold, don't float: freeze outright rather than just skipping buoyancy,
+                // so this also covers pickups that never went through
+                // MmForm_HandleFormInteractions (and would otherwise sink here).
+                MmForm_FreezeForGetItem(player);
+            } else if (MMFORM_IS_ZORA_SWIM() && player->actor.yDistToWater > ZORA_SWIM_THRESHOLD &&
+                       !inDoorActionYield) {
                 player->actor.gravity = 0.0f;
                 MmForm_WaterBuoyancy(player);
 
@@ -12122,8 +12891,7 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // Jump attack, jump, fall, sidehop, backflip into water should start swimming,
     // not continue sinking with land gravity. Also covers OOT yield actions (e.g. items mid-air)
     // and damage knockback (when enemy hits player on land and they fall into water).
-    if (MMFORM_IS_ZORA_SWIM() && gFormState.swimState == 0 &&
-        player->actor.yDistToWater > ZORA_SWIM_ENTER_THRESHOLD) {
+    if (MMFORM_IS_ZORA_SWIM() && gFormState.swimState == 0 && player->actor.yDistToWater > ZORA_SWIM_ENTER_THRESHOLD) {
         s32 airAct = gFormState.goronAction;
         if (airAct == MMFORM_ACT_JUMP || airAct == MMFORM_ACT_FALL || airAct == MMFORM_ACT_JUMP_KICK ||
             airAct == MMFORM_ACT_SIDEHOP || airAct == MMFORM_ACT_BACKFLIP || airAct == MMFORM_ACT_OOT_ACTION ||
@@ -12285,13 +13053,12 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // them (2Ship Player_Action_96:20742). Without this gate the ball hit a ledge, got
     // yanked into MMFORM_ACT_JUMP with the jump SFX + attack voice, and the roll ended —
     // the "sigue saltando normal, no ignora el ledge" report.
-    u8 rollingNow = (gFormState.goronAction == GORON_ACT_ROLL_INIT ||
-                     gFormState.goronAction == GORON_ACT_GORON_ROLL ||
-                     gFormState.goronAction == GORON_ACT_GORON_ROLL_JUMP ||
-                     gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND ||
-                     gFormState.goronAction == GORON_ACT_ROLL_UNCURL);
-    if (gFormState.currentForm == MM_PLAYER_FORM_GORON && !rollingNow && onGround &&
-        player->ledgeClimbType == 2 && player->ledgeClimbDelayTimer >= 3) {
+    u8 rollingNow =
+        (gFormState.goronAction == GORON_ACT_ROLL_INIT || gFormState.goronAction == GORON_ACT_GORON_ROLL ||
+         gFormState.goronAction == GORON_ACT_GORON_ROLL_JUMP || gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND ||
+         gFormState.goronAction == GORON_ACT_ROLL_UNCURL);
+    if (gFormState.currentForm == MM_PLAYER_FORM_GORON && !rollingNow && onGround && player->ledgeClimbType == 2 &&
+        player->ledgeClimbDelayTimer >= 3) {
         f32 jumpVel = (player->yDistToLedge * 0.08f) + 5.5f;
         player->actor.velocity.y = jumpVel;
         player->linearVelocity = 2.5f;
@@ -12410,15 +13177,12 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
         // Each phase is gated by the boomerang state machine latch so the guard NEVER fires
         // when no boomerang activity is in progress (prevents stuck states from blocking
         // normal action dispatch — including mask-press detransform).
-        u8 inAim = (sa->animation == gFormState.cutterWaitAnim &&
-                    player->heldItemAction == PLAYER_IA_BOOMERANG &&
+        u8 inAim = (sa->animation == gFormState.cutterWaitAnim && player->heldItemAction == PLAYER_IA_BOOMERANG &&
                     (player->stateFlags1 & PLAYER_STATE1_USING_BOOMERANG) &&
                     !(player->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN));
-        u8 inThrowAnim = (sa->animation == gFormState.cutterAttack &&
-                          gFormState.boomerangCatchTimer == 1 &&
+        u8 inThrowAnim = (sa->animation == gFormState.cutterAttack && gFormState.boomerangCatchTimer == 1 &&
                           sa->curFrame < Animation_GetLastFrame(gFormState.cutterAttack));
-        u8 inCatchAnim = (sa->animation == gFormState.cutterCatch &&
-                          gFormState.boomerangCatchTimer == 2 &&
+        u8 inCatchAnim = (sa->animation == gFormState.cutterCatch && gFormState.boomerangCatchTimer == 2 &&
                           sa->curFrame < Animation_GetLastFrame(gFormState.cutterCatch));
         if (inAim || inThrowAnim || inCatchAnim) {
             // Tick the form animation so the cutter anim progresses each frame.
@@ -12435,6 +13199,19 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // =========================================================================
     if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
         if (MmForm_GerudoMhrUpdate(player, play)) {
+            return;
+        }
+    }
+
+    // Rito flight controller — same contract as the Gerudo one above: it returns 1
+    // on the frames it is driving a flight move, and 0 the rest of the time so
+    // ordinary locomotion still flows through the action dispatch below.
+    // Rito flight + bow. Both run every frame: the bow can fire mid-glide, so
+    // neither may short-circuit the other. Either one returning 1 means it is
+    // driving the body and the action dispatch below must be skipped.
+    if (gFormState.currentForm == MM_PLAYER_FORM_RITO) {
+        u8 flying = MmForm_RitoFlightUpdate(player, play);
+        if (MmForm_RitoBowUpdate(player, play) || flying) {
             return;
         }
     }
@@ -12539,8 +13316,8 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
                 if (gFormState.currentForm == MM_PLAYER_FORM_ZORA && gFormState.boomerangState == 0 &&
                     gFormState.cutterAttack != NULL && gFormState.jumpKickEnd != NULL &&
                     gFormState.formSkelAnime.animation == gFormState.jumpKickEnd) {
-                    Input* in = &play->state.input[0];
-                    if (CHECK_BTN_ALL(in->cur.button, BTN_B) && !CHECK_BTN_ALL(in->press.button, BTN_B)) {
+                    // Held B only, same rule as every other aim entry point.
+                    if (MmForm_ZoraBoomerangHoldReady(play)) {
                         // Sync OOT's actionFunc to idle BEFORE Player_StartZoraBoomerang.
                         // After jumpkick, OOT's actionFunc may still be Player_Action_808502D0
                         // (jumpslash recovery). The boomerang upper-action chain (func_80835800)
@@ -12729,15 +13506,10 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
                     player->cylinder.dim.height = (s16)(props->cylinderHeight * 0.8f);
                 }
 
-                // Register shield collider with equipped shield's collision type
+                // Fixed collision type — Zora guards with his fins, so the equipped
+                // shield must not change how the block reads (Skijer 2026-07-28).
                 if (gFormState.shieldColliderInitDone) {
-                    static const u8 sZoraShieldColTypes[] = {
-                        COLTYPE_METAL, // PLAYER_SHIELD_NONE
-                        COLTYPE_WOOD,  // PLAYER_SHIELD_DEKU
-                        COLTYPE_METAL, // PLAYER_SHIELD_HYLIAN
-                        COLTYPE_METAL, // PLAYER_SHIELD_MIRROR
-                    };
-                    gFormState.shieldCollider.base.colType = sZoraShieldColTypes[player->currentShield];
+                    gFormState.shieldCollider.base.colType = COLTYPE_METAL;
                     Collider_UpdateCylinder(&player->actor, &gFormState.shieldCollider);
                     CollisionCheck_SetAC(play, &play->colChkCtx, &gFormState.shieldCollider.base);
                 }
@@ -12769,15 +13541,10 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
                     player->cylinder.dim.height = (s16)(props->cylinderHeight * 0.8f);
                 }
 
-                // Register shield collider with equipped shield's collision type
+                // Register the shield collider with a fixed collision type — the form
+                // guards with its own body, so the equipped shield must not change it.
                 if (gFormState.shieldColliderInitDone) {
-                    static const u8 sDekuShieldColTypes[] = {
-                        COLTYPE_METAL, // PLAYER_SHIELD_NONE
-                        COLTYPE_WOOD,  // PLAYER_SHIELD_DEKU
-                        COLTYPE_METAL, // PLAYER_SHIELD_HYLIAN
-                        COLTYPE_METAL, // PLAYER_SHIELD_MIRROR
-                    };
-                    gFormState.shieldCollider.base.colType = sDekuShieldColTypes[player->currentShield];
+                    gFormState.shieldCollider.base.colType = COLTYPE_METAL;
                     Collider_UpdateCylinder(&player->actor, &gFormState.shieldCollider);
                     CollisionCheck_SetAC(play, &play->colChkCtx, &gFormState.shieldCollider.base);
                 }
@@ -12785,13 +13552,12 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
                 // sees the block via AC_BOUNCED (see helper header).
                 MmForm_ActivateFormShieldQuad(player, play);
             }
-            // Gerudo never enters MMFORM_ACT_SHIELD — its R block is OOT's
-            // vanilla Mirror Shield (see TransformMasks_FilterB / GerudoForm_Update).
+            // Gerudo never enters MMFORM_ACT_SHIELD — R is the MHR wirebug modifier,
+            // and OOT's vanilla shield action is blocked for it via MmForm_GetShieldMode.
 
-            // Mirror Shield: set reflection flag (visual + light-beam reflection)
-            if (player->currentShield == PLAYER_SHIELD_MIRROR) {
-                player->stateFlags2 |= PLAYER_STATE2_REFLECTION;
-            }
+            // No PLAYER_STATE2_REFLECTION: a transformed form never reflects light,
+            // with or without the Mirror Shield equipped (user decision 2026-07-28).
+            // Detransform to use the Mirror Shield.
 
             // === Directional control (ALL forms, including Goron for mirror shield aiming) ===
             // From 2Ship Player_Action_18 (z_player.c line 14918-14940):
@@ -12935,10 +13701,8 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // Deku bubble projectile: update physics every frame (independent of action state)
     MmForm_UpdateBubbleProjectile(player, play);
 
-    // Zora boomerang tracking: runs in background while player moves freely (state 3)
-    // From MM Player_UpperAction_15: runs every frame, checks if boomerangs returned.
-    // Player is NOT locked — can walk, run, jump attack, etc. during flight.
-    MmForm_TrackBoomerangsInFlight(player, play);
+    // (Boomerang flight tracking moved to the TOP of MmForm_UpdateActive — here it sat
+    // after the OOT-yield `return` and silently stopped running. See the note there.)
 
     // (Catch animation is now driven by the boomerang state machine in the Zora sync block
     // at the top of MmForm_UpdateActive. The action dispatch guard above blocks dispatch
@@ -12965,14 +13729,14 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
 // =============================================================================
 
 static void MmForm_UpdateTransforming(Player* player, PlayState* play) {
-    // Garo + Gerudo bundle their own .o2r (garo.o2r / gerudo.o2r) and don't
+    // Garo + Gerudo bundle their own .o2r (soh.o2r / soh.o2r) and don't
     // ship the maskOff/maskOn animations that the full cutscene plays from
     // mm.o2r — force the instant 5-frame flash transform for them. Other
     // forms honor the user's CVar preference.
-    u8 forceInstantForLocalForm = (gFormState.targetForm == MM_PLAYER_FORM_GARO ||
-                                   gFormState.targetForm == MM_PLAYER_FORM_GERUDO);
-    u8 instantTransform = CVarGetInteger("gMods.TransformMasks.InstantTransform", 0) ||
-                          sForceInstantTransform || forceInstantForLocalForm;
+    u8 forceInstantForLocalForm =
+        (gFormState.targetForm == MM_PLAYER_FORM_GARO || gFormState.targetForm == MM_PLAYER_FORM_GERUDO);
+    u8 instantTransform = CVarGetInteger("gMods.TransformMasks.InstantTransform", 0) || sForceInstantTransform ||
+                          forceInstantForLocalForm;
 
     if (instantTransform) {
         // Instant transform: 5-frame flash
@@ -13072,6 +13836,34 @@ static void MmForm_UpdateTransforming(Player* player, PlayState* play) {
                     // D_8085D8F0 and dispatched at frames 2/4/11/20/30 below.
 
                     // Play transform voice SFX at frame 30 (handled below)
+
+                    // MM's actual "raise the mask to your face" animation. The cutscene
+                    // has always been silent-but-frozen here for every form; the Rito
+                    // plays the real thing because its rig IS Link's, so cl_setmask
+                    // (child-Link animation, from mm.o2r) fits without retargeting.
+                    //
+                    // OOT runs LinkAnimation_Update from inside each action function, so
+                    // the action func has to be paused for this to survive — and then the
+                    // animation has to be ticked by hand below, which is exactly what
+                    // phase 2 already does for the form's own skeleton.
+                    sCutsceneMaskAnim = 0;
+                    if (gFormState.targetForm == MM_PLAYER_FORM_RITO) {
+                        LinkAnimationHeader* setMask = MmAnim_Load(MM_ANIM_CL_SETMASK);
+                        if (setMask != NULL) {
+                            LinkAnimation_PlayOnce(play, &player->skelAnime, setMask);
+                            sCutsceneMaskAnim = 1;
+                        }
+                        // No mm.o2r → no animation, and the cutscene stays exactly as it
+                        // is for every other form. Nothing else depends on it.
+                    }
+                }
+
+                // Own the pose while the mask goes on: re-arm the pause every frame
+                // (a couple of places in z_player.c clear it) and advance the animation
+                // ourselves, since the paused action function is what would normally do it.
+                if (sCutsceneMaskAnim) {
+                    player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
+                    LinkAnimation_Update(play, &player->skelAnime);
                 }
 
                 // SFX at specific frames (from 2Ship D_8085D8F0, z_player.c.ref:18992)
@@ -13093,6 +13885,12 @@ static void MmForm_UpdateTransforming(Player* player, PlayState* play) {
 
                 // Build toward flash
                 if (gFormState.cutsceneTimer >= 40) {
+                    // Hand the action function back before the flash: from here the form
+                    // (or OOT, for a passive form like the Rito) owns the player again.
+                    if (sCutsceneMaskAnim) {
+                        player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
+                        sCutsceneMaskAnim = 0;
+                    }
                     gFormState.cutscenePhase = 1;
                 }
                 break;
@@ -13158,10 +13956,9 @@ static void MmForm_UpdateTransforming(Player* player, PlayState* play) {
 static void MmForm_UpdateDetransforming(Player* player, PlayState* play) {
     // Garo + Gerudo bundle their own .o2r and don't ship the maskOff/maskOn
     // cutscene anims; force instant de-transform for them.
-    u8 forceInstantForLocalForm = (gFormState.currentForm == MM_PLAYER_FORM_GARO ||
-                                   gFormState.currentForm == MM_PLAYER_FORM_GERUDO);
-    u8 instantTransform = CVarGetInteger("gMods.TransformMasks.InstantTransform", 0) ||
-                          forceInstantForLocalForm;
+    u8 forceInstantForLocalForm =
+        (gFormState.currentForm == MM_PLAYER_FORM_GARO || gFormState.currentForm == MM_PLAYER_FORM_GERUDO);
+    u8 instantTransform = CVarGetInteger("gMods.TransformMasks.InstantTransform", 0) || forceInstantForLocalForm;
 
     if (instantTransform) {
         // Instant de-transform: 5-frame flash
@@ -13290,9 +14087,27 @@ static u8 MmForm_UsesOotAnim(void) {
     // run, jump, ledge, swim_idle, etc. fall back to Link's anims even if the form
     // forgot to load a specific anim for that action.
 
-    // OOT yield: copy OOT joints unless gakki (instrument) overrides.
+    // Gakki (instrument) owns the pose for as long as it is up, WHATEVER action OOT is in.
+    // This used to be checked only for MMFORM_ACT_OOT_ACTION, which silently stopped working
+    // the moment the ocarina actually opened: OOT enters its item cutscene, the CS gate above
+    // rewrites goronAction (logs show it going 46 -> 0 on the very frame Message_StartOcarina
+    // displays textId 0x86E), the OOT_ACTION branch no longer matches, and we fell through to
+    // "copy OOT joints" — painting Link's ocarina pose over the form's gakkiplay animation.
+    // That is the "entran en pose de ocarina" bug: the instrument animation was being
+    // overwritten by Link's, one frame after the ocarina opened.
+    if (gFormState.gakkiActive) {
+        return 0;
+    }
+
+    // OOT yield: copy OOT joints.
     if (act == MMFORM_ACT_OOT_ACTION) {
-        return gFormState.gakkiActive ? 0 : 1;
+        return 1;
+    }
+
+    // Gerudo is vanilla Link re-skinned: OOT's joints ALWAYS, except while her
+    // controller drives one of its own clips (rage enter, rage roll, front slash...).
+    if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
+        return GerudoMhr_DrivingClip() ? 0 : 1;
     }
 
     // Form-specific actions: animation comes from formSkelAnime (form-loaded anim).
@@ -13364,6 +14179,49 @@ static u8 MmForm_UsesOotAnim(void) {
 static s32 MmForm_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, void* thisx) {
     Player* player = (Player*)thisx;
 
+    // Gerudo upper body: Player_OverrideLimbDrawGameplay never runs for a form, so
+    // OOT's own upperLimbRot (the shield aim, the crouch-stab twist) has to be applied
+    // here for her, plus the guard's fixed offset so the crossed blades face front.
+    // Same rotation order as z_player_lib.c (Y, X, Z).
+    if ((limbIndex == PLAYER_LIMB_UPPER) && (gFormState.currentForm == MM_PLAYER_FORM_GERUDO)) {
+        Vec3s guard;
+        u8 hasGuard = GerudoMhr_GetShieldUpperRot(player, &guard);
+        if (player->upperLimbRot.y != 0) {
+            Matrix_RotateY(player->upperLimbRot.y * (M_PI / 0x8000), MTXMODE_APPLY);
+        }
+        if (player->upperLimbRot.x != 0) {
+            Matrix_RotateX(player->upperLimbRot.x * (M_PI / 0x8000), MTXMODE_APPLY);
+        }
+        if (player->upperLimbRot.z != 0) {
+            Matrix_RotateZ(player->upperLimbRot.z * (M_PI / 0x8000), MTXMODE_APPLY);
+        }
+        if (hasGuard) {
+            if (guard.y != 0)
+                Matrix_RotateY(guard.y * (M_PI / 0x8000), MTXMODE_APPLY);
+            if (guard.x != 0)
+                Matrix_RotateX(guard.x * (M_PI / 0x8000), MTXMODE_APPLY);
+            if (guard.z != 0)
+                Matrix_RotateZ(guard.z * (M_PI / 0x8000), MTXMODE_APPLY);
+        }
+    }
+
+    // Gerudo: the same treatment for the two shoulders while she guards. The guard is a
+    // held pose, not an animation, so the arms can only be posed here — and a couple of
+    // degrees of shoulder roll is what makes the crossed scimitars read. Same Y, X, Z
+    // order as above; the angles are baked constants in gerudo_mhr_combat.inc.c.
+    if (((limbIndex == PLAYER_LIMB_L_SHOULDER) || (limbIndex == PLAYER_LIMB_R_SHOULDER)) &&
+        (gFormState.currentForm == MM_PLAYER_FORM_GERUDO)) {
+        Vec3s shoulder;
+        if (GerudoMhr_GetShieldShoulderRot(player, limbIndex, &shoulder)) {
+            if (shoulder.y != 0)
+                Matrix_RotateY(shoulder.y * (M_PI / 0x8000), MTXMODE_APPLY);
+            if (shoulder.x != 0)
+                Matrix_RotateX(shoulder.x * (M_PI / 0x8000), MTXMODE_APPLY);
+            if (shoulder.z != 0)
+                Matrix_RotateZ(shoulder.z * (M_PI / 0x8000), MTXMODE_APPLY);
+        }
+    }
+
     // From 2Ship Player_OverrideLimbDrawGameplayCommon (z_player_lib.c line 2419):
     // Scale root position (jointTable[0]) by per-form rootAnimScale.
     if (limbIndex == 1) { // limbIndex 1 = root limb (SkelAnime uses 1-based indexing)
@@ -13378,6 +14236,29 @@ static s32 MmForm_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, 
                 // mirrors how Deku's 0.3f scale brings the small body down to ground.
                 if (form == MM_PLAYER_FORM_GERUDO && LINK_IS_CHILD) {
                     scale = 0.71f;
+                }
+                // Gerudo hovers a little in EVERY pose: her rig's legs do not reach as far
+                // down as Link's, and the joints painted onto her are his. The root limb is
+                // the one place that fixes all poses at once — every animation, hers or
+                // OOT's, is positioned through it — so she is dropped by a fixed amount
+                // here instead of per-clip. Model units: the player matrix is 0.01, so 100
+                // of these is one world unit. Skijer's NEI
+                if (form == MM_PLAYER_FORM_GERUDO) {
+                    pos->y -= GERUDO_ROOT_DROP;
+                }
+                // Rito is the mirror case: its rig IS OOT's child skeleton (same
+                // jointPos as MM's human Link), so as CHILD it already lines up 1:1
+                // and only ADULT needs the 0.7036 compression from sFormProps.
+                if (form == MM_PLAYER_FORM_RITO && LINK_IS_CHILD) {
+                    scale = 1.0f;
+                }
+                // Keaton is NOT that case. Its rig has deliberately short legs, so the
+                // body hangs 1091 below the root at EITHER age — 1.0f would leave it
+                // floating just as badly as adult's 0.7036 did. A child animation drives
+                // the root to ~2376 instead of the adult 3377, so putting the root at the
+                // same 1131 needs 1131/2376 here against sFormProps' 1131/3377.
+                if (form == MM_PLAYER_FORM_KEATON && LINK_IS_CHILD) {
+                    scale = 0.476f;
                 }
                 pos->x *= scale;
                 pos->y *= scale;
@@ -13451,6 +14332,33 @@ static s32 MmForm_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, 
     // Items FD can use: Swords, Hammer, Fire/Ice/Light Rods, Ball and Chain, Bottles, Nuts.
     // For items with model baked into hand DL (Hammer), don't override — let OOT draw it.
     // For items drawn separately (Rods via CustomItems_Draw), use FD empty hand.
+    // ── Gakki instrument model: ONE rule for every form ──────────────────────────────
+    // While the instrument is out, the hand limb draws the instrument DL declared in the
+    // form's sFormGakkiInstruments row instead of Link's hand. This is how the Gerudo gets
+    // Skull Kid's flute: his model ships INSIDE gSkullKidLeftHandAndFluteDL — the very hand
+    // that the retargeted gSkullKidPlayFluteAnim animates — so swapping this one list puts
+    // hand and flute in place together, already posed by the animation.
+    // MM's own forms leave instrumentDL NULL because their instrument is part of the form
+    // model (drum/pipes are drawn further down in MmForm_Draw), so they skip this entirely.
+    // Three cases, and the difference matters:
+    //   NULL           → leave rendering alone (MM forms: instrument is part of the model)
+    //   GAKKI_DL_HIDE  → draw nothing on that limb, so OoT's ocarina goes invisible. For
+    //                    forms that make the sound with their body (Kafei whistling).
+    //   a DL path      → draw that instrument (Gerudo: Skull Kid's hand+flute list)
+    if (gFormState.gakkiActive != 0) {
+        const char* instDL = MmGakki_GetInstrumentDL(gFormState.currentForm);
+        if (instDL != NULL && limbIndex == MmGakki_GetInstrumentLimb(gFormState.currentForm)) {
+            if (instDL == GAKKI_DL_HIDE) {
+                *dList = NULL; // hides the held ocarina along with the hand mesh
+            } else {
+                Gfx* dl = ResourceMgr_LoadGfxByName(instDL);
+                if (dl != NULL) {
+                    *dList = dl;
+                }
+            }
+        }
+    }
+
     if (gFormState.currentForm == MM_PLAYER_FORM_FIERCE_DEITY) {
         if (limbIndex == PLAYER_LIMB_L_HAND) {
             Gfx* fdDL = NULL;
@@ -13496,7 +14404,7 @@ static s32 MmForm_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, 
     }
 
     // =========================================================================
-    // Gerudo: dual-scimitar override on BOTH hands. The gerudo.o2r ships the
+    // Gerudo: dual-scimitar override on BOTH hands. The soh.o2r ships the
     // OOT "left hand holding master/kokiri sword" DL — we attach the same DL to
     // L_HAND and R_HAND (the right-hand bone matrix is mirrored, so the second
     // sword renders with correct orientation). Sheath/back-sword DLs cleared
@@ -13506,10 +14414,12 @@ static s32 MmForm_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, 
     if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
         if (limbIndex == PLAYER_LIMB_L_HAND) {
             Gfx* swL = GerudoForm_GetSwordDL_L();
-            if (swL != NULL) *dList = swL;
+            if (swL != NULL)
+                *dList = swL;
         } else if (limbIndex == PLAYER_LIMB_R_HAND) {
             Gfx* swR = GerudoForm_GetSwordDL_R();
-            if (swR != NULL) *dList = swR;
+            if (swR != NULL)
+                *dList = swR;
         } else if (limbIndex == PLAYER_LIMB_SHEATH) {
             *dList = NULL; // no sheath / back-sword in gerudo form
         }
@@ -13563,6 +14473,36 @@ extern "C" void MmForm_KillTrail(PlayState* play, s32* effectIndex, u8* active) 
         *active = 0;
         *effectIndex = -1;
     }
+}
+
+// The Rito's own shield, built at the vanilla Deku shield's footprint with the
+// Rito textures (apps/build_rito_shield.py writes it into both games' assets/custom).
+static Gfx* MmForm_RitoShieldDL(void) {
+    static Gfx* sCached = NULL;
+    static u8 sTried = 0;
+
+    if (!sTried) {
+        sTried = 1;
+        const char* otr = "__OTR__objects/object_nei_rito_shield/gRitoShieldDL";
+        if (ResourceMgr_FileExists(otr)) {
+            sCached = ResourceMgr_LoadGfxByName(otr);
+        } else {
+            SPDLOG_WARN("[Rito] shield model missing — run apps/build_rito_shield.py and rebuild soh.o2r");
+        }
+    }
+    return sCached;
+}
+
+// 1 while the Rito is holding its shield up: this is what gives it the Mirror
+// Shield's reflections (z_player_lib.c's two predicates defer to it).
+extern "C" u8 MmForm_RitoShieldIsUp(void) {
+    Player* player;
+
+    if ((gFormState.currentForm != MM_PLAYER_FORM_RITO) || (gPlayState == NULL) || MmForm_RitoBowIsOut()) {
+        return 0;
+    }
+    player = GET_PLAYER(gPlayState);
+    return (player != NULL) && ((player->stateFlags1 & PLAYER_STATE1_SHIELDING) != 0);
 }
 
 static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, void* thisx) {
@@ -13655,6 +14595,14 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
     // causing the mirror shield light beam to stay stuck at the human form's hand.
     // OOT carried/held actor: z_player_lib.c:2051-2064.
     if (limbIndex == PLAYER_LIMB_R_HAND) {
+        // Gerudo Dual Blades: player->mf_9E0 is the LEFT hand — that is where vanilla
+        // captures it (Link holds the sword left-handed), which is why hanging a second
+        // charge glow on it drew the same glow twice in the same place. She carries a
+        // blade in each hand, so the RIGHT one is what was missing. Skijer's NEI
+        if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) {
+            Matrix_Get(&gGerudoRightHandMtx);
+        }
+
         if (player->actor.scale.y >= 0.0f) {
             // Update shieldMf ONLY when actively shielding.
             // MM forms must NOT reflect mirror shield light when not holding R.
@@ -13832,6 +14780,52 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
         }
     }
 
+    // === 7b. Rito shield + bow reticle ===
+    // Neither can ride the vanilla path: Player_PostLimbDrawGameplay (which draws the
+    // shield, captures shieldMf and fires VB_DRAW_ADDITIONAL_RETICLES) does not run for
+    // a FULL form — this function replaces it.
+    //
+    // Placement is MEASURED, not tuned: the shield model is built at the vanilla Deku
+    // shield's own footprint (1672 x 1672 x 110), so it needs no scale and no rotation,
+    // only the centre offset the vanilla DL has in each limb's space. Read off
+    // assets/custom/objects/forms/gerudo/object_link_child/*DekuShield*_vtx_*.
+    if (gFormState.currentForm == MM_PLAYER_FORM_RITO) {
+        u8 inHand = (player->stateFlags1 & PLAYER_STATE1_SHIELDING) != 0;
+
+        if (!MmForm_RitoBowIsOut() && (limbIndex == (inHand ? PLAYER_LIMB_R_HAND : PLAYER_LIMB_SHEATH))) {
+            Gfx* dl = MmForm_RitoShieldDL();
+
+            if (dl != NULL) {
+                OPEN_DISPS(play->state.gfxCtx);
+                Matrix_Push();
+                if (inHand) {
+                    Matrix_Translate(-20.0f, 115.5f, -145.5f, MTXMODE_APPLY);
+                } else {
+                    Matrix_Translate(608.0f, 10.0f, -142.5f, MTXMODE_APPLY);
+                }
+                // Mir_Ray and Twinrova read the reflection direction off this matrix.
+                // Capturing it here is what makes the mirror behaviour aim correctly.
+                if (inHand) {
+                    Matrix_Get(&player->shieldMf);
+                }
+                gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                          G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+                gSPDisplayList(POLY_XLU_DISP++, dl);
+                Matrix_Pop();
+                CLOSE_DISPS(play->state.gfxCtx);
+            }
+        }
+
+        // Same hand offsets AdditionalReticles.cpp calibrated for the vanilla bow.
+        if (MmForm_RitoBowIsAiming() && (limbIndex == PLAYER_LIMB_R_HAND)) {
+            Matrix_Push();
+            Matrix_RotateZYX(0, -15216, -17496, MTXMODE_APPLY);
+            Matrix_Translate(500.0f, 300.0f, 0.0f, MTXMODE_APPLY);
+            Player_DrawHookshotReticle(play, player, 3.402823466e+12f);
+            Matrix_Pop();
+        }
+    }
+
     // === 8. Zora forearm fin/shield DLs ===
     // From 2Ship z_player_lib.c func_80126BD0 (line 3001):
     // Draws fin/blade extensions on forearms. Called at PLAYER_LIMB_LEFT_FOREARM (arg2=0)
@@ -13890,19 +14884,22 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
             //   { 8, {100, 100, 100} }   hold full
             f32 scX, scY, scZ;
             u8 isShield = (gFormState.goronAction == MMFORM_ACT_SHIELD);
-            u8 isPunch = (gFormState.goronAction == GORON_ACT_PUNCH_A ||
-                          gFormState.goronAction == GORON_ACT_PUNCH_B ||
+            u8 isPunch = (gFormState.goronAction == GORON_ACT_PUNCH_A || gFormState.goronAction == GORON_ACT_PUNCH_B ||
                           gFormState.goronAction == GORON_ACT_PUNCH_C);
             // Z-target shield-walk: no actionTimer ramp (we never entered
             // MMFORM_ACT_SHIELD), so just show fins at full extension.
             if (gFormState.zoraZTargetShield && !isShield) {
-                scX = 1.0f; scY = 1.0f; scZ = 1.0f;
+                scX = 1.0f;
+                scY = 1.0f;
+                scZ = 1.0f;
             } else if (isShield) {
                 // Frame-based blade-on ramp using actionTimer (= frames since
                 // shield entry, reset to 0 by MmForm_SetAction on EnterShield).
                 f32 t = (f32)gFormState.actionTimer;
                 if (t <= 3.0f) {
-                    scX = 0.40f; scY = 0.60f; scZ = 0.70f;
+                    scX = 0.40f;
+                    scY = 0.60f;
+                    scZ = 0.70f;
                 } else if (t < 4.0f) {
                     f32 a = t - 3.0f;
                     scX = 0.40f + (0.75f - 0.40f) * a;
@@ -13919,14 +14916,20 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
                     scY = 1.20f + (1.00f - 1.20f) * a;
                     scZ = 1.00f;
                 } else {
-                    scX = 1.0f; scY = 1.0f; scZ = 1.0f;
+                    scX = 1.0f;
+                    scY = 1.0f;
+                    scZ = 1.0f;
                 }
             } else if (gFormState.boomerangState == 1 || isPunch) {
                 // Boomerang aim / punch — straight to full.
-                scX = 1.0f; scY = 1.0f; scZ = 1.0f;
+                scX = 1.0f;
+                scY = 1.0f;
+                scZ = 1.0f;
             } else {
                 // Default fins (idle, walk, run, swim).
-                scX = 0.4f; scY = 0.6f; scZ = 0.7f;
+                scX = 0.4f;
+                scY = 0.6f;
+                scZ = 0.7f;
             }
 
             // The special shield-only DL is drawn raw (no scale) per MM
@@ -13934,7 +14937,9 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
             // gSPDisplayList with NO Matrix_Scale in between). Force 1.0
             // when we're substituting it for the right-forearm fin.
             if (isShieldRight) {
-                scX = 1.0f; scY = 1.0f; scZ = 1.0f;
+                scX = 1.0f;
+                scY = 1.0f;
+                scZ = 1.0f;
             }
 
             OPEN_DISPS(play->state.gfxCtx);
@@ -13994,13 +14999,13 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
                         // big sweeping white arc that goes from elbow out past
                         // the fin tip. Previously used (0, -800, 0) which was
                         // ~8 world units → almost invisible trail.
-                        static Vec3f sZoraTrailTip  = { -2500.0f, 1400.0f, 1100.0f };
-                        static Vec3f sZoraTrailBase = {   900.0f,  300.0f,  100.0f };
+                        static Vec3f sZoraTrailTip = { -2500.0f, 1400.0f, 1100.0f };
+                        static Vec3f sZoraTrailBase = { 900.0f, 300.0f, 100.0f };
                         Vec3f tipW, baseW;
-                        Matrix_MultVec3f(&sZoraTrailTip,  &tipW);
+                        Matrix_MultVec3f(&sZoraTrailTip, &tipW);
                         Matrix_MultVec3f(&sZoraTrailBase, &baseW);
-                        EffectBlure_AddVertex((EffectBlure*)Effect_GetByIndex(gFormState.punchTrailEffectIndex),
-                                              &tipW, &baseW);
+                        EffectBlure_AddVertex((EffectBlure*)Effect_GetByIndex(gFormState.punchTrailEffectIndex), &tipW,
+                                              &baseW);
                     }
                 }
             }
@@ -14017,16 +15022,14 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
     // These MM-coord values (≈30 world units) produce the big visible white
     // arc that wraps Deku's head during the spin. Smaller values render an
     // almost-invisible trail.
-    if (gFormState.currentForm == MM_PLAYER_FORM_DEKU &&
-        gFormState.goronAction == MMFORM_ACT_DEKU_SPIN &&
+    if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.goronAction == MMFORM_ACT_DEKU_SPIN &&
         limbIndex == PLAYER_LIMB_HAT && gFormState.punchTrailActive) {
-        static Vec3f sDekuTrailTip  = { 3000.0f, 0.0f, 0.0f };
+        static Vec3f sDekuTrailTip = { 3000.0f, 0.0f, 0.0f };
         static Vec3f sDekuTrailBase = { 2300.0f, 0.0f, 0.0f };
         Vec3f tipW, baseW;
-        Matrix_MultVec3f(&sDekuTrailTip,  &tipW);
+        Matrix_MultVec3f(&sDekuTrailTip, &tipW);
         Matrix_MultVec3f(&sDekuTrailBase, &baseW);
-        EffectBlure_AddVertex((EffectBlure*)Effect_GetByIndex(gFormState.punchTrailEffectIndex),
-                              &tipW, &baseW);
+        EffectBlure_AddVertex((EffectBlure*)Effect_GetByIndex(gFormState.punchTrailEffectIndex), &tipW, &baseW);
     }
 
     // === 8b. Gerudo dual-scimitar trails + bone-attached hitbox quads ===
@@ -14047,18 +15050,22 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
     // is itself gated on `currentForm == ZORA`. Placing it inside there would
     // make it dead code for Gerudo (which is exactly the bug that hid the trail).
     {
-        u8 isPunchAction = (gFormState.goronAction >= GORON_ACT_PUNCH_A &&
-                            gFormState.goronAction <= GORON_ACT_PUNCH_C) ||
-                            gFormState.goronAction == GORON_ACT_PUNCH_END ||
-                            gFormState.goronAction == MMFORM_ACT_JUMP_KICK; // Gerudo aerial slash
-        if (gFormState.currentForm == MM_PLAYER_FORM_GERUDO &&
-            isPunchAction &&
+        // Gerudo blades. Gated by the moveset (gerudo_mhr_combat.inc.c) through
+        // GerudoMhr_GetBladeGate: trailOn while a swing or a controller clip runs;
+        // mask = which blade may damage this frame; ownFlags = the controller clip
+        // wrote its own dmgFlags/damage, otherwise KEEP the flags OOT's func_80837948
+        // set for the tier (that is what makes rage's tier bump land).
+        //
+        // player->meleeWeaponInfo[0..2] are fed like vanilla's func_800906D4 does, so
+        // OOT's own wall-bounce / hit-stop (func_80842DF4) sees real blade positions.
+        u8 gerudoMask = 0, gerudoOwn = 0, gerudoDmg = 0;
+        u32 gerudoFlags = 0;
+        u8 gerudoTrail = (gFormState.currentForm == MM_PLAYER_FORM_GERUDO)
+                             ? GerudoMhr_GetBladeGate(&gerudoMask, &gerudoOwn, &gerudoFlags, &gerudoDmg)
+                             : 0;
+        if ((gFormState.currentForm == MM_PLAYER_FORM_GERUDO) && (gerudoTrail || gerudoMask) &&
             (limbIndex == PLAYER_LIMB_L_HAND || limbIndex == PLAYER_LIMB_R_HAND)) {
-            static WeaponInfo sGerudoTrailInfoL = { 0 };
             static WeaponInfo sGerudoTrailInfoR = { 0 };
-            static WeaponInfo sGerudoQuadInfoL  = { 0 };
-            static WeaponInfo sGerudoQuadInfoR  = { 0 };
-
             Vec3f swordTips[3];
             Vec3f swordBases[3];
 
@@ -14069,97 +15076,48 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
             Matrix_MultVec3f(&D_801260A4[2], &swordBases[2]);
 
             if (limbIndex == PLAYER_LIMB_L_HAND) {
-                // L trail: feed every frame of the punch action (windup → hit → recovery).
-                if (gFormState.punchTrailActive) {
+                // L trail + meleeWeaponInfo[0] (OOT's wall probe reads this one).
+                u8 moved = func_80090480(play, NULL, &player->meleeWeaponInfo[0], &swordTips[0], &swordBases[0]);
+                if (gerudoTrail && gFormState.punchTrailActive) {
                     EffectBlure* trail = (EffectBlure*)Effect_GetByIndex(gFormState.punchTrailEffectIndex);
-                    if (trail != NULL) {
+                    if (trail != NULL && moved) {
                         EffectBlure_ChangeType(trail, TRAIL_TYPE_MASTER_SWORD);
-                        if (func_80090480(play, NULL, &sGerudoTrailInfoL, &swordTips[0], &swordBases[0])) {
-                            EffectBlure_AddVertex(trail, &sGerudoTrailInfoL.tip, &sGerudoTrailInfoL.base);
-                        }
+                        EffectBlure_AddVertex(trail, &player->meleeWeaponInfo[0].tip, &player->meleeWeaponInfo[0].base);
                     }
                 }
-                // L hitbox quad — only ON during the actual hit-frame window.
-                if (gFormState.gerudoQuadsActive) {
-                    player->meleeWeaponQuads[0].base.atFlags = AT_ON | AT_TYPE_PLAYER;
-                    player->meleeWeaponQuads[0].info.toucher.dmgFlags = DMG_SLASH_KOKIRI;
-                    player->meleeWeaponQuads[0].info.toucher.damage = gFormState.gerudoQuadDamage;
-                    player->meleeWeaponQuads[0].info.toucherFlags = TOUCH_ON | TOUCH_NEAREST;
-                    func_80090480(play, &player->meleeWeaponQuads[0], &sGerudoQuadInfoL,
-                                  &swordTips[1], &swordBases[1]);
+                if (gerudoMask & 1) {
+                    player->meleeWeaponQuads[0].base.atFlags |= AT_ON;
+                    if (gerudoOwn) {
+                        player->meleeWeaponQuads[0].info.toucher.dmgFlags = gerudoFlags;
+                        player->meleeWeaponQuads[0].info.toucher.damage = gerudoDmg;
+                        player->meleeWeaponQuads[0].info.toucherFlags = TOUCH_ON | TOUCH_NEAREST;
+                    }
+                    func_80090480(play, &player->meleeWeaponQuads[0], &player->meleeWeaponInfo[1], &swordTips[1],
+                                  &swordBases[1]);
+                } else {
+                    player->meleeWeaponQuads[0].base.atFlags &= ~AT_ON;
                 }
             } else { // PLAYER_LIMB_R_HAND
-                // R trail: same pattern as L.
-                if (gFormState.punchTrailActiveR) {
+                u8 moved = func_80090480(play, NULL, &sGerudoTrailInfoR, &swordTips[0], &swordBases[0]);
+                if (gerudoTrail && gFormState.punchTrailActiveR) {
                     EffectBlure* trail = (EffectBlure*)Effect_GetByIndex(gFormState.punchTrailEffectIndexR);
-                    if (trail != NULL) {
+                    if (trail != NULL && moved) {
                         EffectBlure_ChangeType(trail, TRAIL_TYPE_MASTER_SWORD);
-                        if (func_80090480(play, NULL, &sGerudoTrailInfoR, &swordTips[0], &swordBases[0])) {
-                            EffectBlure_AddVertex(trail, &sGerudoTrailInfoR.tip, &sGerudoTrailInfoR.base);
-                        }
+                        EffectBlure_AddVertex(trail, &sGerudoTrailInfoR.tip, &sGerudoTrailInfoR.base);
                     }
                 }
-                // R hitbox quad — only ON during the hit-frame window.
-                if (gFormState.gerudoQuadsActive) {
-                    player->meleeWeaponQuads[1].base.atFlags = AT_ON | AT_TYPE_PLAYER;
-                    player->meleeWeaponQuads[1].info.toucher.dmgFlags = DMG_SLASH_KOKIRI;
-                    player->meleeWeaponQuads[1].info.toucher.damage = gFormState.gerudoQuadDamage;
-                    player->meleeWeaponQuads[1].info.toucherFlags = TOUCH_ON | TOUCH_NEAREST;
-                    func_80090480(play, &player->meleeWeaponQuads[1], &sGerudoQuadInfoR,
-                                  &swordTips[1], &swordBases[1]);
-                }
-            }
-
-            // === Wall hit detection + recoil (vanilla parity, z_player.c:func_80842DF4) ===
-            // During the hit-frame window on a non-spin slash, line-trace from the
-            // sword base out past the tip. If the trace hits world geometry that
-            // entities aren't supposed to ignore, spawn the vanilla white shield-
-            // spark VFX at the hit point, play the wall-hit SFX, and recoil Link
-            // backward (linearVelocity = -14, same magnitude as Link's vanilla
-            // sword-into-wall bump). Skipped for step 4 (Wrolling spin) — spin
-            // attacks sweep through walls without recoiling, matching vanilla.
-            // Static "already bounced this slash" sentinel prevents the recoil
-            // from firing every single frame of the hit window once it triggers.
-            static u8 sGerudoWallBouncedStep = 0xFF; // last step we recoiled in
-            u8 step = gFormState.comboStep;
-            if (gFormState.gerudoQuadsActive && step < 4 && sGerudoWallBouncedStep != step) {
-                // Extend the segment ~10 units past the tip so we catch walls the
-                // sword just barely reaches (vanilla uses the same extension).
-                Vec3f diff;
-                f32 dist = Math_Vec3f_DistXYZAndStoreDiff(&swordTips[0], &swordBases[0], &diff);
-                f32 ext = (dist != 0.0f) ? ((dist + 10.0f) / dist) : 1.0f;
-                Vec3f probeEnd;
-                probeEnd.x = swordTips[0].x + (diff.x * ext);
-                probeEnd.y = swordTips[0].y + (diff.y * ext);
-                probeEnd.z = swordTips[0].z + (diff.z * ext);
-
-                Vec3f hitPos;
-                CollisionPoly* hitPoly = NULL;
-                s32 hitBgId;
-                if (BgCheck_EntityLineTest1(&play->colCtx, &probeEnd, &swordTips[0], &hitPos, &hitPoly, true, false,
-                                            false, true, &hitBgId) &&
-                    !SurfaceType_IsIgnoredByEntities(&play->colCtx, hitPoly, hitBgId) &&
-                    (SurfaceType_GetFloorType(&play->colCtx, hitPoly, hitBgId) != 6)) {
-                    // Sparks + SFX (soft / hard / wood depending on surface).
-                    u32 surfaceCat = func_80041F10(&play->colCtx, hitPoly, hitBgId);
-                    CollisionCheck_SpawnShieldParticles(play, &hitPos);
-                    if (surfaceCat == 0xB) {
-                        Player_PlaySfx(&player->actor, NA_SE_IT_WALL_HIT_SOFT);
-                    } else {
-                        Player_PlaySfx(&player->actor, NA_SE_IT_WALL_HIT_HARD);
+                if (gerudoMask & 2) {
+                    player->meleeWeaponQuads[1].base.atFlags |= AT_ON;
+                    if (gerudoOwn) {
+                        player->meleeWeaponQuads[1].info.toucher.dmgFlags = gerudoFlags;
+                        player->meleeWeaponQuads[1].info.toucher.damage = gerudoDmg;
+                        player->meleeWeaponQuads[1].info.toucherFlags = TOUCH_ON | TOUCH_NEAREST;
                     }
-                    // Recoil — match vanilla magnitude. Also mark the quad as bounced
-                    // so OOT's downstream checks see this as a non-damaging swing.
-                    player->linearVelocity = -14.0f;
-                    Player_RequestRumble(player, 180, 20, 100, 0);
-                    player->meleeWeaponQuads[0].base.atFlags |= AT_BOUNCED;
-                    player->meleeWeaponQuads[1].base.atFlags |= AT_BOUNCED;
-                    sGerudoWallBouncedStep = step; // one bounce per slash
+                    func_80090480(play, &player->meleeWeaponQuads[1], &player->meleeWeaponInfo[2], &swordTips[1],
+                                  &swordBases[1]);
+                } else {
+                    player->meleeWeaponQuads[1].base.atFlags &= ~AT_ON;
                 }
-            } else if (!gFormState.gerudoQuadsActive) {
-                // Active window ended — reset the sentinel so the NEXT slash can
-                // recoil again (otherwise only the very first hit window ever bounces).
-                sGerudoWallBouncedStep = 0xFF;
             }
         }
     }
@@ -14212,8 +15170,10 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
                 f32 stemScale = 1.0f;
                 if (gFormState.formSkelAnime.animation == gFormState.dekuFlightLaunch) {
                     f32 t = gFormState.formSkelAnime.curFrame / 6.0f;
-                    if (t < 0.0f) t = 0.0f;
-                    if (t > 1.0f) t = 1.0f;
+                    if (t < 0.0f)
+                        t = 0.0f;
+                    if (t > 1.0f)
+                        t = 1.0f;
                     stemScale = 0.6f + 0.4f * t;
                 }
                 Matrix_Scale(stemScale, stemScale, stemScale, MTXMODE_APPLY);
@@ -14223,8 +15183,7 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
             // Without it the flower has nothing to anchor to and appears to float.
             gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
                       G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-            gSPDisplayList(POLY_OPA_DISP++,
-                           (Gfx*)(handSide == 0 ? gLinkDekuLeftStemDL : gLinkDekuRightStemDL));
+            gSPDisplayList(POLY_OPA_DISP++, (Gfx*)(handSide == 0 ? gLinkDekuLeftStemDL : gLinkDekuRightStemDL));
 
             // Translate to flower position on stem tip (from 2Ship line 3141)
             Matrix_Translate(2150.0f, 0.0f, 0.0f, MTXMODE_APPLY);
@@ -14237,8 +15196,10 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
                 f32 flowerScale = 1.0f;
                 if (gFormState.formSkelAnime.animation == gFormState.dekuFlightLaunch) {
                     f32 t = gFormState.formSkelAnime.curFrame / 8.0f;
-                    if (t < 0.0f) t = 0.0f;
-                    if (t > 1.0f) t = 1.0f;
+                    if (t < 0.0f)
+                        t = 0.0f;
+                    if (t > 1.0f)
+                        t = 1.0f;
                     flowerScale = 0.3f + 0.7f * t;
                 }
                 Matrix_Scale(flowerScale, flowerScale, flowerScale, MTXMODE_APPLY);
@@ -14508,7 +15469,10 @@ void MmForm_Init(PlayState* play, Player* player) {
 
         // Pikachu-specific cleanup (colliders, projectile actors, etc.)
         if (gFormState.currentForm == MM_PLAYER_FORM_PIKACHU) {
-            PikachuForm_Cleanup();
+            if (WolfLinkForm_IsSelected())
+                WolfLinkForm_Cleanup();
+            else
+                PikachuForm_Cleanup();
         }
 
         // Mark for seamless reload — preserve form across scene transition (no flash)
@@ -14526,7 +15490,10 @@ void MmForm_Init(PlayState* play, Player* player) {
 
         // Pikachu-specific cleanup (colliders, projectile actors, etc.)
         if (gFormState.currentForm == MM_PLAYER_FORM_PIKACHU) {
-            PikachuForm_Cleanup();
+            if (WolfLinkForm_IsSelected())
+                WolfLinkForm_Cleanup();
+            else
+                PikachuForm_Cleanup();
         }
 
         // Only memset when NOT transformed — stale pointers don't matter
@@ -14571,7 +15538,10 @@ u8 MmForm_IsFDSkinMode(void) {
 // gPika* flags with this so a stale mirror can never make normal play act like a
 // super attack.
 u8 MmForm_IsPikachuActive(void) {
-    return (gFormState.state == MMFORM_STATE_ACTIVE && gFormState.currentForm == MM_PLAYER_FORM_PIKACHU) ? 1 : 0;
+    return (gFormState.state == MMFORM_STATE_ACTIVE && gFormState.currentForm == MM_PLAYER_FORM_PIKACHU &&
+            !WolfLinkForm_IsSelected())
+               ? 1
+               : 0;
 }
 
 u8 MmForm_IsTransformed(void) {
@@ -14588,6 +15558,104 @@ u8 MmForm_IsTransformed(void) {
 u8 MmForm_IsTransformedAny(void) {
     return gFormState.state == MMFORM_STATE_ACTIVE || gFormState.state == MMFORM_STATE_TRANSFORMING ||
            gFormState.state == MMFORM_STATE_DETRANSFORMING;
+}
+
+// =============================================================================
+// Tunic effects without the tunic (Skijer 2026-07-28)
+//
+// Goron and Zora transform wearing the Kokiri Tunic (see MmForm_ApplyFormProperties),
+// so every OOT site that used to read `currentTunic == PLAYER_TUNIC_GORON/ZORA` for a
+// resistance no longer fires for them. These two accessors re-grant exactly the two
+// gameplay effects — and nothing else (no color, no fast swim, no HUD tunic):
+//   Goron → Goron Tunic's fire/heat resistance (hot rooms, body burn, hot floors)
+//   Zora  → Zora Tunic's underwater breathing (drowning timer never starts)
+// Consumers: z_player.c (func_808382DC, Player_Action_80843CEC, func_8083D53C,
+// Player_UpdateBodyBurn), z_player_lib.c (Player_GetEnvironmentalHazard warnings),
+// z_parameter.c (the env-hazard timers).
+// =============================================================================
+u8 MmForm_HasFireResistance(void) {
+    return (MmForm_IsTransformed() && gFormState.currentForm == MM_PLAYER_FORM_GORON) ? 1 : 0;
+}
+
+u8 MmForm_HasWaterBreathing(void) {
+    return (MmForm_IsTransformed() && gFormState.currentForm == MM_PLAYER_FORM_ZORA) ? 1 : 0;
+}
+
+// =============================================================================
+// Shield decoupling (Skijer 2026-07-28)
+//
+// No transformed form may be affected by, or affect, the equipped shield: the form's
+// own guard must behave identically with a Deku/Hylian/Mirror shield or with none at
+// all, and no form ever writes player->currentShield. OOT's vanilla shield pipeline
+// gates on currentShield, so it needs to know which mode the active form is in.
+//   MMFORM_SHIELD_VANILLA    — human Link: OOT decides normally.
+//   MMFORM_SHIELD_FORM_GUARD — the form rides OOT's upper-body shield (Zora's fins
+//                              come out through func_80834758 while Z-targeting), so
+//                              the equipment gates there must be bypassed.
+//   MMFORM_SHIELD_BLOCK      — the form owns R itself (Goron curl, Deku guard, Garo,
+//                              Pikachu bubble, Gerudo wirebug): OOT's shield actions
+//                              must never engage.
+//   MMFORM_SHIELD_TWO_HANDED — Fierce Deity: R runs OOT's vanilla shield pipeline, but
+//                              without the "a shield must be equipped" gate. With the
+//                              Deity sword in hand he counts as two-handed
+//                              (Player_IsFDHoldingSword drives VB_PLAYER_HOLDS_TWO_HANDED_
+//                              WEAPON), so it resolves to exactly the Biggoron's Sword
+//                              guard — the "_long" two-handed defense pose from
+//                              func_808346C4 and no shield in the right hand, because
+//                              Player_SetModelsForHoldingShield refuses RH_SHIELD for
+//                              two-handed weapons.
+//
+// Fierce Deity is handled here even though it is a "skin mode" that otherwise runs 100%
+// vanilla Link (MmForm_IsTransformed() returns 0 for it). It is UNCONDITIONAL: gating it
+// on "is a sword in hand" made R silently dead in every frame where OOT had emptied
+// Link's hands (user report: "not letting me shield unless I equip a sword"). Bare-handed
+// FD still shows no shield — vanilla promotes rightHandType to RH_SHIELD, but FD's R_HAND
+// branch in MmForm_OverrideLimbDraw substitutes the Deity's empty hand for it, and the
+// SHEATH limb is nulled, so there is nowhere for a shield model to appear.
+// =============================================================================
+extern "C" u8 GerudoForm_IsActive(void); // defined in gerudo_form.cpp
+
+u8 MmForm_GetShieldMode(void) {
+    if (GerudoForm_IsActive()) {
+        // R is Link's own shield again. It used to be BLOCK ("R = wirebug"), which
+        // is why the shield could never be seen: OOT's shield actions were gated
+        // off and the form put a pose on R instead. The wirebugs live on L now, so
+        // R is free, and letting vanilla own it gives us the raise/hold/release
+        // animation, the shieldQuad, deflection and sword sparks for nothing —
+        // GerudoMhr_TryParry then upgrades an early block into a counter.
+        return MMFORM_SHIELD_VANILLA;
+    }
+    if (MmForm_IsFDSkinMode()) {
+        return MMFORM_SHIELD_TWO_HANDED;
+    }
+    if (!MmForm_IsTransformed()) {
+        return MMFORM_SHIELD_VANILLA;
+    }
+    // Rito joins the Zora on FORM_GUARD: it has a real shield now (its own model,
+    // drawn from MmForm_PostLimbDraw), so R has to reach OOT's upper-body shield and
+    // stamp the shieldQuad instead of being swallowed.
+    return ((gFormState.currentForm == MM_PLAYER_FORM_ZORA) || (gFormState.currentForm == MM_PLAYER_FORM_RITO))
+               ? MMFORM_SHIELD_FORM_GUARD
+               : MMFORM_SHIELD_BLOCK;
+}
+
+u8 MmForm_GetWaterMode(void) {
+    // Items grant this with the player still un-transformed, so it outranks the form checks.
+    if (gFormState.zoraSwimEnabled) {
+        return MMFORM_WATER_ZORA_SWIM;
+    }
+    if (MmForm_IsFDSkinMode() || !MmForm_IsTransformed()) {
+        return MMFORM_WATER_VANILLA;
+    }
+    switch (gFormState.currentForm) {
+        case MM_PLAYER_FORM_GORON:
+        case MM_PLAYER_FORM_DEKU:
+            return MMFORM_WATER_SINK;
+        case MM_PLAYER_FORM_ZORA:
+            return MMFORM_WATER_ZORA_SWIM;
+        default:
+            return MMFORM_WATER_VANILLA;
+    }
 }
 
 u8 MmForm_IsZoraSwimEnabled(void) {
@@ -14667,6 +15735,23 @@ u8 MmForm_DragonScaleEnterSwim(PlayState* play, Player* player) {
 void MmForm_DragonScaleSwimUpdate(PlayState* play, Player* player) {
     s32 act = gFormState.goronAction;
 
+    // Get-item takes priority over the swim, same as the Zora-form pre-dispatch in
+    // MmForm_UpdateActive. Once MmForm_HandleFormInteractions has run HANDLER_2 for us
+    // underwater, the branches below would re-assert PAUSE every frame and stomp the
+    // raise-item animation, so drop to the OOT-driven swim idle instead.
+    if ((player->getItemId > GI_NONE) || (player->stateFlags1 & PLAYER_STATE1_GETTING_ITEM)) {
+        gFormState.fastSwimActive = 0;
+        gFormState.swimPitch = 0;
+        gFormState.swimRoll = 0;
+        gFormState.swimRollSmoothed = 0;
+        gFormState.goronAction = MMFORM_ACT_SWIM_IDLE;
+        player->actor.shape.rot.x = 0;
+        player->stateFlags2 &=
+            ~(PLAYER_STATE2_UNDERWATER | PLAYER_STATE2_DIVING | PLAYER_STATE2_DISABLE_ROTATION_ALWAYS);
+        player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
+        return;
+    }
+
     if (act == MMFORM_ACT_SWIM_FAST) {
         // Fast swim: fully managed by MM system
         // Re-force PAUSE + DISABLE_ROTATION every frame (OOT clears them between frames)
@@ -14730,6 +15815,14 @@ u8 MmForm_IsSlotAllowed(u8 slot) {
 
 MmPlayerTransformation MmForm_GetCurrentForm(void) {
     return (MmPlayerTransformation)gFormState.currentForm;
+}
+
+// Fleet Ship Combo: the form we should ADVERTISE to the peer. While a peer-requested form change is
+// queued (sFleetPendingForm, applied later at the top of MmForm_Update), publish the TARGET, not the
+// still-current form — otherwise we keep advertising our old form and force the peer's fresh mask change
+// back ("uso máscara y no me convierte ... siempre lo fuerza"). Mirrors FleetSync's pending-age publish.
+int MmForm_GetFleetPublishForm(void) {
+    return (sFleetPendingForm >= 0) ? (int)sFleetPendingForm : (int)gFormState.currentForm;
 }
 
 // Fleet Ship Combo — force the form to match MM's save.playerForm after a cross-game arrival.
@@ -14808,7 +15901,7 @@ extern "C" s32 MmForm_GetStrengthOverride(void) {
 extern "C" f32 MmForm_GetIncomingDamageMult(void) {
     switch (gFormState.currentForm) {
         case MM_PLAYER_FORM_GARO:
-            return 2.0f;  // glass cannon: double damage taken
+            return 2.0f; // glass cannon: double damage taken
         default:
             return 1.0f;
     }
@@ -14818,6 +15911,11 @@ extern "C" f32 MmForm_GetIncomingDamageMult(void) {
 // Callers guard with TransformMasks_IsTransformedAny() before applying. Skijer's NEI
 extern "C" f32 MmForm_GetSpeedMultiplier(void) {
     s32 form = (s32)MmForm_GetCurrentForm();
+    // Wolf Link shares Pikachu's form slot; its multiplier comes from the TP
+    // wolf/human speed ratio and changes while the A-dash mode is active.
+    if (form == MM_PLAYER_FORM_PIKACHU && WolfLinkForm_IsSelected()) {
+        return WolfLinkForm_SpeedMultiplier();
+    }
     return (form == MM_PLAYER_FORM_FIERCE_DEITY || form == MM_PLAYER_FORM_PIKACHU) ? 1.5f : 1.0f;
 }
 
@@ -14989,8 +16087,7 @@ u8 MmForm_IsGoronRolling(void) {
     return (gFormState.state == MMFORM_STATE_ACTIVE && gFormState.currentForm == MM_PLAYER_FORM_GORON &&
             (gFormState.goronAction == GORON_ACT_ROLL_INIT || gFormState.goronAction == GORON_ACT_GORON_ROLL ||
              gFormState.goronAction == GORON_ACT_GORON_ROLL_JUMP ||
-             gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND ||
-             gFormState.goronAction == GORON_ACT_ROLL_UNCURL));
+             gFormState.goronAction == GORON_ACT_GORON_ROLL_POUND || gFormState.goronAction == GORON_ACT_ROLL_UNCURL));
 }
 
 void MmForm_YieldToOot(void) {
@@ -14999,6 +16096,192 @@ void MmForm_YieldToOot(void) {
     if (gFormState.state == MMFORM_STATE_ACTIVE) {
         gFormState.goronAction = MMFORM_ACT_OOT_ACTION;
         gFormState.actionTimer = 0;
+    }
+}
+
+// =============================================================================
+// Form interaction bypass — called from Player_UpdateCommon (z_player.c)
+// =============================================================================
+//
+// MUST be called from INSIDE Player_UpdateCommon, before it clears
+// interactRangeActor (z_player.c:13592). TransformMasks_Update runs at :13907,
+// by which point the actor we wanted to interact with is already gone — that is
+// why this cannot live in the form's own update.
+//
+// Two jobs:
+//
+// 1. PAUSE bypass (pre-existing behavior, moved here verbatim). While a custom
+//    form action holds PLAYER_STATE3_PAUSE_ACTION_FUNC, OOT skips actionFunc
+//    entirely (z_player.c:13569), so ledge grabs would be dead. Run HANDLER_12.
+//
+// 2. Underwater pickup (new). Zora could not pick up heart pieces / small keys /
+//    rando checks while swimming, in any swim state. Three stacked causes:
+//      (a) MmForm_WaterBuoyancy sets PLAYER_STATE2_UNDERWATER (:10075), and that
+//          is exactly the flag Player_ActionHandler_2 refuses on, in BOTH its
+//          branches (z_player.c:8626 raise-item anim, :8645 A-press grab),
+//          unless currentBoots == PLAYER_BOOTS_IRON.
+//      (b) Fast swim / dolphin jump set PAUSE, so no handler ran at all.
+//      (c) Plain swim runs OOT's actionFunc, but OOT's swim actions use
+//          sActionHandlerList11 = {0, 12, 5, -TALK} (z_player.c:4735), which has
+//          no HANDLER_2. Vanilla MM has the same hole and compensates via
+//          func_8083B3B4 -> Player_Action_60; our OOT equivalent func_8083D12C
+//          early-returns for every transformed form (z_player.c:8021), so that
+//          compensation is gone too.
+//    2Ship solved this same class of bug the same way for the iron-boot bottom
+//    walk — see 2Ship z_player.c:18167, which calls Player_ActionHandler_2
+//    explicitly precisely because sActionHandlerList11 does not carry it. MM's
+//    dive action does the same at 2Ship z_player.c:18486.
+//
+// The behavior we want is "grab in place while submerged" (a Zora breathes
+// underwater; making him surface first would be silly), so UNDERWATER/DIVING are
+// cleared around the handler call rather than routed through a surfacing path.
+//
+// The `pending` gate is what keeps this from stealing A: HANDLER_2's grab branch
+// consumes BTN_A, and A is fast swim. With nothing offered, we never call it.
+s32 Player_ActionHandler_2(Player* this_, PlayState* play);  // A-press grab / offered get-item
+s32 Player_ActionHandler_12(Player* this_, PlayState* play); // ledge grab / climb
+void Player_Action_WaitForPutAway(Player* this_, PlayState* play);
+
+// HANDLER_2 does not run the get-item cutscene directly: it parks the player in
+// Player_Action_WaitForPutAway (z_player.c:11550) and only advances to the real
+// get-item action (func_8083A434 -> Player_Action_8084E6D4) once
+// Player_UpdateUpperBody returns FALSE. That function's own comment (z_player.c:11560)
+// warns it "allows for delaying indefinitely" whenever an upper-body action keeps
+// returning true — holding shield is the example it gives.
+//
+// That is exactly the Zora: he guards with his fins and carries the boomerang as his
+// held item action, so his upper body never yields and WaitForPutAway spins forever.
+// The animation is stuck at its first pose, Player_Action_8084E6D4 is never reached,
+// so func_8084DFF4 (z_player.c:15912) never runs and no textbox ever appears.
+//
+// Vanilla already forces this same skip when waiting makes no sense — see the
+// CARRYING_ACTOR early-out at z_player.c:11568. Do the same for the underwater
+// get-item: there is no real held item to put away underwater.
+static void MmForm_ForceGetItemPastPutAway(Player* player, PlayState* play) {
+    // Guarding on actionFunc is what makes this safe to call every frame: the callback
+    // (func_8083A434) installs Player_Action_8084E6D4, so the condition stops matching
+    // immediately. Deliberately NOT nulling afterPutAwayFunc as a re-entry guard —
+    // Player_Action_WaitForPutAway calls it without a NULL check (z_player.c:11571),
+    // so a stale NULL there would be a crash.
+    if ((player->actionFunc == Player_Action_WaitForPutAway) && (player->afterPutAwayFunc != NULL)) {
+        player->afterPutAwayFunc(play, player);
+    }
+}
+
+// "The Zora swim currently owns the body." Covers the real Zora form AND the
+// Zora-Tunic / Dragon-Scale swim on human Link (MMFORM_IS_ZORA_SWIM), in any of
+// the swim states or simply submerged. Also read from Actor_OfferGetItem in
+// z_actor.c to widen the get-item offer window while swimming — see there.
+u8 MmForm_IsZoraSwimming(Player* player) {
+    if (player == NULL) {
+        return 0;
+    }
+    return MMFORM_IS_ZORA_SWIM() &&
+           ((gFormState.swimState != 0) || ((player->stateFlags2 & PLAYER_STATE2_UNDERWATER) != 0));
+}
+
+// Set while an underwater get-item is playing out, so the body holds still for the
+// whole raise-item animation instead of drifting up (buoyancy) or sinking (Zora heavy
+// boots). Nothing else zeroes it: OOT's WaitForPutAway action does not touch velocity,
+// so whatever the swim left in actor.velocity/gravity would just keep integrating.
+// A stuck freeze underwater would be a softlock — worse than the bug it fixes — so it
+// is also bounded in time. This update ticks at 20Hz (R_UPDATE_RATE = 3), so 200 ticks is
+// ~10s: far longer than any raise-item + textbox, short enough not to strand the player.
+static u8 sUnderwaterGetItemFreeze = 0;
+static s16 sUnderwaterGetItemFreezeTimer = 0;
+#define MMFORM_GETITEM_FREEZE_MAX_FRAMES 200
+
+void MmForm_HandleFormInteractions(Player* player, PlayState* play) {
+    // Unstick the get-item put-away wait for ANY transformed form, anywhere — not just
+    // underwater. This is a Zora-form problem, not a swimming problem: his fins/boomerang
+    // keep an upper-body action alive, Player_UpdateUpperBody never returns false, and
+    // Player_Action_WaitForPutAway spins forever on the first frame of the raise-item
+    // animation. Detransforming mid-hang is what makes it complete, which is the tell.
+    //
+    // Narrow on purpose: only while GETTING_ITEM is set, so the other users of
+    // Player_SetupWaitForPutAway (talking, item exchange) keep their normal timing.
+    if (TransformMasks_IsTransformedAny() && (player->stateFlags1 & PLAYER_STATE1_GETTING_ITEM)) {
+        MmForm_ForceGetItemPastPutAway(player, play);
+    }
+
+    // Hold the body still for the duration of an underwater get-item (see above).
+    if (sUnderwaterGetItemFreeze) {
+        if ((player->stateFlags1 & PLAYER_STATE1_GETTING_ITEM) &&
+            (sUnderwaterGetItemFreezeTimer < MMFORM_GETITEM_FREEZE_MAX_FRAMES)) {
+            sUnderwaterGetItemFreezeTimer++;
+            MmForm_FreezeForGetItem(player);
+        } else {
+            // Done raising the item (or the safety timeout tripped) — hand gravity back.
+            // Any swim action that still owns the body re-derives it from
+            // MmForm_GetGravity next frame.
+            sUnderwaterGetItemFreeze = 0;
+            sUnderwaterGetItemFreezeTimer = 0;
+            player->actor.gravity = -1.2f;
+        }
+    }
+
+    // NOTE the two DIFFERENT gates below, on purpose. The ledge bypass only makes
+    // sense for a real transformed body, but the swim pickup must also cover the
+    // Zora-Tunic / Dragon-Scale swim, where the player is still human Link and
+    // MmForm_IsTransformedAny() is FALSE (gFormState.state != ACTIVE). Gating the
+    // whole function on IsTransformedAny() would silently drop that half.
+    u8 paused = (player->stateFlags3 & PLAYER_STATE3_PAUSE_ACTION_FUNC) ? 1 : 0;
+    u8 handled = 0;
+
+    if (paused && TransformMasks_IsTransformedAny() && Player_ActionHandler_12(player, play)) {
+        handled = 1;
+    }
+
+    // An actual ITEM is being offered right now. Both fields are required: HANDLER_2
+    // dereferences interactRangeActor (z_player.c:8572) and takes its no-button
+    // auto-accept branch on getItemId > GI_NONE (:8573).
+    //
+    // Deliberately NOT `interactRangeActor != NULL` alone. That is also true for plain
+    // grabbables (Actor_OfferCarry offers with GI_NONE), and HANDLER_2's grab branch
+    // consumes BTN_A — which is fast swim. Restricting to a real get-item keeps the
+    // handler on its automatic path and makes stealing A structurally impossible.
+    u8 pending = (player->interactRangeActor != NULL) && (player->getItemId > GI_NONE);
+    u8 swimming = MmForm_IsZoraSwimming(player);
+
+    if (!handled && pending && swimming) {
+        u32 savedWaterFlags = player->stateFlags2 & (PLAYER_STATE2_UNDERWATER | PLAYER_STATE2_DIVING);
+
+        player->stateFlags2 &= ~(PLAYER_STATE2_UNDERWATER | PLAYER_STATE2_DIVING);
+        if (Player_ActionHandler_2(player, play)) {
+            handled = 1; // leave the flags cleared — the get-item action owns the body now
+
+            // Stop dead where we are and stay there for the whole animation. Without
+            // this the Zora keeps drifting: buoyancy pushes him up, or the heavy boots
+            // keep sinking him, while the item is held overhead.
+            gFormState.swimState = 0;
+            gFormState.fastSwimActive = 0;
+            gFormState.swimPitch = 0;
+            gFormState.swimRoll = 0;
+            gFormState.swimRollSmoothed = 0;
+            player->actor.shape.rot.x = 0;
+            player->actor.shape.rot.z = 0;
+            MmForm_FreezeForGetItem(player);
+
+            // Only latch the hold if OOT actually started the raise-item animation.
+            // HANDLER_2 skips it for consumables it grants outright (rupees, ammo),
+            // and freezing there would leave the swim stalled for no reason.
+            if (player->stateFlags1 & PLAYER_STATE1_GETTING_ITEM) {
+                sUnderwaterGetItemFreeze = 1;
+                sUnderwaterGetItemFreezeTimer = 0;
+                // Skip the put-away wait right now so the raise-item animation and the
+                // textbox actually start this frame instead of hanging on pose 1.
+                // (The general unstick at the top of this function catches every other
+                // path into GETTING_ITEM; this one just saves a frame on our own.)
+                MmForm_ForceGetItemPastPutAway(player, play);
+            }
+        } else {
+            player->stateFlags2 |= savedWaterFlags;
+        }
+    }
+
+    if (handled) {
+        player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
+        MmForm_YieldToOot();
     }
 }
 
@@ -15225,10 +16508,9 @@ u8 MmForm_OnWaterSwimAttempt(PlayState* play, Player* player) {
     // falls back to Link unless explicitly overridden" — so swim goes through
     // the vanilla swim actions (surface float, ledge climb out, dive, etc.)
     // with the Garo skin painted on top.
-    if (gFormState.currentForm == MM_PLAYER_FORM_FIERCE_DEITY ||
-        gFormState.currentForm == MM_PLAYER_FORM_PIKACHU ||
-        gFormState.currentForm == MM_PLAYER_FORM_GERUDO ||
-        gFormState.currentForm == MM_PLAYER_FORM_GARO) {
+    if (gFormState.currentForm == MM_PLAYER_FORM_FIERCE_DEITY || gFormState.currentForm == MM_PLAYER_FORM_PIKACHU ||
+        gFormState.currentForm == MM_PLAYER_FORM_GERUDO || gFormState.currentForm == MM_PLAYER_FORM_GARO ||
+        gFormState.currentForm == MM_PLAYER_FORM_RITO || gFormState.currentForm == MM_PLAYER_FORM_KEATON) {
         return 0;
     }
 
@@ -15262,26 +16544,32 @@ TransformMaskId MmForm_GetMaskType(s32 item) {
             // Gated by gMods.GaroMaskTransform (default ON). When OFF the Garo
             // Mask stays a cosmetic mask (no transformation), matching the
             // Gerudo Mask opt-out above.
-            result = CVarGetInteger("gMods.GaroMaskTransform", 1)
-                ? TRANSFORM_MASK_GARO
-                : TRANSFORM_MASK_NONE;
+            result = CVarGetInteger("gMods.GaroMaskTransform", 1) ? TRANSFORM_MASK_GARO : TRANSFORM_MASK_NONE;
             break;
         // Gerudo Mask: gated by gMods.GerudoMaskTransform cheat. If the cheat
         // is OFF, falls through to TRANSFORM_MASK_NONE so the mask stays a
         // cosmetic OOT mask (vanilla behavior — gerudo NPC friendliness only).
         case ITEM_MASK_GERUDO:
-            result = CVarGetInteger("gMods.GerudoMaskTransform", 0)
-                ? TRANSFORM_MASK_GERUDO
-                : TRANSFORM_MASK_NONE;
+            result = CVarGetInteger("gMods.GerudoMaskTransform", 0) ? TRANSFORM_MASK_GERUDO : TRANSFORM_MASK_NONE;
             break;
-        // Keaton Mask: cosmetic only (wearable, no transformation)
+        // Rito Mask: full transformation (cutscene + flash + form state) into the
+        // Link-rigged rito body in soh.o2r. Everything else stays vanilla Link, the
+        // same deal as the Gerudo Mask. Gated by gMods.RitoForm (default ON).
+        case ITEM_RITO_MASK:
+            result = CVarGetInteger("gMods.RitoForm", 1) ? TRANSFORM_MASK_RITO : TRANSFORM_MASK_NONE;
+            break;
+        // Keaton Mask (OoT's or MM's copy): full transformation into the
+        // Link-rigged fox body in soh.o2r. Gated by gMods.KeatonMaskTransform
+        // (default ON); OFF leaves it a plain cosmetic mask.
         case ITEM_MASK_KEATON:
         case ITEM_MM_MASK_KEATON:
-            result = TRANSFORM_MASK_NONE;
+            result = CVarGetInteger("gMods.KeatonMaskTransform", 1) ? TRANSFORM_MASK_KEATON_FORM : TRANSFORM_MASK_NONE;
             break;
-        // Pokeball: triggers Pikachu transformation (replaces Keaton Mask)
+        // Pokeball and Shadow Crystal share the internal custom form slot;
+        // WolfLinkForm_IsSelected routes its independent update/draw implementation.
         case ITEM_POKEBALL:
-            result = TRANSFORM_MASK_KEATON;
+        case EXT_ITEM_SHADOW_CRYSTAL:
+            result = TRANSFORM_MASK_PIKACHU;
             break;
         // OOT mask items (backward compat)
         case ITEM_MASK_GORON:
@@ -15299,23 +16587,51 @@ TransformMaskId MmForm_GetMaskType(s32 item) {
 
 void MmForm_HandleMaskUse(PlayState* play, Player* player, s32 item) {
 
-    // Pikachu (Pokeball or Keaton Mask) does NOT require mm.o2r — check its own CVar first.
-    if (item == ITEM_MASK_KEATON || item == ITEM_MM_MASK_KEATON || item == ITEM_POKEBALL) {
+    // Pikachu (Pokeball ONLY — the Keaton Mask belongs to the Keaton skin
+    // form now) does NOT require mm.o2r — check its own CVar first.
+    if (item == ITEM_POKEBALL) {
         if (!PikachuForm_IsEnabled())
             return;
-        // Fall through to common transform logic below (maskId will be TRANSFORM_MASK_KEATON)
+        // Do not change the owner while an active Wolf instance still needs its
+        // cleanup. Press once to detransform, then Pokeball again for Pikachu.
+        if (gFormState.state == MMFORM_STATE_INACTIVE) {
+            WolfLinkForm_Select(0);
+        }
+        // Fall through to common transform logic below (maskId will be TRANSFORM_MASK_PIKACHU)
+    } else if (item == EXT_ITEM_SHADOW_CRYSTAL) {
+        if (!WolfLinkForm_IsEnabled())
+            return;
+        // Same symmetric rule as Pokeball: an opposite active subtype exits
+        // cleanly first instead of swapping renderer ownership mid-frame.
+        if (gFormState.state == MMFORM_STATE_INACTIVE) {
+            WolfLinkForm_Select(1);
+        }
+        // Fall through to common logic; internally this is the custom/Pikachu slot.
     } else if (item == ITEM_MASK_GERUDO) {
-        // Gerudo uses gerudo.o2r (O2rLoader), not mm.o2r — independent gate.
+        // Gerudo uses soh.o2r (O2rLoader), not mm.o2r — independent gate.
         if (!CVarGetInteger("gMods.GerudoMaskTransform", 0))
             return;
         // Fall through to common transform logic below.
     } else if (item == ITEM_MM_MASK_GARO) {
-        // Garo uses garo.o2r (independent of mm.o2r). Full MmForm transformation
+        // Garo uses soh.o2r (independent of mm.o2r). Full MmForm transformation
         // — flash + cutscene + active form state. The Garo branch in
         // MmForm_UpdateActive is passive (no PAUSE_ACTION_FUNC), so Link's
         // gameplay keeps running 1:1.
         // Gated by gMods.GaroMaskTransform (default ON); OFF keeps it cosmetic.
         if (!CVarGetInteger("gMods.GaroMaskTransform", 1))
+            return;
+        // Fall through to common transform logic below.
+    } else if (item == ITEM_MASK_KEATON || item == ITEM_MM_MASK_KEATON) {
+        // Keaton's body lives in soh.o2r too — its own gate, no mm.o2r needed.
+        if (!CVarGetInteger("gMods.KeatonMaskTransform", 1))
+            return;
+        // Fall through to common transform logic below.
+    } else if (item == ITEM_RITO_MASK) {
+        // Rito lives in soh.o2r too (objects/forms/rito) — its own gate, no mm.o2r
+        // requirement. The transformation cutscene itself needs no MM animation:
+        // the pre-flash phase only freezes/turns the player and fires SFX, and the
+        // rito rides Link's own idle/walk/run afterwards.
+        if (!CVarGetInteger("gMods.RitoForm", 1))
             return;
         // Fall through to common transform logic below.
     } else {
@@ -15419,6 +16735,70 @@ void MmForm_DevTransformTo(PlayState* play, Player* player, MmPlayerTransformati
     gFormState.flashAlpha = 0;
 }
 
+// =============================================================================
+// Fierce Deity: the Deity sword is PERMANENT (Skijer 2026-07-28)
+//
+// In MM the Fierce Deity never sheathes — and here he literally can't, because
+// MmForm_OverrideLimbDraw nulls PLAYER_LIMB_SHEATH (no scabbard, no shield on the
+// back). So on any frame where OOT leaves Link's hands empty, the Deity sword is
+// simply GONE from the model, and everything gated on "a sword is in hand"
+// (Player_IsFDHoldingSword → two-handed BGS guard on R, BGS damage/reach/trail, the
+// sword beam) switches off with it. OOT empties the hands constantly: after using a
+// C-button item, on scene load / respawn, through the disabled-item-buttons putaway
+// in Player_ProcessItemButtons, after cutscenes. That is the "FD sword model isn't
+// showing, and I can't shield unless I equip a sword" report — the A-button putaway
+// block added earlier only covered ONE of those paths.
+//
+// Fix at the source: whenever FD's hands are free and the B button carries a sword,
+// put it straight back in his hand. heldItemId + heldItemAction + itemAction are all
+// written together and the model group is rebuilt through func_8008EC70 — writing
+// heldItemAction alone is what caused the historical equip/unequip animation loop
+// (OOT re-detects the mismatch every frame in Player_UpperAction_ChangeHeldItem).
+//
+// Swordless FD (no sword on B at all) is left alone: nothing to restore, and per the
+// design rule he then has no sword AI either.
+// =============================================================================
+extern "C" s8 Player_ItemToItemAction(s32 item);                   // z_player.c, not in functions.h
+extern "C" void Player_Action_WaitForPutAway(Player*, PlayState*); // z_player.c
+
+static void MmForm_FDKeepSwordInHand(Player* player) {
+    s8 swordIA;
+    s32 meleeWeapon;
+
+    // Something is already in hand (bottle, bow, hammer, rod…) — never override it.
+    if (player->heldItemAction != PLAYER_IA_NONE) {
+        return;
+    }
+    // Don't re-arm mid-cutscene / mid-pickup / while aiming or talking, and never while
+    // an item change is already in flight (that would fight OOT's own transition).
+    if (player->stateFlags1 &
+        (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING | PLAYER_STATE1_IN_ITEM_CS |
+         PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_TALKING |
+         PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_START_CHANGING_HELD_ITEM)) {
+        return;
+    }
+    // CRITICAL: Player_Action_WaitForPutAway spins until the held item is gone and only
+    // then runs afterPutAwayFunc (lifting, climbing, cutscene entry…). Re-arming the
+    // sword under it would make that wait never finish — a hard softlock. Same for the
+    // door actions, which put the item away for the knob/walk-through animation.
+    if ((player->actionFunc == Player_Action_WaitForPutAway) || (player->actionFunc == Player_Action_80845EF8) ||
+        (player->actionFunc == Player_Action_80845CA4)) {
+        return;
+    }
+
+    swordIA = Player_ItemToItemAction(gSaveContext.equips.buttonItems[0]);
+    meleeWeapon = Player_ActionToMeleeWeapon(swordIA);
+    // Swords only (Master 1 / Kokiri 2 / Biggoron 3) — a Deku Stick or Hammer sitting on
+    // B is not the Deity sword and must not be force-drawn.
+    if ((meleeWeapon < 1) || (meleeWeapon > 3)) {
+        return;
+    }
+
+    player->heldItemId = gSaveContext.equips.buttonItems[0];
+    player->heldItemAction = swordIA;
+    func_8008EC70(player); // itemAction = heldItemAction, then rebuild the model group
+}
+
 // FD skin mode: runs AFTER OOT's actionFunc sets linearVelocity and playSpeed.
 // - Sets actor.scale to 0.015f (MM uses 0.015f for FD vs 0.01f for human)
 // - Leaves modelAnimType at OOT's default so FD uses normal Adult Link locomotion/item anims
@@ -15428,6 +16808,9 @@ static void MmForm_FDSkinSpeedBoost(Player* player, PlayState* play) {
     // MM FD actor.scale = 0.015f (z_player_lib.c func_80123140 line 638)
     // OOT default = 0.01f. Set every frame to prevent OOT from resetting it.
     Actor_SetScale(&player->actor, 0.015f);
+
+    // The Deity sword never leaves his hand — see MmForm_FDKeepSwordInHand.
+    MmForm_FDKeepSwordInHand(player);
 
     // Locomotion (idle / walk / run / sidestep / turn) uses Adult Link's NORMAL animations, not
     // the two-handed fighter set. We intentionally do NOT force PLAYER_ANIMTYPE_3 here: with no
@@ -15533,7 +16916,12 @@ void MmForm_Update(PlayState* play, Player* player) {
     // sPendingSoftReload is set by MmForm_Init when the player was transformed in the old scene.
     // We wait until the first Update frame (new PlayState is fully initialized) to reload assets.
     // Unlike the old system, this does NOT flash or go through TRANSFORMING state.
-    if (sPendingSoftReload && MmForm_IsEnabled()) {
+    // MmForm_IsEnabled() requires mm.o2r + the MM-masks CVar; the Rito needs neither
+    // (its body is in soh.o2r), so gate it on its own switch or a scene change would
+    // silently drop the form and hand back plain Link.
+    if (sPendingSoftReload &&
+        (MmForm_IsEnabled() || (sPendingReactivateForm == MM_PLAYER_FORM_RITO && CVarGetInteger("gMods.RitoForm", 1)) ||
+         (sPendingReactivateForm == MM_PLAYER_FORM_KEATON && CVarGetInteger("gMods.KeatonMaskTransform", 1)))) {
         sPendingSoftReload = 0;
         MmPlayerTransformation form = sPendingReactivateForm;
         sPendingReactivateForm = MM_PLAYER_FORM_HUMAN;
@@ -15566,8 +16954,7 @@ void MmForm_Update(PlayState* play, Player* player) {
     {
         static u8 sPikaModeOwned = 0; // mode (not the pokeball) holds the current Pikachu
         u8 modeOn = CVarGetInteger("gPikachuMode", 0) != 0;
-        u8 pikaActive =
-            (gFormState.state == MMFORM_STATE_ACTIVE && gFormState.currentForm == MM_PLAYER_FORM_PIKACHU);
+        u8 pikaActive = (gFormState.state == MMFORM_STATE_ACTIVE && gFormState.currentForm == MM_PLAYER_FORM_PIKACHU);
         if (modeOn && MmForm_IsEnabled()) {
             if (gFormState.state == MMFORM_STATE_INACTIVE && !(player->stateFlags1 & PLAYER_STATE1_DEAD)) {
                 gFormState.targetForm = MM_PLAYER_FORM_PIKACHU;
@@ -15604,6 +16991,9 @@ void MmForm_Update(PlayState* play, Player* player) {
                 MmForm_CheckBarrierInput(player, play);
                 MmForm_UpdateBarrier(player, play);
             }
+            // Kafei's whistle. INACTIVE is the only state he is ever in — he is a
+            // CUSTOM_FORM_SKIN, so he swaps a model and never becomes a form.
+            MmForm_UpdateSkinOcarinaVoice(player, play);
             break;
 
         case MMFORM_STATE_TRANSFORMING:
@@ -15697,10 +17087,9 @@ void MmForm_Draw(PlayState* play, Player* player) {
     // (burrow → charge → launch). Drawn here BEFORE the form skeleton so
     // Link squishing into the ground covers the flower base on his way down,
     // and re-emerges above it on the way up.
-    if (gFormState.currentForm == MM_PLAYER_FORM_DEKU &&
-        gFormState.goronAction == MMFORM_ACT_DEKU_FLOWER) {
+    if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.goronAction == MMFORM_ACT_DEKU_FLOWER) {
         static u32 sLastLogFrame = 0;
-        if (play->gameplayFrames - sLastLogFrame >= 30) {  // once per ~half-second to avoid spam
+        if (play->gameplayFrames - sLastLogFrame >= 30) { // once per ~half-second to avoid spam
             SPDLOG_INFO("[MmForm] DekuFlower draw site reached: cached={}, count={}, phase={}",
                         (void*)sCachedDekuFlowerDL, sDekuFlowerDLCount, gFormState.dekuFlowerPhase);
             sLastLogFrame = play->gameplayFrames;
@@ -15720,6 +17109,17 @@ void MmForm_Draw(PlayState* play, Player* player) {
         Matrix_Pop();
     }
 
+    // Garo rod aim: same deal as the Deku bubble above. The charge ball and the
+    // aim reticle have to be drawn BEFORE the first-person early-return, or the
+    // player holds B, the camera goes first-person and there is nothing on
+    // screen at all — the ball only ever rendered from the Garo body pass,
+    // which is exactly what that return skips.
+    if (gFormState.currentForm == MM_PLAYER_FORM_GARO && GaroForm_IsRodAiming()) {
+        Matrix_Push();
+        GaroForm_DrawProjectiles(play);
+        Matrix_Pop();
+    }
+
     // In first-person aiming (bow, slingshot, hookshot, Deku bubble): skip the MM skeleton.
     // Exception: Zora boomerang — form stays visible (behind-shoulder camera).
     // Exception: cutscenes also set unk_6AD = 3 (z_player.c:12947 when csAction != 0).
@@ -15729,14 +17129,17 @@ void MmForm_Draw(PlayState* play, Player* player) {
     //   onto the form skeleton). Excluding unk_6AD == 3 from the early-return keeps
     //   the form visible across all cutscenes; the joint-copy path further down handles
     //   the actual pose.
-    if (player->unk_6AD != 0 && player->unk_6AD != 3 &&
-        !(player->stateFlags1 & PLAYER_STATE1_USING_BOOMERANG))
+    if (player->unk_6AD != 0 && player->unk_6AD != 3 && !(player->stateFlags1 & PLAYER_STATE1_USING_BOOMERANG))
         return;
 
     // Pikachu form: completely custom draw (local skeleton, not mm.o2r).
     // Must be handled before OPEN_DISPS to avoid mismatched block scopes.
     if (gFormState.skeletonLoaded && gFormState.currentForm == MM_PLAYER_FORM_PIKACHU) {
-        PikachuForm_Draw(play, player);
+        if (WolfLinkForm_IsSelected()) {
+            WolfLinkForm_Draw(play, player);
+        } else {
+            PikachuForm_Draw(play, player);
+        }
         return;
     }
 
@@ -16074,12 +17477,11 @@ void MmForm_Draw(PlayState* play, Player* player) {
             u8 boomActive = ((player->stateFlags1 & PLAYER_STATE1_USING_BOOMERANG) != 0) ||
                             ((player->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN) != 0) ||
                             (gFormState.boomerangCatchTimer != 0);
-            u8 isCutterAnim =
-                (gFormState.currentForm == MM_PLAYER_FORM_ZORA && gFormState.formSkelAnime.animation != NULL &&
-                 boomActive &&
-                 (gFormState.formSkelAnime.animation == gFormState.cutterAttack ||
-                  gFormState.formSkelAnime.animation == gFormState.cutterCatch ||
-                  gFormState.formSkelAnime.animation == gFormState.cutterWaitAnim));
+            u8 isCutterAnim = (gFormState.currentForm == MM_PLAYER_FORM_ZORA &&
+                               gFormState.formSkelAnime.animation != NULL && boomActive &&
+                               (gFormState.formSkelAnime.animation == gFormState.cutterAttack ||
+                                gFormState.formSkelAnime.animation == gFormState.cutterCatch ||
+                                gFormState.formSkelAnime.animation == gFormState.cutterWaitAnim));
             // Force the OOT joint copy whenever GETTING_ITEM is set: this guarantees the
             // form holds the get-item-wait pose (last frame of link_demo_get_itemA) on
             // Zora/Goron/Deku, even if our action state didn't transition to OOT_ACTION
@@ -16102,9 +17504,17 @@ void MmForm_Draw(PlayState* play, Player* player) {
             // OOT's idle/walk jointTable on top of the form's batabata pose).
             u8 forceOotCopy = (player->stateFlags1 & PLAYER_STATE1_GETTING_ITEM) != 0 ||
                               player->av2.fallDamageStunTimer > 0 || player->invincibilityTimer != 0;
+            // Gakki (instrument) wins over EVERY copy path, like MM: there the transformed
+            // player simply plays its own pg_/pz_/pn_gakkistart+gakkiplay animations while the
+            // ordinary ocarina runs underneath (z_message.c only swaps the instrument via
+            // AudioOcarina_SetInstrument). Link's ocarina pose is never involved.
+            // Gating only MmForm_UsesOotAnim() was not enough: the logs show that on the very
+            // frame the ocarina opens (textId 0x86E) we get usesOotAnim=0 but forceOoT=1, so
+            // the copy still happened through forceOotCopy and Link's pose overwrote the
+            // instrument animation — the "entran en pose de ocarina" bug.
             u8 willCopyOoT =
                 (MmForm_UsesOotAnim() || forceOotCopy || gFormState.currentForm == MM_PLAYER_FORM_FIERCE_DEITY) &&
-                !isCutterAnim && player->skelAnime.jointTable != NULL &&
+                !isCutterAnim && !gFormState.gakkiActive && player->skelAnime.jointTable != NULL &&
                 gFormState.formSkelAnime.jointTable != NULL;
 
             // DEBUG: track joint-copy decisions for DEKU_FLY so we can tell if OOT
@@ -16127,8 +17537,8 @@ void MmForm_Draw(PlayState* play, Player* player) {
             // OOT joints are being captured for the form. Logs every 30 frames AND
             // whenever the OOT animation pointer changes.
             {
-                u8 inAnyCs = (player->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE) != 0 ||
-                             player->csAction != 0 || play->csCtx.state != CS_STATE_IDLE;
+                u8 inAnyCs = (player->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE) != 0 || player->csAction != 0 ||
+                             play->csCtx.state != CS_STATE_IDLE;
                 if (inAnyCs) {
                     static u32 sLastDrawLog = 0;
                     static void* sLastDrawAnim = NULL;
@@ -16136,16 +17546,14 @@ void MmForm_Draw(PlayState* play, Player* player) {
                     if (changed || play->gameplayFrames - sLastDrawLog >= 30) {
                         // Sample one joint (root rotation) to confirm OOT pose is being captured.
                         Vec3s* ootRoot = player->skelAnime.jointTable ? &player->skelAnime.jointTable[1] : NULL;
-                        Vec3s* formRoot = gFormState.formSkelAnime.jointTable
-                                              ? &gFormState.formSkelAnime.jointTable[1]
-                                              : NULL;
+                        Vec3s* formRoot =
+                            gFormState.formSkelAnime.jointTable ? &gFormState.formSkelAnime.jointTable[1] : NULL;
                         SPDLOG_INFO("[MmForm] CS draw: willCopyOoT={} usesOotAnim={} forceOoT={} goronAction={} "
                                     "ootAnim={} ootCurFrame={:.2f} ootRoot=({},{},{}) formRootBefore=({},{},{})",
                                     willCopyOoT, MmForm_UsesOotAnim(), forceOotCopy, gFormState.goronAction,
                                     (void*)player->skelAnime.animation, player->skelAnime.curFrame,
                                     ootRoot ? ootRoot->x : 0, ootRoot ? ootRoot->y : 0, ootRoot ? ootRoot->z : 0,
-                                    formRoot ? formRoot->x : 0, formRoot ? formRoot->y : 0,
-                                    formRoot ? formRoot->z : 0);
+                                    formRoot ? formRoot->x : 0, formRoot ? formRoot->y : 0, formRoot ? formRoot->z : 0);
                         sLastDrawLog = play->gameplayFrames;
                         sLastDrawAnim = (void*)player->skelAnime.animation;
                     }
@@ -16162,8 +17570,7 @@ void MmForm_Draw(PlayState* play, Player* player) {
                 if (copyCount > PLAYER_LIMB_BUF_COUNT) {
                     copyCount = PLAYER_LIMB_BUF_COUNT;
                 }
-                memcpy(gFormState.formSkelAnime.jointTable, player->skelAnime.jointTable,
-                       sizeof(Vec3s) * copyCount);
+                memcpy(gFormState.formSkelAnime.jointTable, player->skelAnime.jointTable, sizeof(Vec3s) * copyCount);
             }
 
             // Draw the MM form skeleton (with OOT or form-specific joints)
@@ -16357,7 +17764,7 @@ void MmForm_OnDeath(void) {
         sEquipsSaved = 0;
     }
 
-    // 3. Roll back the form's tunic override (Zora→Zora Tunic, Goron→Goron Tunic).
+    // 3. Roll back the form's tunic override (Zora/Goron → Kokiri Tunic).
     //    Without this, dying as Zora/Goron permanently changes the player's tunic
     //    because Player_Action_DeathRespawn only reads gSaveContext.equips.equipment.
     //    Strength is NOT rolled back here — it's computed virtually in
@@ -16386,6 +17793,14 @@ void MmForm_Reset(void) {
     sPendingReactivate = 0;
     sPendingSoftReload = 0;
     sForceInstantTransform = 0;
+    // Flight state is per-life, not per-save: a reload must not leave the rito
+    // believing it is still airborne (it would keep billing magic and never land).
+    MmForm_RitoResetFlight();
+    MmForm_RitoBowReset();
+    // A scene change / reload can cut the transformation cutscene off mid-phase-0.
+    // This must not survive it, or the next cutscene would think it already owns
+    // the pose and would never re-arm the pause.
+    sCutsceneMaskAnim = 0;
 
     // Discard extended equipment backup (reload/death = stays unequipped).
     // Note: MmForm_OnDeath restores the backup BEFORE the death-triggered scene
@@ -16597,7 +18012,8 @@ Gfx* MmForm_GetFDSwordBeamDL(PlayState* play) {
 // the swords are mid-swing right now" + indices/damage for trail/quad setup.
 
 u8 GerudoForm_PunchActiveThisFrame(void) {
-    if (gFormState.currentForm != MM_PLAYER_FORM_GERUDO) return 0;
+    if (gFormState.currentForm != MM_PLAYER_FORM_GERUDO)
+        return 0;
     // Trail/hitbox active when the action handler has flagged the damage window
     // open for the current slash.
     return gFormState.gerudoQuadsActive ? 1 : 0;
@@ -16606,7 +18022,8 @@ u8 GerudoForm_PunchActiveThisFrame(void) {
 // Only the R sword has a dedicated trail effect — the L sword piggybacks on
 // Link's vanilla meleeWeaponEffectIndex (no helper needed).
 s32 GerudoForm_GetRightTrailEffectIndex(void) {
-    if (!gFormState.punchTrailActiveR) return -1;
+    if (!gFormState.punchTrailActiveR)
+        return -1;
     return gFormState.punchTrailEffectIndexR;
 }
 
@@ -16614,18 +18031,18 @@ u8 GerudoForm_GetCurrentDamage(void) {
     return gFormState.gerudoQuadDamage;
 }
 
-// Gerudo Mirror Shield is now a pure fallback to vanilla Link's shield (R →
-// Player_ActionHandler_11 → defense crouch + sword sparks + projectile bounce +
-// light reflection). GerudoForm_Update keeps player->heldItemAction pinned to
-// the one-handed Master/Kokiri sword so the vanilla pipeline doesn't trip the
-// Player_HoldsTwoHandedWeapon gate, and GerudoForm_GetSwordDL_R returns NULL
-// while SHIELDING so the equipped shield draws on R_HAND (path-swapped to the
-// gerudo-skinned DL by GerudoForm_OverrideLimbDraw). No MM-side pose override
-// is needed.
+// Gerudo has no shield at all: MmForm_GetShieldMode() returns MMFORM_SHIELD_BLOCK
+// for it, so OOT's shield actions never engage and PLAYER_STATE1_SHIELDING never
+// sets. R belongs to the wirebug. The old text here described a Mirror-Shield
+// fallback held together by pinning player->heldItemAction from GerudoForm_Update;
+// both the fallback and the pin are gone (2026-08-07) — the player's weapon and
+// shield equipment are left exactly as they were before the transformation.
 
 // Gerudo MHR Dual Blades combat controller — text-included here (end of the
 // extern "C" body) so it can call every MmForm_* helper defined above and its
 // static entry points match the forward decls near the top of this file.
 #include "mods/transformation_masks/gerudo_mhr_combat.inc.c"
+#include "mods/transformation_masks/rito_flight.inc.c"
+#include "mods/transformation_masks/rito_bow.inc.c"
 
 } // extern "C"

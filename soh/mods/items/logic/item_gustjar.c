@@ -18,6 +18,7 @@
 #include "../helpers/camera_helper.h"
 #include "../helpers/equip_helper.h"
 #include "../helpers/fx_helper.h"
+#include "../objects/object_tornado.h" // shared wind cone + spiral ribbons
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
@@ -32,16 +33,37 @@ void Player_InitGustJarIA(PlayState* play, Player* this) {
 // if the element is WIND (default — no medallion overlay needed).
 s32 GustJar_GetActiveMedallionItem(void) {
     switch (gjElement) {
-        case GUST_ELEMENT_FIRE:   return ITEM_MEDALLION_FIRE;
-        case GUST_ELEMENT_ICE:    return ITEM_MEDALLION_WATER;
-        case GUST_ELEMENT_SHADOW: return ITEM_MEDALLION_SHADOW;
-        case GUST_ELEMENT_SPIRIT: return ITEM_MEDALLION_SPIRIT;
-        case GUST_ELEMENT_LIGHT:  return ITEM_MEDALLION_LIGHT;
-        default:                  return -1; // WIND or unknown
+        case GUST_ELEMENT_FIRE:
+            return ITEM_MEDALLION_FIRE;
+        case GUST_ELEMENT_ICE:
+            return ITEM_MEDALLION_WATER;
+        case GUST_ELEMENT_SHADOW:
+            return ITEM_MEDALLION_SHADOW;
+        case GUST_ELEMENT_SPIRIT:
+            return ITEM_MEDALLION_SPIRIT;
+        case GUST_ELEMENT_LIGHT:
+            return ITEM_MEDALLION_LIGHT;
+        default:
+            return -1; // WIND or unknown
     }
 }
 
-static void GustJar_ClearScaleCache(void); // Forward declaration
+static void GustJar_ClearScaleCache(void);        // Forward declaration
+static void GustJar_TornadoStop(PlayState* play); // Forward declaration
+
+// AT damage for the current element. Bare WIND is pure knockback — it deals NO HP damage to
+// anything (user decision). The collider stays armed with its damage bit though, because
+// breakables key on dmgFlags + AC_HIT and ignore the damage value, so pots, crates, grass and
+// rocks still shatter in the gust while enemies only get blown away.
+static u8 GustJar_ElementDamage(u8 element, u8 baseDamage) {
+    return (element == GUST_ELEMENT_WIND) ? 0 : baseDamage;
+}
+
+// Blow cone half-angle, derived from the cone's own dimensions so the test can never disagree
+// with the cone that gets drawn. Math_Atan2S(x, y) with (radius, length) is the apex angle.
+static s16 GustJar_BlowHalfAngle(void) {
+    return Math_Atan2S(GUST_CONE_BLOW_RADIUS, GUST_CONE_BLOW_LENGTH);
+}
 
 // =============================================================================
 // Equip / Unequip
@@ -74,6 +96,7 @@ static void GustJar_Unequip(PlayState* play, Player* player) {
         gjFirstPerson = 0;
     }
     GustJar_ClearScaleCache();
+    GustJar_TornadoStop(play); // Handle_GustJar stops running now, so release the blures here
     gjEquipped = 0;
     gjMode = GUST_MODE_OFF;
     gjBlowActive = 0;
@@ -175,8 +198,11 @@ static void GustJar_ClearScaleCache(void) {
 
 // Spawn smoke balls flowing TOWARD nozzle (suction cone)
 void GustJar_SpawnSuckVFX(PlayState* play, Vec3f* nozzle, s16 aimYaw) {
-    // 6 particles per frame spread in a cone, moving toward nozzle
-    for (s32 i = 0; i < 6; i++) {
+    // Supporting dust only — the tornado mesh is the effect now.
+    if ((play->gameplayFrames % GUST_VFX_SPAWN_EVERY) != 0) {
+        return;
+    }
+    for (s32 i = 0; i < GUST_VFX_PARTICLES; i++) {
         f32 dist = 80.0f + Rand_ZeroFloat(140.0f);
         s16 spreadAngle = aimYaw + (s16)Rand_CenteredFloat(0x2000); // ~45° spread
         f32 spreadY = Rand_CenteredFloat(30.0f);
@@ -205,7 +231,10 @@ void GustJar_SpawnSuckVFX(PlayState* play, Vec3f* nozzle, s16 aimYaw) {
 void GustJar_SpawnBlowVFX(PlayState* play, Vec3f* nozzle, s16 aimYaw, u8 element) {
     const GustElementColor* col = &sGustElementColors[element];
 
-    for (s32 i = 0; i < 6; i++) {
+    if ((play->gameplayFrames % GUST_VFX_SPAWN_EVERY) != 0) {
+        return;
+    }
+    for (s32 i = 0; i < GUST_VFX_PARTICLES; i++) {
         s16 spreadAngle = aimYaw + (s16)Rand_CenteredFloat(0x2000);
         f32 startDist = 10.0f + Rand_ZeroFloat(20.0f);
 
@@ -228,11 +257,67 @@ void GustJar_SpawnBlowVFX(PlayState* play, Vec3f* nozzle, s16 aimYaw, u8 element
 }
 
 // =============================================================================
+// Tornado — the wind cone the jar summons at its mouth
+// =============================================================================
+//
+// The cone mesh (object_nei_tornado) is intensity-only, so it comes out in whatever colour we
+// hand it. Only the BLOW is tinted, by the primed element's colour, which is what makes the
+// damage type readable at a glance; the SUCK is always plain white, because sucking has no
+// damage type to communicate. The blow cone is also the larger of the two — it's the one that
+// hurts.
+//
+// Update side fills sGustTornado and feeds the ribbons; the draw hook emits the geometry.
+// Drawn at the SAME dimensions the gameplay cone uses (item_gustjar.h), so what you see is what
+// grabs and what hits.
+#define GUST_TORNADO_RIBBONS 6
+// Texture scroll per frame, in quarter-texels. The texture is 64 tall = 256 quarter-texels, so
+// the blow traverses the whole cone in ~13 frames and the suck (inward, hence negative) in ~21.
+#define GUST_TORNADO_SCROLL_BLOW 20
+#define GUST_TORNADO_SCROLL_SUCK (-12)
+
+static TornadoParams sGustTornado;
+static TornadoRibbons sGustRibbons;
+static u8 sGustTornadoOn = 0;
+
+static void GustJar_TornadoUpdate(PlayState* play, Vec3f* nozzle, s16 aimYaw, s16 aimPitch, u8 isBlow) {
+    u8 element = (gjElement < GUST_ELEMENT_COUNT) ? gjElement : GUST_ELEMENT_WIND;
+    const GustElementColor* col = &sGustElementColors[element];
+
+    sGustTornado.origin = *nozzle;
+    sGustTornado.yaw = aimYaw;
+    sGustTornado.pitch = aimPitch;
+    sGustTornado.length = isBlow ? GUST_CONE_BLOW_LENGTH : GUST_CYL_SUCK_LENGTH;
+    sGustTornado.radius = isBlow ? GUST_CONE_BLOW_RADIUS : GUST_CYL_SUCK_RADIUS;
+    // Element tint on the blow only; the suck is always white.
+    sGustTornado.color.r = isBlow ? col->prim.r : 255;
+    sGustTornado.color.g = isBlow ? col->prim.g : 255;
+    sGustTornado.color.b = isBlow ? col->prim.b : 255;
+    sGustTornado.color.a = isBlow ? 220 : 170;
+    // Roll about the cone axis. The suck spins the other way from the blow so the two modes
+    // read differently even when the element (and therefore the colour) is the same.
+    sGustTornado.spin += isBlow ? 0x1200 : -0x0C00;
+    // ...and slide the streaks ALONG the cone on top of that roll: outward while blowing,
+    // back into the mouth while sucking. That axial motion is what sells the direction of the
+    // wind — the roll alone reads the same either way.
+    Tornado_AdvanceScroll(&sGustTornado, 0, isBlow ? GUST_TORNADO_SCROLL_BLOW : GUST_TORNADO_SCROLL_SUCK);
+    sGustTornadoOn = 1;
+
+    Tornado_RibbonsUpdate(play, &sGustRibbons, &sGustTornado, GUST_TORNADO_RIBBONS);
+}
+
+static void GustJar_TornadoStop(PlayState* play) {
+    sGustTornadoOn = 0;
+    Tornado_RibbonsStop(play, &sGustRibbons);
+}
+
+// =============================================================================
 // Absorb Mode — pull actors + AT collider damage + shrink + Freezard suction VFX
 // =============================================================================
 
-static void GustJar_Absorb(Player* player, PlayState* play, Vec3f* nozzle, s16 aimYaw) {
+static void GustJar_Absorb(Player* player, PlayState* play, Vec3f* nozzle, s16 aimYaw, s16 aimPitch) {
     gjHeatTimer++;
+
+    GustJar_TornadoUpdate(play, nozzle, aimYaw, aimPitch, /*isBlow=*/0);
 
     // Looping wind sound
     Actor_PlaySfx_Flagged(&player->actor, NA_SE_EV_WIND_TRAP - SFX_FLAG);
@@ -249,33 +334,58 @@ static void GustJar_Absorb(Player* player, PlayState* play, Vec3f* nozzle, s16 a
     // the BLOW cone delivers elemental damage. Reset every frame because
     // GustJar_Blow rewrites this with elemDmgFlags on the next mode switch.
     col->info.toucher.dmgFlags = 0x00000040; // DMG_HAMMER_SWING
+    // Restore damage/effect too: GustJar_Blow overwrites them, and without this the suck kept
+    // whatever the last blow left behind (0 before this pass) for the rest of the session.
+    col->info.toucher.damage = GustJar_ElementDamage(gjElement, GUST_DAMAGE_SUCK);
+    col->info.toucher.effect = 0;
+    col->dim.radius = GUST_COL_SUCK_RADIUS; // small nub at the mouth; the blow sizes its own
+    col->dim.height = GUST_COL_SUCK_HEIGHT;
+    col->dim.yShift = -(GUST_COL_SUCK_HEIGHT / 2); // centre it on the nozzle, not stack it above
     col->base.atFlags |= AT_ON | AT_TYPE_PLAYER;
     CollisionCheck_SetAT(play, &play->colChkCtx, &col->base);
     if (col->base.atFlags & AT_HIT) {
         col->base.atFlags &= ~AT_HIT;
     }
 
-    // Pull + shrink actors toward nozzle
-    f32 rangeSq = SQ(GUST_RANGE_MAX);
-    f32 shrinkStart = 120.0f; // Start shrinking at this distance
+    // Pull + shrink actors toward the nozzle.
+    //
+    // The volume is a CYLINDER along the aim axis: within the suck length ahead of the nozzle and
+    // within the suck radius of the axis. A cone would pinch to nothing right at the mouth, which is
+    // where the pull should be strongest, so suction keeps its full width the whole way out.
+    // (It used to be an unaimed sphere, which grabbed things behind Link.)
+    Vec3f axis;
+    f32 suckRadiusSq = SQ(GUST_CYL_SUCK_RADIUS);
+    f32 shrinkStart = GUST_CYL_SUCK_LENGTH * 0.75f; // Start shrinking at this distance
     ActorCategory categories[] = { ACTORCAT_ENEMY, ACTORCAT_PROP };
+
+    Tornado_GetAxis(aimYaw, aimPitch, &axis);
+
     for (s32 c = 0; c < 2; c++) {
         Actor* actor = play->actorCtx.actorLists[categories[c]].head;
         while (actor != NULL) {
             Actor* next = actor->next;
             if (actor->update != NULL && GustJar_IsSuckable(actor)) {
-                f32 dx = nozzle->x - actor->world.pos.x;
-                f32 dz = nozzle->z - actor->world.pos.z;
-                f32 distXZSq = SQ(dx) + SQ(dz);
+                // Nozzle -> actor, then split it into "along the axis" and "off the axis".
+                f32 ax = actor->world.pos.x - nozzle->x;
+                f32 ay = actor->world.pos.y - nozzle->y;
+                f32 az = actor->world.pos.z - nozzle->z;
+                f32 along = (ax * axis.x) + (ay * axis.y) + (az * axis.z);
 
-                if (distXZSq < rangeSq) {
-                    f32 dy = fabsf(nozzle->y - actor->world.pos.y);
-                    if (dy < LINK_HEIGHT_HITBOX) {
-                        f32 norm = sqrtf(distXZSq);
+                if ((along >= 0.0f) && (along <= GUST_CYL_SUCK_LENGTH)) {
+                    f32 px = ax - (axis.x * along);
+                    f32 py = ay - (axis.y * along);
+                    f32 pz = az - (axis.z * along);
+
+                    if (((px * px) + (py * py) + (pz * pz)) < suckRadiusSq) {
+                        // Pull straight back down the axis toward the nozzle.
+                        f32 dx = -ax;
+                        f32 dz = -az;
+                        f32 norm = sqrtf(SQ(dx) + SQ(dz));
+
                         if (norm > 1.0f) {
-                            // Pull toward nozzle
                             f32 strength = 8.0f;
                             f32 invNorm = strength / norm;
+
                             actor->world.pos.x += dx * invNorm;
                             actor->world.pos.z += dz * invNorm;
                             if (actor->bgCheckFlags & BGCHECKFLAG_GROUND)
@@ -388,8 +498,10 @@ static void GustJar_ApplyElementEffect(Actor* actor, PlayState* play, u8 element
     }
 }
 
-static void GustJar_Blow(Player* player, PlayState* play, Vec3f* nozzle, s16 aimYaw) {
+static void GustJar_Blow(Player* player, PlayState* play, Vec3f* nozzle, s16 aimYaw, s16 aimPitch) {
     gjBlowTimer--;
+
+    GustJar_TornadoUpdate(play, nozzle, aimYaw, aimPitch, /*isBlow=*/1);
 
     // Freezard-style blow VFX
     GustJar_SpawnBlowVFX(play, nozzle, aimYaw, gjElement);
@@ -402,17 +514,36 @@ static void GustJar_Blow(Player* player, PlayState* play, Vec3f* nozzle, s16 aim
     ColliderCylinder* col = &gjCollider;
     u32 elemDmgFlags = GustJar_GetElementDmgFlags(gjElement);
     col->info.toucher.dmgFlags = elemDmgFlags;
-    col->info.toucher.damage = 0; // VFX only, no HP damage
+    // Elemental blows land for real; bare WIND is the one that stays at 0 and only knocks
+    // things away (breakables still shatter — they key on dmgFlags, not the damage value).
+    col->info.toucher.damage = GustJar_ElementDamage(gjElement, GUST_DAMAGE_BLOW);
     col->info.toucher.effect = 0;
     col->base.atFlags |= AT_ON | AT_TYPE_PLAYER;
 
-    // Sweep 3 positions: near(40), mid(100), far(160) along aim direction
-    static const f32 sweepDists[] = { 40.0f, 100.0f, 160.0f };
+    // Sweep the collider along the cone at near/mid/far. These are FRACTIONS of the cone's
+    // length, so the damage coverage follows the cone — hardcoded distances would leave the far
+    // half of a longer cone doing nothing but pushing.
+    static const f32 sweepFracs[] = { GUST_BLOW_SWEEP_NEAR, GUST_BLOW_SWEEP_MID, GUST_BLOW_SWEEP_FAR };
+    Vec3f sweepAxis;
+
+    Tornado_GetAxis(aimYaw, aimPitch, &sweepAxis);
     for (s32 s = 0; s < 3; s++) {
-        col->dim.pos.x = (s16)(nozzle->x + Math_SinS(aimYaw) * sweepDists[s]);
-        col->dim.pos.y = (s16)(nozzle->y);
-        col->dim.pos.z = (s16)(nozzle->z + Math_CosS(aimYaw) * sweepDists[s]);
-        col->dim.radius = 40; // Wider than default
+        f32 dist = GUST_CONE_BLOW_LENGTH * sweepFracs[s];
+        // The cone's own radius at this distance — see GUST_COL_BLOW_RADIUS_AT. Each sample is
+        // sized to swallow the cone's cross-section right there, so the three of them together
+        // cover the whole drawn cone instead of one fixed size being too fat at the mouth and
+        // too thin at the far end.
+        s16 coneR = GUST_COL_BLOW_RADIUS_AT(sweepFracs[s]);
+
+        col->dim.radius = coneR;
+        col->dim.height = coneR * 2;
+        col->dim.yShift = -coneR; // yShift is the BOTTOM — centre the cylinder on the aim line
+
+        // Follow the full 3D aim axis, so aiming up or down still lands the hits on the cone
+        // instead of on the ground track underneath it.
+        col->dim.pos.x = (s16)(nozzle->x + sweepAxis.x * dist);
+        col->dim.pos.y = (s16)(nozzle->y + sweepAxis.y * dist);
+        col->dim.pos.z = (s16)(nozzle->z + sweepAxis.z * dist);
         CollisionCheck_SetAT(play, &play->colChkCtx, &col->base);
     }
     if (col->base.atFlags & AT_HIT) {
@@ -439,7 +570,7 @@ static void GustJar_Blow(Player* player, PlayState* play, Vec3f* nozzle, s16 aim
                 if (angleDiff > 0x7FFF)
                     angleDiff = (s16)(0xFFFF - angleDiff);
 
-                if (angleDiff < GUST_BLOW_CONE_HALF_ANGLE) {
+                if (angleDiff < GustJar_BlowHalfAngle()) {
                     f32 dist = sqrtf(distSq);
 
                     // Strong push — direct position displacement + velocity
@@ -482,6 +613,12 @@ static void GustJar_Blow(Player* player, PlayState* play, Vec3f* nozzle, s16 aim
 
 void CustomItems_DrawGustJar(Player* this, PlayState* play) {
     GustJarPot_Draw(this, play);
+    // The wind cone. sGustTornadoOn is re-armed every frame by GustJar_Absorb/GustJar_Blow and
+    // cleared at the top of Handle_GustJar, so it can only be set when the jar is actually
+    // sucking or blowing this frame.
+    if (sGustTornadoOn) {
+        Tornado_Draw(play, &sGustTornado);
+    }
 }
 
 // =============================================================================
@@ -503,15 +640,15 @@ static void GustJar_ApplyCarryPose(Player* player, PlayState* play) {
     // AnimationContext_SetLoadFrame does an immediate synchronous memcpy of
     // the frame's joint table into frameBuf (z_skelanime.c:909) — values are
     // available right away.
-    AnimationContext_SetLoadFrame(play, (LinkAnimationHeader*)&gPlayerAnim_link_normal_carryB_free,
-                                  8, PLAYER_LIMB_MAX, frameBuf);
+    AnimationContext_SetLoadFrame(play, (LinkAnimationHeader*)&gPlayerAnim_link_normal_carryB_free, 8, PLAYER_LIMB_MAX,
+                                  frameBuf);
 
     player->skelAnime.jointTable[PLAYER_LIMB_L_SHOULDER] = frameBuf[PLAYER_LIMB_L_SHOULDER];
-    player->skelAnime.jointTable[PLAYER_LIMB_L_FOREARM]  = frameBuf[PLAYER_LIMB_L_FOREARM];
-    player->skelAnime.jointTable[PLAYER_LIMB_L_HAND]     = frameBuf[PLAYER_LIMB_L_HAND];
+    player->skelAnime.jointTable[PLAYER_LIMB_L_FOREARM] = frameBuf[PLAYER_LIMB_L_FOREARM];
+    player->skelAnime.jointTable[PLAYER_LIMB_L_HAND] = frameBuf[PLAYER_LIMB_L_HAND];
     player->skelAnime.jointTable[PLAYER_LIMB_R_SHOULDER] = frameBuf[PLAYER_LIMB_R_SHOULDER];
-    player->skelAnime.jointTable[PLAYER_LIMB_R_FOREARM]  = frameBuf[PLAYER_LIMB_R_FOREARM];
-    player->skelAnime.jointTable[PLAYER_LIMB_R_HAND]     = frameBuf[PLAYER_LIMB_R_HAND];
+    player->skelAnime.jointTable[PLAYER_LIMB_R_FOREARM] = frameBuf[PLAYER_LIMB_R_FOREARM];
+    player->skelAnime.jointTable[PLAYER_LIMB_R_HAND] = frameBuf[PLAYER_LIMB_R_HAND];
 }
 
 // =============================================================================
@@ -523,6 +660,17 @@ void Handle_GustJar(Player* this, PlayState* play) {
     if (gjCollider.base.shape != COLSHAPE_CYLINDER) {
         Player_InitGustJarIA(play, this);
     }
+
+    // Tornado is opt-in per frame: only GustJar_Absorb / GustJar_Blow re-arm it, so every early
+    // return below (unequipped, blocked, damaged, idle) leaves the cone hidden.
+    //
+    // sGustTornadoOn still holds LAST frame's value here. If nothing armed it, the effect is
+    // over and the ribbons must give their blure slots back — the engine only has 25, so
+    // leaking six per suck would starve every other trail in the scene within a few uses.
+    if (!sGustTornadoOn) {
+        GustJar_TornadoStop(play);
+    }
+    sGustTornadoOn = 0;
 
     ItemInputState input;
     static s8 prevInvincibility = 0;
@@ -588,8 +736,8 @@ void Handle_GustJar(Player* this, PlayState* play) {
     // instead of trusting ItemInput_CheckOtherButtons, which lists R as an
     // "action button" globally for all other items.
     {
-        static const u16 sGjUnequipButtons = BTN_A | BTN_B | BTN_START | BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT |
-                                             BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT;
+        static const u16 sGjUnequipButtons = BTN_A | BTN_B | BTN_START | BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT | BTN_DUP |
+                                             BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT;
         u16 mask = sGjUnequipButtons & ~input.equippedButton;
         if (play->state.input[0].press.button & mask) {
             GustJar_Unequip(play, this);
@@ -657,7 +805,7 @@ void Handle_GustJar(Player* this, PlayState* play) {
             Audio_StopSfxById(NA_SE_EV_WIND_TRAP);
             return;
         }
-        GustJar_Blow(this, play, &nozzle, aimYaw);
+        GustJar_Blow(this, play, &nozzle, aimYaw, aimPitch);
         return;
     }
 
@@ -666,8 +814,8 @@ void Handle_GustJar(Player* this, PlayState* play) {
     // absorbs, release C blows proportional to charge) and BLOW (manual —
     // hold C directly blows with current element, no charge mechanic).
     // Works in any mode while the gust jar is equipped.
-    u8 lrCurr = CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_L) &&
-                CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_R);
+    u8 lrCurr =
+        CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_L) && CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_R);
     u8 lrPress = CHECK_BTN_ALL(play->state.input[0].press.button, BTN_L) ||
                  CHECK_BTN_ALL(play->state.input[0].press.button, BTN_R);
     u8 lrToggled = 0;
@@ -708,9 +856,8 @@ void Handle_GustJar(Player* this, PlayState* play) {
         }
 
         if (cycleDir != 0) {
-            static const s32 sCycleQuestItems[] = { QUEST_MEDALLION_FIRE, QUEST_MEDALLION_WATER,
-                                                    QUEST_MEDALLION_SHADOW, QUEST_MEDALLION_SPIRIT,
-                                                    QUEST_MEDALLION_LIGHT };
+            static const s32 sCycleQuestItems[] = { QUEST_MEDALLION_FIRE, QUEST_MEDALLION_WATER, QUEST_MEDALLION_SHADOW,
+                                                    QUEST_MEDALLION_SPIRIT, QUEST_MEDALLION_LIGHT };
             static const u8 sCycleElements[] = { GUST_ELEMENT_FIRE, GUST_ELEMENT_ICE, GUST_ELEMENT_SHADOW,
                                                  GUST_ELEMENT_SPIRIT, GUST_ELEMENT_LIGHT };
             u8 available[6];
@@ -799,7 +946,7 @@ void Handle_GustJar(Player* this, PlayState* play) {
             }
         }
         if (gjMode == GUST_MODE_ABSORB) {
-            GustJar_Absorb(this, play, &nozzle, aimYaw);
+            GustJar_Absorb(this, play, &nozzle, aimYaw, aimPitch);
         }
         wasHeld = 1;
     }

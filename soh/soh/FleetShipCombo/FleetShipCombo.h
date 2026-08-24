@@ -26,7 +26,30 @@ void FleetShipCombo_HostBootstrap(int argc, char** argv);
 // Mirror mm.o2r + oot.o2r so both sit next to BOTH exes (combo layout: root + /2ship). Call around the
 // extractor: an o2r extracted by either game is copied into the sibling dir, and a missing one that's
 // present in the sibling is pulled in. No-op with no sibling (standalone).
+//
+// VERSION-AWARE: each archive has an owner build (mm.o2r <-> 2ship.o2r, oot.o2r <-> soh.o2r) whose
+// "portVersion" major it must match. Only a copy that matches its owner is ever mirrored, and it
+// OVERWRITES a copy that doesn't. Plain existence-mirroring used to bounce an OUTDATED archive back
+// into the dir the game had just deleted it from, so every boot re-deleted it (or, worse, the other
+// game loaded it and crashed on the new resource format).
 void FleetShipCombo_ProvisionO2rBothDirs(void);
+
+// ---- MM archive gate (runs BEFORE Ship's own extractor) ----
+// The combo needs a VALID mm.o2r (matching the 2ship build) somewhere in the layout. If there is none,
+// this launches `2ship.exe --fleet-extract` VISIBLE so its ROM extractor can build one, and returns
+// true; the caller then pumps FleetShipCombo_GuestExtractRunning() (drawing a "waiting" modal) until
+// it returns false, and only THEN runs Ship's own extractor. Order matters and is deliberate: MM's
+// archive first, then OoT's. Doing it the other way round meant Ship launched the child HIDDEN
+// (parked off-screen) and 2ship's own "No O2R Files - Generate one now?" popup was drawn where nobody
+// could see or click it: MM never came up and the combo looked dead.
+// Returns false when nothing needs doing (combo off, no 2ship.exe, or a valid mm.o2r exists).
+bool FleetShipCombo_GuestExtractStart(void);
+// True while the visible extractor child is still running.
+bool FleetShipCombo_GuestExtractRunning(void);
+// True when a mm.o2r matching the 2ship build exists next to soh.exe or next to 2ship.exe. This is
+// what HostBootstrap gates the hidden child on: launching 2ship without it only produces an invisible
+// extractor prompt.
+bool FleetShipCombo_HaveValidMmArchive(void);
 
 // ---- Shared-memory coordination (Frente B) ----
 // A named shared-memory region carries the active-game flag (and later the D3D11
@@ -38,6 +61,13 @@ void FleetShipCombo_ProvisionO2rBothDirs(void);
 // instanceKey (Ship's own PID) makes the region name UNIQUE per combo, so several combos
 // can run on one machine without colliding. Pass 0 to use the legacy unsuffixed name.
 void FleetShipCombo_SharedInit(unsigned long instanceKey);
+
+// True when a combo is active AND its goal is "Beat Both Bosses" (gFleetCombo.GoalMode 0).
+//
+// That goal is genuinely cross-game: Ganon falling is only half of it, so whichever boss dies first
+// must NOT roll credits. Both games ask this before running their ending. False outside a combo, so
+// a solo seed behaves exactly as it always did.
+int FleetCombo_BeatBothBosses(void);
 
 // Active game stored in shared memory, or -1 if the region is unavailable.
 int FleetShipCombo_GetActiveGame(void);
@@ -51,6 +81,19 @@ void FleetShipCombo_SetActiveGame(int game);
 // (Ship), 1 = MM (2ship). rotY is the s16 binary-angle Link should face on arrival. saveFile is the
 // save SLOT the trigger is in (e.g. gSaveContext.fileNum) so the target game lands in its own same slot.
 void FleetShipCombo_RequestWarp(int targetGame, int scene, float x, float y, float z, int rotY, int saveFile);
+
+// Scene sentinel for a RESUME warp: "hand the player to the other game AT ITS OWN SAVE", instead of
+// at a portal. Sent when a combo file whose last save was made in the other game is loaded — the
+// arrival keeps the entrance/respawn the save itself carries (owl save included) and only takes the
+// shared-state overlay. Every real scene id is >= 0, so -1 can never collide with one.
+#define FC_WARP_SCENE_RESUME (-1)
+
+// Queue a RESUME hand-off to MM. Called when a combo file is loaded whose last save was made in MM:
+// the combo always boots in OoT, so OoT loads the file and then walks the player across by itself,
+// landing them in MM's own save. Queued rather than done immediately — it waits for OoT to actually
+// be in gameplay, so the hand-off uses the ordinary in-game warp path (fade, departure, flip) and
+// never the cold-boot one. No-op if the last save was in OoT.
+void FleetCombo_QueueResumeToMm(void);
 
 // Applied by whichever game just became active: returns 1 ONCE per new request when a warp is
 // addressed to THIS game, filling the target scene + land position/rotation. The receiver then
@@ -78,6 +121,13 @@ int FleetShipCombo_GetSendFadeAlpha(void);
 void FleetShipCombo_SetDoorDLIndex(int index);
 int FleetShipCombo_GetDoorDLIndex(void);
 
+// ---- Combo seed identity ----
+// The Rando finalSeed OoT generated for this combo. OoT publishes it; MM validates the finalSeed
+// baked into its paired save against it and rebuilds the slot when they disagree, so an MM file
+// left over from an older seed can never be played against a newer OoT seed. 0 = unset.
+void FleetShipCombo_SetComboSeed(unsigned int seed);
+unsigned int FleetShipCombo_GetComboSeed(void);
+
 // ---- Anchor-style packet channel (shared-memory rings, region version 2) ----
 // The transport under FleetNet: one JSON message per call, same shape as an Anchor packet, but
 // through shared memory instead of a socket. Two one-way rings mean no lock and no file, so a
@@ -89,8 +139,26 @@ int FleetShipCombo_PushPacket(const char* json);
 int FleetShipCombo_PopPacket(char* out, int cap);
 
 // True if THIS process (Ocarina of Time) is the active game, OR if shared memory is
-// unavailable (standalone). Drives the FrameAdvance freeze of the inactive game.
+// unavailable (standalone). Drives input blocking, audio mute and the warp triggers.
 bool FleetShipCombo_IsThisGameActive(void);
+
+// ---- Waiting room ("limbo") ----
+// The inactive game is no longer frozen: before handing over it parks Link in a sealed custom
+// scene ("fleet_scene", hijacking SCENE_TEST01) and keeps RUNNING there. Implemented in
+// FleetWarpBoot.cpp.
+//   FleetLimbo_DepartToMm -> what the send path calls INSTEAD of RequestWarp: records the warp,
+//                            walks Link into the room, and the boot tick flips once he is inside.
+//   IsGameSuspended       -> 1 only for an inactive game that is NOT parked (the old freeze, kept
+//                            as the fallback). The freeze/render gates ask this, not IsThisGameActive.
+//   IsParkedInLimbo       -> 1 while the loaded scene is the waiting room.
+//   LimboSaveShadow*      -> wrap a save write done while parked so the file records the player's
+//                            real place, never the waiting room.
+void FleetLimbo_DepartToMm(int scene, float x, float y, float z, int rotY, int saveFile);
+int FleetLimbo_InFlight(void); // 1 while walking into the room (already inactive): guards must not squash it
+int FleetShipCombo_IsGameSuspended(void);
+int FleetShipCombo_IsParkedInLimbo(void);
+void FleetShipCombo_LimboSaveShadowBegin(void);
+void FleetShipCombo_LimboSaveShadowEnd(void);
 
 // ---- Picture-in-picture: shared D3D11 game texture (Frente B B2-B4) ----
 // Read the shared-texture descriptor published by 2ship (the producer). Returns 1 if
@@ -109,6 +177,9 @@ void FleetShipCombo_RegisterConsumerWindow(void);
 // own window so the user can reach its BenGui.
 int FleetShipCombo_GetUiFocus(void);
 void FleetShipCombo_SetUiFocus(int focus);
+
+// Read at menu-REGISTRATION time (boot), so "isFleetShipCombo.DevUi" needs a restart to take effect.
+bool FleetShipCombo_ShowMenuUi(void);
 
 // ---- FleetSync save-sync handshake (reservedU[1..3]) ----
 // The game that just SAVED signals; the other (frozen) exe applies the shared overlay from the
@@ -139,6 +210,33 @@ unsigned long long FleetShipCombo_GetSharedWindowOpenSeq(void);
 // reset); ConsumeRestartRequest returns 1 ONCE when the OTHER game reset.
 void FleetShipCombo_SignalRestart(void);
 int FleetShipCombo_ConsumeRestartRequest(void);
+
+// Hand the combo back to Ocarina of Time: active game 0, front window 0, isPlayerIn2Ship 0.
+// MM's own title screen / file select are never screens this combo shows, so every restart ends
+// here and the player comes back on OoT's title. Idempotent; no-op outside a combo.
+void FleetShipCombo_YieldToOoT(void);
+
+// ---- Guest (2ship) watchdog ----
+// The heartbeat 2ship bumps every frame in shared memory (reservedU[0]). Same value twice means
+// nothing turned over there.
+unsigned long long FleetShipCombo_GetGuestHeartbeat(void);
+
+// Poll the 2ship child: dead process (crash / closed / exited) or a heartbeat that stopped while
+// the process lingers (hang) both tear the combo down -- Ship shows MM's image, so a guest that
+// stopped rendering leaves Ship on a black screen it can never recover from. Emits a notification,
+// then closes Ship a moment later. Call every frame; no-op when there is no child (standalone).
+void FleetShipCombo_PollGuestAlive(void);
+
+// "Is 2ship turning frames right now?" — 1 yes, 0 no (dead process, never started, or hung).
+// The cross-game warp asks this on the frame it would flip, because the flip is one-way: making a
+// dead or hung MM the active game leaves the player on a window that never updates again, with OoT
+// frozen behind it and no way back. Unlike the watchdog above this answers immediately and does not
+// tear anything down — the warp just declines to travel and the player keeps playing OoT.
+int FleetShipCombo_IsGuestResponsive(void);
+
+// Tell the player why a warp did nothing (the warp trigger lives in C and cannot post notifications
+// itself). Logs a [FleetWatchdog] line and shows an on-screen notice.
+void FleetShipCombo_ReportGuestUnavailable(void);
 
 // ---- UI-overlay texture (reservedU[7..9]) ----
 // SECOND shared texture published by 2ship with ONLY its ImGui windows (trackers etc.) on a

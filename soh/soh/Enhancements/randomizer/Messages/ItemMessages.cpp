@@ -194,7 +194,23 @@ void BuildCustomItemMessage(Player* player, CustomMessage& msg) {
             static_cast<ItemID>(Rando::StaticData::RetrieveItem(static_cast<RandomizerGet>(rgid)).GetItemID());
         msg.AutoFormat(itemId);
     } else {
-        msg.AutoFormat();
+        // No custom icon: AutoFormat() with no argument inserts no item-icon token, so the textbox
+        // renders with NO icon on the left. For a plain vanilla item (bomb bag, quiver, hover boots,
+        // tunics...) that is just a missing icon, and its real one is one lookup away: pass
+        // giEntry->itemId — the actual ItemID, NOT GetItemID() which returns the get-item id.
+        //
+        // Bounded on purpose. Many MM-port rows are built with a RandomizerGet in the itemId slot
+        // (see RG_MM_SONG_SONATA), which is far past the end of gItemIcons; handing that to
+        // Message_LoadItemIcon would take the custom-item branch and memcpy from a NULL icon.
+        // Below ITEM_ROCS_FEATHER_SKIJER is exactly the vanilla range, and everything custom
+        // already went through the HasCustomIcon path above. Anything else stays iconless — an
+        // empty textbox beats a wrong or invented icon (Skijer's call). Skijer's NEI
+        auto gi = Rando::StaticData::RetrieveItem(static_cast<RandomizerGet>(rgid)).GetGIEntry();
+        if (gi != nullptr && gi->itemId != ITEM_NONE && gi->itemId < ITEM_ROCS_FEATHER_SKIJER) {
+            msg.AutoFormat(static_cast<ItemID>(gi->itemId));
+        } else {
+            msg.AutoFormat();
+        }
     }
 }
 
@@ -202,10 +218,13 @@ void LoadCustomItemIcon(bool displayAsEnglish) {
     Player* player = GET_PLAYER(gPlayState);
     const char* customIcon = nullptr;
     CustomIconSize iconSize = ICON_SIZE_32;
-    if (player->getItemEntry.objectId != OBJECT_INVALID) {
+    // Same rule as the hooks above: getItemId is only an RG on MOD_RANDOMIZER entries.
+    if (player->getItemEntry.objectId != OBJECT_INVALID && player->getItemEntry.modIndex == MOD_RANDOMIZER) {
         RandomizerGet rgid = static_cast<RandomizerGet>(player->getItemEntry.getItemId);
         customIcon = Rando::StaticData::RetrieveItem(rgid).GetCustomIcon();
         iconSize = Rando::StaticData::RetrieveItem(rgid).GetCustomIconSize();
+    } else if (player->getItemEntry.objectId != OBJECT_INVALID) {
+        customIcon = nullptr; // vanilla entry: its own icon token in the message is already right
     } else {
         // if we're seeing an icon and we don't have a GI, assume we're in the alter text showing a triforce piece
         customIcon = Rando::StaticData::RetrieveItem(RG_TRIFORCE_PIECE).GetCustomIcon();
@@ -236,7 +255,7 @@ void DrawCustomItemIcon(Gfx** p) {
     MessageContext* msgCtx = &gPlayState->msgCtx;
     Player* player = GET_PLAYER(gPlayState);
     CustomIconSize iconSize = ICON_SIZE_32;
-    if (player->getItemEntry.objectId != OBJECT_INVALID) {
+    if (player->getItemEntry.objectId != OBJECT_INVALID && player->getItemEntry.modIndex == MOD_RANDOMIZER) {
         RandomizerGet rgid = static_cast<RandomizerGet>(player->getItemEntry.getItemId);
         iconSize = Rando::StaticData::RetrieveItem(rgid).GetCustomIconSize();
     }
@@ -413,23 +432,23 @@ void BuildLanternCatchMessage(uint16_t* textId, bool* loadFromMessageTable) {
                                 TEXTBOX_TYPE_BLUE);
             break;
         case 3: // POE (purple)
-            msg = CustomMessage("\x13\xB4"
-                                "You caught %pPoe Fire%w!&%pReveals hidden spirits%w&and invisible actors.",
-                                "\x13\xB4"
-                                "Du hast %pIrrlichterfeuer%w!&%pEnthullt verborgene Geister%w&und unsichtbare Akteure.",
-                                "\x13\xB4"
-                                "Vous avez le %pFeu Spectral%w!&%pRevele les esprits caches%w&et acteurs invisibles.",
-                                TEXTBOX_TYPE_BLUE);
+            msg =
+                CustomMessage("\x13\xB4"
+                              "You caught %pPoe Fire%w!&%pReveals the invisible%w and&%pdispels illusions%w. No magic.",
+                              "\x13\xB4"
+                              "Du hast %pIrrlichterfeuer%w!&%pEnthullt Unsichtbares%w und&%plost Illusionen auf%w.",
+                              "\x13\xB4"
+                              "Vous avez le %pFeu Spectral%w!&%pRevele l'invisible%w et&%pdissipe les illusions%w.",
+                              TEXTBOX_TYPE_BLUE);
             break;
         case 4: // GREEN
-            msg = CustomMessage(
-                "\x13\xB4"
-                "You caught %gGreen Fire%w!&%gReveals hidden spirits%w.&Slowly %gregenerates health%w.",
-                "\x13\xB4"
-                "Du hast %ggruenes Feuer%w!&%gEnthullt verborgene Geister%w.&%gRegeneriert langsam Leben%w.",
-                "\x13\xB4"
-                "Vous avez le %gFeu Vert%w!&%gRevele les esprits caches%w.&%gRegene lentement la vie%w.",
-                TEXTBOX_TYPE_BLUE);
+            msg = CustomMessage("\x13\xB4"
+                                "You caught %gGreen Fire%w!&Slowly %gregenerates health%w&while it stays lit.",
+                                "\x13\xB4"
+                                "Du hast %ggruenes Feuer%w!&%gRegeneriert langsam Leben%w,&solange es brennt.",
+                                "\x13\xB4"
+                                "Vous avez le %gFeu Vert%w!&%gRegenere lentement la vie%w&tant qu'il brule.",
+                                TEXTBOX_TYPE_BLUE);
             break;
         default:
             msg = CustomMessage("\x13\xB4"
@@ -494,9 +513,15 @@ void RegisterCustomIconHooks() {
     // vanilla tries to load Message_LoadItemIcon(ITEM_CUSTOM=0x9C) which is not a valid
     // OBJECT_GI_*. Detect custom-icon items via the player's getItemEntry, suppress
     // vanilla, and call our loader/drawer.
+    // getItemId only holds a RandomizerGet when the entry IS a randomizer entry: the Item ctor puts
+    // the RG there for MOD_RANDOMIZER rows and the vanilla GI id there for MOD_NONE ones. Casting a
+    // GI id to RandomizerGet indexes a completely unrelated row, and if THAT row has a custom icon
+    // the hook hijacks the textbox — which is why Iron Boots (GI 0x2E) showed Deku Nuts
+    // (RG #0x2E = RG_PROGRESSIVE_NUT_UPGRADE) and Hover Boots (GI 0x2F) showed Deku Sticks. Gate on
+    // modIndex so vanilla items keep their own icon token. Skijer's NEI
     COND_VB_SHOULD(VB_LOAD_ITEM_ICON, IS_RANDO, {
         Player* player = GET_PLAYER(gPlayState);
-        if (player->getItemEntry.objectId != OBJECT_INVALID) {
+        if (player->getItemEntry.objectId != OBJECT_INVALID && player->getItemEntry.modIndex == MOD_RANDOMIZER) {
             RandomizerGet rgid = static_cast<RandomizerGet>(player->getItemEntry.getItemId);
             if (Rando::StaticData::RetrieveItem(rgid).HasCustomIcon()) {
                 *should = false;
@@ -510,7 +535,7 @@ void RegisterCustomIconHooks() {
     });
     COND_VB_SHOULD(VB_DRAW_ITEM_ICON, IS_RANDO, {
         Player* player = GET_PLAYER(gPlayState);
-        if (player->getItemEntry.objectId != OBJECT_INVALID) {
+        if (player->getItemEntry.objectId != OBJECT_INVALID && player->getItemEntry.modIndex == MOD_RANDOMIZER) {
             RandomizerGet rgid = static_cast<RandomizerGet>(player->getItemEntry.getItemId);
             if (Rando::StaticData::RetrieveItem(rgid).HasCustomIcon()) {
                 *should = false;

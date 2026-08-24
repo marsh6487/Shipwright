@@ -1500,15 +1500,15 @@ void AudioLoad_Init(void* heap, size_t heapSize) {
 
     numFonts = fntListSize;
 
-    // #end region
-    // MM_FONT_HEADROOM: extra SoundFont slots beyond OOT's boot count, so the
-    // MM BGM loader (soh/mods/sound_translator/mm_bgm_loader.cpp) can register
-    // MM soundfonts at SoH-side indices past `numFonts` without OOB on the
-    // audio thread. Verified crash 0xc0000005 at mixer.c:103 (aLoadBufferImpl)
-    // when an MM seq referenced font idx 134 and gAudioContext.soundFonts was
-    // only sized for 38 OOT fonts. MM has 41 fonts; OOT has ~38; combined
-    // worst-case (no aliasing) ≈ 79 slots. 256 is generous safety margin.
-    #define MM_FONT_HEADROOM 256
+// #end region
+// MM_FONT_HEADROOM: extra SoundFont slots beyond OOT's boot count, so the
+// MM BGM loader (soh/mods/sound_translator/mm_bgm_loader.cpp) can register
+// MM soundfonts at SoH-side indices past `numFonts` without OOB on the
+// audio thread. Verified crash 0xc0000005 at mixer.c:103 (aLoadBufferImpl)
+// when an MM seq referenced font idx 134 and gAudioContext.soundFonts was
+// only sized for 38 OOT fonts. MM has 41 fonts; OOT has ~38; combined
+// worst-case (no aliasing) ≈ 79 slots. 256 is generous safety margin.
+#define MM_FONT_HEADROOM 256
     gAudioContext.soundFonts =
         AudioHeap_Alloc(&gAudioContext.audioInitPool, (numFonts + MM_FONT_HEADROOM) * sizeof(SoundFont));
     // Zero the headroom so an OOB-into-headroom read returns 0 fields (and any

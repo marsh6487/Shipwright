@@ -573,6 +573,67 @@ RANDO_ENUM_ITEM(RG_MM_TIME_DAY_3)
 RANDO_ENUM_ITEM(RG_MM_TIME_NIGHT_1)
 RANDO_ENUM_ITEM(RG_MM_TIME_NIGHT_2)
 RANDO_ENUM_ITEM(RG_MM_TIME_NIGHT_3)
+// MM's PROGRESSIVE forms of the two chains above. 2ship picks one form or the other per seed
+// (RO_CLOCK_SHUFFLE_PROGRESSIVE for the clock, the Goron Lullaby option for the song), so these never
+// coexist with the individual entries — they are the shape MM's pool uses by default, and without an
+// OoT counterpart they could not cross at all. Skijer's NEI
+// The 3 NEI custom songs. They already exist as PLAYABLE songs (OCARINA_SONG_NEI_*, z64.h) and the MM
+// quest page already draws them in the rows of the three songs they replace, but they had no
+// RandomizerGet — so they could not be shuffled or placed in OoT at all, only handed out by MM. Their
+// FC rows carried rg = FCI_NO_ITEM for exactly this reason. Skijer's NEI
+RANDO_ENUM_ITEM(RG_NEI_SONG_FUGUE_OF_HOME)
+RANDO_ENUM_ITEM(RG_NEI_SONG_COMMAND_MELODY)
+RANDO_ENUM_ITEM(RG_NEI_SONG_BALLAD_OF_HERO)
+RANDO_ENUM_ITEM(RG_MM_TIME_PROGRESSIVE)
+RANDO_ENUM_ITEM(RG_MM_SONG_LULLABY_PROGRESSIVE)
+// Elemental Wand (Skijer's NEI). Which of these enter the pool depends on the wand's randomizer
+// option: "Medallions"/"Single item" place only RG_ELEMENTAL_WAND, "Elemental shuffle" places the six
+// rods instead. All of them grant the same page-2 slot; they differ only in which mode they light.
+// Appended — the list is append-only, raw values live in saves and seeds.
+RANDO_ENUM_ITEM(RG_ELEMENTAL_WAND)
+RANDO_ENUM_ITEM(RG_WAND_SAND_ROD)
+RANDO_ENUM_ITEM(RG_WAND_TORNADO_ROD)
+RANDO_ENUM_ITEM(RG_WAND_WATER_ROD)
+RANDO_ENUM_ITEM(RG_WAND_METEOR_ROD)
+RANDO_ENUM_ITEM(RG_WAND_STORM_ROD)
+RANDO_ENUM_ITEM(RG_WAND_SHADOW_SCEPTER)
+// The last three page-2 equipment cells. They were fully playable in both games (behaviours in
+// mods/equipment) but had NO randomizer identity at all, so they could not be placed in a seed nor
+// synced across games — the only way to own them was the save editor. Appended, never inserted:
+// raw values live in saves and seeds. Skijer's NEI
+RANDO_ENUM_ITEM(RG_EXT_TRIDENT)
+RANDO_ENUM_ITEM(RG_EXT_CLIMB_BOOTS)
+RANDO_ENUM_ITEM(RG_EXT_ROC_BOOTS)
+// The four page-2 cells opened by the 2026-08-06 re-layout (behaviorless-for-now real items).
+RANDO_ENUM_ITEM(RG_SHEIKAH_SLATE)
+RANDO_ENUM_ITEM(RG_PHANTOM_HOURGLASS)
+RANDO_ENUM_ITEM(RG_SHADOW_CRYSTAL)
+RANDO_ENUM_ITEM(RG_ROD_OF_SEASONS)
+// Per-LEVEL identities of the NEI progressive weapon chains. The RG_PROGRESSIVE_* rows stay the
+// POOL items; these are what the progressive GI resolution lands on, so every level presents with
+// its own name, textbox and model (a progressive give must always look like the level you are
+// actually receiving). Never placed directly in a seed. Skijer's NEI
+RANDO_ENUM_ITEM(RG_RAZOR_SWORD)       // Kokiri chain L2
+RANDO_ENUM_ITEM(RG_GILDED_SWORD)      // Kokiri chain L3
+RANDO_ENUM_ITEM(RG_TRUE_MASTER_SWORD) // Master chain L2
+RANDO_ENUM_ITEM(RG_GREAT_FAIRY_SWORD) // BGS chain L2
+RANDO_ENUM_ITEM(RG_IRON_KNUCKLE_AXE)  // Hammer chain L2
+RANDO_ENUM_ITEM(RG_ULTRASHOT)         // Hookshot chain L3
+RANDO_ENUM_ITEM(RG_QUARTZ_OF_MOTION)  // Stone of Agony chain L2
+// Dual Cane per-skill identities (mirror of MM's RI_OOT_NEI_CANE_* — the RG_CANE_OF_SOMARIA row
+// stays the pool item AND the Statue skill; these are what its resolution lands on for gives 2-6,
+// in the fixed order Statue -> Flip -> Block -> Stone -> Platform -> Ultrahand).
+RANDO_ENUM_ITEM(RG_CANE_PACCI_FLIP)       // give 2 (Pacci base — yellow)
+RANDO_ENUM_ITEM(RG_CANE_SOMARIA_BLOCK)    // give 3 (Somaria upgrade — red + flame)
+RANDO_ENUM_ITEM(RG_CANE_PACCI_STONE)      // give 4 (Pacci upgrade — yellow + flame)
+RANDO_ENUM_ITEM(RG_CANE_SOMARIA_PLATFORM) // give 5 (Somaria upgrade — red + flame)
+RANDO_ENUM_ITEM(RG_CANE_PACCI_ULTRAHAND)  // give 6 (Pacci upgrade — yellow + flame)
+// Sheikah Slate runes — sibling items over SLOT_SHEIKAH_SLATE (wand idiom: any order, no levels).
+// Each lights its NeiSaveData.slateRunesOwned bit; the first one also hands over the slate itself.
+RANDO_ENUM_ITEM(RG_SLATE_RUNE_BOMB)         // Remote Bomb (cyan)
+RANDO_ENUM_ITEM(RG_SLATE_RUNE_MASTER_CYCLE) // Master Cycle Zero (teal)
+RANDO_ENUM_ITEM(RG_SLATE_RUNE_STASIS)       // Stasis (gold)
+RANDO_ENUM_ITEM(RG_SLATE_RUNE_CRYONIS)      // Cryonis (ice blue)
 RANDO_ENUM_ITEM(RG_MAX)
 RANDO_ENUM_END(RandomizerGet)
 

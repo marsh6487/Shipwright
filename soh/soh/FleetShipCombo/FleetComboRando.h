@@ -17,8 +17,10 @@
 // CVars combo: gFleetCombo.GoalMode (0 = Beat Both Bosses, 1 = Triforce Hunt),
 //              gFleetCombo.TriforceTotal, gFleetCombo.TriforceRequired.
 //
-// V1 impone: entrance shuffle de OoT OFF y songs de OoT en Anywhere (la pre-colocación puede
-// usar cualquier location; las etapas restringidas de canciones no soportan robo de spots).
+// Nada se fuerza: cada juego conserva sus opciones tal cual. El entrance shuffle de OoT funciona
+// normal (lo único no modelado es barajar entradas ENTRE juegos: el portal ToT <-> Clock Town es
+// fijo), y las categorías compartidas (canciones, dungeon rewards) solo mandan si tú las pones en su
+// modo de spots — ahí la etapa restringida coloca antes que nada y las etapas nativas se apartan.
 
 #include <string>
 #include <vector>
@@ -41,30 +43,60 @@ bool FleetCombo_IsRunning();
 // Última línea de estado/progreso para la UI (thread-safe, copia).
 std::string FleetCombo_GetStatus();
 
+// Restricted-category stages (shared Songs / Dungeon Rewards on their spots mode). Called from
+// Fill() BEFORE every native placement stage, so those spots are already occupied when own-dungeon
+// items, dungeon rewards, Link's Pocket and the rest run — they only fill empty locations, so they
+// skip them by themselves and no per-stage reservation is needed. true = seguir; false = reintentar.
+bool FleetCombo_RestrictedStageHook();
+
 // Hook llamado desde Fill() (fill.cpp) en cada intento. true = seguir; false = reintentar.
 // No-op (true) cuando no hay generación combo activa.
 bool FleetCombo_PrePlacementHook();
 
-// ---- Options INCOMPATIBLE with the combo ----
-// Options one game can do and the other cannot, or that the combo does not model yet. Generation
-// forces them to a safe value; this table is the SAME one that applies the forcing, so the Shared
-// window's panel cannot lie about what generation will do.
-struct FleetIncompat {
-    const char* label;    // short name for the UI
-    const char* why;      // why it is incompatible (shown on hover)
-    const char* forcedTo; // what it ends up as after generating
-    // OoT CVars that get checked/forced, nullptr-terminated. nullptr = the option is not forced
-    // through a CVar (it goes straight onto the Context at generation, or is an oracle push to the
-    // MM side): there is no live state to read, the row only informs.
-    const char* const* cvars;
-    int safeValue; // value every cvar in the row is forced to
-};
+// Shared Songs option: 0 = Own Game Logic, 1 = Song Spots, 2 = Anywhere. Always 0 when no combo
+// generation is running, so the native song stages behave exactly as they always did.
+int FleetCombo_SharedSongsMode();
 
-// The whole table (including the rows with no CVar, marked cvars == nullptr).
-const FleetIncompat* FleetCombo_GetIncompatTable(int* count);
+// True when the shared Dungeon Rewards option is on "Reward Spots" during a combo generation: the
+// combo deals OoT's 6 medallions + 3 stones and MM's 4 remains across the 13 boss spots of BOTH
+// games, so OoT's own reward stages must stand down and leave those locations empty.
+bool FleetCombo_RestrictedDungeonRewards();
 
-// How many rows with OoT CVars are RIGHT NOW sitting on a conflicting value.
-int FleetCombo_CountActiveConflicts();
+// True only while a combo seed is being generated. Lets native stages use combo numbers without
+// affecting solo-OoT seeds (today: the bottle count, 8 instead of 4).
+bool FleetCombo_IsComboGeneration();
 
-// Sets every row's OoT CVars to their safe value (the same thing generation will do).
-void FleetCombo_ResolveAllConflicts();
+// Bottles MM contributes that OoT cannot draw (Gold Dust, Chateau Romani). OoT's pool subtracts these
+// from its 8 so the SHARED 8-slot bottle inventory adds up exactly. 0 outside a combo.
+int FleetCombo_MmOnlyBottleCount();
+
+// ---- Cross-game hints ----
+// Readable area of the MM check where pre-placement put `riName` (MM's RI_* name), e.g. "Woodfall
+// Temple". Empty string if the item is not placed in MM, or if the oracle manifest carried no areas
+// (2ship builds older than checkAreas).
+//
+// Consumed by OoT's hint generation: without it an item placed in MM resolves to RC_UNKNOWN_CHECK ->
+// "Invalid Location", the `areas` array comes out shorter than the locations one, and the template's
+// leftover [[N]] tokens end up printed on screen.
+std::string FleetCombo_GetMmAreaForItem(const std::string& riName);
+
+// Same, but keyed by OoT's RandomizerGet (what hint generation deals in).
+// Chain: RandomizerGet -> RI_ name (FC table) -> MM check (sMmPlacements) -> area.
+std::string FleetCombo_GetMmAreaForOotItem(int randomizerGet);
+
+// A hint names a CONCRETE item (RG_MASTER_SWORD); the combo may only carry the CHAIN that grants it
+// (RG_PROGRESSIVE_MASTER_SWORD). Returns the chain's RandomizerGet in that case, 0 otherwise.
+//
+// Hint generation must translate BEFORE it searches: looking for the concrete id finds nothing,
+// because no location holds it, and the hint degrades to "an Isolated Place" even when the item is
+// sitting in Hyrule. Searching for the chain finds it in whichever world it landed in.
+int FleetCombo_ChainForItem(int randomizerGet);
+
+// true when MM area data is loaded (recent manifest + pre-placement done).
+bool FleetCombo_HasMmHintData();
+
+// NOTE: there is no incompatibility table any more. It existed for the monolithic pre-placement,
+// which claimed any location it liked and so could not coexist with each game's restricted stages.
+// The delegated fill runs AFTER those stages and takes only what they leave, so nothing has to be
+// forced: every option holds as the player set it, and the cross-game goal is the one thing the combo
+// owns. Skijer's NEI

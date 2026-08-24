@@ -126,8 +126,7 @@ static u8 ObjLightswitch_IsSw97LightArrow(Actor* ac) {
         return p == ARROW_SW97_LIGHT || p == ARROW_SEED_LIGHT;
     }
     if (ac->id == ACTOR_PLAYER) {
-        return gCustomItemState.gustJarEquipped &&
-               gCustomItemState.gustJarMode == 3 /* GUST_MODE_BLOW */ &&
+        return gCustomItemState.gustJarEquipped && gCustomItemState.gustJarMode == 3 /* GUST_MODE_BLOW */ &&
                gCustomItemState.gustJarElement == 5 /* GUST_ELEMENT_LIGHT */;
     }
     return 0;

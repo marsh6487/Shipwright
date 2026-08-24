@@ -141,7 +141,11 @@ typedef enum {
     FC_MM_FAIRIES_SNOWHEAD,
     FC_MM_FAIRIES_GREAT_BAY,
     FC_MM_FAIRIES_STONE_TOWER,
-    // 94..127 free for future assignments (NEVER renumber the above).
+    // OoT Progressive Strength (Goron Bracelet -> Silver -> Gold Gauntlets). Info-only in MM, like
+    // the tunics/boots above: the cell records the level so the ext-equipment kaleido and the combo
+    // sync can see it. Appended at the first free index, so no existing cell moves. Skijer's NEI
+    FC_OOT_STRENGTH = 94,
+    // 95..127 free for future assignments (NEVER renumber the above).
     FC_MAX = FC_COMBO_OBTAINED_SIZE
 } FleetComboId;
 
@@ -149,6 +153,13 @@ typedef enum {
 // Mirror of MM's nei.ootQuestItems pattern: OoT stores MM quest ownership here. Bits chosen to
 // match MM's native QuestItem indices where one exists (remains 0-3, songs 6-17) so the sync is
 // a masked copy of MM's inventory.questItems.
+// --- Combo goal state (Beat Both Bosses) ---------------------------------------------------
+// Shared because the goal is genuinely cross-game: neither world may roll credits until BOTH
+// bosses are down. Whoever wins first records its bit, saves, and is sent back out to keep
+// playing; the second one to fall triggers the real ending. Synced like every other combo field.
+#define FC_GOAL_GANON_BEATEN (1 << 0)
+#define FC_GOAL_MAJORA_BEATEN (1 << 1)
+
 #define FC_MMQ_REMAINS_ODOLWA (1 << 0)
 #define FC_MMQ_REMAINS_GOHT (1 << 1)
 #define FC_MMQ_REMAINS_GYORG (1 << 2)
@@ -158,14 +169,14 @@ typedef enum {
 #define FC_MMQ_SONG_NEW_WAVE (1 << 8)
 #define FC_MMQ_SONG_ELEGY (1 << 9)
 #define FC_MMQ_SONG_OATH (1 << 10)
-#define FC_MMQ_SONG_SARIA (1 << 11)      // shared with OoT questItems (kept for display parity)
-#define FC_MMQ_SONG_TIME (1 << 12)       // shared
+#define FC_MMQ_SONG_SARIA (1 << 11) // shared with OoT questItems (kept for display parity)
+#define FC_MMQ_SONG_TIME (1 << 12)  // shared
 #define FC_MMQ_SONG_HEALING (1 << 13)
-#define FC_MMQ_SONG_EPONA (1 << 14)      // shared
+#define FC_MMQ_SONG_EPONA (1 << 14) // shared
 #define FC_MMQ_SONG_SOARING (1 << 15)
-#define FC_MMQ_SONG_STORMS (1 << 16)     // shared
-#define FC_MMQ_SONG_SUN (1 << 17)        // shared
-#define FC_MMQ_BOMBERS_NOTEBOOK (1 << 18) // matches MM native QUEST_BOMBERS_NOTEBOOK (0x12)
+#define FC_MMQ_SONG_STORMS (1 << 16)        // shared
+#define FC_MMQ_SONG_SUN (1 << 17)           // shared
+#define FC_MMQ_BOMBERS_NOTEBOOK (1 << 18)   // matches MM native QUEST_BOMBERS_NOTEBOOK (0x12)
 #define FC_MMQ_SONG_TIME_INVERTED (1 << 19) // playing-variant knowledge flags (info-only)
 #define FC_MMQ_SONG_TIME_DOUBLE (1 << 20)
 // Mask of the bits that come 1:1 from MM's native inventory.questItems (remains 0-3, songs 6-17,
@@ -253,10 +264,11 @@ static const FcBottleContentPair kFcBottleContentMap[] = {
     { 0x1B, 0xFE }, // ITEM_LETTER_RUTO              <-> (no MM relative: sentinel 0xFE, kept OoT-side)
 };
 #define FC_BOTTLE_CONTENT_MAP_COUNT (sizeof(kFcBottleContentMap) / sizeof(kFcBottleContentMap[0]))
-#define FC_BOTTLE_SLOT_EMPTY 0xFF    // NeiSaveData.bottleSlots "no bottle in this slot"
-#define FC_BOTTLE_UNMAPPED 0xFE      // translation result for a content with no relative: the
-                                     // applier must replace it with the LOCAL empty-bottle id
-                                     // (never store 0xFE — big ids crash icon/digit lookups)
+#define FC_BOTTLE_SLOT_EMPTY 0xFF // NeiSaveData.bottleSlots "no bottle in this slot"
+#define FC_BOTTLE_UNMAPPED \
+    0xFE // translation result for a content with no relative: the
+         // applier must replace it with the LOCAL empty-bottle id
+         // (never store 0xFE — big ids crash icon/digit lookups)
 
 static inline uint8_t FcBottle_OotToMm(uint8_t ootId) {
     unsigned int i;
@@ -312,6 +324,10 @@ static const FcBottleContentPair kFcItemPairMap[] = {
     { 0xF5, 0xF8 }, // Bottomless Bottle
     { 0xF6, 0x0C }, // Powder Keg
     { 0xDD, 0xDC }, // Magic Mushroom
+    // Elemental Wand — the ONE page-2 custom whose id is the SAME on both sides (0xD0), so it falls
+    // outside the +0x18 block below and used to translate to 0xFF (unmappable) in BOTH directions:
+    // obtained in either game, it simply never showed up in the other. Skijer's NEI
+    { 0xD0, 0xD0 }, // Elemental Wand
 };
 #define FC_ITEM_PAIR_MAP_COUNT (sizeof(kFcItemPairMap) / sizeof(kFcItemPairMap[0]))
 // NEI page-2 custom items sit in a contiguous 26-id block on both sides at a fixed offset:

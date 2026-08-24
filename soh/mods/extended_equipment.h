@@ -181,8 +181,7 @@ void ExtEquip_ClearTransformBackup(void);
 // ---------------------------------------------------------------------------
 // Divine Shield helpers (called from z_player_lib.c and z_player.c)
 // ---------------------------------------------------------------------------
-u8 DivineShield_IsWoodType(void);
-u8 DivineShield_IsFireproof(void);
+u8 ExtEquip_ShieldIsWooden(void);
 void DivineShield_OnShieldBlock(Player* player, PlayState* play);
 
 // ---------------------------------------------------------------------------
@@ -213,11 +212,11 @@ typedef struct {
 
 typedef struct {
     // Cane of Byrna (Ext Sword 1)
-    u8 byrnaSavedSwordEquip; // Original equips.equipment sword nibble
-    u8 byrnaSavedButtonItem; // Original equips.buttonItems[0]
+    u8 byrnaSavedSwordEquip;   // Original equips.equipment sword nibble
+    u8 byrnaSavedButtonItem;   // Original equips.buttonItems[0]
     f32 byrnaSavedSwordHealth; // Original swordHealth (GK durability)
     u8 byrnaSavedBgsFlag;      // Original bgsFlag (1=BGS, 0=GK)
-    u8 byrnaActive;          // Whether Byrna has overridden sword state
+    u8 byrnaActive;            // Whether Byrna has overridden sword state
 
     // Pegasus Anklet
     u8 pegasusState;
@@ -240,8 +239,8 @@ typedef struct {
     u8 ikAxeDrawing; // 1 when hammer is out (hide vanilla sword DL), 0 in free mode
 
     // Four Sword (Ext Sword 2)
-    u8 fourSwordSavedSwordEquip; // Original equips.equipment sword nibble
-    u8 fourSwordSavedButtonItem; // Original equips.buttonItems[0]
+    u8 fourSwordSavedSwordEquip;       // Original equips.equipment sword nibble
+    u8 fourSwordSavedButtonItem;       // Original equips.buttonItems[0]
     u8 fourSwordActive;                // pak loader is live
     s16 fourSwordBHoldTimer;           // frames B has been held while shielding
     u8 fourSwordCharging;              // 1 while charge is armed (B+shield >= threshold)
@@ -279,6 +278,27 @@ void ExtEquip_UpdateBehavior(void* player, void* play);
 void ExtEquip_OnMeleeHit(void* player, void* play);
 
 /**
+ * Ext-equipment parry dispatcher — the SINGLE z_player.c hook for every page-2
+ * piece whose guard is an animation rather than a raised shield (shieldQuad never
+ * bounces for those, so the *_OnShieldBlock hook never fires for them).
+ *
+ * Sits in the damage branch chain next to GerudoMhr_TryParry. Returns 1 when a
+ * piece consumed the hit, so the vanilla damage branches are skipped. Add new
+ * pieces inside the dispatcher, NOT as new branches in z_player.c.
+ * Skijer's NEI
+ */
+u8 ExtEquip_TryParry(void* play, void* player);
+
+/**
+ * True when an ext piece owns the B button and OOT must NOT interpret it as a
+ * sword swing. Read from Player_GetItemOnButton (index 0), the same place the
+ * Deku form and the sword-blocking masks hook — that is BEFORE actionFunc, which
+ * is the only point early enough to stop the vanilla swing from starting.
+ * Skijer's NEI
+ */
+u8 ExtEquip_BlocksBButtonSword(void);
+
+/**
  * Called from z_player.c draw section for equipment-specific visuals
  * (barriers, auras, etc.).
  */
@@ -289,6 +309,73 @@ void ExtEquip_DrawBehavior(void* player, void* play);
  * Called from z_player_lib.c in the limb draw callback.
  */
 u8 ExtEquip_ShouldHideSwordDL(void);
+
+// ---------------------------------------------------------------------------
+// Kite Shield — shield surfing (ext shield 2). State lives in
+// mods/equipment/behaviors/equip_kite_shield.c, the engine in mods/equipment/kite_surf.c.
+// ---------------------------------------------------------------------------
+
+/** True while the surf owns the player at all, mount and dismount included. */
+u8 KiteSurf_IsActive(void);
+
+/** True only while actually riding — the board is out and the hand/back shield must not draw. */
+u8 KiteSurf_IsRiding(void);
+
+/** Draws the board under Link's feet. Called from Player_PostLimbDraw on PLAYER_LIMB_ROOT. */
+void ExtEquip_DrawKiteSurfBoard(void* play);
+
+// KiteSurf_AdjustLimb (the lower-body crouch/lean) is NOT declared here on purpose: it takes a
+// Vec3s*, and this header is pulled in by z64item.h — i.e. by translation units that have not seen
+// z64math.h yet. z_player_lib.c declares it locally, the way it already does for the BossRemains
+// limb hooks.
+// Trident (ext sword 3) sword-trail / melee-quad frame: pushes the matrix into the
+// lance's own frame (caller pops) and returns 1 while the lance is out; 0 otherwise.
+u8 ExtEquip_TridentTrailBegin(void);
+f32 ExtEquip_TridentTrailLength(void);
+void ExtEquip_TridentApplyHeldTransform(void);
+// Spin-attack charge glow: replaces En_M_Thunder's per-sword translate/scale block
+// with the lance's frame so the glow covers the trident. Called with mf_9E0 current.
+u8 ExtEquip_TridentThunderTransform(void);
+
+// Trident (ext sword 3) ground chain. Same arrangement as GerudoMhr_NextComboMwa /
+// GerudoMhr_OwnsComboRow, and for the same reason: OOT picks the swing row from the
+// STICK ANGLE and only reaches a _COMBO row on the third consecutive press, so a
+// fixed 1->2->3 sequence cannot be expressed by filling the six rows. Both are
+// called from func_80837948, which lives above the unity include of this module —
+// hence the declarations here rather than in the .c. Skijer's NEI
+s32 Trident_NextComboMwa(Player* player, s32 requested);
+u8 Trident_OwnsComboRow(Player* player);
+// True for the rows of the ground chain, so func_80837948 starts them with a MORPH
+// (Player_AnimChangeOnceMorphAdjusted) instead of cutting straight to frame 0 —
+// otherwise each slash begins from a pose the previous one never reached.
+u8 Trident_MorphsRow(Player* player, s32 mwa);
+// Keeps vanilla's hold-B charge reachable after the trident's long swings — same
+// hook and same reason as GerudoMhr_HoldsChargeWindow (Player_UpdateCommon).
+u8 Trident_HoldsChargeWindow(Player* player);
+// True during the untouchable opening of the max-charge release: z_player_lib.c
+// paints the tunic gold so the immunity window is visible.
+u8 Trident_GoldenArmor(void);
+// Guard clips for the vanilla shield action: 0 raise, 1 hold, 2 lower. NULL = vanilla.
+// (Trident_GetGuardAnim is gone: the trident's shield poses are vanilla's now.)
+
+/**
+ * Multiplier on how fast the LEG cycle turns over, asked for by func_8084029C after
+ * it clamps the phase rate. This is the only lever that works: every locomotion
+ * action loads the joint table from unk_868 and never reads skelAnime.playSpeed.
+ * 1.0f unless something (the Pegasus dash) is deliberately speeding the legs up.
+ */
+f32 ExtEquip_LegCycleRateMul(void);
+// R+B from the guard: the clip func_808428D8 plays instead of link_normal_defense_kiru.
+// Only the fallback for when the guard dash cannot start — R+B is the dash.
+LinkAnimationHeader* Trident_GetGuardStabAnim(Player* player);
+// (Trident_OnShieldBlock is gone: the trident no longer parries. Its guard is a plain
+// vanilla block with whatever shield its age gets — Divine as a child, Mirror as an adult.)
+// Draw / sheathe clips for Player_StartChangingHeldItem. NULL = vanilla's.
+LinkAnimationHeader* Trident_GetItemChangeAnim(Player* player, s8 newItemAction, s32* itemChangeType);
+// Jump slash launch (func_8083BA90, next to GerudoMhr_AdjustJumpSlash): shorter, lower hop.
+void Trident_AdjustJumpSlash(Player* player, s32 mwa);
+// True while the Phantom Ganon flight owns Link (Player_HandleExitsAndVoids skips the void check).
+u8 Trident_IsFlying(void);
 
 /**
  * Returns the MM Mirror Shield OTR path if Shield of Ikana is equipped, NULL otherwise.
@@ -312,21 +399,24 @@ void ExtEquip_DrawShieldBackDL(void* play);
 u8 ExtEquip_SlotRetired(s16 equipType, u8 index);
 
 // Extended recolor tunics (Skijer 2026-07-16) — currently-equipped predicates + Spirit money gate:
-u8 ExtEquip_IsChampionTunic(void);   // ext tunic 1 (blue) equipped
-u8 ExtEquip_IsSpiritTunic(void);     // ext tunic 2 (orange/black) equipped
-u8 ExtEquip_IsSnowquillTunic(void);  // ext tunic 3 (white) equipped
+u8 ExtEquip_IsChampionTunic(void); // ext tunic 1 (blue) equipped
+u8 ExtEquip_IsSpiritTunic(void);   // ext tunic 2 (orange/black) equipped
+u8 ExtEquip_IsSagesTunic(void);    // ext tunic 3 (white) equipped
 typedef enum {
-    SNOWQUILL_RESIST_ICE,
-    SNOWQUILL_RESIST_FIRE,
-    SNOWQUILL_RESIST_THUNDER,
-    SNOWQUILL_RESIST_STUN,
-    SNOWQUILL_RESIST_FALL,
-    SNOWQUILL_RESIST_WIND,
-} SnowquillResistance;
-u8 ExtEquip_HasSnowquillResistance(SnowquillResistance resistance);
-u8 ExtEquip_SpiritHasMoney(void);    // Spirit equipped AND rupees > 0
-void ExtEquip_GiveCape(void);        // grant the Magic Cape (dedicated ownership flag)
-void* ExtEquip_GetCapeIcon(void);    // upgrade-column icon (decoupled from the ext grid slot)
+    SAGES_RESIST_ICE,
+    SAGES_RESIST_FIRE,
+    SAGES_RESIST_THUNDER,
+    SAGES_RESIST_STUN,
+    SAGES_RESIST_FALL,
+    SAGES_RESIST_WIND,
+} SagesResistance;
+u8 ExtEquip_HasSagesResistance(SagesResistance resistance);
+void ExtEquip_SagesFlash(SagesResistance resistance); // a resistance just absorbed damage
+void ExtEquip_SagesFlashTick(void);                   // per-frame decay (Sages_Behavior)
+void ExtEquip_GetSagesTunicColor(u8* r, u8* g, u8* b);
+u8 ExtEquip_SpiritHasMoney(void); // Spirit equipped AND rupees > 0
+void ExtEquip_GiveCape(void);     // grant the Magic Cape (dedicated ownership flag)
+void* ExtEquip_GetCapeIcon(void); // upgrade-column icon (decoupled from the ext grid slot)
 void* ExtEquip_GetPendantIcon(void);
 
 // Upgrade-column passives (Magic Cape / Pendant of Memories — Skijer 2026-07-15):
@@ -336,10 +426,11 @@ void* ExtEquip_GetPendantIcon(void);
 // Sword clones, Deku Leaf). Passive: active whenever the cape is OWNED, independent of visibility.
 #define MAGIC_REQ(cost) (ExtEquip_CapeOwned() ? ((cost) / 2) : (cost))
 u8 ExtEquip_CapeOwned(void);
-u8 ExtEquip_CapeVisible(void);          // owned && not hidden (draw the cloth)
+u8 ExtEquip_CapeVisible(void); // owned && not hidden (draw the cloth)
 void ExtEquip_ToggleCapeVisibility(void);
-u8 ExtEquip_PendantOwned(void);         // owns the Pendant of Memories (ext BOOTS 2 bit)
-u8 ExtEquip_PendantActive(void);        // owned && effect toggle ON
+u8 ExtEquip_PendantOwned(void);  // owns the Pendant as EQUIPMENT (permanent once granted)
+void ExtEquip_GivePendant(void); // grant it (the adult trade slot does this automatically)
+u8 ExtEquip_PendantActive(void); // owned && effect toggle ON
 void ExtEquip_TogglePendantEffect(void);
 
 /**
@@ -373,6 +464,9 @@ void ExtEquip_CaptureCapeShoulderPos(s32 limbIndex);
  * When set to 1, ExtInv_GetItemIcon won't replace sword/shield icons.
  */
 extern u8 gExtEquipSuppressIconOverride;
+// 1 while the equipment page names one of its PAGE-2 GRID cells (disambiguates the one item id
+// shared by the Pendant of Memories and the Climb Boots — see extended_equipment.c).
+extern u8 gExtEquipGridNameContext;
 
 // ---------------------------------------------------------------------------
 // Shield of Ikana: Death Save
