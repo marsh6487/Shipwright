@@ -19,6 +19,12 @@
  * (soh.vcxproj); CMake builds glob it, but cmake regeneration is forbidden in this fork.
  */
 
+// At GLOBAL scope, before the extern "C" block below: z64.h pulls in <memory> under C++, and a
+// template cannot have C linkage. Getting it in first makes the include inside that block a no-op —
+// boss_remains.cpp survives the same pattern only because its own header lands here first.
+#include "z64.h"
+#include <math.h> // sqrtf / fabsf, used by the ported actor .c files
+
 // OPEN_DISPS / CLOSE_DISPS redeclare these two symbols inline at each call site; in a C++ TU that
 // takes C++ linkage unless a C declaration exists at file scope. Force the C symbols (same trick as
 // boss_remains.cpp / spiritual_stones.cpp) so the macro's redeclaration matches and links.

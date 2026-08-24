@@ -13,6 +13,10 @@
 // in-block redeclaration takes C++ linkage unless a C declaration exists at file scope. Force the
 // C symbols (same trick as spiritual_stones.cpp / garo_form.cpp) so the macro's redeclaration
 // matches and the link succeeds.
+// At GLOBAL scope, before the extern "C" block below: z64.h pulls in <memory> under C++, and a
+// template cannot have C linkage. Getting it in first makes the include inside that block a no-op.
+#include "z64.h"
+
 extern "C" {
 void FrameInterpolation_RecordOpenChild(const void* a, int b);
 void FrameInterpolation_RecordCloseChild(void);
