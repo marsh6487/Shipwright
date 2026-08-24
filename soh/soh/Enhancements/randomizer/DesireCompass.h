@@ -19,11 +19,14 @@
 // C-safe header: the kaleido (.c) calls these extern "C" entry points.
 // =============================================================================
 
+// Outside the extern "C" block on purpose: z64.h pulls in <memory> under C++, and a template
+// cannot have C linkage (GCC/Clang reject it; MSVC lets it through).
+#include "z64.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "z64.h"
 
 // The 8 tracking categories, in kaleido-list order.
 typedef enum {
