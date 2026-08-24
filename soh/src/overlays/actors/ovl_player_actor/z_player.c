@@ -56,6 +56,7 @@ void Player_AnimPlayLoop(PlayState* play, Player* this, LinkAnimationHeader* ani
 // sw97 include at line ~121, so they need declaring up here.
 void Player_SetIntangibility(Player* this, s32 timer);
 s32 func_80837B18(PlayState* play, Player* this, s32 damage);
+s32 Player_PutAwayHeldItem(PlayState* play, Player* this);
 
 // ============================================================================
 // CUSTOM ITEMS IMPLEMENTATION

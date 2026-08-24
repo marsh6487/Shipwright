@@ -54,7 +54,6 @@ extern u8 MmForm_IsFDSkinMode(void);
 extern u8 MmForm_IsPikachuActive(void);
 extern u8 MmForm_IsItemAllowed(s32 item);
 extern u8 MmForm_IsSlotAllowed(u8 slot);
-extern MmPlayerTransformation MmForm_GetCurrentForm(void);
 extern u8 MmForm_IsGoronRolling(void);
 extern u8 MmForm_OnWaterSwimAttempt(PlayState* play, Player* player);
 extern TransformMaskId MmForm_GetMaskType(s32 item);

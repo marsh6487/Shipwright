@@ -15,7 +15,6 @@
 #include "transformation_masks/assets/mm_asset_loader.h"
 #include "pak_loader/pak_loader.h"
 
-extern MmPlayerTransformation MmForm_GetCurrentForm(void);
 // trade_items.c ships no header; declared locally, as randomizer.cpp and debugSaveEditor.cpp do.
 #define TRADE_ADULT_PENDANT 19 // Pendant of Memories (== ITEM_EXT_BOOTS_2), mirrors trade_items.c
 extern u8 TradeAdult_IsOwnedIndex(s32 index);

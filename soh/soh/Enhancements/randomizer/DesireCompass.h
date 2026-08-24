@@ -27,7 +27,6 @@
 extern "C" {
 #endif
 
-
 // The 8 tracking categories, in kaleido-list order.
 typedef enum {
     DCOMPASS_CAT_BOSS_SOULS = 0,

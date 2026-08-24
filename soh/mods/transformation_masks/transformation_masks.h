@@ -222,6 +222,8 @@ u8 TransformMasks_IsFDSkinMode(void);
 // Returns true if ANY form is active (including FD skin mode)
 u8 TransformMasks_IsTransformedAny(void);
 
+MmPlayerTransformation MmForm_GetCurrentForm(void);
+
 // Dragon Scale: Zora swim for non-Zora forms (Adult Link only)
 u8 TransformMasks_IsZoraSwimEnabled(void);
 void TransformMasks_SetZoraSwimEnabled(u8 enabled);
