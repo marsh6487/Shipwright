@@ -560,12 +560,20 @@ static u8 Lantern_IsInHand(void) {
 // frame (state IDLE + lensActive false), and pressing the Lens saw lensActive
 // already true and toggled it straight back OFF. z_actor.c now ORs this flag with
 // lensActive, so the Poe fire and the Lens work independently and stack.
+// The Garo form sees through the world for free, the same way the Poe fire does.
+// It is OR'd into this gate rather than driving actorCtx.lensActive from
+// garo_form.cpp: two owners toggling the same flag would each undo the other on
+// the frames the other one wanted it, and every reason the lens can be on
+// without the Lens of Truth belongs in one place.
+u8 GaroForm_HasPassiveLens(void);
+
 void Lantern_UpdateLens(PlayState* play) {
     // While HOLDING IN HAND — literally: this is the same test CustomItems_Draw uses to
     // put the lantern in Link's fist, so the shadow lens is on exactly while you can SEE
     // the lantern being held. Press its button to take it out; it stays out until another
     // item takes the hand (drawing the sword) or the lantern leaves the buttons.
-    u8 wantLens = (gCustomItemState.lanternFireType == LANTERN_FIRE_POE) && Lantern_IsInHand();
+    u8 wantLens = ((gCustomItemState.lanternFireType == LANTERN_FIRE_POE) && Lantern_IsInHand()) ||
+                  GaroForm_HasPassiveLens();
 
     // Vanilla drops the lens during real cutscenes; match that. Player_InCsMode is NOT used
     // as the test — it is also true for item cutscenes, textboxes and any state that sets

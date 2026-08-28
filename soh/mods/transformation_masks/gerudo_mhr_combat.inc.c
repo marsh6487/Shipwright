@@ -82,7 +82,9 @@
 // because the clip builders below concatenate resampled ranges by hand.
 #define GMHR_ANIM_S16_PER_FRAME 67
 #define GMHR_CHARGE_RATE_MUL 3.0f // hold-B fills in a third of the time
-#define GMHR_RAGE_DURATION 400    // frames
+// No separate duration any more: the meter IS the fuel and drains one point per frame,
+// so GMHR_RAGE_MAX doubles as "how long demon mode lasts without magic" and the magic
+// upgrades stretch it (GerudoMhr_RageCapacity).
 #define GMHR_RAGE_HOP_MUL 1.5f
 #define GMHR_ROLL_SPEED_MUL 2.0f      // Gerudo's roll covers twice the ground
 #define GMHR_FRONT_SLASH_DIST 100.0f  // "same distance as the jump slash"
@@ -103,6 +105,14 @@
 // Clip paths + loaders
 // ===========================================================================
 #define MHRP(name) "__OTR__misc/link_animetion/gMonsterHunterRise_DualBlade_" name
+// Demon mode draws from a DIFFERENT archive, mhr_weapons2_anims.o2r, and a different
+// naming scheme: the Great Sword ("gs") and Hammer ("hm") families, e.g.
+// MHRW("gs_dash_attack09"). The .o2r files in x64/Release/nei are auto-discovered (no
+// source file names any of them), so nothing has to be registered — but if a demon clip
+// ever comes back NULL, that archive not loading is the first thing to check.
+#define MHRW(name) "__OTR__misc/link_animetion/gPlayerAnim_mhr_" name
+// One demon clip lives with the Dual Blade set instead (mhr_anims.o2r).
+#define MHRIG(name) "__OTR__misc/link_animetion/gMonsterHunterRise_InsectGlaive_" name
 
 static LinkAnimationHeader* MmForm_MhrLoadPath(const char* path) {
     if (path == NULL || !ResourceMgr_FileExists(path))
@@ -175,6 +185,27 @@ static const GMhrGroupBinding sMhrGroupBindings[] = {
     { PLAYER_ANIMGROUP_short_landing, MHRP("ForwardSingleTwinSlash"), NULL, 0, -1, -1, 0.0f },
 };
 #define GMHR_GROUP_BINDING_COUNT ((s32)(sizeof(sMhrGroupBindings) / sizeof(sMhrGroupBindings[0])))
+
+// Demon mode: the SAME rows in the SAME order, with the axe clips. Row-parallel is not a
+// style choice — sMhrTables.savedGroup[i] is indexed by row, so the two tables have to
+// line up or restoring vanilla puts the wrong clip back. The static_assert below is the
+// guard. She has no dedicated demon idle or walk, so the charge-stance idle and the run
+// cover them (both loop cleanly, which is what those slots need).
+static const GMhrGroupBinding sMhrDemonGroupBindings[] = {
+    { PLAYER_ANIMGROUP_wait, MHRW("gs_idle03_loop"), NULL, 0, -1, -1, 0.0f },
+    { PLAYER_ANIMGROUP_walk, MHRW("gs_run01_loop"), NULL, GMHR_WALK_FRAMES, -1, -1, 0.0f },
+    { PLAYER_ANIMGROUP_run, MHRW("gs_run01_loop"), NULL, GMHR_RUN_FRAMES, -1, -1, 0.0f },
+    { PLAYER_ANIMGROUP_damage_run, MHRW("gs_run01_loop"), NULL, GMHR_RUN_FRAMES, -1, -1, 0.0f },
+    // The guard is one 100-frame idle that already closes on its own first pose, so the
+    // middle slot can be the WHOLE clip resampled and it loops without a seam.
+    { PLAYER_ANIMGROUP_defense, MHRW("gs_idle22_loop"), NULL, 0, 0, 24, 3.0f },
+    { PLAYER_ANIMGROUP_defense_wait, MHRW("gs_idle22_loop"), NULL, 40, -1, -1, 0.0f },
+    { PLAYER_ANIMGROUP_defense_end, MHRW("gs_idle22_loop"), NULL, 0, 75, 99, 3.0f },
+    { PLAYER_ANIMGROUP_landing, MHRW("gs_charge_attack14"), NULL, 0, 0, 30, 2.0f },
+    { PLAYER_ANIMGROUP_short_landing, MHRW("gs_charge_attack14"), NULL, 0, 0, 30, 2.0f },
+};
+static_assert(sizeof(sMhrDemonGroupBindings) / sizeof(sMhrDemonGroupBindings[0]) == GMHR_GROUP_BINDING_COUNT,
+              "demon locomotion table must be row-parallel to the dual-blade one");
 
 // ---- swings (D_80854190 rows) -----------------------------------------------
 // swingEnd: the frame the user calls "anim end" — the installed swing is CUT there,
@@ -331,6 +362,51 @@ static const GMhrMeleeBinding sMhrMeleeBindings[] = {
 };
 #define GMHR_MELEE_BINDING_COUNT ((s32)(sizeof(sMhrMeleeBindings) / sizeof(sMhrMeleeBindings[0])))
 
+// Demon mode, row-parallel (same mwa in the same slot — see the note on the locomotion
+// table). Windows are SOURCE frames, measured off the clips: they are the frames where the
+// arm chain's angular velocity peaks, which is where the axe is actually travelling. Only
+// the LEFT hand carries a window because demon mode holds one weapon, not two.
+// Speeds are picked so each row installs to roughly the length of the dual-blade row it
+// replaces, so the rhythm of the fight does not change when she switches.
+#define GMHR_DEMON_COMBO_SPEED 2.0f
+#define GMHR_DEMON_STAB_SPEED 3.0f
+#define GMHR_DEMON_CHARGE_SPEED 4.0f // "muy rapida": 243 source frames down to about 10
+static const GMhrMeleeBinding sMhrDemonMeleeBindings[] = {
+    // B chain — three hits in demon mode (sGerudoRageComboRows).
+    { PLAYER_MWA_FORWARD_SLASH_1H, MHRW("hm_charge_attack02"), NULL, GMHR_DEMON_COMBO_SPEED, 30,
+      { { 14, 24 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN, GMHR_NOWIN, GMHR_NOWIN, 0 },
+    { PLAYER_MWA_FORWARD_COMBO_1H, MHRW("hm_charge_attack03"), NULL, GMHR_DEMON_COMBO_SPEED, 30,
+      { { 13, 26 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN, GMHR_NOWIN, GMHR_NOWIN, 0 },
+    { PLAYER_MWA_RIGHT_SLASH_1H, MHRW("hm_charge_attack04"), NULL, GMHR_DEMON_COMBO_SPEED, 40,
+      { { 28, 36 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN, GMHR_NOWIN, GMHR_NOWIN, 0 },
+    { PLAYER_MWA_RIGHT_COMBO_1H, MHRW("hm_charge_attack04"), NULL, GMHR_DEMON_COMBO_SPEED, 40,
+      { { 28, 36 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN, GMHR_NOWIN, GMHR_NOWIN, 0 },
+    // Rows OOT can still reach on its own.
+    { PLAYER_MWA_LEFT_SLASH_1H, MHRW("hm_charge_attack03"), NULL, GMHR_DEMON_COMBO_SPEED, 30,
+      { { 13, 26 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN, GMHR_NOWIN, GMHR_NOWIN, 0 },
+    { PLAYER_MWA_LEFT_COMBO_1H, MHRW("hm_charge_attack04"), NULL, GMHR_DEMON_COMBO_SPEED, 40,
+      { { 28, 36 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN, GMHR_NOWIN, GMHR_NOWIN, 0 },
+    // Thrust: a charge attack in its own right — it summons a level-1 thunder, quickly
+    // (GerudoMhr_DemonStabThunder).
+    { PLAYER_MWA_STAB_1H, MHRW("gs_charge_attack01"), NULL, GMHR_DEMON_STAB_SPEED, 45,
+      { { 28, 40 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN, GMHR_NOWIN, GMHR_NOWIN, 0 },
+    { PLAYER_MWA_STAB_COMBO_1H, MHRW("gs_charge_attack01"), NULL, GMHR_DEMON_STAB_SPEED, 45,
+      { { 28, 40 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN, GMHR_NOWIN, GMHR_NOWIN, 0 },
+    { PLAYER_MWA_JUMPSLASH_START, MHRW("gs_dash_attack09"), NULL, 2.5f, 70,
+      { { 36, 39 }, { 64, 65 }, { -1, -1 } }, GMHR_NOWIN, GMHR_NOWIN, GMHR_NOWIN, 0 },
+    { PLAYER_MWA_JUMPSLASH_FINISH, MHRW("gs_charge_attack14"), NULL, 2.0f, 30,
+      { { 1, 10 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN, GMHR_NOWIN, GMHR_NOWIN, 1 },
+    // Charge release: the lightning drops on her during this one, hence the space at the
+    // front of the window (GerudoMhr_ChargeSummonFrame drives the strike).
+    { PLAYER_MWA_SPIN_ATTACK_1H, MHRW("gs_wirebug_attack04"), NULL, GMHR_DEMON_CHARGE_SPEED, 60,
+      { { 20, 28 }, { 46, 50 }, { -1, -1 } }, GMHR_NOWIN, GMHR_NOWIN, GMHR_NOWIN, 0 },
+    // Quick spin: only 20 source frames, so it plays at its own rate.
+    { PLAYER_MWA_BIG_SPIN_1H, MHRW("gs_dash_attack36"), NULL, 1.0f, -1,
+      { { 5, 18 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN, GMHR_NOWIN, GMHR_NOWIN, 1 },
+};
+static_assert(sizeof(sMhrDemonMeleeBindings) / sizeof(sMhrDemonMeleeBindings[0]) == GMHR_MELEE_BINDING_COUNT,
+              "demon swing table must be row-parallel to the dual-blade one");
+
 // ---- evasive jumps (D_80853D4C, served through VB_PLAYER_ANIM_SITE_DODGE_HOP) ----
 typedef struct {
     s32 dir; // EXTPLAYER_JUMP_*
@@ -348,6 +424,14 @@ static const GMhrJumpBinding sMhrJumpBindings[] = {
       MHRP("BackwardRisingDoubleSilkbindDash"), -1 },
 };
 #define GMHR_JUMP_BINDING_COUNT ((s32)(sizeof(sMhrJumpBindings) / sizeof(sMhrJumpBindings[0])))
+
+static const GMhrJumpBinding sMhrDemonJumpBindings[] = {
+    { EXTPLAYER_JUMP_SIDE_L, MHRW("gs_side_attack01"), NULL, -1 },
+    { EXTPLAYER_JUMP_SIDE_R, MHRW("gs_side_attack02"), NULL, -1 },
+    { EXTPLAYER_JUMP_BACKFLIP, MHRW("gs_back_attack01"), NULL, -1 },
+};
+static_assert(sizeof(sMhrDemonJumpBindings) / sizeof(sMhrDemonJumpBindings[0]) == GMHR_JUMP_BINDING_COUNT,
+              "demon hop table must be row-parallel to the dual-blade one");
 
 // ---- single clips ---------------------------------------------------------
 #define GMHR_FALL_CLIP MHRP("StationaryReadyIdle_Variant05")      // free fall, fighter
@@ -423,6 +507,63 @@ static const GMhrClip sMhrClips[] = {
     { MHRP("ForwardTripleRushSlash"), GMHR_DRAW_SPEED, 0, GMHR_NOWIN, GMHR_NOWIN }, // DRAW_RUN (played reversed)
 };
 static_assert(sizeof(sMhrClips) / sizeof(sMhrClips[0]) == GMHR_CLIP_MAX, "sMhrClips must have one row per GMhrClipId");
+
+// Demon mode's controller clips. Same order as GMhrClipId. The front slash is one clip in
+// demon mode rather than the start/teleport/strike triple, so the three FRONT rows share
+// it; the state machine still walks them, it just never changes what is on screen.
+static const GMhrClip sMhrDemonClips[] = {
+    // Entering IS the unsheathe: she slams the axe into the ground. 151 frames, and it
+    // closes on its own first pose, so there is no snap when the flourish ends.
+    { MHRW("hm_jump07"), 3.0f, 0, GMHR_NOWIN, GMHR_NOWIN },                             // RAGE_ENTER
+    { MHRW("gs_dash_attack03"), 2.0f, 0, { { 15, 19 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN }, // RAGE_ROLL
+    { MHRW("gs_jump_attack10"), 2.5f, 0, { { 23, 32 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN }, // RAGE_PARRY (close range)
+    { MHRW("gs_dash_attack16"), 2.5f, 0, { { 32, 42 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN }, // FRONT_SLASH
+    { MHRW("gs_dash_attack16"), 2.5f, 0, { { 32, 42 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN }, // RAGE_FRONT_START
+    { MHRW("gs_dash_attack16"), 2.5f, 0, { { 32, 42 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN }, // RAGE_FRONT_STRIKE
+    { MHRW("gs_charge_attack04"), 1.5f, 0, { { 0, 13 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN }, // AERIAL
+    { MHRW("gs_idle03_loop"), 1.0f, 1, GMHR_NOWIN, GMHR_NOWIN },                                // RAGE_AERIAL_LOOP
+    { MHRW("gs_charge_attack04"), 1.5f, 0, { { 0, 13 }, { -1, -1 }, { -1, -1 } }, GMHR_NOWIN }, // RAGE_AERIAL_END
+    { MHRW("gs_jump01"), 2.0f, 0, GMHR_NOWIN, GMHR_NOWIN },                                     // SHEATHE
+    { MHRW("hm_jump07"), 3.0f, 0, GMHR_NOWIN, GMHR_NOWIN },                                     // DRAW_STAND
+    { MHRW("hm_jump07"), 3.0f, 0, GMHR_NOWIN, GMHR_NOWIN },                                     // DRAW_RUN
+};
+static_assert(sizeof(sMhrDemonClips) / sizeof(sMhrDemonClips[0]) == GMHR_CLIP_MAX,
+              "sMhrDemonClips must have one row per GMhrClipId");
+
+// ---- which table set is live -----------------------------------------------
+// Demon mode is not a modifier on the dual-blade moveset any more: it is a second,
+// complete one. Everything that reads a table goes through these so there is exactly one
+// place that decides which weapon she is holding.
+static u8 MmForm_GerudoDemon(void);
+static const GMhrGroupBinding* MmForm_GerudoGroupTable(void) {
+    return MmForm_GerudoDemon() ? sMhrDemonGroupBindings : sMhrGroupBindings;
+}
+static const GMhrMeleeBinding* MmForm_GerudoMeleeTable(void) {
+    return MmForm_GerudoDemon() ? sMhrDemonMeleeBindings : sMhrMeleeBindings;
+}
+static const GMhrJumpBinding* MmForm_GerudoJumpTable(void) {
+    return MmForm_GerudoDemon() ? sMhrDemonJumpBindings : sMhrJumpBindings;
+}
+static const GMhrClip* MmForm_GerudoClipTable(void) {
+    return MmForm_GerudoDemon() ? sMhrDemonClips : sMhrClips;
+}
+
+// Single clips that also change with the weapon.
+#define GMHR_DEMON_FALL_CLIP MHRW("gs_idle03_loop")
+#define GMHR_DEMON_IDLE_CLIP MHRW("gs_idle03_loop")
+#define GMHR_DEMON_WALK_CLIP MHRW("gs_run01_loop")
+#define GMHR_DEMON_SPRINT_CLIP MHRW("hm_dash_attack04")
+#define GMHR_DEMON_CHARGE_START MHRW("gs_back_attack07")
+#define GMHR_DEMON_CHARGE_STANCE MHRW("gs_idle03_loop")
+#define GMHR_DEMON_ROLL_CLIP MHRW("gs_dash_attack03")
+#define GMHR_DEMON_ROLL_END 35
+// The long-range parry: launch, home in, land. Three clips, played as one move.
+// 27 frames and it CLIMBS: the root gains 5150 units of height over the clip, which is
+// the launch itself — this one clip is why the far parry gets off the ground. It is also
+// the only insect glaive clip in the moveset, hence its own axe placement.
+#define GMHR_DEMON_PARRY_FAR_LAUNCH MHRIG("ForwardHighAerialMultiHitSilkbindStaffStrike_Variant18")
+#define GMHR_DEMON_PARRY_FAR_DIVE MHRW("hm_charge_attack12")
+#define GMHR_DEMON_PARRY_FAR_LAND MHRW("hm_motion11")
 // ForwardDoubleTwinSlash is 32 frames and the blades leave the hands here (the map
 // says "deben desaparecer en frame 17"). Drawing is the same clip run backwards, so
 // the SAME frame is where they come back — one number owns both directions.
@@ -434,6 +575,7 @@ static_assert(sizeof(sMhrClips) / sizeof(sMhrClips[0]) == GMHR_CLIP_MAX, "sMhrCl
 typedef enum {
     GMHR_IDLE = 0,
     GMHR_RAGE_ENTER,
+    GMHR_RAGE_EXIT, // sheathing the axe; rage only clears when the clip is done
     GMHR_RAGE_ROLL,
     GMHR_RAGE_PARRY,
     GMHR_FRONT_SLASH,
@@ -519,19 +661,67 @@ static ColliderCylinderInit sMhrCylInitData = {
 // ===========================================================================
 // Section 3 — rage meter (public)
 // ===========================================================================
+// Which MHR weapon a demon clip was animated for. The hammer and the great sword hold
+// their weapon at completely different angles, so the axe needs a placement per family or
+// it only ever looks right in one of them. Derived from the clip PATH, which is the one
+// thing every source of animation here has in common — table rows, controller clips and
+// the on-demand loaders all name their clip.
+typedef enum {
+    GMHR_AXE_FAMILY_GS = 0, // gPlayerAnim_mhr_gs_*  (Great Sword)
+    GMHR_AXE_FAMILY_HM,     // gPlayerAnim_mhr_hm_*  (Hammer)
+    GMHR_AXE_FAMILY_IG,     // gMonsterHunterRise_InsectGlaive_*
+    GMHR_AXE_FAMILY_MAX,
+} GMhrAxeFamily;
+
+static s32 MmForm_GerudoAxeFamilyOfPath(const char* path) {
+    if (path == NULL)
+        return GMHR_AXE_FAMILY_GS;
+    if (strstr(path, "InsectGlaive") != NULL)
+        return GMHR_AXE_FAMILY_IG;
+    if (strstr(path, "_hm_") != NULL)
+        return GMHR_AXE_FAMILY_HM;
+    return GMHR_AXE_FAMILY_GS;
+}
+
+// Demon mode = the axe moveset. One reader for the whole file.
+static u8 MmForm_GerudoDemon(void) {
+    return sMhrRage.active;
+}
+
+// Dialling switch for the Item Editor's axe panel: lets L enter demon mode without a full
+// meter and stops the fuel draining, so the placement can be worked on without refilling
+// every few seconds. It does NOT force the state on — L still has to be pressed, so the
+// enter clip and the table swap run exactly as they do in play.
+static u8 MmForm_GerudoForceDemon(void) {
+    return CVarGetInteger("gItemEditor.GerudoAxe.FreeDemon", 0) != 0;
+}
+
 u8 GerudoMhr_RageActive(void) {
     return (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) && sMhrRage.active;
 }
+// Demon mode's tank. Magic is the upgrade: none / single / double buys x1 / x2 / x4, and
+// since the meter drains straight while demon mode is up, a bigger tank is a longer one.
+s16 GerudoMhr_RageCapacity(void) {
+    s32 level = gSaveContext.magicLevel;
+    if (level < 0) {
+        level = 0;
+    }
+    if (level > 2) {
+        level = 2;
+    }
+    return (s16)(GMHR_RAGE_MAX << level);
+}
+
 u8 GerudoMhr_RageReady(void) {
-    return (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) && !sMhrRage.active && (sMhrRage.meter >= GMHR_RAGE_MAX);
+    return (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) && !sMhrRage.active &&
+           (sMhrRage.meter >= GerudoMhr_RageCapacity());
 }
 f32 GerudoMhr_RageFill(void) {
     if (gFormState.currentForm != MM_PLAYER_FORM_GERUDO)
         return 0.0f;
-    if (sMhrRage.active)
-        return (f32)sMhrRage.timer / (f32)GMHR_RAGE_DURATION;
-    return (f32)sMhrRage.meter / (f32)GMHR_RAGE_MAX;
+    return (f32)sMhrRage.meter / (f32)GerudoMhr_RageCapacity();
 }
+// The single clips (the ones not in a table) also swap with the weapon.
 static const char* MmForm_GerudoPick(const char* normal, const char* rage) {
     return (sMhrRage.active && (rage != NULL)) ? rage : normal;
 }
@@ -601,8 +791,12 @@ static LinkAnimationHeader* MmForm_GerudoChargeReleaseClip(const char* path, f32
 }
 
 // The installed frame En_M_Thunder is thrown on (0 = not built, use the generic rule).
+// Demon mode's release is a different clip built at one rate, so it falls back to that
+// generic rule rather than reusing the dual blades' measured split.
 s16 GerudoMhr_ChargeSummonFrame(void) {
-    return (gFormState.currentForm == MM_PLAYER_FORM_GERUDO) ? sGerudoChargeSummonFrame : 0;
+    if (gFormState.currentForm != MM_PLAYER_FORM_GERUDO)
+        return 0;
+    return MmForm_GerudoDemon() ? 0 : sGerudoChargeSummonFrame;
 }
 
 // ===========================================================================
@@ -639,9 +833,9 @@ void MmForm_GerudoInstallAnims(void) {
         return;
 
     for (s32 i = 0; i < GMHR_GROUP_BINDING_COUNT; i++) {
-        const GMhrGroupBinding* b = &sMhrGroupBindings[i];
+        const GMhrGroupBinding* b = &MmForm_GerudoGroupTable()[i];
         LinkAnimationHeader* anim = ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(
-            MmForm_GerudoPick(b->path, b->ragePath), 0, b->srcStart, b->srcEnd, MmForm_GerudoGroupFrames(b));
+            b->path, 0, b->srcStart, b->srcEnd, MmForm_GerudoGroupFrames(b));
         for (s32 col = 0; col < PLAYER_ANIMTYPE_MAX; col++) {
             sMhrTables.savedGroup[i][col] = ExtPlayer_GetAnimGroupAnim(b->group, col);
             if ((anim != NULL) && (GMHR_FIGHTER_COLUMNS_MASK & (1 << col))) {
@@ -653,12 +847,12 @@ void MmForm_GerudoInstallAnims(void) {
     }
 
     for (s32 i = 0; i < GMHR_MELEE_BINDING_COUNT; i++) {
-        const GMhrMeleeBinding* b = &sMhrMeleeBindings[i];
+        const GMhrMeleeBinding* b = &MmForm_GerudoMeleeTable()[i];
         ExtPlayer_GetMeleeAnim(b->mwa, &sMhrTables.savedMelee[i], &sMhrTables.savedMeleeEnd[i],
                                &sMhrTables.savedMeleeEndLock[i], &sMhrTables.savedHitStart[i],
                                &sMhrTables.savedHitEnd[i]);
         sMhrTables.swingScale[i] = 1.0f;
-        const char* path = MmForm_GerudoPick(b->path, b->ragePath);
+        const char* path = b->path;
         LinkAnimationHeader* raw = MmForm_MhrLoadPath(path);
         if (raw == NULL) {
             SPDLOG_WARN("[GerudoMHR] missing swing clip {}", path);
@@ -676,8 +870,10 @@ void MmForm_GerudoInstallAnims(void) {
         if (swingFrames < 2)
             swingFrames = 2;
         LinkAnimationHeader* swing;
-        if (b->mwa == PLAYER_MWA_SPIN_ATTACK_1H) {
-            // The charge release runs at three rates; the builder reports its own length.
+        if ((b->mwa == PLAYER_MWA_SPIN_ATTACK_1H) && !MmForm_GerudoDemon()) {
+            // The dual-blade charge release runs at three rates; the builder reports its
+            // own length. GMHR_CHARGE_FAST_BEG/END are frames of THAT clip, so demon mode
+            // — a different clip entirely — takes the plain single-rate path.
             swing = MmForm_GerudoChargeReleaseClip(path, swingMul, &swingFrames);
             if (swing == NULL) {
                 swing = ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(path, 0, 0, swingEnd, swingFrames);
@@ -730,7 +926,8 @@ void MmForm_GerudoInstallAnims(void) {
     }
 
     {
-        LinkAnimationHeader* crit = ResourceMgr_LoadPlayerAnimAsHeaderInPlace(GMHR_CRIT_IDLE_CLIP, 0);
+        LinkAnimationHeader* crit =
+            ResourceMgr_LoadPlayerAnimAsHeaderInPlace(MmForm_GerudoPick(GMHR_CRIT_IDLE_CLIP, GMHR_DEMON_IDLE_CLIP), 0);
         const s32 slots[2] = { EXTPLAYER_FIDGET_CRIT_START, EXTPLAYER_FIDGET_CRIT_LOOP };
         for (s32 i = 0; i < 2; i++) {
             sMhrTables.savedCritIdle[i] = ExtPlayer_GetFidgetAnim(slots[i], 1);
@@ -740,7 +937,8 @@ void MmForm_GerudoInstallAnims(void) {
     }
     {
         // Light hit reactions (front/back, short) — the "soft damage" clip.
-        LinkAnimationHeader* hit = ResourceMgr_LoadPlayerAnimAsHeaderInPlace(GMHR_HIT_LIGHT_CLIP, 0);
+        LinkAnimationHeader* hit =
+            ResourceMgr_LoadPlayerAnimAsHeaderInPlace(MmForm_GerudoPick(GMHR_HIT_LIGHT_CLIP, GMHR_DEMON_IDLE_CLIP), 0);
         for (s32 i = 0; i < 4; i++) {
             sMhrTables.savedHit[i] = ExtPlayer_GetHitAnim(i);
             if (hit != NULL)
@@ -753,8 +951,17 @@ void MmForm_GerudoInstallAnims(void) {
         // even the release, until the start animation is over). A 173-frame stance in
         // that slot meant holding B did nothing visible for three seconds. So START is
         // a short slice and everything else is the held loop.
-        LinkAnimationHeader* start = ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(GMHR_CHARGE_STANCE, 0, 0, 24, 14);
-        LinkAnimationHeader* loop = ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(GMHR_CHARGE_STANCE, 0, 25, 172, 60);
+        // Demon mode has a separate windup clip instead of a slice of the stance, so the
+        // ranges differ: gs_back_attack07 (40f) into gs_idle03_loop, which loops on its own.
+        LinkAnimationHeader* start;
+        LinkAnimationHeader* loop;
+        if (MmForm_GerudoDemon()) {
+            start = ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(GMHR_DEMON_CHARGE_START, 0, -1, -1, 14);
+            loop = ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(GMHR_DEMON_CHARGE_STANCE, 0, -1, -1, 35);
+        } else {
+            start = ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(GMHR_CHARGE_STANCE, 0, 0, 24, 14);
+            loop = ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(GMHR_CHARGE_STANCE, 0, 25, 172, 60);
+        }
         for (s32 p = 0; p < EXTPLAYER_CHARGE_PHASE_MAX; p++) {
             for (s32 h = 0; h < 2; h++) {
                 LinkAnimationHeader* pick =
@@ -967,13 +1174,16 @@ u8 GerudoMhr_HoldsChargeWindow(Player* player) {
 // L is the modifier: while it is down, B belongs to the form (L+B = front slash),
 // so OOT must not see it. TransformMasks_FilterB asks this on the input copy OOT
 // reads; the controller reads the raw input and still sees the press.
+// R+B is the front slash, so B must not reach OOT while R is held — otherwise the same
+// press also starts an ordinary swing and the two fight over the animation. (Was L+B
+// until demon mode took L over.)
 u8 GerudoMhr_LOwnsB(void) {
     if (gFormState.currentForm != MM_PLAYER_FORM_GERUDO)
         return 0;
     if (gPlayState == NULL)
         return 0;
     Input* in = &gPlayState->state.input[0];
-    return CHECK_BTN_ALL(in->cur.button, BTN_L) ? 1 : 0;
+    return CHECK_BTN_ALL(in->cur.button, BTN_R) ? 1 : 0;
 }
 
 // Are the scimitars drawn in the hands (gerudo_form.cpp reads this for the DLs)?
@@ -1009,7 +1219,8 @@ static const s32 sGerudoComboRows[] = {
     PLAYER_MWA_RIGHT_SLASH_1H,
     PLAYER_MWA_RIGHT_COMBO_1H,
 };
-static const s32 sGerudoRageComboRows[] = { PLAYER_MWA_FORWARD_SLASH_1H, PLAYER_MWA_RIGHT_COMBO_1H };
+static const s32 sGerudoRageComboRows[] = { PLAYER_MWA_FORWARD_SLASH_1H, PLAYER_MWA_FORWARD_COMBO_1H,
+                                            PLAYER_MWA_RIGHT_SLASH_1H };
 #define GMHR_COMBO_STEPS ((s32)(sizeof(sGerudoComboRows) / sizeof(sGerudoComboRows[0])))
 #define GMHR_RAGE_COMBO_STEPS ((s32)(sizeof(sGerudoRageComboRows) / sizeof(sGerudoRageComboRows[0])))
 #define GMHR_COMBO_RESET_FRAMES 40
@@ -1074,10 +1285,10 @@ u8 GerudoMhr_OwnsComboRow(Player* player) {
 
 static const GMhrMeleeBinding* MmForm_GerudoBindingForMwa(s32 mwa, s32* outIndex) {
     for (s32 i = 0; i < GMHR_MELEE_BINDING_COUNT; i++) {
-        if (sMhrMeleeBindings[i].mwa == mwa) {
+        if (MmForm_GerudoMeleeTable()[i].mwa == mwa) {
             if (outIndex != NULL)
                 *outIndex = i;
-            return &sMhrMeleeBindings[i];
+            return &MmForm_GerudoMeleeTable()[i];
         }
     }
     return NULL;
@@ -1099,8 +1310,11 @@ static u8 MmForm_GerudoWinHit(const GMhrWin* w, f32 prev, f32 cur) {
 u8 GerudoMhr_GetBladeGate(u8* mask, u8* ownFlags, u32* dmgFlags, u8* damage) {
     if (gFormState.currentForm != MM_PLAYER_FORM_GERUDO)
         return 0;
-    if (mask != NULL)
-        *mask = sMhr.bladeMask;
+    if (mask != NULL) {
+        // Demon mode is a single two-handed axe: bit 1 (the right blade) never arms, or
+        // she would hit twice with a weapon she is not holding.
+        *mask = MmForm_GerudoDemon() ? (u8)(sMhr.bladeMask & 1) : sMhr.bladeMask;
+    }
     if (ownFlags != NULL)
         *ownFlags = sMhr.bladeOwnFlags;
     if (dmgFlags != NULL)
@@ -1108,6 +1322,26 @@ u8 GerudoMhr_GetBladeGate(u8* mask, u8* ownFlags, u32* dmgFlags, u8* damage) {
     if (damage != NULL)
         *damage = sMhr.bladeDamage;
     return sMhr.trailOn;
+}
+
+// Which family the clip on screen right now belongs to, so the axe can be placed for it.
+// Asked once per frame by the draw. The order matters: a controller clip wins because it
+// has paused OOT and owns the body; then a swing, because its row names the clip OOT is
+// playing; otherwise it is locomotion, which is great sword throughout except the sprint.
+s32 GerudoMhr_AxeFamily(Player* player) {
+    if (!MmForm_GerudoDemon())
+        return GMHR_AXE_FAMILY_GS;
+    if (sMhr.clipId != GMHR_CLIP_NONE)
+        return MmForm_GerudoAxeFamilyOfPath(MmForm_GerudoClipTable()[sMhr.clipId].path);
+    if (player != NULL) {
+        s32 idx = -1;
+        const GMhrMeleeBinding* b = MmForm_GerudoBindingForMwa(player->meleeWeaponAnimation, &idx);
+        if ((b != NULL) && (player->meleeWeaponState != 0))
+            return MmForm_GerudoAxeFamilyOfPath(b->path);
+    }
+    if (sGerudoSprinting)
+        return MmForm_GerudoAxeFamilyOfPath(GMHR_DEMON_SPRINT_CLIP);
+    return GMHR_AXE_FAMILY_GS;
 }
 
 // Per-frame gate for the OOT swing that is running (trail spawn/kill, per-hand
@@ -1213,8 +1447,8 @@ void GerudoMhr_ScanBladeHits(Player* player) {
     }
     if (hit && !sMhrRage.active) {
         sMhrRage.meter += GMHR_RAGE_PER_HIT;
-        if (sMhrRage.meter > GMHR_RAGE_MAX) {
-            sMhrRage.meter = GMHR_RAGE_MAX;
+        if (sMhrRage.meter > GerudoMhr_RageCapacity()) {
+            sMhrRage.meter = GerudoMhr_RageCapacity();
         }
     }
 }
@@ -1235,7 +1469,22 @@ u8 GerudoMhr_UsesConeBurst(Player* player) {
         return 0;
     if (gFormState.currentForm != MM_PLAYER_FORM_GERUDO)
         return 0;
+    // Demon mode's release is a bolt that falls ON her, not a wedge thrown forward, so it
+    // does not want the cone (GerudoMhr_DemonThunderStrike owns that one).
+    if (MmForm_GerudoDemon())
+        return 0;
     return Player_ActionToMeleeWeapon(player->heldItemAction) > 0;
+}
+
+// Demon mode's charge release calls down lightning on top of her, partway through
+// gs_wirebug_attack04. The strike's visual is not built yet — this is the single place it
+// will hang off, so the timing can be dialled before anything is drawn.
+void GerudoMhr_DemonThunderStrike(PlayState* play, Player* player) {
+    if ((play == NULL) || (player == NULL))
+        return;
+    if (!MmForm_GerudoDemon())
+        return;
+    // TODO(vfx): the bolt lands here.
 }
 
 // The cone's own hits: it is a separate actor with its own collider, so it never goes
@@ -1247,8 +1496,8 @@ void GerudoMhr_AddChargeRage(void) {
     if (sMhrRage.active)
         return;
     sMhrRage.meter += GMHR_RAGE_PER_HIT * GMHR_RAGE_CHARGE_MUL;
-    if (sMhrRage.meter > GMHR_RAGE_MAX) {
-        sMhrRage.meter = GMHR_RAGE_MAX;
+    if (sMhrRage.meter > GerudoMhr_RageCapacity()) {
+        sMhrRage.meter = GerudoMhr_RageCapacity();
     }
 }
 
@@ -1280,7 +1529,9 @@ static void MmForm_GerudoTickSprintRow(void) {
     // GMHR_RUN_FRAMES, not 29: this is the RUN row, and OOT samples it at 20/29 of
     // the stride counter. Installing 29 here throws away the second step.
     LinkAnimationHeader* clip = ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(
-        sGerudoSprinting ? GMHR_SPRINT_CLIP : GMHR_WALK_CLIP, 0, -1, -1, GMHR_RUN_FRAMES);
+        MmForm_GerudoDemon() ? (sGerudoSprinting ? GMHR_DEMON_SPRINT_CLIP : GMHR_DEMON_WALK_CLIP)
+                             : (sGerudoSprinting ? GMHR_SPRINT_CLIP : GMHR_WALK_CLIP),
+        0, -1, -1, GMHR_RUN_FRAMES);
     if (clip == NULL)
         return;
     for (s32 col = 0; col < PLAYER_ANIMTYPE_MAX; col++) {
@@ -1322,6 +1573,9 @@ u8 GerudoMhr_WantsLongRoll(void) {
 LinkAnimationHeader* GerudoMhr_GetRollAnim(void) {
     if (gFormState.currentForm != MM_PLAYER_FORM_GERUDO)
         return NULL;
+    if (MmForm_GerudoDemon()) {
+        return ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(GMHR_DEMON_ROLL_CLIP, 0, 0, GMHR_DEMON_ROLL_END, 0);
+    }
     return ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(GMHR_ROLL_CLIP, 0, 0, GMHR_ROLL_END, 0);
 }
 
@@ -1374,7 +1628,7 @@ LinkAnimationHeader* GerudoMhr_GetHopAnim(s32 dir) {
                                         &sBackflip, &sBackflipData);
     }
     for (s32 i = 0; i < GMHR_JUMP_BINDING_COUNT; i++) {
-        const GMhrJumpBinding* b = &sMhrJumpBindings[i];
+        const GMhrJumpBinding* b = &MmForm_GerudoJumpTable()[i];
         if (b->dir != dir)
             continue;
         u8 rage = sMhrRage.active && (b->ragePath != NULL);
@@ -1391,7 +1645,7 @@ LinkAnimationHeader* GerudoMhr_GetHopAnim(s32 dir) {
 LinkAnimationHeader* GerudoMhr_GetFallAnim(Player* player) {
     if (!GerudoMhr_ForcesFighter(player))
         return NULL;
-    return ResourceMgr_LoadPlayerAnimAsHeaderInPlace(GMHR_FALL_CLIP, 0);
+    return ResourceMgr_LoadPlayerAnimAsHeaderInPlace(MmForm_GerudoPick(GMHR_FALL_CLIP, GMHR_DEMON_FALL_CLIP), 0);
 }
 
 // ---- the jump slash: a flying lunge at the target --------------------------
@@ -1525,7 +1779,7 @@ static void MmForm_GerudoBladesOff(Player* player) {
 static void MmForm_GerudoStartClip(PlayState* play, Player* player, GMhrClipId id, u8 reversed) {
     if (id < 0 || id >= GMHR_CLIP_MAX)
         return;
-    const GMhrClip* c = &sMhrClips[id];
+    const GMhrClip* c = &MmForm_GerudoClipTable()[id];
     LinkAnimationHeader* anim = MmForm_MhrLoadPath(c->path);
     if (anim == NULL)
         return;
@@ -1610,7 +1864,7 @@ static void MmForm_GerudoTickClipBlades(void) {
         sMhr.trailOn = 0;
         return;
     }
-    const GMhrClip* c = &sMhrClips[sMhr.clipId];
+    const GMhrClip* c = &MmForm_GerudoClipTable()[sMhr.clipId];
     f32 cur = MmForm_GerudoCurFrame();
     f32 prev = sMhr.prevFrame;
     if (prev < 0.0f || prev > cur)
@@ -1780,7 +2034,7 @@ LinkAnimationHeader* GerudoMhr_GetItemChangeAnim(Player* player, s8 newIA, s32* 
         return NULL;
     if (Player_ActionToMeleeWeapon(newIA) <= 0)
         return NULL;
-    LinkAnimationHeader* anim = MmForm_MhrLoadPath(sMhrClips[GMHR_CLIP_DRAW_RUN].path);
+    LinkAnimationHeader* anim = MmForm_MhrLoadPath(MmForm_GerudoClipTable()[GMHR_CLIP_DRAW_RUN].path);
     if (anim == NULL)
         return NULL;
     if (*itemChangeType > 0)
@@ -1853,12 +2107,12 @@ static void MmForm_GerudoTickA(Player* player, PlayState* play, Input* in, u8 on
     sGerudoSprinting = sMhr.aSprint;
 }
 
-// Rage runs until the player turns it off (L+R again) or the fuel runs out: the
-// meter drains over GMHR_RAGE_DURATION frames while it is up.
+// Demon mode runs until the player taps L again or the fuel runs out. The METER is the
+// fuel and it drains straight — so a bigger capacity (more magic) is literally a longer
+// demon mode, with no second number to keep in sync.
 static void MmForm_GerudoRageOff(Player* player) {
     sMhrRage.active = 0;
     sMhrRage.timer = 0;
-    sMhrRage.meter = 0;
     sGerudoComboStep = 0;
     Player_PlayVoiceSfx(player, NA_SE_VO_LI_BREATH_REST);
 }
@@ -1866,7 +2120,10 @@ static void MmForm_GerudoRageOff(Player* player) {
 static void MmForm_GerudoTickRage(Player* player) {
     if (!sMhrRage.active)
         return;
-    if (--sMhrRage.timer <= 0) {
+    if (MmForm_GerudoForceDemon())
+        return;
+    if (--sMhrRage.meter <= 0) {
+        sMhrRage.meter = 0;
         MmForm_GerudoRageOff(player);
     }
 }
@@ -2043,6 +2300,17 @@ static u8 MmForm_GerudoMhrUpdate(Player* player, PlayState* play) {
                 MmForm_GerudoEndClip(play, player);
             return 1;
 
+        // Leaving is the mirror of entering: the clip plays FIRST and rage only clears at
+        // the end. Clearing it up front would swap the tables mid-clip and she would
+        // finish the axe animation holding the scimitars.
+        case GMHR_RAGE_EXIT:
+            MmForm_GerudoPlant(player);
+            if (MmForm_GerudoAdvance(play, player)) {
+                MmForm_GerudoRageOff(player);
+                MmForm_GerudoEndClip(play, player);
+            }
+            return 1;
+
         case GMHR_RAGE_ROLL: {
             f32 f = MmForm_GerudoCurFrame();
             MmForm_GerudoTickClipBlades();
@@ -2217,18 +2485,19 @@ static u8 MmForm_GerudoMhrUpdate(Player* player, PlayState* play) {
     if (!MmForm_GerudoCanAct(player))
         return 0;
 
-    // L+R while in rage: turn it off by hand.
-    if (fighter && sMhrRage.active && ((lPress && rHeld) || (rPress && lHeld))) {
-        MmForm_GerudoRageOff(player);
+    // Tap L while in demon mode: sheathe the axe. Whatever meter is left is KEPT — the
+    // meter is fuel, not a one-shot, so backing out early banks it.
+    if (fighter && sMhrRage.active && lPress) {
+        sGerudoComboLockedYaw = player->actor.shape.rot.y;
+        MmForm_GerudoStartClip(play, player, GMHR_CLIP_SHEATHE, 0);
+        sMhr.state = GMHR_RAGE_EXIT;
         return 1;
     }
 
-    // L+R with a full meter, blades out, on the ground: rage.
-    if (fighter && onGround && !sMhrRage.active && (sMhrRage.meter >= GMHR_RAGE_MAX) &&
-        ((lPress && rHeld) || (rPress && lHeld))) {
+    // Tap L with a full meter, weapon out, on the ground: demon mode.
+    if (fighter && onGround && !sMhrRage.active && lPress &&
+        ((sMhrRage.meter >= GerudoMhr_RageCapacity()) || MmForm_GerudoForceDemon())) {
         sMhrRage.active = 1;
-        sMhrRage.timer = GMHR_RAGE_DURATION;
-        sMhrRage.meter = 0;
         sGerudoComboStep = 0;
         player->stateFlags1 &= ~PLAYER_STATE1_SHIELDING;
         sGerudoComboLockedYaw = player->actor.shape.rot.y;
@@ -2238,8 +2507,9 @@ static u8 MmForm_GerudoMhrUpdate(Player* player, PlayState* play) {
         return 1;
     }
 
-    // L+B on the ground: front slash (rage: wind-up, teleport, strike).
-    if (fighter && onGround && lHeld && bPress && !(player->stateFlags1 & PLAYER_STATE1_SHIELDING)) {
+    // R+B on the ground: front slash (demon: wind-up, teleport, strike). It used to be
+    // L+B; L is the demon toggle now.
+    if (fighter && onGround && rHeld && bPress) {
         sGerudoComboLockedYaw = player->actor.shape.rot.y;
         if (sMhrRage.active) {
             sMhr.frontTarget = player->focusActor;

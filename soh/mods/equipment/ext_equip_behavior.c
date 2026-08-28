@@ -127,39 +127,55 @@ static const ExtEquipBehaviorFunc sExtBootsBehaviors[3] = {
     ExtEquip_Behavior_Boots3,
 };
 
+// Cleanup of the piece leaving a slot. Called synchronously from ExtEquip_SetSlot — the ONLY
+// caller — so a switch never leaves the old behavior's state (timers, colliders, forced player
+// flags, anim tables) behind for a frame, and every slot has an entry.
+static void ExtEquip_CleanupSlot(s16 equipType, u8 index) {
+    switch (equipType) {
+        case EQUIP_TYPE_SWORD:
+            if (index == 1) {
+                Byrna_Cleanup();
+            } else if (index == 2) {
+                FourSword_Cleanup();
+            } else if (index == 3) {
+                Trident_Cleanup();
+            }
+            break;
+        case EQUIP_TYPE_SHIELD:
+            if (index == 1) {
+                DivineShield_Cleanup();
+            } else if (index == 2) {
+                KiteShield_Cleanup();
+            } else if (index == 3) {
+                Ikana_Cleanup();
+            }
+            break;
+        case EQUIP_TYPE_TUNIC:
+            if (index == 1) {
+                if (gPlayState != NULL) {
+                    Champion_Cleanup(gPlayState);
+                }
+            } else if (index == 2) {
+                Breastplate_Cleanup();
+            } else if (index == 3) {
+                Sages_Cleanup();
+            }
+            break;
+        case EQUIP_TYPE_BOOTS:
+            if (index == 1) {
+                Pegasus_Cleanup();
+            } else if (index == 2) {
+                ClimbBoots_Cleanup();
+            } else if (index == 3) {
+                RocBoots_Cleanup();
+            }
+            break;
+    }
+}
+
 static void ExtEquip_DispatchBehavior(Player* player, PlayState* play) {
     // Upgrade-column passives and the Zora Tunic swim run cheat-independently
     // from ExtEquip_UpdateBehavior.
-
-    // Byrna cleanup: restore original sword when Byrna is no longer active
-    if (gExtEquipState.currentExtSword != 1) {
-        Byrna_Cleanup();
-    }
-    // Pegasus cleanup: disable collider when Pegasus boots are no longer active
-    if (gExtEquipState.currentExtBoots != 1) {
-        Pegasus_Cleanup();
-    }
-    // Four Sword cleanup: clear forced equipment when sword slot 2 is no longer active
-    if (gExtEquipState.currentExtSword != 2) {
-        FourSword_Cleanup();
-    }
-    // New-slot cleanups (Skijer 2026-07-29)
-    if (gExtEquipState.currentExtSword != 3) {
-        Trident_Cleanup();
-    }
-    if (gExtEquipState.currentExtShield != 2) {
-        KiteShield_Cleanup();
-    }
-    if (gExtEquipState.currentExtBoots != 2) {
-        ClimbBoots_Cleanup();
-    }
-    if (gExtEquipState.currentExtBoots != 3) {
-        RocBoots_Cleanup();
-    }
-    // Champion's Tunic cleanup: clear screen tint when the Champion slot (now 1) is lost
-    if (gExtEquipState.currentExtTunic != 1) {
-        Champion_Cleanup(play);
-    }
 
     if (gExtEquipState.currentExtSword > 0 && gExtEquipState.currentExtSword <= 3) {
         sExtSwordBehaviors[gExtEquipState.currentExtSword - 1](player, play);

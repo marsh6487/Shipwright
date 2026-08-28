@@ -74,6 +74,7 @@
 #include "item_cane_of_somaria.c"
 #include "item_elemental_wand.c" // Skijer's NEI: six rods behind one item action (wandMode dispatch)
 #include "item_sheikah_slate.c"  // Skijer's NEI: four runes behind one page-2 cell (slateMode dispatch)
+#include "item_rod_of_seasons.c" // Skijer's NEI: four seasons behind one page-2 cell (season dispatch)
 #include "item_shadow_crystal.c" // Shadow Crystal -> Wolf Link full transformation
 #include "item_time_gate.c"
 #include "item_minish_cap.c"

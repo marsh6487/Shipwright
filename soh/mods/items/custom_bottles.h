@@ -114,6 +114,9 @@ uint8_t Bottle_CatchIntoEmpty(uint16_t content);
 // NOT a plain content give (which only fills an existing empty bottle and is lost when none exists).
 uint8_t Bottle_GiveBottle(uint16_t contentItem);
 
+// 1 = Bottle_GiveBottle would succeed. Obtainability checks ask this before offering a bottle.
+uint8_t Bottle_HasFreeSlot(void);
+
 // Pending visible-slot sync from a catch that filled a wheel's ACTIVE slot. Consumed once per catch by
 // the per-frame enforcer (mm_bottle_items.cpp), which writes SLOT_BOTTLE_1/2 + refreshes the C-button.
 uint8_t Bottle_ConsumeCatchSync(uint8_t* outWheel, uint8_t* outItem);

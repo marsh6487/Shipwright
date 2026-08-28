@@ -684,10 +684,13 @@ typedef enum {
     // from scratch each frame - so writing world.pos is writing into a value that is about to be
     // recomputed, and moving one meant moving where it thinks it lives.
     PACCI_UH_TRAIT_DRIVE_HOME = 1 << 14,
-    // Aiming at it CUTS it, the way the boomerang does. No carry: the cane deals the blow its own
-    // damage table already accepts and gets out of the way, so the actor falls, sets its flag and
-    // dies exactly as it always has.
-    PACCI_UH_TRAIT_SEVERS = 1 << 15,
+    // Aiming at it HITS it, with whatever kind of blow that particular actor is waiting for. No
+    // carry: the cane lands the hit its damage table already accepts and gets out of the way, so
+    // the actor plays its own reaction, sets its own flag and dies its own death.
+    //
+    // Which blow is per row, because the answer is different every time: the Jabu tentacle only
+    // accepts a boomerang, the bombchu rock only an explosion. One mechanism, one field.
+    PACCI_UH_TRAIT_STRIKES = 1 << 15,
     // Held in place, D-pad drives its HEIGHT rather than its position - for the one actor whose
     // size is the thing worth changing about it.
     PACCI_UH_TRAIT_HEIGHT = 1 << 16,
@@ -698,11 +701,56 @@ typedef enum {
     // animation, for the things that are too big to float in front of you and would look absurd
     // doing it.
     PACCI_UH_TRAIT_PULLABLE = 1 << 18,
+    // The D-pad swings ONE hinge of this body open and shut.
+    //
+    // Split out of LOCKED, which used to imply it. That was written for the Dodongo's jaw and then
+    // quietly tilted every other locked body 26 degrees on its X axis - the chain platform, the
+    // grate, the bombchu rock and the coffin lid all leaned over while you held them.
+    PACCI_UH_TRAIT_JAW = 1 << 19,
+    // Same gesture, but handed to an animation the actor already owns instead of posed by hand.
+    PACCI_UH_TRAIT_HINGE = 1 << 20,
 } PacciUhTrait;
+
+// Bg_Mizu_Movebg is seven machines wearing one actor id. MOVEBG_TYPE is the top nibble of params
+// and it decides which; these four split the table row by row so each variant gets the truth.
+static u8 Pacci_UhMovebgType(Actor* actor) {
+    return (u8)(((u16)actor->params >> 0xC) & 0xF);
+}
+
+static u8 Pacci_UhCondMovebgWaterSlaved(Actor* actor) {
+    return (Pacci_UhMovebgType(actor) <= 2) ? 1 : 0;
+}
+
+static u8 Pacci_UhCondMovebgDragonRoom(Actor* actor) {
+    return (Pacci_UhMovebgType(actor) == 3) ? 1 : 0;
+}
+
+static u8 Pacci_UhCondMovebgSwitched(Actor* actor) {
+    u8 type = Pacci_UhMovebgType(actor);
+
+    return ((type >= 4) && (type <= 6)) ? 1 : 0;
+}
+
+static u8 Pacci_UhCondMovebgHookshot(Actor* actor) {
+    return (Pacci_UhMovebgType(actor) == 7) ? 1 : 0;
+}
+
+// Only the deck. The two chain segments are spawned as its children and driven by it - grabbing one
+// of those would be grabbing a limb.
+//
+// The deck is params -1 (DT_DRAWBRIDGE), which lives in an enum inside z_bg_spot00_hanebasi.c and
+// not in its header, so the value is spelled out rather than named. The chains are 0 and 1.
+static u8 Pacci_UhCondDrawbridge(Actor* actor) {
+    return (actor->params == -1) ? 1 : 0;
+}
 
 typedef struct {
     s16 actorId;
-    u16 traits;
+    // u32, not u16, and that is load-bearing. PacciUhTrait runs past bit 15 - HEIGHT is 1 << 16 and
+    // HINGE is 1 << 20 - so a u16 field silently truncated the top five traits to nothing, in the
+    // TABLE itself. Every row that used one was a row with no traits at all, and the five newest
+    // behaviours were dead on arrival with nothing to see in the code that declared them.
+    u32 traits;
     // A bit field inside params, spelled out per row because every actor packs it somewhere
     // different. PATH reads a scene path index out of it; SETS_FLAG reads a switch flag index.
     u8 pathShift;
@@ -719,6 +767,11 @@ typedef struct {
     // PROXY only: what to spawn in the body's place, and with what params.
     s16 proxyId;
     s16 proxyParams;
+    // STRIKES only: the blow to land, and how hard. dmgFlags has to be something the target's own
+    // bumper accepts or nothing happens at all - which is the point, since it means the actor's
+    // rules decide, not ours.
+    u32 hitFlags;
+    s16 hitDamage;
 } PacciUhTraitRow;
 
 // A torch's flame is a separate collider from its stand, and it is only submitted while the torch
@@ -790,11 +843,14 @@ static const PacciUhTraitRow sPacciUhTraits[] = {
     // but it can be thrown, because throwing is a state it already has and already knows how to do
     // properly, cutscene camera and quake included.
     { ACTOR_BG_HEAVY_BLOCK, PACCI_UH_TRAIT_THROWS, 0, 0, NULL },
-    // The ferry is DRIVEN, not carried and not excluded. Holding it lets its own speed ramp run
-    // and letting go stops it - cane_ship.cpp explains why it has to be the speed and not the
-    // position. LOCKED so the carry never writes a position onto it, NO_TURN so it keeps its
-    // heading down the corridor.
-    { ACTOR_BG_HAKA_SHIP, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_NO_TURN, 0, 0, NULL },
+    // The ferry, pushed and pulled along the canal by hand. Nothing in BgHakaShip_Move recomputes
+    // x or z - only y, which it rebuilds from home plus a sine to make it bob - so the horizontal
+    // plane is genuinely free and the vertical one is genuinely not. PLANE_XZ says exactly that.
+    //
+    // Dragging it does not skip the wreck either: the trigger is a distance from home
+    // (home.pos.x - world.pos.x > 7600, z_bg_haka_ship.c:130) checked every frame, so shoving it
+    // to the far end runs the crash the same way sailing there does.
+    { ACTOR_BG_HAKA_SHIP, PACCI_UH_TRAIT_PLANE_XZ | PACCI_UH_TRAIT_NO_TURN, 0, 0, NULL },
     { ACTOR_BG_MIZU_WATER, PACCI_UH_TRAIT_EXCLUDE, 0, 0, NULL },     // Water Plane: not a body,
                                                                      // it is the water level
     { ACTOR_BG_JYA_ZURERUKABE, PACCI_UH_TRAIT_EXCLUDE, 0, 0, NULL }, // Sliding Climbable Wall
@@ -826,8 +882,7 @@ static const PacciUhTraitRow sPacciUhTraits[] = {
     // actually is: BgJyaLift_Move only ever steps between two hardcoded heights, 1613 and 973, and
     // then nulls its own actionFunc. There is no continuum to slide it along - the two heights are
     // the whole vocabulary - so driving the flag says the same thing more directly.
-    { ACTOR_BG_JYA_LIFT, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0x3F, NULL,
-      1 },
+    { ACTOR_BG_JYA_LIFT, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG, 0, 0x3F, NULL, 1 },
     { ACTOR_OBJ_ELEVATOR, PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_NO_TURN, 0, 0, NULL },
     // -- Dodongo's Cavern: moved by hand, and the room notices ------------------------------------
     // These three are all the same idea. Each one's position is normally decided by a switch flag
@@ -851,9 +906,11 @@ static const PacciUhTraitRow sPacciUhTraits[] = {
       NULL, 1 },
     // The staircase. Its own code sets this flag when it finishes descending
     // (z_bg_ddan_kd.c:142-144), so pushing it down by hand is doing the same thing by hand.
-    { ACTOR_BG_DDAN_KD,
-      PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_NO_TURN | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0x3F,
-      NULL, -1 },
+    // ...and the flag traits are gone from it. BgDdanKd only reads that flag in its Init; at runtime
+    // it is written by BgDdanKd_LowerStairs and read by nobody, so setting it by hand moved a
+    // number and nothing else. Pushing the staircase down still works, because CheckForExplosions
+    // writes no position at all.
+    { ACTOR_BG_DDAN_KD, PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_NO_TURN, 0, 0, NULL },
     // The skull mouth: LOCKED. It is the wall of the room with a face on it, and dragging it around
     // was never the point - the only thing about it that is meant to change is whether the mouth is
     // open. So it does not move at all, and D-up / D-down open and shut it directly. The flag is
@@ -866,18 +923,30 @@ static const PacciUhTraitRow sPacciUhTraits[] = {
     // params & 0x3F survives, so the flag can still be found while the actor is alive. Several
     // other candidates do `params &= 0xFF` in their Init and throw the index away - see the note on
     // sPacciUhTraits below.
-    { ACTOR_BG_JYA_KANAAMI, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0x3F,
-      NULL, 1 }, // Sliding Metal Grate: rot.x 0 up, 0x4000 fallen
-    { ACTOR_BG_JYA_BOMBCHUIWA, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0x3F,
-      NULL, 1 }, // Bombchu rock / light ray
+    // These three are ONE WAY, and the CLEARS_FLAG they used to carry was a lie in all three.
+    // BgJyaLift_SetFinalPosY and func_80899A08 both null their own actionFunc when they arrive, and
+    // BgHakaHuta_Open never looks back - so clearing the flag afterwards moved nothing and only
+    // switched off something the rest of the room might be reading.
+    { ACTOR_BG_JYA_KANAAMI, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG, 0, 0x3F, NULL,
+      1 }, // Sliding Metal Grate: world.rot.x 0 up, 0x4000 fallen
+    // Bombchu rock. It was a flag toggle and the flag did nothing: BgJyaBombchuiwa_Init is the only
+    // place that reads it (z_bg_jya_bombchuiwa.c:82), so flipping it mid-room changed nothing until
+    // you left and came back. What the rock is actually listening for is an explosion - bumper
+    // 0x00000008, DMG_EXPLOSIVE - and one of those brings down the whole thing: rubble, sound, and
+    // the light ray it was hiding.
+    { ACTOR_BG_JYA_BOMBCHUIWA, PACCI_UH_TRAIT_STRIKES, 0, 0, NULL, 0, 0, 0, DMG_EXPLOSIVE,
+      PACCI_UH_CUT_DAMAGE },
     // Bg_Haka_Huta, the coffin lid. Its Init does `params &= 0xFF` and then uses what is left AS the
     // flag index, so unlike the others the surviving byte IS the flag - it is readable at runtime by
     // accident of that ordering rather than by design, and it works.
-    { ACTOR_BG_HAKA_HUTA, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0xFF, NULL,
-      1 },
+    { ACTOR_BG_HAKA_HUTA, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG, 0, 0xFF, NULL, 1 },
 
-    { ACTOR_BG_DODOAGO, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0x3F, NULL,
-      1 },
+    // JAW is what actually opens it. The flag is Init-only here too, so the mouth is posed directly
+    // and the flag comes along for the room's sake - which is also why this one keeps CLEARS_FLAG
+    // when its neighbours lost it: the jaw is OUR pose, so shutting it again is ours to do.
+    { ACTOR_BG_DODOAGO,
+      PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_JAW | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0x3F,
+      NULL, 1 },
     // Stone Elevator (Fire Temple) re-derives its Y from a cosine of its own timer every frame, so
     // this row only works because the carry freezes the actor's update. If that ever changes, this
     // one has to become an EXCLUDE rather than quietly fighting the player.
@@ -913,10 +982,24 @@ static const PacciUhTraitRow sPacciUhTraits[] = {
     // Each of these packs the path index somewhere different, which is exactly why the shift and
     // mask are per row. En_Goroiwa is deliberately absent: a rolling boulder is more fun loose, and
     // it picks its route back up from wherever you set it down.
-    // Water Temple platforms: the vertical axis, not the path. They DO own a scene path and the
-    // projection worked, but a path in this room is a line the water level drags them along, and
-    // sliding one sideways along it is not a thing the room has any use for. Height is.
-    { ACTOR_BG_MIZU_MOVEBG, PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_NO_TURN, 0, 0, NULL },
+    // Water Temple platforms: SEVEN different machines behind one actor id, and one row was never
+    // going to describe them. MOVEBG_TYPE is params >> 12, and BgMizuMovebg_UpdateMain switches on
+    // it every frame (z_bg_mizu_movebg.c:248-300).
+    //
+    // Types 0/1/2 are welded to the water: world.pos.y = waterBoxes[2].ySurface + 15, rewritten
+    // every frame from the room's water level. There is no height to give them.
+    { ACTOR_BG_MIZU_MOVEBG, PACCI_UH_TRAIT_EXCLUDE, 0, 0, Pacci_UhCondMovebgWaterSlaved },
+    // Type 3 steps toward this->homeY - the actor's OWN field, not actor.home.pos - so neither the
+    // position nor home is a handle. Left alone rather than pretending.
+    { ACTOR_BG_MIZU_MOVEBG, PACCI_UH_TRAIT_EXCLUDE, 0, 0, Pacci_UhCondMovebgDragonRoom },
+    // Types 4/5/6 are a real switch toggle: home Y, or home Y + 115.2 when params & 0x3F is set,
+    // stepped 1.0 a frame and re-read every frame. That one goes both ways.
+    { ACTOR_BG_MIZU_MOVEBG,
+      PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0x3F,
+      Pacci_UhCondMovebgSwitched, 1 },
+    // Type 7 is the hookshot platform, and it really does ride a scene path.
+    { ACTOR_BG_MIZU_MOVEBG, PACCI_UH_TRAIT_PATH | PACCI_UH_TRAIT_NO_TURN, 8, 0xF,
+      Pacci_UhCondMovebgHookshot },
     { ACTOR_OBJ_BEAN, PACCI_UH_TRAIT_PATH | PACCI_UH_TRAIT_NO_TURN, 8, 0x1F, NULL },
 
     // -- fire: carrying one is carrying an open flame --------------------------------------------
@@ -974,13 +1057,21 @@ static const PacciUhTraitRow sPacciUhTraits[] = {
     // death at all: no health, no damage table, and its only Actor_Kill is the flag check in Init.
     // Its flag index is discarded there too (params &= 0xFF with nothing keeping the top byte), so
     // it cannot even be marked as dealt with. En_Bx is a hazard, En_Ba is the thing you cut.
-    { ACTOR_EN_BA, PACCI_UH_TRAIT_SEVERS, 0, 0, NULL },
+    { ACTOR_EN_BA, PACCI_UH_TRAIT_STRIKES, 0, 0, NULL, 0, 0, 0, DMG_BOOMERANG, PACCI_UH_CUT_DAMAGE },
 
     // -- size, not position ------------------------------------------------------------------------
     // The Water Spout. Its world.pos.y is rebuilt every frame from initPosY + currentHeight, so
     // moving it does nothing at all; and its scale.y is dead weight - the initchain sets it and
     // Draw does Matrix_Scale(1,1,1). targetHeight is the only number that means "how tall".
     { ACTOR_EN_SIOFUKI, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_HEIGHT, 0, 0, NULL },
+
+    // -- its own hinge, its own animation ----------------------------------------------------------
+    // The Market drawbridge. Nothing here is reimplemented: BgSpot00Hanebasi_DrawbridgeRiseAndFall
+    // already walks shape.rot.x toward destAngle at 80 a frame, drags both chain segments along at
+    // 0.4x that rate, and plays NA_SE_EV_BRIDGE_OPEN / _CLOSE with their stop variants. The cane
+    // writes destAngle and points the actor at that function; the bridge does the rest.
+    { ACTOR_BG_SPOT00_HANEBASI, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_HINGE, 0, 0,
+      Pacci_UhCondDrawbridge },
 
     // -- hauled, not carried -----------------------------------------------------------------------
     // Big enough that floating them at arm's length would look ridiculous. Bg_Haka_Zou is the
@@ -1001,8 +1092,14 @@ static const PacciUhTraitRow* Pacci_UhTraitRow(Actor* actor) {
             }
             // A row whose condition is false does not apply AT ALL - it is not a row with its
             // traits stripped. An unlit torch is an ordinary torch, and that is the whole answer.
+            //
+            // But it does not end the search either: one actor id can carry several rows, one per
+            // variant, and the condition is what tells them apart. Bg_Mizu_Movebg is seven
+            // different machines behind one id - two of them are welded to the water level, one
+            // rebuilds itself from a private field, three are switch toggles and one follows a
+            // path - and returning on the first miss meant only ever seeing the first of them.
             if ((sPacciUhTraits[i].cond != NULL) && !sPacciUhTraits[i].cond(actor)) {
-                return NULL;
+                continue;
             }
             return &sPacciUhTraits[i];
         }
@@ -1010,7 +1107,7 @@ static const PacciUhTraitRow* Pacci_UhTraitRow(Actor* actor) {
     return NULL;
 }
 
-static u16 Pacci_UhTraits(Actor* actor) {
+static u32 Pacci_UhTraits(Actor* actor) {
     const PacciUhTraitRow* row = Pacci_UhTraitRow(actor);
 
     return (row != NULL) ? row->traits : 0;
@@ -1667,7 +1764,16 @@ typedef struct {
     // frame combines that radial facing with the manual delta, keeping turning and
     // adjustment independent.
     Vec3s baseRot;
-    Vec3s grabRot;     // orientation at the moment of the grab, for the Z reset
+    Vec3s grabRot; // orientation at the moment of the grab, for the Z reset
+    // world.rot AS IT WAS, kept so it can be handed back intact.
+    //
+    // For a lot of actors world.rot is not a pose at all, it is a HEADING. Bg_Haka_Ship sets
+    // world.rot.y = shape.rot.y - 0x4000 in its Init and then sails along it; Bg_Hidan_Rock and
+    // Bg_Hidan_Sima build their x/z out of Math_SinS(world.rot.y); Bg_Jya_Kanaami animates its
+    // whole fall in world.rot.x. The carry writes shape.rot into world.rot every frame, which for
+    // those is not a small liberty - the ferry left the dock 90 degrees off course and never came
+    // back, and the grate's fall froze mid-air. So it is saved here and restored on release.
+    Vec3s grabWorldRot;
     s16 faceOffsetYaw; // grabbed facing minus object->player yaw
     // The yaw the CARRY POINT orbits at, which is NOT Link's aim: it chases it at a capped
     // angular rate. Building the hold position straight from focus.rot.y meant a fast turn
@@ -1682,7 +1788,7 @@ typedef struct {
     // constraint is measured against - the XZ a lift may not leave, the Y an ice block may not
     // leave - and it is the position AT THE GRAB, not the one the scene spawned it at, so a
     // block you already slid keeps the plane it is on.
-    u16 traits;
+    u32 traits; // u32 for the same reason the row's is - see PacciUhTraitRow
     s8 flagDir; // SETS_FLAG: which way the body has to be moved. See PacciUhTraitRow.
     Vec3f railPos;
     s32 pathId;
@@ -2034,6 +2140,7 @@ static void Pacci_UhKeepOnScreen(Actor* actor) {
 static void Pacci_UltrahandHeldUpdate(Actor* thisx, PlayState* play) {
     Vec3f pos = thisx->world.pos;
     Vec3s rot = thisx->shape.rot;
+    Vec3s worldRot = thisx->world.rot;
 
     Pacci_UhKeepOnScreen(thisx);
     if (sUltrahand.origUpdate != NULL) {
@@ -2046,7 +2153,7 @@ static void Pacci_UltrahandHeldUpdate(Actor* thisx, PlayState* play) {
     // Whatever it did to its own position this frame is not motion the carry agreed to.
     thisx->world.pos = pos;
     thisx->shape.rot = rot;
-    thisx->world.rot = rot;
+    thisx->world.rot = worldRot; // what it had, not what shape.rot says - see grabWorldRot
     // ONLY while carried. This wrapper stays installed through the whole fall - it is
     // Pacci_UltrahandLetGo that removes it, and that only runs on landing - so zeroing the
     // velocity unconditionally reset the fall to a standstill every single frame. The body
@@ -2074,6 +2181,9 @@ static void Pacci_UhLockedInput(PlayState* play, u8 edge);
 static void Pacci_UhLockedPose(PlayState* play, Actor* actor);
 static void Pacci_UhHeightInput(Actor* actor, u8 edge);
 static u8 Pacci_UhAiming(Player* player, Actor* actor);
+static void Pacci_UhHingeInput(Actor* actor, u8 edge);
+// z_bg_spot00_hanebasi.c, not static and not in any header. The drawbridge's own raise/lower.
+void BgSpot00Hanebasi_DrawbridgeRiseAndFall(BgSpot00Hanebasi* this, PlayState* play);
 // Not in functions.h - it is Player's own. equip_champion.c reaches for it the same way.
 extern int Player_IsZTargeting(Player* this);
 static void Pacci_UhBombTick(Actor* actor);
@@ -2082,12 +2192,7 @@ static u8 Pacci_UhBombDetonate(PlayState* play);
 // Pacci_BackRiderDrop needs no forward declaration - it is public and cane_pacci.h is already in.
 static void Pacci_BackRiderTake(PlayState* play, Player* player, Actor* rider);
 
-// Is Ultrahand holding this exact actor? cane_ship.cpp asks, so the ferry knows whether its own
-// speed ramp is allowed to run this frame. Deliberately narrow: it answers for ONE actor rather
-// than exposing the held pointer, so nothing outside can start steering the carry.
-u8 Pacci_IsDriving(Actor* actor) {
-    return ((actor != NULL) && (actor == sUltrahand.held) && !sUltrahand.dropping) ? 1 : 0;
-}
+
 
 u8 Pacci_IsHoldingUltrahand(void) {
     return (sUltrahand.held != NULL) && !sUltrahand.dropping;
@@ -2105,6 +2210,7 @@ static void Pacci_UltrahandLetGo(void) {
         actor->velocity.y = 0.0f;
         actor->room = (s8)sUltrahand.origRoom;
         actor->colorFilterParams = 0;
+        actor->world.rot = sUltrahand.grabWorldRot; // its heading back, see grabWorldRot
     }
     // The assembly is NOT un-fused here, and that was a mistake worth writing down. Releasing
     // the parts on landing gave each one its update and gravity back - and then they hung in the
@@ -2418,7 +2524,12 @@ static void Pacci_UltrahandBeginDrop(void) {
     // Bg_Hidan_Syoku rebuilds its Y from a cosine of its own timer - and that is theirs to do. The
     // difference is that they now return to their own position on their own terms instead of being
     // thrown at the floor first.
-    if (sUltrahand.traits & (PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_PATH | PACCI_UH_TRAIT_LOCKED)) {
+    //
+    // PLANE_XZ belongs here too: its constraint pins Y for the whole fall, so "dropping" one was a
+    // body hanging exactly where it already was until the timeout ran out. A ferry and a sliding
+    // ice block are both floors - neither was ever above anything to land on.
+    if (sUltrahand.traits &
+        (PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_PLANE_XZ | PACCI_UH_TRAIT_PATH | PACCI_UH_TRAIT_LOCKED)) {
         Pacci_UltrahandLetGo();
         Audio_PlaySoundGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
@@ -2597,9 +2708,26 @@ void Pacci_ThrowTick(PlayState* play) {
         sUhThrowTimer--;
         return; // still "lifted"; its Wait state is running the pickup
     }
-    // Let go. Actor_HasNoParent goes true and the block flies.
+    // The throw itself, and this part is NOT the actor's. BgHeavyBlock_Fly integrates speedXZ along
+    // world.rot.y and never sets either - in vanilla they arrive from Link, on frame 6 of his throw
+    // animation (Player_Action_80846358, z_player.c:12253-12256). Without them the block just
+    // dropped where it stood. These are his three numbers, unchanged.
+    {
+        Player* player = GET_PLAYER(play);
+
+        sUhThrowActor->world.rot.y = player->actor.shape.rot.y;
+        sUhThrowActor->speedXZ = 10.0f;
+        sUhThrowActor->velocity.y = 20.0f;
+    }
+    // Actor_HasNoParent goes true and the block flies.
     sUhThrowActor->parent = NULL;
     sUhThrowActor = NULL;
+}
+
+// Is a THROWS body mid-hand-off? cane_ship.cpp asks, so Link is not frozen into the carry cutscene
+// for a lift he never actually performed.
+u8 Pacci_IsThrowing(void) {
+    return (sUhThrowActor != NULL) ? 1 : 0;
 }
 
 static void Pacci_ThrowArm(Player* player, Actor* target) {
@@ -2623,6 +2751,8 @@ static void Pacci_ThrowArm(Player* player, Actor* target) {
 static ColliderCylinder sUhCutCol;
 static Actor* sUhCutTarget = NULL;
 static s16 sUhCutTimer = 0;
+static u32 sUhCutFlags = 0;
+static s16 sUhCutDamage = 0;
 
 void Pacci_CutTick(PlayState* play) {
     CombatColliderConfig cfg;
@@ -2637,8 +2767,8 @@ void Pacci_CutTick(PlayState* play) {
         return;
     }
     sUhCutTimer--;
-    cfg.dmgFlags = DMG_BOOMERANG;
-    cfg.damage = PACCI_UH_CUT_DAMAGE;
+    cfg.dmgFlags = sUhCutFlags;
+    cfg.damage = sUhCutDamage;
     cfg.effect = 0;
     cfg.radius = PACCI_UH_CUT_RADIUS;
     cfg.height = PACCI_UH_CUT_HEIGHT;
@@ -2650,11 +2780,13 @@ void Pacci_CutTick(PlayState* play) {
     }
 }
 
-static void Pacci_CutArm(PlayState* play, Player* player, Actor* target) {
+static void Pacci_CutArm(PlayState* play, Player* player, Actor* target, const PacciUhTraitRow* row) {
     CombatColliderConfig cfg;
 
-    cfg.dmgFlags = DMG_BOOMERANG;
-    cfg.damage = PACCI_UH_CUT_DAMAGE;
+    sUhCutFlags = row->hitFlags;
+    sUhCutDamage = (row->hitDamage != 0) ? row->hitDamage : PACCI_UH_CUT_DAMAGE;
+    cfg.dmgFlags = sUhCutFlags;
+    cfg.damage = sUhCutDamage;
     cfg.effect = 0;
     cfg.radius = PACCI_UH_CUT_RADIUS;
     cfg.height = PACCI_UH_CUT_HEIGHT;
@@ -2752,6 +2884,7 @@ static void Pacci_UltrahandTake(Player* player, Actor* target) {
     sUltrahand.origRoom = target->room;
     sUltrahand.baseRot = target->shape.rot;
     sUltrahand.grabRot = target->shape.rot;
+    sUltrahand.grabWorldRot = target->world.rot;
     sUltrahand.carryYaw = player->actor.focus.rot.y; // start on the aim, no opening swing
     sUltrahand.carryVel.x = 0.0f;
     sUltrahand.carryVel.y = 0.0f;
@@ -2855,9 +2988,9 @@ u8 Pacci_CastUltrahand(PlayState* play, Player* player) {
             Pacci_ThrowArm(player, target);
             return 1; // nothing is carried; the throw IS the action
         }
-        if ((row != NULL) && (row->traits & PACCI_UH_TRAIT_SEVERS)) {
-            Pacci_CutArm(play, player, target);
-            return 1; // nothing is carried; the cut IS the action
+        if ((row != NULL) && (row->traits & PACCI_UH_TRAIT_STRIKES)) {
+            Pacci_CutArm(play, player, target, row);
+            return 1; // nothing is carried; the blow IS the action
         }
         if ((row != NULL) && (row->traits & PACCI_UH_TRAIT_PROXY)) {
             Actor* copy = Actor_Spawn(&play->actorCtx, play, row->proxyId, target->world.pos.x, target->world.pos.y,
@@ -2887,7 +3020,7 @@ static u8 Pacci_UhAssemblyGround(PlayState* play, Actor* root, f32* outY);
 // Put a constrained body back on its own axis, plane or path. Runs AFTER the carry has placed it
 // wherever the controls asked for, so nothing above has to know these actors exist.
 static void Pacci_UhConstrain(PlayState* play, Actor* actor) {
-    u16 traits = sUltrahand.traits;
+    u32 traits = sUltrahand.traits;
 
     if (traits & PACCI_UH_TRAIT_AXIS_Y) {
         actor->world.pos.x = sUltrahand.railPos.x;
@@ -4926,7 +5059,7 @@ static void Pacci_UhLockedPose(PlayState* play, Actor* actor) {
     s16 want;
     s32 open;
 
-    if (!(sUltrahand.traits & PACCI_UH_TRAIT_LOCKED) || !(sUltrahand.traits & PACCI_UH_TRAIT_SETS_FLAG)) {
+    if (!(sUltrahand.traits & PACCI_UH_TRAIT_JAW)) {
         return;
     }
     row = Pacci_UhTraitRow(actor);
@@ -4944,6 +5077,38 @@ static void Pacci_UhLockedPose(PlayState* play, Actor* actor) {
     if (actor->id == ACTOR_BG_DODOAGO) {
         play->roomCtx.unk_74[0] = play->roomCtx.unk_74[1] = open ? 255 : 0;
     }
+}
+
+// D-pad on a HINGE body runs the actor's OWN open/close animation.
+//
+// The difference from JAW is the whole reason both exist. The Dodongo has no animation to call, so
+// its jaw is posed by hand; the drawbridge has one, and calling it gets the chains, the timing and
+// the two bridge sounds for free. Writing shape.rot.x here instead would have meant reproducing all
+// three badly, and its own BgSpot00Hanebasi_DrawbridgeWait would have fought the result.
+static void Pacci_UhHingeInput(Actor* actor, u8 edge) {
+    BgSpot00Hanebasi* bridge;
+    BgSpot00Hanebasi* chain;
+    s16 want;
+
+    if ((actor == NULL) || !(sUltrahand.traits & PACCI_UH_TRAIT_HINGE) ||
+        (actor->id != ACTOR_BG_SPOT00_HANEBASI) || (actor->child == NULL)) {
+        return;
+    }
+    if (edge & 1) {
+        want = -0x4000; // raised
+    } else if (edge & 2) {
+        want = 0; // lowered
+    } else {
+        return;
+    }
+    bridge = (BgSpot00Hanebasi*)actor;
+    chain = (BgSpot00Hanebasi*)actor->child;
+    if (bridge->destAngle == want) {
+        return;
+    }
+    bridge->destAngle = want;
+    chain->destAngle = (want != 0) ? -0xFE0 : 0; // the chain swings a fraction of the deck's arc
+    bridge->actionFunc = BgSpot00Hanebasi_DrawbridgeRiseAndFall;
 }
 
 // D-pad on a HEIGHT body changes how BIG it is, because that is the only thing about it worth
@@ -4979,8 +5144,8 @@ static void Pacci_UhLockedInput(PlayState* play, u8 edge) {
     u8 want;
 
     if ((actor == NULL) || !(sUltrahand.traits & PACCI_UH_TRAIT_LOCKED) ||
-        !(sUltrahand.traits & PACCI_UH_TRAIT_SETS_FLAG)) {
-        return;
+        !(sUltrahand.traits & PACCI_UH_TRAIT_SETS_FLAG) || (sUltrahand.traits & PACCI_UH_TRAIT_HINGE)) {
+        return; // a hinge answers to its own animation, not to a flag
     }
     if (edge & 1) {
         want = 1;
@@ -5686,6 +5851,7 @@ u8 Pacci_UltrahandModeUpdate(PlayState* play, Player* player) {
     // instruction, not sixty.
     Pacci_UhLockedInput(play, edge);
     Pacci_UhHeightInput(sUltrahand.held, edge);
+    Pacci_UhHingeInput(sUltrahand.held, edge);
 
     // Runs on any pad STATE, not just an edge: continuous moves need every frame.
     if (Pacci_IsHoldingUltrahand() && (dpad != 0)) {
@@ -5825,4 +5991,38 @@ void Pacci_ReleaseAll(PlayState* play) {
         }
     }
     Pacci_DropUltrahand();
+}
+
+// Three things end a hold whether the player meant it or not: leaving the scene, getting hit, and
+// falling out of the world. Checked here rather than inside the mode's own update because that one
+// only runs while the cane is the item in hand, and none of these three waits for that.
+//
+// The two halves are NOT the same teardown, and the difference matters. A hit or a void-out leaves
+// the body where it is and lets it fall: that is a drop, and the player should see it happen. A
+// scene change is a teardown - every actor the cane is holding, tinting, anchoring or driving is
+// about to be freed, and the pool is full of borrowed update and draw pointers into overlays that
+// are going away. Pacci_ReleaseAll hands all of it back first. It was written for exactly this and
+// had never been called from anywhere.
+void Pacci_UhAbortTick(PlayState* play) {
+    Player* player;
+    u8 busy;
+
+    if (play == NULL) {
+        return;
+    }
+    busy = (Pacci_UltrahandModeActive() || Pacci_IsHoldingUltrahand()) ? 1 : 0;
+    if (!busy) {
+        return;
+    }
+    if ((play->transitionTrigger != TRANS_TRIGGER_OFF) || (gSaveContext.respawnFlag != 0)) {
+        Pacci_ReleaseAll(play);
+        sUhMode.active = 0;
+        sUhMode.prevDpad = 0;
+        sUhMode.summonHold = 0;
+        return;
+    }
+    player = GET_PLAYER(play);
+    if ((player != NULL) && (player->stateFlags1 & (PLAYER_STATE1_DAMAGED | PLAYER_STATE1_DEAD))) {
+        Pacci_UltrahandModeExit(play); // drops what is held on the way out
+    }
 }

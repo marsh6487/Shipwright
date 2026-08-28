@@ -75,6 +75,9 @@ unsigned char ExtEquip_PendantOwned(void);
 void ExtEquip_GivePendant(void);
 // Ownership of a page-2 equipment cell (extEquipOwnedBits). Needed by the fold below.
 unsigned char ExtEquip_HasItem(short equipType, unsigned char index);
+// The single writer of an equipped ext slot + the RAM re-read after an apply (extended_equipment.h).
+void ExtEquip_SetSlot(short equipType, unsigned char index);
+void ExtEquip_ResyncFromSave(void);
 // Bottle wheel fold (custom_bottles.cpp) — declared HERE, in the extern "C" block: a declaration
 // inside this file's anonymous namespace mangles as a local C++ symbol and fails to link.
 void Bottle_WheelPersist(unsigned char wheel, unsigned short slotItem);
@@ -201,21 +204,21 @@ int GetEquippedShieldCanonical() {
     return nibble;                                           // 0 none, 1 deku, 2 hylian, 3 mirror
 }
 
+// Routed through ExtEquip_SetSlot so the outgoing ext shield is cleaned up and the RAM copy every
+// predicate/draw reads changes with the save (a raw nei->extEquipShield write left them apart
+// until the next scene load). ExtEquip_SetSlot picks the owned vanilla base itself.
 void SetEquippedShieldCanonical(int canon) {
-    NeiSaveData* nei = Nei_Save();
     switch (canon) {
         case 1:
         case 2:
         case 3:
-            nei->extEquipShield = 0;
+            ExtEquip_SetSlot(EQUIP_TYPE_SHIELD, 0);
             gSaveContext.equips.equipment = (gSaveContext.equips.equipment & ~0xF0) | (canon << 4);
             break;
         case 4:
         case 5:
         case 6:
-            nei->extEquipShield = (uint8_t)(canon - 3);
-            // ext shields render over a vanilla base: Ikana over Mirror, others over Hylian
-            gSaveContext.equips.equipment = (gSaveContext.equips.equipment & ~0xF0) | ((canon == 6 ? 3 : 2) << 4);
+            ExtEquip_SetSlot(EQUIP_TYPE_SHIELD, (unsigned char)(canon - 3));
             break;
         default:
             break; // 0/unknown: leave as-is
@@ -876,6 +879,10 @@ void ApplyShared(const nlohmann::json& sh) {
                     (int)nei->bottleSlots[2], (int)nei->bottleSlots[3], (int)nei->bottleSlots[4],
                     (int)nei->bottleSlots[5], (int)nei->bottleSlots[6], (int)nei->bottleSlots[7]);
     }
+
+    // Everything above wrote Nei_Save()->extEquip* / equipment nibbles directly — the RAM copy the
+    // behaviors and draws read must follow now, not at the next scene load.
+    ExtEquip_ResyncFromSave();
 }
 
 // =================================================================================================

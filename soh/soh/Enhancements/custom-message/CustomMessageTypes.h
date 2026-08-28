@@ -243,6 +243,7 @@ typedef enum {
     TEXT_SAVE_MSG = 0x9213,
     TEXT_CONTINUE_OVERWORLD_MSG = 0x9214,
     TEXT_CONTINUE_DUNGEON_MSG = 0x9215,
+    TEXT_TIME_GATE_PROMPT = 0x9216,
     TEXT_DESIRE_SENSOR_HINT = 0x9300,
 
     // Pause menu C-Up item descriptions (0x9400-0x94FF)

@@ -1,131 +1,94 @@
 /**
- * rito_bow.inc.c — the Rito's bow moveset (MHR clips from nei/bow_anims.o2r).
- *
- * ORDER MATTERS: text-included right AFTER rito_flight.inc.c, inside the same
- * extern "C" body. It reads sRito to know whether the flight controller owns the
- * body this frame, and reuses that file's clip loader / clip player wholesale.
- * No #include here: mm_player_form.cpp's own include block is fixed and adding a
- * header inside an extern "C" body is not safe.
- *
- * B belongs to the Rito outright — there is no bow item and no ammo:
- *   tap B          -> stab with the arrow in hand
- *   hold B         -> draw, aim, charge
- *   release        -> plain shot (free) or, fully charged, the special shot
- *                     (ground = arcing arrow that lands as a thunder ring,
- *                      air    = three arrows in a line). Those cost magic.
+ * rito_bow.inc.c — the Rito's own bow, on B. Text-included after rito_flight.inc.c,
+ * inside the same extern "C" body, and dispatched BEFORE it so a press in mid-air takes
+ * the frame off the glide. Three arrows leave on the release, each with a target of its
+ * own; switches come before enemies because a switch is the reason you are shooting.
  */
 
-// ovl_En_Arrow/z_en_arrow.h is not reachable from this translation unit; these are
-// its ArrowType values. SW97_ELEM_* come in through extended_inventory.h -> nei_save.h.
-#define RITO_ARROW_NORMAL 2
-#define RITO_ARROW_SW97_FIRE 17
+#define RITO_BOW_ANIM(name) "__OTR__misc/link_animetion/gPlayerAnim_mhr_bow_" name
 
-#define RITO_BOWA(name) RITO_ANIM("gPlayerAnim_mhr_bow_" name)
+#define RITO_BOW_CLIP_AIR RITO_BOW_ANIM("charge_attack09")
+#define RITO_BOW_CLIP_ENTER_STILL RITO_BOW_ANIM("motion12")
+#define RITO_BOW_CLIP_HOLD_STILL RITO_BOW_ANIM("idle04_loop")
+#define RITO_BOW_CLIP_ENTER_MOVE RITO_BOW_ANIM("dash_attack07")
+#define RITO_BOW_CLIP_ENTER_DASH RITO_BOW_ANIM("dash_attack09")
+#define RITO_BOW_CLIP_HOLD_MOVE RITO_BOW_ANIM("run07_loop")
+#define RITO_BOW_CLIP_RELEASE RITO_BOW_ANIM("dash_attack13")
 
-#define RITO_BOW_CLIP_DRAW RITO_BOWA("jump_attack07")
-#define RITO_BOW_CLIP_SHEATHE RITO_BOWA("motion02")
-#define RITO_BOW_CLIP_AIM RITO_BOWA("motion12")
-#define RITO_BOW_CLIP_CHARGE RITO_BOWA("motion14")
-#define RITO_BOW_CLIP_SHOT_ARC RITO_BOWA("charge_attack03")
-#define RITO_BOW_CLIP_SHOT_AIR RITO_BOWA("charge_attack09")
-#define RITO_BOW_CLIP_STAB RITO_BOWA("attack08")
-#define RITO_BOW_CLIP_RUN RITO_BOWA("dash_attack10")
-#define RITO_BOW_CLIP_RUN_AIM RITO_BOWA("dash_attack07")
+#define RITO_BOW_SPEED 1.25f
 
-// Logic frames: this runs at 20Hz (R_UPDATE_RATE = 3), so 20 == one second.
-#define RITO_BOW_TAP_FRAMES 4        // B released inside this window is a stab, not a draw
-#define RITO_BOW_CHARGE_FULL 20      // one second of hold arms the special shot
-#define RITO_BOW_IDLE_STOW 50        // no B for this long and the bow goes away
-#define RITO_BOW_CHARGE_MAGIC 12     // same price as getting airborne
-#define RITO_BOW_AIM_PITCH_MAX 14000 // func_8084ABD8's own clamp with a weapon out
-#define RITO_BOW_AIM_PITCH_RATE 90
-#define RITO_BOW_ARC_PITCH (-0x1800) // lob for the ground special
-#define RITO_BOW_AIR_SPREAD 0x0500   // pitch step between the three air arrows
-#define RITO_BOW_SHOT_HEIGHT 40.0f
+// Frames are LOGIC frames: this runs at 20Hz (R_UPDATE_RATE = 3), so 20 = 1 second.
+#define RITO_BOW_VOLLEY 3         // arrows per release, one target each
+#define RITO_BOW_LOOSE_FRAME 3    // into the release clip, where the arrows leave
+#define RITO_BOW_RANGE 1400.0f    // how far the volley looks for something to hit
+#define RITO_BOW_CONE 0x5000      // ~110 degrees each side of the camera: generous, there is no aim
+#define RITO_BOW_TURN 0x0600      // per-frame steering an arrow may apply toward its target
+#define RITO_BOW_ARROW_SPEED 150.0f
+#define RITO_BOW_HIT_DIST 170.0f  // one frame of travel: EnArrow moves 150 units a frame,
+                                  // so a tighter sphere is jumped clean over
+#define RITO_BOW_MOVE_SPEED 5.0f  // walking with the bow drawn
+#define RITO_BOW_MOVE_DEADZONE 10.0f
+#define RITO_BOW_TURN_RATE 0x0C00 // how fast the body swings to the stick while drawn
+#define RITO_BOW_ICE_RADIUS 90.0f // how near an arrival an Obj_Ice_Poly has to be to shatter
+#define RITO_BOW_HANDSHAKE 4      // player->unk_A73: without it EnArrow_Shoot kills its own arrow
 
-// Aim assist: bend the shot toward an enemy that is already roughly in front,
-// never snap to it. EnArrow has no homing of its own.
-#define RITO_BOW_ASSIST_RANGE 1200.0f
-#define RITO_BOW_ASSIST_CONE 0x2000
-#define RITO_BOW_ASSIST_BEND 0x0C00
-
-// An arrow lives well under this; the entry is dropped afterwards so a recycled
-// allocation can never inherit somebody else's thunder.
-#define RITO_BOW_THUNDER_TTL 90
-#define RITO_BOW_THUNDER_MAX 4
+// Obj_Switch's own layout (z_obj_switch.h): type in the low 3 bits, frozen in bit 7.
+#define RITO_BOW_SWITCH_TYPE(actor) ((actor)->params & 7)
+#define RITO_BOW_SWITCH_IS_TARGET(actor)                                          \
+    ((RITO_BOW_SWITCH_TYPE(actor) == OBJSWITCH_TYPE_EYE) ||                       \
+     (RITO_BOW_SWITCH_TYPE(actor) == OBJSWITCH_TYPE_CRYSTAL) ||                   \
+     (RITO_BOW_SWITCH_TYPE(actor) == OBJSWITCH_TYPE_CRYSTAL_TARGETABLE))
 
 typedef enum {
-    RITO_BOW_STOWED = 0,
-    RITO_BOW_DRAW,
-    RITO_BOW_AIM,
-    RITO_BOW_CHARGE,
-    RITO_BOW_SHOOT,
-    RITO_BOW_STAB,
-    RITO_BOW_SHEATHE,
+    RITO_BOW_OFF = 0,
+    RITO_BOW_AIR,     // one press in the air: held still, one arrow straight down
+    RITO_BOW_ENTER,   // a ground entry clip is playing; the hold loop follows it
+    RITO_BOW_HOLD,    // drawn on the ground, waiting for B to come up
+    RITO_BOW_RELEASE, // the loose; the volley leaves on RITO_BOW_LOOSE_FRAME
 } RitoBowState;
+
+// The actor pointer is only ever COMPARED against the live actor list, never
+// dereferenced blind, so an arrow that dies between frames leaves nothing dangling.
+typedef struct {
+    Actor* arrow;
+    Vec3f goal;
+} RitoBowArrow;
 
 typedef struct {
     u8 loaded;
     u8 state;
-    u8 holdsAnim; // the shot clip is on the body: the flight must not overwrite it
+    u8 moving; // which hold loop is running: 0 = idle04, 1 = run07
     s16 timer;
-    s16 charge; // frames spent in CHARGE
-    s16 idle;   // frames since the last B, drives the auto-stow
-    s16 aimYaw;
-    s16 aimPitch;
-    PlayerActionFunc bowAction;
-    struct {
-        Actor* arrow;
-        s16 ttl;
-    } thunder[RITO_BOW_THUNDER_MAX];
-    LinkAnimationHeader* draw;
-    LinkAnimationHeader* sheathe;
-    LinkAnimationHeader* aim;
-    LinkAnimationHeader* chargeUp;
-    LinkAnimationHeader* shotArc;
-    LinkAnimationHeader* shotAir;
-    LinkAnimationHeader* stab;
-    LinkAnimationHeader* run;
-    LinkAnimationHeader* runAim;
+    LinkAnimationHeader* air;
+    LinkAnimationHeader* enterStill;
+    LinkAnimationHeader* holdStill;
+    LinkAnimationHeader* enterMove;
+    LinkAnimationHeader* enterDash; // still -> moving, without leaving the draw
+    LinkAnimationHeader* holdMove;
+    LinkAnimationHeader* release;
+    RitoBowArrow arrows[RITO_BOW_VOLLEY];
 } RitoBow;
 
 static RitoBow sRitoBow;
 
-static struct {
-    u8 installed;
-    LinkAnimationHeader* savedRun[PLAYER_ANIMTYPE_MAX];
-    LinkAnimationHeader* savedWalk[PLAYER_ANIMTYPE_MAX];
-} sRitoBowTables;
+static LinkAnimationHeader* MmForm_RitoBowLoadClip(const char* path) {
+    LinkAnimationHeader* raw;
+    s16 frames;
 
-// Locomotion while the bow is out, same swap the landing uses: OOT keeps owning
-// the movement, it just plays the Rito's clip. Restored the moment it is stowed,
-// on form exit and on reset — a leak here follows Link out of the transformation.
-static void MmForm_RitoBowInstallRun(void) {
-    s32 col;
-
-    if (sRitoBowTables.installed || (sRitoBow.run == NULL)) {
-        return;
+    if ((path == NULL) || !ResourceMgr_FileExists(path)) {
+        return NULL;
     }
-    sRitoBowTables.installed = 1;
-    for (col = 0; col < PLAYER_ANIMTYPE_MAX; col++) {
-        sRitoBowTables.savedRun[col] = ExtPlayer_GetAnimGroupAnim(PLAYER_ANIMGROUP_run, col);
-        sRitoBowTables.savedWalk[col] = ExtPlayer_GetAnimGroupAnim(PLAYER_ANIMGROUP_walk, col);
-        ExtPlayer_SetAnimGroupAnim(PLAYER_ANIMGROUP_run, col, sRitoBow.run);
-        ExtPlayer_SetAnimGroupAnim(PLAYER_ANIMGROUP_walk, col, sRitoBow.run);
+    raw = ResourceMgr_LoadPlayerAnimAsHeader(path);
+    if (raw == NULL) {
+        return NULL;
     }
-}
-
-extern "C" void MmForm_RitoBowRestoreRun(void) {
-    s32 col;
-
-    if (!sRitoBowTables.installed) {
-        return;
+    // Resampling to fewer frames IS the speed-up, and the resampler rewrites the resource
+    // in place: every path here is loaded exactly once, guarded by `loaded`.
+    frames = (s16)(((f32)raw->common.frameCount / RITO_BOW_SPEED) + 0.5f);
+    if (frames < 2) {
+        frames = 2;
     }
-    sRitoBowTables.installed = 0;
-    for (col = 0; col < PLAYER_ANIMTYPE_MAX; col++) {
-        ExtPlayer_SetAnimGroupAnim(PLAYER_ANIMGROUP_run, col, sRitoBowTables.savedRun[col]);
-        ExtPlayer_SetAnimGroupAnim(PLAYER_ANIMGROUP_walk, col, sRitoBowTables.savedWalk[col]);
-    }
+    return ResourceMgr_LoadPlayerAnimAsHeaderInPlaceResampled(path, 1, frames);
 }
 
 static void MmForm_RitoBowLoadClips(void) {
@@ -133,368 +96,373 @@ static void MmForm_RitoBowLoadClips(void) {
         return;
     }
     sRitoBow.loaded = 1;
-    sRitoBow.draw = MmForm_RitoLoadClip(RITO_BOW_CLIP_DRAW);
-    sRitoBow.sheathe = MmForm_RitoLoadClip(RITO_BOW_CLIP_SHEATHE);
-    sRitoBow.aim = MmForm_RitoLoadClip(RITO_BOW_CLIP_AIM);
-    sRitoBow.chargeUp = MmForm_RitoLoadClip(RITO_BOW_CLIP_CHARGE);
-    sRitoBow.shotArc = MmForm_RitoLoadClip(RITO_BOW_CLIP_SHOT_ARC);
-    sRitoBow.shotAir = MmForm_RitoLoadClip(RITO_BOW_CLIP_SHOT_AIR);
-    sRitoBow.stab = MmForm_RitoLoadClip(RITO_BOW_CLIP_STAB);
-    sRitoBow.run = MmForm_RitoLoadClip(RITO_BOW_CLIP_RUN);
-    sRitoBow.runAim = MmForm_RitoLoadClip(RITO_BOW_CLIP_RUN_AIM);
-    if (sRitoBow.aim == NULL) {
-        SPDLOG_WARN("[Rito] bow clips missing ({}) — B stays on the stab", RITO_BOW_CLIP_AIM);
+    sRitoBow.air = MmForm_RitoBowLoadClip(RITO_BOW_CLIP_AIR);
+    sRitoBow.enterStill = MmForm_RitoBowLoadClip(RITO_BOW_CLIP_ENTER_STILL);
+    sRitoBow.holdStill = MmForm_RitoBowLoadClip(RITO_BOW_CLIP_HOLD_STILL);
+    sRitoBow.enterMove = MmForm_RitoBowLoadClip(RITO_BOW_CLIP_ENTER_MOVE);
+    sRitoBow.enterDash = MmForm_RitoBowLoadClip(RITO_BOW_CLIP_ENTER_DASH);
+    sRitoBow.holdMove = MmForm_RitoBowLoadClip(RITO_BOW_CLIP_HOLD_MOVE);
+    sRitoBow.release = MmForm_RitoBowLoadClip(RITO_BOW_CLIP_RELEASE);
+    if (sRitoBow.holdStill == NULL) {
+        SPDLOG_WARN("[Rito] bow clips missing ({}) — B will not draw", RITO_BOW_CLIP_HOLD_STILL);
     }
-}
-
-extern "C" void MmForm_RitoBowReset(void) {
-    s32 i;
-
-    MmForm_RitoBowRestoreRun();
-    sRitoBow.state = RITO_BOW_STOWED;
-    sRitoBow.holdsAnim = 0;
-    sRitoBow.timer = 0;
-    sRitoBow.charge = 0;
-    sRitoBow.idle = 0;
-    sRitoBow.aimPitch = 0;
-    sRitoBow.bowAction = NULL;
-    for (i = 0; i < RITO_BOW_THUNDER_MAX; i++) {
-        sRitoBow.thunder[i].arrow = NULL;
-        sRitoBow.thunder[i].ttl = 0;
-    }
-}
-
-// The bow is out, so B is not OOT's sword any more (TransformMasks_FilterB).
-extern "C" u8 MmForm_RitoBowOwnsB(void) {
-    return gFormState.currentForm == MM_PLAYER_FORM_RITO;
-}
-
-// The flight controller asks this before advancing its own clip: a shot fired
-// mid-glide has to keep the body for the length of the clip.
-extern "C" u8 MmForm_RitoBowHoldsAnim(void) {
-    return sRitoBow.holdsAnim;
-}
-
-extern "C" u8 MmForm_RitoBowIsAiming(void) {
-    return (sRitoBow.state == RITO_BOW_AIM) || (sRitoBow.state == RITO_BOW_CHARGE);
 }
 
 extern "C" u8 MmForm_RitoBowIsOut(void) {
-    return (gFormState.currentForm == MM_PLAYER_FORM_RITO) && (sRitoBow.state != RITO_BOW_STOWED);
+    return (gFormState.currentForm == MM_PLAYER_FORM_RITO) && (sRitoBow.state != RITO_BOW_OFF);
 }
 
-static u8 MmForm_RitoBowSpendMagic(void) {
-    if ((gSaveContext.magicCapacity <= 0) || (gSaveContext.magic < RITO_BOW_CHARGE_MAGIC)) {
-        return 0;
-    }
-    gSaveContext.magic -= RITO_BOW_CHARGE_MAGIC;
-    return 1;
-}
-
-// Rito arrows are his own, so no ammo is touched — but the SW97 element still
-// rides them, read exactly the way func_80834380 reads it for the real bow.
-static s16 MmForm_RitoBowArrowType(void) {
-    u8 elem = Sw97_EffectiveElement(0);
-
-    if ((elem >= SW97_ELEM_FIRE) && (elem <= SW97_ELEM_WIND)) {
-        return RITO_ARROW_SW97_FIRE + (elem - SW97_ELEM_FIRE);
-    }
-    return RITO_ARROW_NORMAL;
-}
-
-static void MmForm_RitoBowNoteThunder(Actor* arrow) {
-    s32 i;
-
-    for (i = 0; i < RITO_BOW_THUNDER_MAX; i++) {
-        if (sRitoBow.thunder[i].arrow == NULL) {
-            sRitoBow.thunder[i].arrow = arrow;
-            sRitoBow.thunder[i].ttl = RITO_BOW_THUNDER_TTL;
-            return;
-        }
-    }
-}
-
-static void MmForm_RitoBowTickThunder(void) {
-    s32 i;
-
-    for (i = 0; i < RITO_BOW_THUNDER_MAX; i++) {
-        if ((sRitoBow.thunder[i].arrow != NULL) && (--sRitoBow.thunder[i].ttl <= 0)) {
-            sRitoBow.thunder[i].arrow = NULL;
-        }
-    }
-}
-
-// Called from EnArrow_Fly the frame an arrow sticks in terrain. The pointer is
-// alive by construction (the arrow is calling about itself), so the only thing
-// the list has to defend against is a stale entry, which the TTL handles.
-extern "C" void MmForm_RitoBowOnArrowStick(PlayState* play, Actor* arrow) {
-    s32 i;
-
-    for (i = 0; i < RITO_BOW_THUNDER_MAX; i++) {
-        if (sRitoBow.thunder[i].arrow != arrow) {
-            continue;
-        }
-        sRitoBow.thunder[i].arrow = NULL;
-        // EN_M_THUNDER_STATIC_FLAG (0x40) | swordType+1: the release ring, fired where
-        // it was spawned instead of being worn by the player. No magic (high byte 0).
-        Actor_Spawn(&play->actorCtx, play, ACTOR_EN_M_THUNDER, arrow->world.pos.x, arrow->world.pos.y,
-                    arrow->world.pos.z, 0, 0, 0, 0x41);
+// Where an arrow should be pointed to hit `actor`. Obj_Switch never fills focus.pos,
+// so its own origin plus a lift is the only honest aim point for one.
+static void MmForm_RitoBowAimPoint(Actor* actor, Vec3f* out) {
+    if (actor->id == ACTOR_OBJ_SWITCH) {
+        out->x = actor->world.pos.x;
+        out->y = actor->world.pos.y + 20.0f;
+        out->z = actor->world.pos.z;
         return;
     }
+    Math_Vec3f_Copy(out, &actor->focus.pos);
 }
 
-extern "C" u8 MmForm_RitoBowOwnsArrow(Actor* arrow) {
+static u8 MmForm_RitoBowIsInSight(Actor* actor, s16 camYaw) {
+    s16 off;
+
+    if ((actor->update == NULL) || (actor->xyzDistToPlayerSq > SQ(RITO_BOW_RANGE))) {
+        return 0;
+    }
+    off = actor->yawTowardsPlayer + 0x8000 - camYaw;
+    return ABS(off) < RITO_BOW_CONE;
+}
+
+// Fills `out` with up to `max` DISTINCT actors, nearest first, switches before enemies:
+// three arrows must never converge on one target. Returns how many were found.
+static s32 MmForm_RitoBowFindTargets(PlayState* play, Actor** out, s32 max, s16 camYaw) {
+    static const u8 sPasses[] = { ACTORCAT_SWITCH, ACTORCAT_PROP, ACTORCAT_BG, ACTORCAT_ENEMY };
+    s32 found = 0;
+    s32 pass;
+
+    for (pass = 0; (pass < (s32)ARRAY_COUNT(sPasses)) && (found < max); pass++) {
+        u8 wantSwitch = (sPasses[pass] != ACTORCAT_ENEMY);
+
+        // Nearest first, one actor taken per sweep: the list is unordered and the volley
+        // is three arrows deep, so a full re-sweep per arrow is cheaper than a sort.
+        while (found < max) {
+            Actor* best = NULL;
+            f32 bestDist = SQ(RITO_BOW_RANGE);
+            Actor* actor;
+            s32 i;
+
+            for (actor = play->actorCtx.actorLists[sPasses[pass]].head; actor != NULL; actor = actor->next) {
+                if (wantSwitch && ((actor->id != ACTOR_OBJ_SWITCH) || !RITO_BOW_SWITCH_IS_TARGET(actor))) {
+                    continue;
+                }
+                if (!MmForm_RitoBowIsInSight(actor, camYaw) || (actor->xyzDistToPlayerSq >= bestDist)) {
+                    continue;
+                }
+                for (i = 0; i < found; i++) {
+                    if (out[i] == actor) {
+                        break;
+                    }
+                }
+                if (i < found) {
+                    continue; // already carries an arrow of its own
+                }
+                best = actor;
+                bestDist = actor->xyzDistToPlayerSq;
+            }
+            if (best == NULL) {
+                break;
+            }
+            out[found++] = best;
+        }
+    }
+    return found;
+}
+
+// Ball-and-chain, not fire: shards on contact and the switch live the same frame.
+// Obj_Ice_Poly is a CHILD of the switch it covers, which is how the switch is reached.
+static void MmForm_RitoBowShatterIce(PlayState* play, Vec3f* at) {
+    static Color_RGBA8 sIceWhite = { 250, 250, 250, 255 };
+    static Color_RGBA8 sIceGray = { 180, 200, 230, 255 };
+    s32 cat;
+
+    for (cat = 0; cat < ACTORCAT_MAX; cat++) {
+        Actor* actor = play->actorCtx.actorLists[cat].head;
+
+        while (actor != NULL) {
+            Actor* next = actor->next;
+
+            if ((actor->id == ACTOR_OBJ_ICE_POLY) && (actor->update != NULL) &&
+                (Math_Vec3f_DistXYZ(at, &actor->world.pos) < RITO_BOW_ICE_RADIUS)) {
+                Vec3f vel = { 0.0f, 0.0f, 0.0f };
+                Vec3f accel = { 0.0f, -1.0f, 0.0f };
+                s32 i;
+
+                for (i = 0; i < 8; i++) {
+                    Vec3f pos;
+
+                    pos.x = actor->world.pos.x + Rand_CenteredFloat(40.0f);
+                    pos.y = actor->world.pos.y + (Rand_ZeroOne() * 70.0f);
+                    pos.z = actor->world.pos.z + Rand_CenteredFloat(40.0f);
+                    vel.x = Rand_CenteredFloat(6.0f);
+                    vel.y = Rand_ZeroOne() * 6.0f;
+                    vel.z = Rand_CenteredFloat(6.0f);
+                    func_8002829C(play, &pos, &vel, &accel, &sIceWhite, &sIceGray, 350, 20);
+                }
+                // At the position, not on the actor: the actor is killed on the next line.
+                Sfx_PlaySfxAtPos(&actor->world.pos, NA_SE_EV_ICE_BROKEN);
+                if (actor->parent != NULL) {
+                    actor->parent->params &= ~0x80; // the switch stops being frozen at once
+                }
+                Actor_Kill(actor);
+            }
+            actor = next;
+        }
+    }
+}
+
+static void MmForm_RitoBowClearArrows(void) {
     s32 i;
 
-    for (i = 0; i < RITO_BOW_THUNDER_MAX; i++) {
-        if (sRitoBow.thunder[i].arrow == arrow) {
-            return 1;
+    for (i = 0; i < RITO_BOW_VOLLEY; i++) {
+        sRitoBow.arrows[i].arrow = NULL;
+    }
+}
+
+// EnArrow_Shoot asks before it re-derives its yaw from the camera. Answering 1 both
+// claims the arrow and lays its aim down, pitch included, which the camera would flatten.
+extern "C" u8 MmForm_RitoBowClaimArrow(PlayState* play, Actor* arrow) {
+    s32 i;
+
+    for (i = 0; i < RITO_BOW_VOLLEY; i++) {
+        if (sRitoBow.arrows[i].arrow != arrow) {
+            continue;
         }
+        arrow->world.rot.y = Math_Vec3f_Yaw(&arrow->world.pos, &sRitoBow.arrows[i].goal);
+        arrow->world.rot.x = Math_Vec3f_Pitch(&arrow->world.pos, &sRitoBow.arrows[i].goal);
+        arrow->shape.rot = arrow->world.rot;
+        return 1;
     }
     return 0;
 }
 
-static void MmForm_RitoBowAssist(PlayState* play, Vec3f* from, s16* yaw, s16* pitch) {
-    Actor* actor = play->actorCtx.actorLists[ACTORCAT_ENEMY].head;
-    Actor* best = NULL;
-    s16 bestOff = RITO_BOW_ASSIST_CONE;
+// Bends every arrow in the air toward its point and shatters the ice it arrives at.
+// Ticked ahead of every early return below: a volley outlives the state that fired it.
+static void MmForm_RitoBowTickArrows(PlayState* play) {
+    s32 i;
 
-    for (; actor != NULL; actor = actor->next) {
-        if ((actor->update == NULL) || (actor->xyzDistToPlayerSq > SQ(RITO_BOW_ASSIST_RANGE))) {
+    for (i = 0; i < RITO_BOW_VOLLEY; i++) {
+        Actor* arrow;
+        Actor* live = NULL;
+        s16 dYaw;
+        s16 dPitch;
+
+        arrow = sRitoBow.arrows[i].arrow;
+        if (arrow == NULL) {
             continue;
         }
-        s16 off = Math_Vec3f_Yaw(from, &actor->focus.pos) - *yaw;
-        if (ABS(off) < bestOff) {
-            bestOff = ABS(off);
-            best = actor;
+        // Prove the pointer before using it: an arrow that hit something is gone from the
+        // list and its memory is already back in the pool.
+        for (live = play->actorCtx.actorLists[ACTORCAT_ITEMACTION].head; live != NULL; live = live->next) {
+            if (live == arrow) {
+                break;
+            }
+        }
+        if (live == NULL) {
+            sRitoBow.arrows[i].arrow = NULL;
+            continue;
+        }
+        if (Math_Vec3f_DistXYZ(&arrow->world.pos, &sRitoBow.arrows[i].goal) < RITO_BOW_HIT_DIST) {
+            MmForm_RitoBowShatterIce(play, &sRitoBow.arrows[i].goal);
+            sRitoBow.arrows[i].arrow = NULL;
+            continue;
+        }
+        dYaw = Math_Vec3f_Yaw(&arrow->world.pos, &sRitoBow.arrows[i].goal) - arrow->world.rot.y;
+        dPitch = Math_Vec3f_Pitch(&arrow->world.pos, &sRitoBow.arrows[i].goal) - arrow->world.rot.x;
+        arrow->world.rot.y += CLAMP(dYaw, -RITO_BOW_TURN, RITO_BOW_TURN);
+        arrow->world.rot.x += CLAMP(dPitch, -RITO_BOW_TURN, RITO_BOW_TURN);
+        arrow->shape.rot = arrow->world.rot;
+        // Rotating alone curves nothing: EnArrow_Fly rides the velocity vector laid down
+        // once, so it is rebuilt each frame from the new heading. Gravity drop goes with it.
+        Actor_SetProjectileSpeed(arrow, RITO_BOW_ARROW_SPEED);
+    }
+}
+
+// The untracked shot: it goes where it is pointed and never bends.
+static Actor* MmForm_RitoBowSpawnArrow(PlayState* play, Player* player, s16 yaw, s16 pitch) {
+    Vec3f* from = &player->bodyPartsPos[PLAYER_BODYPART_L_HAND];
+
+    // EnArrow_Shoot kills any parentless arrow it finds while this countdown is clear.
+    player->unk_A73 = RITO_BOW_HANDSHAKE;
+    return Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ARROW, from->x, from->y, from->z, pitch, yaw, 0, ARROW_NORMAL);
+}
+
+// The tracked shot: aimed at `goal` on the way out and bent toward it every frame after.
+static void MmForm_RitoBowFireAt(PlayState* play, Player* player, s32 slot, Vec3f* goal) {
+    Vec3f* from = &player->bodyPartsPos[PLAYER_BODYPART_L_HAND];
+    Actor* arrow = MmForm_RitoBowSpawnArrow(play, player, Math_Vec3f_Yaw(from, goal), Math_Vec3f_Pitch(from, goal));
+
+    if (arrow != NULL) {
+        sRitoBow.arrows[slot].arrow = arrow;
+        Math_Vec3f_Copy(&sRitoBow.arrows[slot].goal, goal);
+    }
+}
+
+static void MmForm_RitoBowLoose(PlayState* play, Player* player) {
+    Actor* targets[RITO_BOW_VOLLEY];
+    s16 camYaw = Camera_GetCamDirYaw(GET_ACTIVE_CAM(play));
+    s32 count = MmForm_RitoBowFindTargets(play, targets, RITO_BOW_VOLLEY, camYaw);
+    s32 i;
+
+    MmForm_RitoBowClearArrows();
+    for (i = 0; i < RITO_BOW_VOLLEY; i++) {
+        if (i < count) {
+            Vec3f goal;
+
+            MmForm_RitoBowAimPoint(targets[i], &goal);
+            MmForm_RitoBowFireAt(play, player, i, &goal);
+        } else {
+            // Untargeted arrows fan, so a volley into an empty room still reads as three.
+            MmForm_RitoBowSpawnArrow(play, player, camYaw + (s16)((i - 1) * 0x0500), 0);
         }
     }
-    if (best == NULL) {
+}
+
+static void MmForm_RitoBowPlay(PlayState* play, Player* player, LinkAnimationHeader* anim, u8 loop) {
+    if (anim == NULL) {
         return;
     }
-    s16 dYaw = Math_Vec3f_Yaw(from, &best->focus.pos) - *yaw;
-    s16 dPitch = Math_Vec3f_Pitch(from, &best->focus.pos) - *pitch;
-    *yaw += CLAMP(dYaw, -RITO_BOW_ASSIST_BEND, RITO_BOW_ASSIST_BEND);
-    *pitch += CLAMP(dPitch, -RITO_BOW_ASSIST_BEND, RITO_BOW_ASSIST_BEND);
+    player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
+    LinkAnimation_Change(play, &player->skelAnime, anim, 1.0f, 0.0f, Animation_GetLastFrame(anim),
+                         loop ? ANIMMODE_LOOP : ANIMMODE_ONCE, -4.0f);
+    sRitoBow.timer = 0;
 }
 
-static void MmForm_RitoBowFire(PlayState* play, Player* player, s16 pitch, u8 thunder) {
-    Vec3f from = player->actor.world.pos;
-    s16 yaw = sRitoBow.aimYaw;
-    Actor* arrow;
+static s32 MmForm_RitoBowAdvance(PlayState* play, Player* player) {
+    player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
+    sRitoBow.timer++;
+    return LinkAnimation_Update(play, &player->skelAnime);
+}
 
-    from.y += RITO_BOW_SHOT_HEIGHT;
-    MmForm_RitoBowAssist(play, &from, &yaw, &pitch);
+// Walking with the bow drawn. The action function is paused, but OOT still integrates
+// linearVelocity and gravity, so heading and speed are the whole of it.
+static u8 MmForm_RitoBowGroundMove(PlayState* play, Player* player) {
+    f32 stickMag;
+    s16 stickAngle;
+    s16 worldYaw;
 
-    // EnArrow_Shoot kills any arrow whose parent is NULL unless the player is on the
-    // fire frame — func_808350A4 sets this too, and it is the whole handshake.
-    player->unk_A73 = 4;
-    arrow = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ARROW, from.x, from.y, from.z, pitch, yaw, 0,
-                        MmForm_RitoBowArrowType());
-    if ((arrow != NULL) && thunder) {
-        MmForm_RitoBowNoteThunder(arrow);
+    func_80077D10(&stickMag, &stickAngle, &play->state.input[0]);
+    if (stickMag < RITO_BOW_MOVE_DEADZONE) {
+        player->linearVelocity = 0.0f;
+        return 0;
     }
-    // EnArrow_Shoot plays NA_SE_IT_ARROW_SHOT itself.
-}
-
-static void MmForm_RitoBowAimCamera(PlayState* play) {
-    Camera* cam = GET_ACTIVE_CAM(play);
-
-    // BOWARROWZ is already the over-the-shoulder aim (eyeDist 70 / atOffsetX -120 in
-    // sSetNormal0ModeBowArrowZData); vanilla only reaches it through Z-targeting.
-    // Ask first: ChangeMode falls back to CAM_MODE_NORMAL for a mode the current
-    // setting does not list, which would yank the camera every frame.
-    if (Camera_CheckValidMode(cam, CAM_MODE_BOWARROWZ)) {
-        Camera_ChangeMode(cam, CAM_MODE_BOWARROWZ);
-    }
-}
-
-static void MmForm_RitoBowAim(PlayState* play, Player* player, Input* input) {
-    s32 pitch;
-
-    sRitoBow.aimYaw = Camera_GetCamDirYaw(GET_ACTIVE_CAM(play));
-    pitch = sRitoBow.aimPitch - ((input->rel.stick_y * RITO_BOW_AIM_PITCH_RATE) / 60);
-    sRitoBow.aimPitch = CLAMP(pitch, -RITO_BOW_AIM_PITCH_MAX, RITO_BOW_AIM_PITCH_MAX);
-    player->actor.shape.rot.y = sRitoBow.aimYaw;
-    player->actor.world.rot.y = sRitoBow.aimYaw;
-    MmForm_RitoBowAimCamera(play);
-}
-
-static u8 MmForm_RitoBowRunning(Player* player, u8 onGround) {
-    return onGround && (fabsf(player->linearVelocity) > 1.0f);
-}
-
-// dash_attack07 is the wind-up taken at a run; the standing one is motion14.
-static LinkAnimationHeader* MmForm_RitoBowChargeClip(Player* player, u8 onGround) {
-    if (MmForm_RitoBowRunning(player, onGround) && (sRitoBow.runAim != NULL)) {
-        return sRitoBow.runAim;
-    }
-    return sRitoBow.chargeUp;
-}
-
-static void MmForm_RitoBowTake(PlayState* play, Player* player) {
-    if (MMFORM_ON_GROUND(player)) {
-        func_80839FFC(player, play);
-        sRitoBow.bowAction = player->actionFunc;
-    }
+    worldYaw = Camera_GetInputDirYaw(GET_ACTIVE_CAM(play)) + stickAngle;
+    Math_ScaledStepToS(&player->yaw, worldYaw, RITO_BOW_TURN_RATE);
+    player->actor.world.rot.y = player->yaw;
+    player->actor.shape.rot.y = player->yaw;
+    player->linearVelocity = RITO_BOW_MOVE_SPEED;
+    return 1;
 }
 
 static void MmForm_RitoBowEnd(Player* player) {
-    sRitoBow.state = RITO_BOW_STOWED;
-    sRitoBow.holdsAnim = 0;
-    sRitoBow.charge = 0;
-    sRitoBow.idle = 0;
-    MmForm_RitoBowRestoreRun();
+    sRitoBow.state = RITO_BOW_OFF;
+    sRitoBow.moving = 0;
+    sRitoBow.timer = 0;
     player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
 }
 
-// Returns 1 on the frames it is driving the body, exactly like the flight controller.
+extern "C" void MmForm_RitoBowReset(void) {
+    sRitoBow.state = RITO_BOW_OFF;
+    sRitoBow.moving = 0;
+    sRitoBow.timer = 0;
+    MmForm_RitoBowClearArrows();
+}
+
+// Returns 1 when the bow owns the frame. Called before the flight controller, so a press
+// in mid-air takes the frame off the glide instead of racing it.
 static u8 MmForm_RitoBowUpdate(Player* player, PlayState* play) {
     Input* input = &play->state.input[0];
     u8 bHeld;
-    u8 onGround;
 
     if (gFormState.currentForm != MM_PLAYER_FORM_RITO) {
         return 0;
     }
+    // Ahead of every early return below: a volley outlives the state that fired it.
+    MmForm_RitoBowTickArrows(play);
     MmForm_RitoBowLoadClips();
-    MmForm_RitoBowTickThunder();
     if (MmForm_InputOwnedByMessage()) {
         return 0;
     }
-    if (sRitoBow.aim == NULL) {
-        return 0; // no clips: leave B alone entirely
-    }
-
     bHeld = CHECK_BTN_ALL(input->cur.button, BTN_B);
-    onGround = MMFORM_ON_GROUND(player) != 0;
-    sRitoBow.idle = bHeld ? 0 : (sRitoBow.idle + 1);
-    // While the bow is out it owns the body, so the flight controller must not
-    // advance its own clip underneath it (MmForm_RitoBowHoldsAnim).
-    sRitoBow.holdsAnim = (sRitoBow.state != RITO_BOW_STOWED);
 
-    if (sRitoBow.state != RITO_BOW_STOWED) {
-        // Running with the bow out hands the body BACK to vanilla on purpose, so there
-        // the actionFunc no longer matches the snapshot and the identity check below
-        // cannot apply — the explicit state flags are what ends the bow in that case.
-        u8 vanillaOwnsBody = (sRitoBow.state == RITO_BOW_AIM) && MmForm_RitoBowRunning(player, onGround);
-
-        if (player->stateFlags1 &
-            (PLAYER_STATE1_DAMAGED | PLAYER_STATE1_IN_WATER | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_DEAD)) {
-            MmForm_RitoBowEnd(player);
-            return 0;
-        }
-        if (!vanillaOwnsBody && (sRitoBow.bowAction != NULL) && onGround &&
-            (player->actionFunc != sRitoBow.bowAction)) {
-            MmForm_RitoBowEnd(player);
-            return 0;
-        }
+    // Damage, water or a cutscene ends the draw wherever it is.
+    if ((sRitoBow.state != RITO_BOW_OFF) &&
+        (player->stateFlags1 & (PLAYER_STATE1_IN_WATER | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_DAMAGED))) {
+        MmForm_RitoBowEnd(player);
+        return 0;
     }
 
     switch (sRitoBow.state) {
-        case RITO_BOW_STAB:
-            if (MmForm_RitoAdvance(play, player) || (++sRitoBow.timer > 20)) {
+        case RITO_BOW_AIR:
+            // One press, and the rito hangs there for the length of the clip. Nothing is
+            // held: the arrow goes down on the loose frame and the fall picks up after.
+            player->actor.velocity.y = 0.0f;
+            player->actor.gravity = 0.0f;
+            player->linearVelocity = 0.0f;
+            if (sRitoBow.timer == RITO_BOW_LOOSE_FRAME) {
+                MmForm_RitoBowClearArrows();
+                MmForm_RitoBowSpawnArrow(play, player, player->actor.shape.rot.y, 0x4000);
+            }
+            if (MmForm_RitoBowAdvance(play, player)) {
+                // Straight back into the fall, morphed rather than cut: the flight
+                // controller owns the air again from the next frame.
+                player->actor.gravity = RITO_FLY_GRAVITY_DEFAULT;
                 MmForm_RitoBowEnd(player);
+                if (sRito.fly != NULL) {
+                    MmForm_RitoPlay(play, player, sRito.fly, 1, 1.0f);
+                }
                 return 0;
             }
             return 1;
 
-        case RITO_BOW_DRAW:
-            // Let go inside the tap window and it was never a draw: it was a stab.
-            if (!bHeld && (sRitoBow.timer < RITO_BOW_TAP_FRAMES)) {
-                sRitoBow.state = RITO_BOW_STAB;
-                sRitoBow.timer = 0;
-                MmForm_RitoPlay(play, player, sRitoBow.stab, 0, 1.0f);
-                return 1;
+        case RITO_BOW_ENTER:
+            MmForm_RitoBowGroundMove(play, player);
+            if (MmForm_RitoBowAdvance(play, player)) {
+                sRitoBow.state = RITO_BOW_HOLD;
+                MmForm_RitoBowPlay(play, player, sRitoBow.moving ? sRitoBow.holdMove : sRitoBow.holdStill, 1);
             }
-            sRitoBow.timer++;
-            if (!MmForm_RitoAdvance(play, player)) {
-                return 1;
-            }
-            sRitoBow.state = RITO_BOW_AIM;
-            MmForm_RitoBowInstallRun();
-            MmForm_RitoPlay(play, player, sRitoBow.aim, 0, 1.0f);
             return 1;
 
-        case RITO_BOW_AIM: {
-            // Bow out and ready. The nock plays out first, then B starts the charge.
-            u8 running = MmForm_RitoBowRunning(player, onGround);
+        case RITO_BOW_HOLD: {
+            u8 moving = MmForm_RitoBowGroundMove(play, player);
 
-            MmForm_RitoBowAim(play, player, input);
-            if (running) {
-                // Let OOT animate: the group swap already points its run clip at the
-                // Rito's. Aim and camera keep tracking regardless.
-                player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
-                sRitoBow.bowAction = player->actionFunc;
-            } else if (!MmForm_RitoAdvance(play, player)) {
+            if (!bHeld) {
+                sRitoBow.state = RITO_BOW_RELEASE;
+                MmForm_RitoBowPlay(play, player, sRitoBow.release, 0);
                 return 1;
             }
-            if (bHeld) {
-                sRitoBow.state = RITO_BOW_CHARGE;
-                sRitoBow.charge = 0;
-                MmForm_RitoPlay(play, player, MmForm_RitoBowChargeClip(player, onGround), 0, 1.0f);
+            if (moving != sRitoBow.moving) {
+                sRitoBow.moving = moving;
+                if (moving) {
+                    // Standing still to moving is its own step-off, and it lands in the
+                    // run loop rather than back in the entry the draw started from.
+                    sRitoBow.state = RITO_BOW_ENTER;
+                    MmForm_RitoBowPlay(play, player, sRitoBow.enterDash, 0);
+                } else {
+                    MmForm_RitoBowPlay(play, player, sRitoBow.holdStill, 1);
+                }
                 return 1;
             }
-            if (sRitoBow.idle > RITO_BOW_IDLE_STOW) {
-                sRitoBow.state = RITO_BOW_SHEATHE;
-                sRitoBow.timer = 0;
-                MmForm_RitoPlay(play, player, sRitoBow.sheathe, 0, 1.0f);
-                return 1;
-            }
-            return running ? 0 : 1;
+            MmForm_RitoBowAdvance(play, player);
+            return 1;
         }
 
-        case RITO_BOW_CHARGE:
-            MmForm_RitoBowAim(play, player, input);
-            if (onGround && !MmForm_RitoBowRunning(player, onGround)) {
-                player->linearVelocity = 0.0f;
+        case RITO_BOW_RELEASE:
+            MmForm_RitoBowGroundMove(play, player);
+            if (sRitoBow.timer == RITO_BOW_LOOSE_FRAME) {
+                MmForm_RitoBowLoose(play, player);
             }
-            if (++sRitoBow.charge == RITO_BOW_CHARGE_FULL) {
-                Player_PlaySfx(&player->actor, NA_SE_IT_SWORD_CHARGE); // the shot is armed
-            }
-            // The wind-up parks on its last frame; holding B is what keeps it there.
-            if (MmForm_RitoAdvance(play, player)) {
-                player->skelAnime.playSpeed = 0.0f;
-            }
-            if (bHeld) {
-                return 1;
-            }
-            sRitoBow.state = RITO_BOW_SHOOT;
-            sRitoBow.timer = 0;
-            if (sRitoBow.charge < RITO_BOW_CHARGE_FULL) {
-                MmForm_RitoPlay(play, player, onGround ? sRitoBow.shotArc : sRitoBow.shotAir, 0, 1.0f);
-                MmForm_RitoBowFire(play, player, sRitoBow.aimPitch, 0);
-                return 1;
-            }
-            if (!MmForm_RitoBowSpendMagic()) {
-                Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
-                MmForm_RitoPlay(play, player, onGround ? sRitoBow.shotArc : sRitoBow.shotAir, 0, 1.0f);
-                MmForm_RitoBowFire(play, player, sRitoBow.aimPitch, 0);
-                return 1;
-            }
-            if (onGround) {
-                // One lobbed arrow; the thunder ring goes off where it lands.
-                MmForm_RitoPlay(play, player, sRitoBow.shotArc, 0, 1.0f);
-                MmForm_RitoBowFire(play, player, sRitoBow.aimPitch + RITO_BOW_ARC_PITCH, 1);
-            } else {
-                // Three in a line, fanned down-forward.
-                MmForm_RitoPlay(play, player, sRitoBow.shotAir, 0, 1.0f);
-                MmForm_RitoBowFire(play, player, sRitoBow.aimPitch + RITO_BOW_AIR_SPREAD, 0);
-                MmForm_RitoBowFire(play, player, sRitoBow.aimPitch, 0);
-                MmForm_RitoBowFire(play, player, sRitoBow.aimPitch - RITO_BOW_AIR_SPREAD, 0);
-            }
-            return 1;
-
-        case RITO_BOW_SHOOT:
-            MmForm_RitoBowAimCamera(play);
-            if (MmForm_RitoAdvance(play, player) || (++sRitoBow.timer > 24)) {
-                sRitoBow.state = RITO_BOW_AIM; // re-nock
-                MmForm_RitoPlay(play, player, sRitoBow.aim, 0, 1.0f);
-            }
-            return 1;
-
-        case RITO_BOW_SHEATHE:
-            if (MmForm_RitoAdvance(play, player) || (++sRitoBow.timer > 20)) {
+            if (MmForm_RitoBowAdvance(play, player)) {
                 MmForm_RitoBowEnd(player);
                 return 0;
             }
@@ -504,18 +472,23 @@ static u8 MmForm_RitoBowUpdate(Player* player, PlayState* play) {
             break;
     }
 
-    // Stowed. B is the only way in — but not on top of a flight move that is already
-    // driving the body. Gliding is the one that composes: you can shoot out of it.
     if (!CHECK_BTN_ALL(input->press.button, BTN_B) || (player->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE)) {
         return 0;
     }
-    if ((sRito.state != RITO_FLY_OFF) && (sRito.state != RITO_FLY_GLIDE)) {
+    if (!MMFORM_ON_GROUND(player)) {
+        if (sRitoBow.air == NULL) {
+            return 0;
+        }
+        sRitoBow.state = RITO_BOW_AIR;
+        MmForm_RitoBowPlay(play, player, sRitoBow.air, 0);
+        return 1;
+    }
+    if (sRitoBow.holdStill == NULL) {
         return 0;
     }
-    MmForm_RitoBowTake(play, player);
-    sRitoBow.state = RITO_BOW_DRAW;
-    sRitoBow.timer = 0;
-    sRitoBow.aimPitch = 0;
-    MmForm_RitoPlay(play, player, sRitoBow.draw, 0, 1.0f);
+    func_80839FFC(player, play);
+    sRitoBow.moving = (fabsf(player->linearVelocity) > 1.0f);
+    sRitoBow.state = RITO_BOW_ENTER;
+    MmForm_RitoBowPlay(play, player, sRitoBow.moving ? sRitoBow.enterMove : sRitoBow.enterStill, 0);
     return 1;
 }

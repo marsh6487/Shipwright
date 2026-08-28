@@ -1397,7 +1397,7 @@ static u8 Trident_IsSwordIA(s8 ia) {
 // The guard — vanilla's shield action, and now vanilla's POSES too.
 //
 // R is OOT's own shield, unchanged and un-reskinned: Mirror forced by
-// Trident_EnforceShield, block handled by the vanilla shield quad, and the
+// ExtEquip_SetSlot (Divine or Mirror, once), block handled by the vanilla shield quad, and the
 // raise/hold/lower clips are Link's own ("haz que las poses de shield use las
 // vanilla"). The gunlance guard idle that used to be served through
 // VB_PLAYER_ANIM_SITE_SHIELD_RAISE / _LOOP is gone from those sites.
@@ -1892,41 +1892,9 @@ static void Trident_Draw(Player* player, PlayState* play) {
 // trident con el Hylian puesto te deja sin escudo hasta que lo vuelvas a poner tú.
 // Por eso esto NO tiene pareja en Trident_Cleanup, y no es un olvido.
 // ---------------------------------------------------------------------------
-// El escudo del gunlance, por edad: niño → Divine Shield (ext, ranura 1), adulto →
-// Mirror Shield.
-//
-// ⚠️ SIEMPRE SE DESEQUIPA LO QUE HUBIERA ANTES, y ahí estaba el bug del "luego sigue
-// el kite shield a veces". La versión anterior llamaba a Inventory_ChangeEquipment
-// para poner el Mirror y nada más — pero eso sólo toca el escudo VANILLA. Si llevabas
-// un escudo EXT puesto (Kite, Ikana…), gExtEquipState.currentExtShield seguía
-// apuntándolo y el modelo custom se seguía dibujando por encima. Son dos ranuras
-// distintas y hay que limpiar las dos.
-#define TRI_EXT_SHIELD_DIVINE 1
-
-static void Trident_EnforceShield(void) {
-    u8 wantDivine = (gSaveContext.linkAge == LINK_AGE_CHILD);
-    u8 curExt = ExtEquip_GetCurrent(EQUIP_TYPE_SHIELD);
-    u16 curVanilla = CUR_EQUIP_VALUE(EQUIP_TYPE_SHIELD);
-
-    if (wantDivine) {
-        if (curExt == TRI_EXT_SHIELD_DIVINE) {
-            return; // ya está
-        }
-        // Las dos ranuras a cero antes de poner nada. ExtEquip_Equip pone por su
-        // cuenta el escudo vanilla que le sirve de base.
-        ExtEquip_Unequip(EQUIP_TYPE_SHIELD);
-        ExtEquip_Equip(EQUIP_TYPE_SHIELD, TRI_EXT_SHIELD_DIVINE);
-        return;
-    }
-
-    if ((curExt == 0) && (curVanilla == EQUIP_VALUE_SHIELD_MIRROR)) {
-        return; // ya está
-    }
-    ExtEquip_Unequip(EQUIP_TYPE_SHIELD);
-    Inventory_ChangeEquipment(EQUIP_TYPE_SHIELD, CHECK_OWNED_EQUIP(EQUIP_TYPE_SHIELD, EQUIP_INV_SHIELD_MIRROR)
-                                                     ? EQUIP_VALUE_SHIELD_MIRROR
-                                                     : EQUIP_VALUE_SHIELD_NONE);
-}
+// The Trident's shield rule (Divine or a Mirror, else bare) is applied ONCE by ExtEquip_SetSlot
+// when the Trident goes on, and the kaleido/ExtEquip_Equip refuse other shields while it is worn —
+// nothing here touches the shield slot per frame anymore.
 
 // ---------------------------------------------------------------------------
 // Phantom Ganon flight — the one custom state.
@@ -2589,7 +2557,6 @@ static void Trident_Behavior(Player* player, PlayState* play) {
     // else stomped the tables. B is NEVER intercepted — OOT's pipeline drives the
     // whole combo, it just plays our animations.
     Trident_InstallAnims();
-    Trident_EnforceShield();
 
     drawn = Trident_CanAct(player);
     Trident_TickLoco(play, player, drawn);

@@ -23,6 +23,12 @@ static const u16 sButtonMasks[8] = {
      PLAYER_STATE1_HOOKSHOT_FALLING | PLAYER_STATE1_CHARGING_SPIN_ATTACK)
 
 /**
+ * Is `button` claimed this frame by something that has taken the pad over (Ultrahand mode, the
+ * Master Cycle)? Every place that scans the raw pad against buttonItems must ask this first.
+ */
+u8 ItemInput_ButtonIsClaimed(u16 button);
+
+/**
  * Input state for custom item polling.
  */
 typedef struct {

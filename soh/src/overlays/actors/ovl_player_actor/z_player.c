@@ -2835,85 +2835,55 @@ s32 Player_ItemIsItemAction(s32 item1, s32 itemAction) {
     }
 }
 
-// mods/actors/cane_pacci.c — while Ultrahand mode is up the D-pad rotates and moves
-// the held object, so it must not also be firing whatever is equipped to it.
-u8 Pacci_UltrahandModeActive(void);
-// mods/actors/master_cycle.c — on the bike the D-pad is the wheelie (up) and its cancel (down).
 u8 MasterCycle_IsRiding(void);
 // The yaw to sit a rider at. Passes every other mount's own yaw straight through; the bike answers
 // with the direction it is TRAVELLING, which in a drift is not where its body points.
 s16 MasterCycle_RideYaw(Actor* ride);
 
+// Fork-added B-button state, owned by the Zora fin / Deku bubble setup below. Read by the
+// VB_GET_ITEM_ON_BUTTON subscriber, which cannot see this file's statics.
+s32 Player_IsZoraBoomerangActive(void) {
+    return sZoraBoomerangActive;
+}
+
+s32 Player_IsDekuBubbleActive(void) {
+    return sDekuBubbleActive;
+}
+
 s32 Player_GetItemOnButton(PlayState* play, s32 index) {
-    // Indices 4..7 are the D-pad slots. Ultrahand mode and the Master Cycle claim those buttons.
-    if ((index >= 4) && (Pacci_UltrahandModeActive() || MasterCycle_IsRiding())) {
-        return ITEM_NONE;
-    }
-    // On the bike B is the reverse/dismount control, and both hands are on the bars: nothing is
-    // drawn out of it. Same trick the Deku form uses below — an empty B slot is how you tell OoT to
-    // leave the button alone, and it is what stops the sword coming out of its scabbard. (The swing
-    // itself, if the sword was already in hand when he got on, is stopped in func_80837948.)
-    if ((index == 0) && MasterCycle_IsRiding()) {
-        return ITEM_NONE;
-    }
+    s32 item;
+
     if (index >= ((CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) ? 8 : 4)) {
         return ITEM_NONE;
-    } else if (play->bombchuBowlingStatus != 0) {
-        return (play->bombchuBowlingStatus > 0) ? ITEM_BOMBCHU : ITEM_NONE;
-    } else if (index == 0) {
-        // Zora boomerang / Deku bubble: BTN_B returns the appropriate item
-        // so OOT's pipeline (aim, sHeldItemButtonIsHeldDown, throw/fire) works.
-        // ONLY during aim phase (USING_BOOMERANG flag set). During flight phase
-        // (fins in air, Phase 1 cleaned flags), return normal B item so player
-        // can punch/jump-slash while fins fly.
-        {
-            Player* cachedPlayer = GET_PLAYER(play);
-            if (sZoraBoomerangActive && (cachedPlayer->stateFlags1 & PLAYER_STATE1_USING_BOOMERANG)) {
-                return ITEM_BOOMERANG;
-            }
-        }
-        if (sDekuBubbleActive) {
-            return ITEM_SLINGSHOT;
-        }
-        // Deku form: block OOT from interpreting B as sword.
-        // OOT's actionFunc runs BEFORE TransformMasks_Update, so Player_ProcessItemButtons
-        // sees B_BTN_ITEM=sword → starts sword swing before our code can intercept.
-        // Return ITEM_NONE so OOT ignores B entirely; our form code handles it.
-        if (TransformMasks_IsTransformed()) {
-            if (MmForm_GetCurrentForm() == 3 /* DEKU */) {
-                return ITEM_NONE;
-            }
-        }
-        // Bremen / Kamaro mask: same trick — return ITEM_NONE on the B slot so
-        // OOT's Player_ProcessItemButtons treats B as "no item" and won't draw
-        // sword. C-button item slots are unaffected, so the mask can still be
-        // unequipped or swapped from a C button.
-        if (MmMaskWear_BlocksSword()) {
-            return ITEM_NONE;
-        }
-        // (The Trident briefly stripped B here so its moveset could own the button.
-        // Removed: that is the approach the Gerudo Dual Blades moveset explicitly
-        // abandoned — stealing B costs you OOT's whole draw / face-target / chain /
-        // putaway pipeline, and the moveset then races actionFunc by one frame.
-        // The trident installs its clips into OOT's melee animation table instead,
-        // exactly like MmForm_GerudoInstallAnims, so B reaches the normal attack
-        // pipeline and that pipeline IS the moveset. Skijer's NEI)
-        return B_BTN_ITEM;
-    } else if (index == 1) {
-        return C_BTN_ITEM(0);
-    } else if (index == 2) {
-        return C_BTN_ITEM(1);
-    } else if (index == 3) {
-        return C_BTN_ITEM(2);
-    } else if (index == 4) {
-        return DPAD_ITEM(0);
-    } else if (index == 5) {
-        return DPAD_ITEM(1);
-    } else if (index == 6) {
-        return DPAD_ITEM(2);
-    } else if (index == 7) {
-        return DPAD_ITEM(3);
     }
+
+    if (play->bombchuBowlingStatus != 0) {
+        item = (play->bombchuBowlingStatus > 0) ? ITEM_BOMBCHU : ITEM_NONE;
+    } else {
+        switch (index) {
+            case 0:
+                item = B_BTN_ITEM;
+                break;
+            case 1:
+            case 2:
+            case 3:
+                item = C_BTN_ITEM(index - 1);
+                break;
+            case 4:
+            case 5:
+            case 6:
+            case 7:
+                item = DPAD_ITEM(index - 4);
+                break;
+            default:
+                item = ITEM_NONE;
+                break;
+        }
+    }
+
+    GameInteractor_Should(VB_GET_ITEM_ON_BUTTON, item, index, &item, play);
+
+    return item;
 }
 
 /**
@@ -2989,7 +2959,8 @@ void Player_ProcessItemButtons(Player* this, PlayState* play) {
             }
             if (!Player_ItemIsInUse(this, B_BTN_ITEM) && !Player_ItemIsInUse(this, C_BTN_ITEM(0)) &&
                 !Player_ItemIsInUse(this, C_BTN_ITEM(1)) && !Player_ItemIsInUse(this, C_BTN_ITEM(2)) && !hasOnDpad) {
-                // Zora boomerang / Deku bubble: don't put away — active via B, not on any button
+                // Zora boomerang / Deku bubble: don't put away — active via B, and
+                // B_BTN_ITEM still names whatever the player really has equipped there.
                 if (sZoraBoomerangActive || sDekuBubbleActive) {
                     // Skip Player_UseItem(ITEM_NONE) — keep boomerang active
                 } else if (GameInteractor_Should(VB_PUTAWAY_BECAUSE_DISABLED_ITEM_BUTTONS, true)) {
@@ -3023,8 +2994,9 @@ void Player_ProcessItemButtons(Player* this, PlayState* play) {
         } else if (GameInteractor_Should(VB_CHANGE_HELD_ITEM_AND_USE_ITEM, true, item)) {
             this->heldItemButton = i;
 
-            // Extended equipment on C button: toggle equip on/off
-            if (item >= ITEM_EXT_SWORD_1 && item <= ITEM_EXT_BOOTS_3) {
+            // Extended equipment on a C button: toggle equip on/off. On B an ext sword id is the
+            // Four Sword / Trident itself and must swing (ExtPlayer_GetItemAction aliases it).
+            if ((i != 0) && item >= ITEM_EXT_SWORD_1 && item <= ITEM_EXT_BOOTS_3) {
                 ExtEquip_ToggleFromCButton(item);
             }
             // Per-form item interception: if transformed, check the form's item list first.
@@ -3254,7 +3226,8 @@ void func_80834644(PlayState* play, Player* this) {
     this->stateFlags1 &= ~PLAYER_STATE1_START_CHANGING_HELD_ITEM;
 }
 
-LinkAnimationHeader* func_808346C4(PlayState* play, Player* this) {
+// formerly func_808346C4
+LinkAnimationHeader* Player_StartUpperBodyShield(PlayState* play, Player* this) {
     Player_SetUpperActionFunc(this, func_80834B5C);
     Player_DetachHeldActor(play, this);
 
@@ -3277,20 +3250,13 @@ LinkAnimationHeader* func_808346C4(PlayState* play, Player* this) {
     }
 }
 
-s32 func_80834758(PlayState* play, Player* this) {
+// formerly func_80834758
+s32 Player_TryRaiseUpperBodyShield(PlayState* play, Player* this) {
     LinkAnimationHeader* anim;
     f32 frame;
 
-    // Transformation masks: no form is affected by the equipped shield (Skijer 2026-07-28).
-    //   BLOCK      → the form owns R (Goron curl, Deku guard, Garo, Pikachu bubble,
-    //                Gerudo wirebug); OOT's upper-body shield must never raise.
-    //   FORM_GUARD → Zora rides this exact path to extend his forearm fins, so the
-    //                equipment gate below is skipped: the fins come out with any shield
-    //                or with none. (This replaces the old hack of writing
-    //                currentShield = MIRROR from MmForm_UpdateActive.)
-    //   TWO_HANDED → Fierce Deity: same bypass. func_808346C4 then picks the "_long"
-    //                two-handed defense anim on its own because the Deity always counts
-    //                as holding a two-handed weapon, giving the Biggoron-Sword guard.
+    // FORM_GUARD and TWO_HANDED ride this path with no shield equipped: Zora's fins and the
+    // Deity's free-hands guard come out either way, so they skip the equipment arm below.
     u8 formShieldMode = TransformMasks_GetShieldMode();
 
     if (formShieldMode == MMFORM_SHIELD_BLOCK) {
@@ -3305,7 +3271,7 @@ s32 func_80834758(PlayState* play, Player* this) {
         Player_IsZTargeting(this) && CHECK_BTN_ALL(sControlInput->cur.button, BTN_R) &&
         !GerudoMhr_BlockShieldRaise(this)) {
 
-        anim = func_808346C4(play, this);
+        anim = Player_StartUpperBodyShield(play, this);
         frame = Animation_GetLastFrame(anim);
         LinkAnimation_Change(play, &this->upperSkelAnime, anim, 1.0f, frame, frame, ANIMMODE_ONCE, 0.0f);
         Player_PlaySfx(this, NA_SE_IT_SHIELD_POSTURE);
@@ -3317,7 +3283,7 @@ s32 func_80834758(PlayState* play, Player* this) {
 }
 
 s32 func_8083485C(Player* this, PlayState* play) {
-    if (func_80834758(play, this)) {
+    if (Player_TryRaiseUpperBodyShield(play, this)) {
         return true;
     } else {
         return false;
@@ -3364,7 +3330,7 @@ s32 func_8083499C(Player* this, PlayState* play) {
  * This upper body action allows for shielding or changing held items while a sword is in hand.
  */
 s32 Player_UpperAction_Sword(Player* this, PlayState* play) {
-    if (func_80834758(play, this) || func_8083499C(this, play)) {
+    if (Player_TryRaiseUpperBodyShield(play, this) || func_8083499C(this, play)) {
         return true;
     } else {
         return false;
@@ -3415,7 +3381,7 @@ s32 func_80834BD4(Player* this, PlayState* play) {
     f32 frame;
 
     if (LinkAnimation_Update(play, &this->upperSkelAnime)) {
-        anim = func_808346C4(play, this);
+        anim = Player_StartUpperBodyShield(play, this);
         frame = Animation_GetLastFrame(anim);
         LinkAnimation_Change(play, &this->upperSkelAnime, anim, 1.0f, frame, frame, ANIMMODE_ONCE, 0.0f);
     }
@@ -3552,7 +3518,7 @@ s32 func_8083501C(Player* this, PlayState* play) {
         this->unk_860 = -this->unk_860;
     }
 
-    if ((!Player_HoldsHookshot(this) || func_80834FBC(this)) && !func_80834758(play, this) &&
+    if ((!Player_HoldsHookshot(this) || func_80834FBC(this)) && !Player_TryRaiseUpperBodyShield(play, this) &&
         !func_80834F2C(this, play)) {
         // Deku bubble: pipeline fully exiting — restore default state
         if (sDekuBubbleActive) {
@@ -3699,7 +3665,7 @@ s32 func_808353D8(Player* this, PlayState* play) {
         return true;
     }
 
-    if (!func_80834758(play, this) &&
+    if (!Player_TryRaiseUpperBodyShield(play, this) &&
         (sUseHeldItem || ((this->unk_860 < 0) && sHeldItemButtonIsHeldDown) || func_80834E44(play))) {
         this->unk_860 = ABS(this->unk_860);
 
@@ -3780,7 +3746,7 @@ s32 Player_UpperAction_CarryActor(Player* this, PlayState* play) {
         func_80834644(play, this);
     }
 
-    if (func_80834758(play, this)) {
+    if (Player_TryRaiseUpperBodyShield(play, this)) {
         return true;
     }
 
@@ -3810,7 +3776,7 @@ void func_808357E8(Player* this, Gfx** dLists) {
 }
 
 s32 func_80835800(Player* this, PlayState* play) {
-    if (func_80834758(play, this)) {
+    if (Player_TryRaiseUpperBodyShield(play, this)) {
         return true;
     }
 
@@ -3954,7 +3920,7 @@ s32 func_808359FC(Player* this, PlayState* play) {
 }
 
 s32 func_80835B60(Player* this, PlayState* play) {
-    if (func_80834758(play, this)) {
+    if (Player_TryRaiseUpperBodyShield(play, this)) {
         return true;
     }
 
@@ -4258,20 +4224,7 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
                     Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
                 }
             } else if (item >= ITEM_MM_MASK_POSTMAN && item <= ITEM_MM_MASK_FIERCE_DEITY) {
-                // MM Mask items from 3rd inventory page. Garo gets routed
-                // through the MmForm pipeline like the others (full transform
-                // with flash + cutscene). The Garo MmForm branch is passive
-                // so Link's normal gameplay (items, swim, sword) still runs 1:1.
-                if (TransformMasks_IsEnabled() || item == ITEM_MM_MASK_GARO || item == ITEM_MM_MASK_KEATON) {
-                    TransformMaskId maskType = TransformMasks_GetMaskType(item);
-                    if (maskType != TRANSFORM_MASK_NONE) {
-                        TransformMasks_HandleMaskUse(play, this, item);
-                        return;
-                    }
-                }
-                // Skin forms (Kafei / Keaton / Rito): toggle the Link-rigged
-                // replacement model from soh.o2r (registry in custom_forms.cpp).
-                if (CustomForms_TrySkinItem(play, this, item)) {
+                if (TransformMasks_TryFormFromItem(play, this, item)) {
                     return;
                 }
                 // MM masks with an OOT counterpart behave 1:1 with the OOT trade mask:
@@ -4299,28 +4252,10 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
                     TransformMasks_WearToggle(play, this, item);
                 }
             } else if (itemAction >= PLAYER_IA_MASK_KEATON && itemAction <= PLAYER_IA_MASK_TRUTH) {
-                // Handle wearable masks (ONLY actual masks, not Lens or custom items)
-
-                // TRANSFORMATION MASKS: Check if this mask should trigger transformation.
-                // The Rito Mask bypasses TransformMasks_IsEnabled the same way the Garo
-                // Mask does in the MM-mask branch above: its body ships in soh.o2r, so it
-                // does not depend on mm.o2r being mounted or on the MM-masks page.
-                if (TransformMasks_IsEnabled() || item == ITEM_RITO_MASK || item == ITEM_MASK_KEATON) {
-                    TransformMaskId maskType = TransformMasks_GetMaskType(item);
-                    if (maskType != TRANSFORM_MASK_NONE) {
-                        // This is a transformation mask - handle transformation instead of wearing
-                        TransformMasks_HandleMaskUse(play, this, item);
-                        return; // Don't do normal mask wearing
-                    }
-                }
-
-                // Skin forms (Keaton Mask -> Keaton form, etc.): toggle the
-                // Link-rigged replacement model instead of wearing the mask.
-                if (CustomForms_TrySkinItem(play, this, item)) {
+                if (TransformMasks_TryFormFromItem(play, this, item)) {
                     return;
                 }
 
-                // Normal OOT mask wearing behavior - clear any MM mask first
                 TransformMasks_WearClear();
 
                 if (this->currentMask != PLAYER_MASK_NONE) {
@@ -5772,7 +5707,8 @@ void func_80837C0C(PlayState* play, Player* this, s32 damageResponseType, f32 sp
     }
 }
 
-s32 func_80838144(s32 arg0) {
+// formerly func_80838144
+s32 Player_GetHotFloorTimerIndex(s32 arg0) {
     s32 temp = arg0 - 2;
 
     if ((temp >= 0) && (temp < 2)) {
@@ -5786,7 +5722,8 @@ int func_8083816C(s32 arg0) {
     return (arg0 == 4) || (arg0 == 7) || (arg0 == 12);
 }
 
-void func_8083819C(Player* this, PlayState* play) {
+// formerly func_8083819C
+void Player_BurnDekuShield(Player* this, PlayState* play) {
     if (GameInteractor_Should(VB_BURN_SHIELD, this->currentShield == PLAYER_SHIELD_DEKU, this)) {
         Actor_Spawn(&play->actorCtx, play, ACTOR_ITEM_SHIELD, this->actor.world.pos.x, this->actor.world.pos.y,
                     this->actor.world.pos.z, 0, 0, 0, 1);
@@ -5795,7 +5732,8 @@ void func_8083819C(Player* this, PlayState* play) {
     }
 }
 
-void func_8083821C(Player* this) {
+// formerly func_8083821C
+void Player_CatchFire(Player* this) {
     s32 i;
 
     if (!GameInteractor_Should(VB_PLAYER_CATCH_FIRE, true, this)) {
@@ -5811,7 +5749,7 @@ void func_8083821C(Player* this) {
 
 void func_80838280(Player* this) {
     if (this->actor.colChkInfo.acHitEffect == 1) {
-        func_8083821C(this);
+        Player_CatchFire(this);
     }
     Player_PlayVoiceSfx(this, NA_SE_VO_LI_FALL_L);
 }
@@ -5982,7 +5920,7 @@ s32 func_808382DC(Player* this, PlayState* play) {
                 }
 
                 if (sp64 && (this->shieldQuad.info.acHitInfo->toucher.effect == HIT_SPECIAL_EFFECT_FIRE)) {
-                    func_8083819C(this, play);
+                    Player_BurnDekuShield(this, play);
                 }
 
                 return 0;
@@ -6026,7 +5964,7 @@ s32 func_808382DC(Player* this, PlayState* play) {
                 return 0;
             } else {
                 static u8 D_808544F4[] = { 120, 60 };
-                s32 sp48 = func_80838144(sFloorType);
+                s32 sp48 = Player_GetHotFloorTimerIndex(sFloorType);
 
                 // Desert immunity (Gerudo) and the Goron form's tunic-less heat resistance gate
                 // both floor arms outright. Arm 1 is spikes, not heat, so it stays ungated.
@@ -7588,8 +7526,8 @@ void Player_SetupRoll(Player* this, PlayState* play) {
     // Rito: a bird does not tuck and roll — this becomes a 1.5x Roc's Feather hop
     // with its own clip. Skijer's NEI
     {
-        extern unsigned char MmForm_RitoTryHop(Player * player, PlayState * play, unsigned char isBackflip);
-        if (MmForm_RitoTryHop(this, play, 0)) {
+        extern unsigned char MmForm_RitoTryHop(Player * player, PlayState * play, int dir);
+        if (MmForm_RitoTryHop(this, play, -1)) {
             return;
         }
     }
@@ -7615,13 +7553,13 @@ s32 Player_TryRoll(Player* this, PlayState* play) {
 }
 
 void func_8083BCD0(Player* this, PlayState* play, s32 controlStickDirection) {
-    // Rito: only the BACKFLIP (stick back) is replaced, by a 1x Roc's Feather jump;
-    // the side hops keep OOT's arc. PLAYER_STICK_DIR_BACKWARD is direction 2 here —
-    // the table below is indexed 0 front, 1 side-left, 2 backflip, 3 side-right.
-    // Skijer's NEI
-    if (controlStickDirection == 2) {
-        extern unsigned char MmForm_RitoTryHop(Player * player, PlayState * play, unsigned char isBackflip);
-        if (MmForm_RitoTryHop(this, play, 1)) {
+    // Rito: every dodge — backflip AND both side hops — becomes a 1x Roc's Feather
+    // jump wearing the backflip clip; the side hops keep their sideways push. The
+    // table below is indexed 0 front, 1 side-left, 2 backflip, 3 side-right, and
+    // direction 0 never reaches here. Skijer's NEI
+    {
+        extern unsigned char MmForm_RitoTryHop(Player * player, PlayState * play, int dir);
+        if (MmForm_RitoTryHop(this, play, controlStickDirection)) {
             return;
         }
     }
@@ -8009,36 +7947,26 @@ s32 Player_ActionHandler_11(Player* this, PlayState* play) {
     LinkAnimationHeader* anim;
     f32 frame;
 
-    // Transformation masks (Skijer 2026-07-28): forms are fully decoupled from shield
-    // equipment.
-    //   BLOCK / FORM_GUARD → the form owns R (Goron curls, Deku guards, Zora raises his
-    //       fins through MmForm_EnterShield, Garo/Pikachu/Gerudo have their own R moves).
-    //       OOT's static shield action must never engage on top of them.
-    //   TWO_HANDED → Fierce Deity guards exactly like the Biggoron's Sword: the vanilla
-    //       action runs, but without requiring a shield to be equipped. Being two-handed
-    //       keeps Player_SetModelsForHoldingShield from putting a shield in his hand and
-    //       selects the free-hands defense pose, same as BGS.
     u8 formShieldMode = TransformMasks_GetShieldMode();
 
     if ((formShieldMode != MMFORM_SHIELD_VANILLA) && (formShieldMode != MMFORM_SHIELD_TWO_HANDED)) {
         return 0;
     }
 
-    // Gerudo's R is the blade guard. The one thing that must not raise it is a held
-    // L, the modifier button (wirebug moves, and L+R for rage). This handler is
-    // re-asked every frame by Player_Action_80843188, so the same predicate that
-    // refuses the raise also drops a guard already up — through vanilla's own
-    // release branch, which plays defense_end and the shield-off SFX.
+    // Re-asked every frame by Player_Action_80843188, so refusing the raise on a held L also drops
+    // a guard already up, through vanilla's own release branch.
     if (GerudoMhr_BlockShieldRaise(this)) {
         return 0;
     }
 
+    u8 guardsWithBlades = GerudoMhr_UsesBladeGuard(this);
+    u8 childBigShield = Player_IsChildWithHylianShield(this);
+
     if ((play->shootingGalleryStatus == 0) &&
         ((formShieldMode == MMFORM_SHIELD_TWO_HANDED) || (this->currentShield != PLAYER_SHIELD_NONE) ||
-         GerudoMhr_UsesBladeGuard(this)) &&
+         guardsWithBlades) &&
         CHECK_BTN_ALL(sControlInput->cur.button, BTN_R) &&
-        (Player_IsChildWithHylianShield(this) ||
-         (!Player_FriendlyLockOnOrParallel(this) && (this->focusActor == NULL)))) {
+        (childBigShield || (!Player_FriendlyLockOnOrParallel(this) && (this->focusActor == NULL)))) {
 
         func_80832318(this);
         Player_DetachHeldActor(play, this);
@@ -8048,16 +7976,13 @@ s32 Player_ActionHandler_11(Player* this, PlayState* play) {
 
             this->stateFlags1 |= PLAYER_STATE1_SHIELDING;
 
-            // Gerudo: the guard enters fighter. modelAnimType is only recomputed
-            // when the held item changes, so raising the blades with empty hands
-            // would otherwise still read column 0. Done HERE, before the anim is
-            // fetched, so the raise itself already comes from the fighter column —
-            // GerudoMhr_ForcesFighter reads the SHIELDING flag set one line above.
-            if (GerudoMhr_UsesBladeGuard(this)) {
+            // modelAnimType is only recomputed when the held item changes, so blades raised with
+            // empty hands would still read column 0. Must run before the anim is fetched.
+            if (guardsWithBlades) {
                 Player_SetModelGroup(this, Player_ActionToModelGroup(this, this->heldItemAction));
             }
 
-            if (!Player_IsChildWithHylianShield(this)) {
+            if (!childBigShield) {
                 Player_SetModelsForHoldingShield(this);
                 anim = GET_PLAYER_ANIM(PLAYER_ANIMGROUP_defense, this->modelAnimType);
             } else {
@@ -8078,19 +8003,14 @@ s32 Player_ActionHandler_11(Player* this, PlayState* play) {
             }
 
             frame = Animation_GetLastFrame(anim);
-            // Vanilla starts the raise ON its last frame — the shield is simply up,
-            // there is nothing to watch. Gerudo's guard IS an animation (the first
-            // slice of the dual-blade flourish), so she plays it from the start;
-            // starting at `frame` like everyone else is what would skip it whole.
-            f32 shieldStartFrame = GerudoMhr_UsesBladeGuard(this) ? 0.0f : frame;
-            // ...and blend into it over 3 frames instead of cutting: vanilla can snap
-            // because it lands on a pose, we are starting a motion from whatever the
-            // idle or run cycle was showing.
-            f32 shieldMorph = GerudoMhr_UsesBladeGuard(this) ? -3.0f : 0.0f;
+            // Vanilla lands on a pose so it starts on the last frame and snaps; the blade guard is
+            // a motion, so it plays from the start and blends in.
+            f32 shieldStartFrame = guardsWithBlades ? 0.0f : frame;
+            f32 shieldMorph = guardsWithBlades ? -3.0f : 0.0f;
             LinkAnimation_Change(play, &this->skelAnime, anim, 1.0f, shieldStartFrame, frame, ANIMMODE_ONCE,
                                  shieldMorph);
 
-            if (Player_IsChildWithHylianShield(this)) {
+            if (childBigShield) {
                 Player_StartAnimMovement(play, this, 4);
             }
 
@@ -8865,8 +8785,10 @@ s32 Player_HandleSlopes(PlayState* play, Player* this, CollisionPoly* floorPoly)
     s16 velYawToDownwardSlope;
 
     // Climb Boots: full traction — steep slopes neither force the slide nor slow the climb.
+    // Roc's Boots on the water surface: the lake bottom's slope is not the floor Link stands on.
     if (!Player_InBlockingCsMode(play, this) && (Player_Action_SlideOnSlope != this->actionFunc) &&
-        !ClimbBoots_HasGrip() && (SurfaceType_GetFloorEffect(&play->colCtx, floorPoly, this->actor.floorBgId) == 1)) {
+        !ClimbBoots_HasGrip() && !RocBoots_OnWater() &&
+        (SurfaceType_GetFloorEffect(&play->colCtx, floorPoly, this->actor.floorBgId) == 1)) {
         // Get direction of movement relative to the downward direction of the slope
         playerVelYaw = Math_Atan2S(this->actor.velocity.z, this->actor.velocity.x);
         Player_GetSlopeDirection(floorPoly, &slopeNormal, &downwardSlopeYaw);
@@ -11223,9 +11145,9 @@ static AnimSfxEntry D_808545F0[] = {
 void Player_Action_80843CEC(Player* this, PlayState* play) {
     if (Player_SuffersHeat(this)) {
         if ((play->roomCtx.curRoom.behaviorType2 == ROOM_BEHAVIOR_TYPE2_3) || (sFloorType == 9) ||
-            ((func_80838144(sFloorType) >= 0) &&
+            ((Player_GetHotFloorTimerIndex(sFloorType) >= 0) &&
              !SurfaceType_IsWallDamage(&play->colCtx, this->actor.floorPoly, this->actor.floorBgId))) {
-            func_8083821C(this);
+            Player_CatchFire(this);
         }
     }
 
@@ -12927,7 +12849,8 @@ s32 Player_UpdateHoverBoots(Player* this) {
         (this->currentBoots == PLAYER_BOOTS_HOVER ||
          ((CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) || gIvanPossessActive || Sm64Mario_IsReady()) &&
           this->ivanFloating)) &&
-        ((this->actor.yDistToWater >= 0.0f) || (func_80838144(sFloorType) >= 0) || func_8083816C(sFloorType));
+        ((this->actor.yDistToWater >= 0.0f) || (Player_GetHotFloorTimerIndex(sFloorType) >= 0) ||
+         func_8083816C(sFloorType));
 
     if (canHoverOnGround && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && (this->hoverBootsTimer != 0)) {
         this->actor.bgCheckFlags &= ~1;
@@ -13257,6 +13180,12 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
     if ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && (floorPoly != NULL)) {
         if (GameInteractor_Should(VB_SET_STATIC_FLOOR_TYPE, true, this)) {
             sFloorType = SurfaceType_GetFloorType(&play->colCtx, floorPoly, this->actor.floorBgId);
+
+            // Roc's Boots: WALK ON LAVA — the sink/burn/void-out floors (4/7/12) and the timed
+            // hot floors (2/3) read as plain floor, the same family the Hover Boots float over.
+            if (RocBoots_IsWorn() && (func_8083816C(sFloorType) || (Player_GetHotFloorTimerIndex(sFloorType) >= 0))) {
+                sFloorType = 0;
+            }
         }
 
         if (!Player_UpdateHoverBoots(this)) {
@@ -13294,6 +13223,30 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
         }
     } else {
         Player_UpdateHoverBoots(this);
+    }
+
+    // Roc's Boots: WALK ON WATER — feet at/below the surface while not swimming → pin Link to the
+    // surface and call it flat floor.
+    {
+        u8 onWater = RocBoots_WalksOnWater(this);
+
+        if (onWater != 0) {
+            if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
+                this->actor.bgCheckFlags |= BGCHECKFLAG_GROUND;
+                if (onWater == 2) {
+                    this->actor.bgCheckFlags |= BGCHECKFLAG_GROUND_TOUCH;
+                }
+            }
+            this->actor.world.pos.y += this->actor.yDistToWater;
+            this->actor.yDistToWater = 0.0f;
+            this->actor.floorHeight = this->actor.world.pos.y;
+            sYDistToFloor = 0.0f;
+            if (this->actor.velocity.y < 0.0f) {
+                this->actor.velocity.y = 0.0f;
+            }
+            sFloorType = 0;
+            this->floorPitch = this->floorPitchAlt = sFloorShapePitch = 0;
+        }
     }
 
     if (this->prevFloorType == sFloorType) {
@@ -13491,7 +13444,7 @@ void Player_UpdateBodyBurn(PlayState* play, Player* this) {
     spawnedFlame = false;
     timerPtr = this->bodyFlameTimers;
 
-    func_8083819C(this, play);
+    Player_BurnDekuShield(this, play);
 
     for (i = 0; i < PLAYER_BODYPART_MAX; i++, timerPtr++) {
         timerStep = sp58 + sp54;
@@ -13700,7 +13653,7 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
     if (this->stateFlags2 & PLAYER_STATE2_PAUSE_MOST_UPDATING) {
         if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
             Player_ZeroSpeedXZ(this);
-            Actor_MoveXZGravity(&this->actor);
+            RocBoots_MoveWithGravity(this, Actor_MoveXZGravity); // half gravity while worn
         }
 
         Player_ProcessSceneCollision(play, this);
@@ -13802,7 +13755,7 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
                 this->actor.world.rot.y = this->yaw;
             }
 
-            Actor_UpdateVelocityXZGravity(&this->actor);
+            RocBoots_MoveWithGravity(this, Actor_UpdateVelocityXZGravity); // half gravity while worn
 
             if ((this->pushedSpeed != 0.0f) && !Player_InCsMode(play) &&
                 !(this->stateFlags1 &
@@ -14452,6 +14405,14 @@ void Player_Update(Actor* thisx, PlayState* play) {
         extern void Slate_TickInput(PlayState * play, Player * player);
 
         Slate_TickInput(play, this);
+    }
+
+    // Rod of Seasons: pushes the owned season's weather into envCtx, and holds its own C button to
+    // open the season wheel. Skijer's NEI
+    {
+        extern void Seasons_TickInput(PlayState * play, Player * player);
+
+        Seasons_TickInput(play, this);
     }
 
     // Shadow Crystal is a u16 extended item, so it needs the same effective-button

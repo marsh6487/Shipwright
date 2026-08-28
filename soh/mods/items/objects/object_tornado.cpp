@@ -72,6 +72,12 @@ void Tornado_Draw(PlayState* play, const TornadoParams* p) {
 
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
 
+    // The matrix below is built with MTXMODE_NEW, so it REPLACES whatever the caller had.
+    // Push/pop is not decorative: a caller that draws the cone before its own model — the
+    // Rito's updraft goes up before the form skeleton — otherwise inherits the cone's
+    // transform and comes out the wrong size.
+    Matrix_Push();
+
     // Model +Y must land on the aim direction. Composing Ry(yaw) * Rx(a) * Ry(spin) sends
     // (0,1,0) to (sin(yaw)sin(a), cos(a), cos(yaw)sin(a)), so a = 90 deg + pitch gives exactly
     // the axis above. The trailing Ry(spin) then rolls the cone about its own axis.
@@ -95,6 +101,8 @@ void Tornado_Draw(PlayState* play, const TornadoParams* p) {
     gSPDisplayList(POLY_XLU_DISP++, Gfx_TexScroll(play->state.gfxCtx, (u32)p->scrollS, (u32)p->scrollT,
                                                   TORNADO_TEX_WIDTH, TORNADO_TEX_HEIGHT));
     gSPDisplayList(POLY_XLU_DISP++, sTornadoTriDL);
+
+    Matrix_Pop();
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

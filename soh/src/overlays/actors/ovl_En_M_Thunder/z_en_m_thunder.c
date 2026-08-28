@@ -8,9 +8,6 @@
 
 // Sword beam params: bit 7 in lower byte signals sword beam mode
 #define EN_M_THUNDER_SWORD_BEAM_FLAG 0x80
-// Bit 6: the ring stays where it was spawned instead of being worn by the player.
-// The Rito's charged arrow fires one of these at its impact point. Skijer's NEI
-#define EN_M_THUNDER_STATIC_FLAG 0x40
 
 void EnMThunder_Init(Actor* thisx, PlayState* play);
 void EnMThunder_Destroy(Actor* thisx, PlayState* play);
@@ -140,9 +137,7 @@ void EnMThunder_Init(Actor* thisx, PlayState* play2) {
         return;
     }
 
-    // 0x3F, not 0xFF: bits 6 and 7 of the low byte are the two mode flags. Every
-    // vanilla caller passes Player_GetMeleeWeaponHeld() (1..3) so nothing shifts.
-    this->swordType = (this->actor.params & 0x3F) - 1;
+    this->swordType = (this->actor.params & 0xFF) - 1;
     Lights_PointNoGlowSetInfo(&this->lightInfo, this->actor.world.pos.x, this->actor.world.pos.y,
                               this->actor.world.pos.z, 255, 255, 255, 0);
     this->lightNode = LightContext_InsertLight(play, &play->lightCtx, &this->lightInfo);
@@ -151,31 +146,13 @@ void EnMThunder_Init(Actor* thisx, PlayState* play2) {
     this->collider.dim.yShift = -20;
     this->followPlayerTimer = 8;
     this->spinTrailTexScroll = 0.0f;
-    if (!(this->actor.params & EN_M_THUNDER_STATIC_FLAG)) {
-        this->actor.world.pos = player->bodyPartsPos[0];
-    }
+    this->actor.world.pos = player->bodyPartsPos[0];
     this->spinAttackTimer = 0.0f;
     this->dimmingIntensity = 0.0f;
     this->actor.shape.rot.y = player->actor.shape.rot.y + 0x8000;
     this->actor.room = -1;
     Actor_SetScale(&this->actor, 0.1f);
     this->isUsingMagic = 0;
-
-    // Fired at a point in the world, not out of Link: skip the charge state machine
-    // and go straight to the release. followPlayerTimer stays 0 so EnMThunder_SpinAttacking
-    // never drags it back onto the player.
-    if (this->actor.params & EN_M_THUNDER_STATIC_FLAG) {
-        this->collider.info.toucher.dmgFlags = sJumpAttackDmgFlags[this->swordType];
-        this->attackStrength = 0;
-        this->targetScale = 8;
-        this->spinAttackTimer = 1.0f;
-        this->followPlayerTimer = 0;
-        this->actor.child = NULL;
-        EnMThunder_SetupAction(this, EnMThunder_SpinAttacking);
-        Audio_PlaySoundGeneral(NA_SE_IT_ROLLING_CUT_LV1, &this->actor.projectedPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-        return;
-    }
 
     if (player->stateFlags2 & PLAYER_STATE2_SPIN_ATTACKING) {
         if (!gSaveContext.isMagicAcquired || (gSaveContext.magicState != MAGIC_STATE_IDLE) ||

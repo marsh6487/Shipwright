@@ -212,7 +212,6 @@ void Pacci_HighlightEnemyTarget(PlayState* play, u8 stone);
 u8 Pacci_IsHoldingUltrahand(void);
 
 /** Is Ultrahand holding this exact actor? Used by cane_ship.cpp to gate the ferry's speed ramp. */
-u8 Pacci_IsDriving(Actor* actor);
 
 /**
  * ARMED = Ultrahand is the cane's selected skill. Distinct from Pacci_UltrahandModeActive():
@@ -274,6 +273,8 @@ void Pacci_BackRiderTick(PlayState* play);
 void Pacci_CutTick(PlayState* play);
 /** Finish a throw that was handed to the actor's own state machine. Every frame, like the rest. */
 void Pacci_ThrowTick(PlayState* play);
+/** Is a body mid-throw? cane_ship.cpp keeps Link out of the lift cutscene while it is. */
+u8 Pacci_IsThrowing(void);
 
 // -- Hauling ------------------------------------------------------------------
 // Some bodies are dragged along the ground with Link braced against them instead of being carried.
@@ -345,6 +346,11 @@ void Pacci_DropUltrahand(void);
  * (see Pacci_DropUltrahand) — this is for resetting the whole subsystem.
  */
 void Pacci_ReleaseAll(PlayState* play);
+/**
+ * End a hold the player did not choose to end: a scene change, a hit, or a void-out. Every frame,
+ * like the other ticks, because none of those three waits for the cane to be in hand.
+ */
+void Pacci_UhAbortTick(PlayState* play);
 
 /** Drop pool entries whose actor died (scene unload, killed by something else). */
 void Pacci_CleanupPool(void);

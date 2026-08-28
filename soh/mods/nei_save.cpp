@@ -326,6 +326,8 @@ void NeiSave_Save(SaveContext* saveContext, int sectionID, bool fullSave) {
     SaveManager::Instance->SaveData("trirodSel", gNeiSave.trirodSel);
     SaveManager::Instance->SaveData("trirodLayoutVersion", gNeiSave.trirodLayoutVersion);
     SaveManager::Instance->SaveData("trirodFullList", gNeiSave.trirodFullList);
+    SaveManager::Instance->SaveData("season", gNeiSave.season);
+    SaveManager::Instance->SaveData("seasonsOwned", gNeiSave.seasonsOwned);
     SaveManager::Instance->SaveData("quartzOwned", gNeiSave.quartzOwned);
     SaveManager::Instance->SaveData("quartzCategory", gNeiSave.quartzCategory);
     SaveManager::Instance->SaveData("quartzSubcat", gNeiSave.quartzSubcat);
@@ -436,6 +438,10 @@ void NeiSave_Load() {
         gNeiSave.trirodSel = 0;
         gNeiSave.trirodLayoutVersion = 2;
     }
+    // Rod of Seasons — absent keys = rod not owned, and Spring is the index a fresh save falls back
+    // to anyway (Seasons_GetSeason heals it to an owned one).
+    SaveManager::Instance->LoadData("season", gNeiSave.season, (uint8_t)SEASON_SPRING);
+    SaveManager::Instance->LoadData("seasonsOwned", gNeiSave.seasonsOwned, (uint8_t)0);
     SaveManager::Instance->LoadData("quartzOwned", gNeiSave.quartzOwned, (uint8_t)0);
     SaveManager::Instance->LoadData("quartzCategory", gNeiSave.quartzCategory, (uint8_t)0);
     SaveManager::Instance->LoadData("quartzSubcat", gNeiSave.quartzSubcat, (uint8_t)0);

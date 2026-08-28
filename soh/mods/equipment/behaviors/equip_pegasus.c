@@ -149,6 +149,11 @@ static void Pegasus_Stop(Player* p, PlayState* play, s32 resetAction) {
 
 // Full cleanup when Pegasus boots are unequipped (disables collider completely)
 static void Pegasus_Cleanup(void) {
+    // A dash in progress must be released here or the hijacked charge-walk action, its player
+    // flags and gravity survive the unequip — the documented "inverted controls" state, for good.
+    if ((gPlayState != NULL) && (gExtEquipBehavior.pegasusState != PEGASUS_IDLE)) {
+        Pegasus_Stop(GET_PLAYER(gPlayState), gPlayState, 1);
+    }
     if (gExtEquipBehavior.pegasusColInit) {
         sPegasusCol.base.atFlags &= ~(AT_ON | AT_TYPE_PLAYER);
         sPegasusCol.base.acFlags = AC_NONE;

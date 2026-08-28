@@ -603,6 +603,15 @@ void ObjectKankyo_DrawSnow(ObjectKankyo* this2, PlayState* play2) {
     s32 pad;
     s32 pad2;
 
+    // The Rod of Seasons reuses these particles for Spring's blossom, so the colour is the only
+    // thing that separates the two. Skijer's NEI
+    extern void Seasons_PrecipTint(u8 * r, u8 * g, u8 * b);
+    u8 tintR;
+    u8 tintG;
+    u8 tintB;
+
+    Seasons_PrecipTint(&tintR, &tintG, &tintB);
+
     if (!(play->cameraPtrs[0]->unk_14C & 0x100)) {
         OPEN_DISPS(play->state.gfxCtx);
         if (play->envCtx.unk_EE[2] < play->envCtx.unk_EE[3]) {
@@ -702,8 +711,8 @@ void ObjectKankyo_DrawSnow(ObjectKankyo* this2, PlayState* play2) {
             Matrix_Scale(0.05f, 0.05f, 0.05f, MTXMODE_APPLY);
             gDPPipeSync(POLY_XLU_DISP++);
 
-            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 200, 200, 200, 180);
-            gDPSetEnvColor(POLY_XLU_DISP++, 200, 200, 200, 180);
+            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, tintR, tintG, tintB, 180);
+            gDPSetEnvColor(POLY_XLU_DISP++, tintR, tintG, tintB, 180);
 
             gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_LOAD);
 

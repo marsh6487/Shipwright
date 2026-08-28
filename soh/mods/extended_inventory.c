@@ -1275,6 +1275,104 @@ uint8_t Slate_RuneNeighbor(uint8_t rune, int32_t dir) {
     return Slate_RuneAt(0);
 }
 
+// ── Rod of Seasons — four seasons in one page-2 cell (slate idiom: each season is its own sibling
+// item, "random" order comes from where the seed hides them) ─────────────────────────────────────
+static void* const sSeasonIcon[SEASON_COUNT] = {
+    (void*)"__OTR__textures/icon_item_custom/gItemIconSeasonSpringTex",
+    (void*)"__OTR__textures/icon_item_custom/gItemIconSeasonSummerTex",
+    (void*)"__OTR__textures/icon_item_custom/gItemIconSeasonAutumnTex",
+    (void*)"__OTR__textures/icon_item_custom/gItemIconSeasonWinterTex",
+};
+
+static const uint8_t sSeasonColor[SEASON_COUNT][3] = {
+    { 255, 183, 213 }, // Spring — cherry blossom
+    { 255, 205, 70 },  // Summer — high sun
+    { 230, 120, 50 },  // Autumn — amber
+    { 150, 215, 255 }, // Winter — ice blue
+};
+
+void* Seasons_SeasonIcon(uint8_t season) {
+    return (season < SEASON_COUNT) ? sSeasonIcon[season] : sSeasonIcon[0];
+}
+
+void Seasons_SeasonColor(uint8_t season, uint8_t* r, uint8_t* g, uint8_t* b) {
+    const uint8_t* c = sSeasonColor[(season < SEASON_COUNT) ? season : SEASON_SPRING];
+
+    *r = c[0];
+    *g = c[1];
+    *b = c[2];
+}
+
+uint8_t Seasons_SeasonOwned(uint8_t season) {
+    if (season >= SEASON_COUNT) {
+        return 0;
+    }
+    return (Nei_Save()->seasonsOwned & (1 << season)) != 0;
+}
+
+void Seasons_GrantSeason(uint8_t season) {
+    if (season >= SEASON_COUNT) {
+        return;
+    }
+    Nei_Save()->seasonsOwned |= (1 << season);
+    // The freshly obtained season becomes the active one, which is also what makes the get-item
+    // textbox icon (resolved through Seasons_GetSeason) show the season that was just granted.
+    Nei_Save()->season = season;
+    // Obtaining ANY season hands over the rod itself if it isn't there yet.
+    ExtInv_GiveItem(SLOT_ROD_OF_SEASONS, EXT_ITEM_ROD_OF_SEASONS);
+}
+
+uint8_t Seasons_SeasonCount(void) {
+    uint8_t n = 0;
+    for (uint8_t s = 0; s < SEASON_COUNT; s++) {
+        if (Seasons_SeasonOwned(s)) {
+            n++;
+        }
+    }
+    return n;
+}
+
+uint8_t Seasons_SeasonAt(uint8_t index) {
+    uint8_t n = 0;
+    for (uint8_t s = 0; s < SEASON_COUNT; s++) {
+        if (Seasons_SeasonOwned(s)) {
+            if (n == index) {
+                return s;
+            }
+            n++;
+        }
+    }
+    return SEASON_SPRING;
+}
+
+uint8_t Seasons_GetSeason(void) {
+    uint8_t s = Nei_Save()->season;
+    if (!Seasons_SeasonOwned(s)) {
+        s = Seasons_SeasonAt(0);
+        Nei_Save()->season = s;
+    }
+    return s;
+}
+
+void Seasons_SetSeason(uint8_t season) {
+    if (Seasons_SeasonOwned(season)) {
+        Nei_Save()->season = season;
+    }
+}
+
+uint8_t Seasons_SeasonNeighbor(uint8_t season, int32_t dir) {
+    uint8_t n = Seasons_SeasonCount();
+    if (n <= 1) {
+        return season;
+    }
+    for (uint8_t i = 0; i < n; i++) {
+        if (Seasons_SeasonAt(i) == season) {
+            return Seasons_SeasonAt((uint8_t)((i + n + (dir > 0 ? 1 : -1)) % n));
+        }
+    }
+    return Seasons_SeasonAt(0);
+}
+
 uint8_t ExtInv_GetItemSlot(uint16_t itemId) {
     if (itemId < 52) {
         return gItemSlots[itemId];

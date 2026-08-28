@@ -23,6 +23,7 @@
 
 // MM Animation API
 #include "mods/anim_translator/mm_anim_loader.h"
+#include "mods/transformation_masks/transformation_masks.h"
 
 // Pending animation type (stored when waiting for delay)
 static s32 sPendingAnimType = 0; // 0=none, 1=backflip, 2=roll jump
@@ -85,8 +86,11 @@ void Handle_RocsCape(Player* p, PlayState* play) {
             sPendingAnimType = CVarGetInteger("gMods.RocsItems.InvertAnims", 0) ? 2 : 1;
         }
 
-    } else if (rcJumpCount == 0) {
-        // Double jump (second jump, while in air)
+    } else if (MmForm_RitoAirRocsAllowed(p) || (rcJumpCount == 0)) {
+        // Double jump, or — as a Rito — any number of them, each one paid for in magic.
+        // The Rito test comes FIRST because it is what bills; leaving it second would
+        // hand the rito its first mid-air jump for free. With the meter empty it
+        // answers 0 and the rito falls back to everyone else's single double jump.
         rcJumpCount = 1;
         p->actor.velocity.y = ROCSCAPE_DOUBLE_JUMP_VELOCITY;
         ItemVoice_Play(p, ROCSCAPE_SOUND_DOUBLE_ADULT, ROCSCAPE_SOUND_DOUBLE_CHILD);

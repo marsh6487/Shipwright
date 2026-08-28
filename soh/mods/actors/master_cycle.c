@@ -847,6 +847,12 @@ void MasterCycle_Tick(PlayState* play, Player* player) {
         }
         return;
     }
+    // Cleared here, ahead of the returns below, so dismissing the bike drops the latch too —
+    // otherwise an armed carry survives to the next loading zone and remounts a bike he put away.
+    if (!MasterCycle_IsRiding()) {
+        sMcCarry = 0;
+    }
+
     if (sMc.actor == NULL) {
         return;
     }

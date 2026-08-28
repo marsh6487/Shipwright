@@ -491,7 +491,10 @@ const char* MmGakki_GetInstrumentDL(s32 form);
 
 /**
  * Sentinel returned by MmGakki_GetInstrumentDL for forms that play with NO instrument
- * model: the limb is drawn empty, which also makes OoT's held ocarina invisible.
+ * model. The limb is redrawn with Link's EMPTY-hand DL, which drops the ocarina
+ * and keeps the hand: OoT bakes the ocarina into the hand DL, so blanking the
+ * limb outright would delete both. Point it at the hand that actually holds the
+ * instrument (PLAYER_LIMB_R_HAND for the ocarina).
  * Distinct from NULL, which means "don't touch the rendering".
  */
 #define GAKKI_DL_HIDE ((const char*)-1)
@@ -501,6 +504,9 @@ s32 MmGakki_GetInstrumentLimb(s32 form);
 
 /** @return OCARINA_INSTRUMENT_* for GAKKI_VOICE_NATIVE forms, 0 otherwise. */
 s32 MmGakki_GetNativeInstrument(s32 form);
+
+/** @return the form's Soundfont_0 instrument index, or -1 when it names none. */
+s32 MmGakki_GetFontInstrumentIndex(s32 form);
 
 /** @return 1 when the form's voice type is not GAKKI_VOICE_NONE. */
 s32 MmGakki_FormHasOwnInstrument(s32 form);

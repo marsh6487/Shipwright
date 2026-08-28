@@ -17,6 +17,7 @@
 
 #include "extended_player.h"
 #include "extended_inventory.h" // SLOT_*, AGE_REQ_*, NeiItem (Skijer's NEI)
+#include "extended_equipment.h" // ITEM_EXT_SWORD_* (ext swords ride B as themselves)
 #include "z64.h"
 #include "mods/items/custom_items.h"
 #include "assets/soh_assets.h"                           // icon textures (Skijer's NEI)
@@ -1604,6 +1605,11 @@ int8_t ExtPlayer_GetItemAction(int32_t item) {
             return PLAYER_IA_SWORD_MASTER;
         case ITEM_SWORD_BGS:
             return PLAYER_IA_SWORD_BIGGORON;
+        // Four Sword / Trident sit on B as themselves (ExtEquip_SetSlot) and swing as a one-hand
+        // sword; their behaviors supply the model — no Kokiri Sword is ever written to the save.
+        case ITEM_EXT_SWORD_2:
+        case ITEM_EXT_SWORD_3:
+            return PLAYER_IA_SWORD_KOKIRI;
 
         // Chateau Romani (bottle item - drink to activate infinite magic)
         case ITEM_CHATEAU_ROMANI:

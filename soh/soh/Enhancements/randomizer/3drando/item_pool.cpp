@@ -624,7 +624,9 @@ void GenerateItemPool() {
         AddItemToPool(RG_SLATE_RUNE_CRYONIS, 2, 1, 1, 1);
         AddItemToPool(RG_PHANTOM_HOURGLASS, 2, 1, 1, 1);
         AddItemToPool(RG_SHADOW_CRYSTAL, 2, 1, 1, 1);
-        AddItemToPool(RG_ROD_OF_SEASONS, 2, 1, 1, 1);
+        // One copy per season (4): the rod is progressive, so a single copy would leave three of its
+        // four seasons permanently locked. 3drando stays free of mods/ headers, hence the literal.
+        AddItemToPool(RG_ROD_OF_SEASONS, 4, 4, 4, 4);
         AddItemToPool(RG_LANTERN, 2, 1, 1, 1);
         AddItemToPool(RG_MINISH_CAP, 2, 1, 1, 1);
         AddItemToPool(RG_POKEBALL, 2, 1, 1, 1);

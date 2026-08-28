@@ -356,10 +356,10 @@ u8 FourSword_HeldSwordDL(void** blade, void** handle) {
 }
 
 static void FourSword_Behavior(Player* player, PlayState* play) {
+    // The sword action comes from B holding ITEM_EXT_SWORD_2 itself (ExtEquip_SetSlot puts it
+    // there; ExtPlayer_GetItemAction aliases it to the one-hand sword action). Nothing here
+    // touches the equipment nibble or the save.
     if (!gExtEquipBehavior.fourSwordActive) {
-        gExtEquipBehavior.fourSwordSavedSwordEquip =
-            (gSaveContext.equips.equipment >> gEquipShifts[EQUIP_TYPE_SWORD]) & 0xF;
-        gExtEquipBehavior.fourSwordSavedButtonItem = gSaveContext.equips.buttonItems[0];
         gExtEquipBehavior.fourSwordActive = 1;
     }
 
@@ -367,11 +367,6 @@ static void FourSword_Behavior(Player* player, PlayState* play) {
                                PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_GETTING_ITEM)) {
         return;
     }
-
-    // Force Kokiri Sword as the base so the sword action system works
-    // (the held-sword DL override is visual only, not equipment/action state)
-    Inventory_ChangeEquipment(EQUIP_TYPE_SWORD, EQUIP_VALUE_SWORD_KOKIRI);
-    gSaveContext.equips.buttonItems[0] = ITEM_SWORD_KOKIRI;
 
     u8 isShielding = (player->stateFlags1 & PLAYER_STATE1_SHIELDING) ? 1 : 0;
     u8 bHeld = CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_B) ? 1 : 0;
@@ -415,11 +410,7 @@ static void FourSword_Behavior(Player* player, PlayState* play) {
 // ─── Cleanup ──────────────────────────────────────────────────────────────────
 
 static void FourSword_Cleanup(void) {
-    if (gExtEquipBehavior.fourSwordActive) {
-        Inventory_ChangeEquipment(EQUIP_TYPE_SWORD, gExtEquipBehavior.fourSwordSavedSwordEquip);
-        gSaveContext.equips.buttonItems[0] = gExtEquipBehavior.fourSwordSavedButtonItem;
-        gExtEquipBehavior.fourSwordActive = 0;
-    }
+    gExtEquipBehavior.fourSwordActive = 0;
     gExtEquipBehavior.fourSwordCharging = 0;
     gExtEquipBehavior.fourSwordBHoldTimer = 0;
     gExtEquipBehavior.fourSwordCloneCount = 0;

@@ -29,6 +29,7 @@ extern "C" {
 #include "mods/extended_equipment.h"
 #include "mods/items/logic/weapon_upgrades.h"
 #include "mods/items/custom_items.h"
+#include "mods/items/custom_bottles.h" // Bottle_GiveBottle: rando bottles go to the 8-slot wheel
 #include "src/overlays/actors/ovl_Obj_Bean/z_obj_bean.h"
 #include "mods/nei_save.h"                          // Nei_Save() + FC_COMBO_OBTAINED_FC_SIZE (fcId store)
 #include "soh/FleetShipCombo/FleetComboItemsGlue.h" // FcCombo_ItemForNative (native RG -> FcComboItemId)
@@ -1672,41 +1673,48 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
 
     // bottle items
     if (item >= RG_BOTTLE_WITH_RED_POTION && item <= RG_BOTTLE_WITH_BIG_POE) {
+        ItemID bottleItem = ITEM_NONE;
+        switch (item) {
+            case RG_BOTTLE_WITH_RED_POTION:
+                bottleItem = ITEM_POTION_RED;
+                break;
+            case RG_BOTTLE_WITH_GREEN_POTION:
+                bottleItem = ITEM_POTION_GREEN;
+                break;
+            case RG_BOTTLE_WITH_BLUE_POTION:
+                bottleItem = ITEM_POTION_BLUE;
+                break;
+            case RG_BOTTLE_WITH_FAIRY:
+                bottleItem = ITEM_FAIRY;
+                break;
+            case RG_BOTTLE_WITH_FISH:
+                bottleItem = ITEM_FISH;
+                break;
+            case RG_BOTTLE_WITH_BLUE_FIRE:
+                bottleItem = ITEM_BLUE_FIRE;
+                break;
+            case RG_BOTTLE_WITH_BUGS:
+                bottleItem = ITEM_BUG;
+                break;
+            case RG_BOTTLE_WITH_POE:
+                bottleItem = ITEM_POE;
+                break;
+            case RG_BOTTLE_WITH_BIG_POE:
+                bottleItem = ITEM_BIG_POE;
+                break;
+            default:
+                break;
+        }
+
+        // Skijer's NEI — "Bottle with X" GRANTS a bottle, so it belongs in the 8-slot wheel. NEI owns
+        // all four vanilla slots permanently, so the fallback loop below never matched under it and
+        // every rando bottle was silently lost.
+        if (Bottle_GiveBottle(bottleItem)) {
+            return Return_Item_Entry(giEntry, RG_NONE);
+        }
+
         for (u16 i = 0; i < 4; i++) {
             if (gSaveContext.inventory.items[SLOT_BOTTLE_1 + i] == ITEM_NONE) {
-                ItemID bottleItem = ITEM_NONE;
-                switch (item) {
-                    case RG_BOTTLE_WITH_RED_POTION:
-                        bottleItem = ITEM_POTION_RED;
-                        break;
-                    case RG_BOTTLE_WITH_GREEN_POTION:
-                        bottleItem = ITEM_POTION_GREEN;
-                        break;
-                    case RG_BOTTLE_WITH_BLUE_POTION:
-                        bottleItem = ITEM_POTION_BLUE;
-                        break;
-                    case RG_BOTTLE_WITH_FAIRY:
-                        bottleItem = ITEM_FAIRY;
-                        break;
-                    case RG_BOTTLE_WITH_FISH:
-                        bottleItem = ITEM_FISH;
-                        break;
-                    case RG_BOTTLE_WITH_BLUE_FIRE:
-                        bottleItem = ITEM_BLUE_FIRE;
-                        break;
-                    case RG_BOTTLE_WITH_BUGS:
-                        bottleItem = ITEM_BUG;
-                        break;
-                    case RG_BOTTLE_WITH_POE:
-                        bottleItem = ITEM_POE;
-                        break;
-                    case RG_BOTTLE_WITH_BIG_POE:
-                        bottleItem = ITEM_BIG_POE;
-                        break;
-                    default:
-                        break;
-                }
-
                 gSaveContext.inventory.items[SLOT_BOTTLE_1 + i] = bottleItem;
                 return Return_Item_Entry(giEntry, RG_NONE);
             }
@@ -1716,6 +1724,9 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
     // Magic Mushroom bottle (NEI custom - not part of the vanilla bottle
     // range, so handled separately).
     if (item == RG_BOTTLE_WITH_MAGIC_MUSHROOM) {
+        if (Bottle_GiveBottle(ITEM_BOTTLE_WITH_MAGIC_MUSHROOM)) {
+            return Return_Item_Entry(giEntry, RG_NONE);
+        }
         for (u16 i = 0; i < 4; i++) {
             if (gSaveContext.inventory.items[SLOT_BOTTLE_1 + i] == ITEM_NONE) {
                 gSaveContext.inventory.items[SLOT_BOTTLE_1 + i] = ITEM_BOTTLE_WITH_MAGIC_MUSHROOM;
@@ -1728,6 +1739,9 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
     // above: ITEM_GOLD_DUST (0xEC) into the first free bottle slot. mm_bottles_behavior.cpp maps
     // 0xEC -> MM_BOTTLE_GOLD_DUST, so the content behaves (and empties) like MM's gold dust.
     if (item == RG_MM_BOTTLE_GOLD_DUST) {
+        if (Bottle_GiveBottle(ITEM_GOLD_DUST)) {
+            return Return_Item_Entry(giEntry, RG_NONE);
+        }
         for (u16 i = 0; i < 4; i++) {
             if (gSaveContext.inventory.items[SLOT_BOTTLE_1 + i] == ITEM_NONE) {
                 gSaveContext.inventory.items[SLOT_BOTTLE_1 + i] = ITEM_GOLD_DUST;
@@ -2131,7 +2145,14 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
             ExtInv_GiveItem(SLOT_SHADOW_CRYSTAL, EXT_ITEM_SHADOW_CRYSTAL);
             break;
         case RG_ROD_OF_SEASONS:
-            ExtInv_GiveItem(SLOT_ROD_OF_SEASONS, EXT_ITEM_ROD_OF_SEASONS);
+            // Progressive, the slate idiom: each copy lights the next season in calendar order and
+            // hands over the cell on the first one. The rod is inert until it owns a season.
+            for (uint8_t season = 0; season < SEASON_COUNT; season++) {
+                if (!Seasons_SeasonOwned(season)) {
+                    Seasons_GrantSeason(season);
+                    break;
+                }
+            }
             break;
         case RG_EXT_PENDANT_OF_MEMORIES:
             // ONE grant: the adult trade wheel. The old dual-grant also lit the ExtEquip BOOTS-2 bit

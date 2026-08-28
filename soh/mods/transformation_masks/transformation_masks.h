@@ -39,7 +39,14 @@ typedef enum MmPlayerTransformation {
     // Its three tails are NOT limbs (21 is the hard ceiling) — they are drawn as
     // appendages with their own matrices, like the Bunny Hood ears.
     MM_PLAYER_FORM_KEATON = 9,
-    MM_PLAYER_FORM_MAX = 10
+    // Kafei — Link-rigged human body from soh.o2r (objects/forms/kafei). Promoted from
+    // a visual skin: as a skin the engine could not see him at all
+    // (TransformMasks_IsTransformedAny() returned 0), so every form-gated system skipped
+    // him and each one would have needed its own strcmp. Closest to Fierce Deity of all
+    // the custom forms — he mirrors Link's own skeleton and carries no animations of his
+    // own, so the vanilla clips drive him unchanged. The only one shipping BOTH ages.
+    MM_PLAYER_FORM_KAFEI = 10,
+    MM_PLAYER_FORM_MAX = 11
 } MmPlayerTransformation;
 
 // OOT mask type enum (for transformation mask identification)
@@ -53,7 +60,8 @@ typedef enum TransformMaskId {
     TRANSFORM_MASK_GARO,
     TRANSFORM_MASK_GERUDO,
     TRANSFORM_MASK_RITO,       // ITEM_RITO_MASK (shares the Farore's Wind cell)
-    TRANSFORM_MASK_KEATON_FORM // Keaton Mask (OoT or MM copy)
+    TRANSFORM_MASK_KEATON_FORM, // Keaton Mask (OoT or MM copy)
+    TRANSFORM_MASK_KAFEI        // Kafei Mask (MM copy)
 } TransformMaskId;
 
 // =============================================================================
@@ -224,6 +232,15 @@ u8 TransformMasks_IsTransformedAny(void);
 
 MmPlayerTransformation MmForm_GetCurrentForm(void);
 
+// OCARINA_INSTRUMENT_* the song replay should be voiced with, MM's
+// sPlayerFormOcarinaInstruments[CUR_FORM]. DEFAULT for forms whose instrument is not one
+// of OoT's — those are voiced from the OnOcarinaPlaybackNote hook instead.
+u8 MmForm_GetOcarinaPlaybackInstrument(void);
+
+// Soundfont_0 instrument the song fanfare should voice its melody with, MM's
+// sOcarinaSongFanfareIoData[CUR_FORM]. Only an MM fanfare sequence reads it.
+u8 MmForm_GetSongFanfareInstrument(void);
+
 // Dragon Scale: Zora swim for non-Zora forms (Adult Link only)
 u8 TransformMasks_IsZoraSwimEnabled(void);
 void TransformMasks_SetZoraSwimEnabled(u8 enabled);
@@ -355,6 +372,14 @@ u8 GerudoMhr_UsesBladeGuard(Player* player);
 // The installed frame of the charge-release swing that throws the thunder wedge
 // (source frame GMHR_CHARGE_FAST_BEG). 0 = the clip was not built; fall back.
 s16 GerudoMhr_ChargeSummonFrame(void);
+// Which MHR weapon family the demon clip on screen belongs to (0 = great sword,
+// 1 = hammer, 2 = insect glaive). The axe is placed differently for each.
+s32 GerudoMhr_AxeFamily(Player* player);
+// Demon mode's charge release drops lightning on her; the visual hangs off this.
+void GerudoMhr_DemonThunderStrike(PlayState* play, Player* player);
+// Demon mode's tank: GMHR_RAGE_MAX scaled x1/x2/x4 by gSaveContext.magicLevel. The meter
+// drains one point per frame while demon mode is up, so this is also its duration.
+s16 GerudoMhr_RageCapacity(void);
 // Hold-B charge rate multiplier (func_80844E3C): she charges three times as fast.
 f32 GerudoMhr_ChargeRateMul(Player* player);
 // En_M_Thunder asks: 1 when the charge release is hers — a third of a cylinder thrown
@@ -414,15 +439,16 @@ LinkAnimationHeader* GerudoMhr_GetGuardAnim(Player* player, s32 phase);
 u8 GerudoMhr_HoldsChargeWindow(Player* player);
 // 1 while L is held as Gerudo: TransformMasks_FilterB strips B from OOT's input copy.
 u8 GerudoMhr_LOwnsB(void);
-// 1 while the Rito form is active: B is its bow, never OOT's sword.
-u8 MmForm_RitoBowOwnsB(void);
 // The Rito's bow state, read by the draw path (reticle, and the shield hides).
 u8 MmForm_RitoBowIsOut(void);
-u8 MmForm_RitoBowIsAiming(void);
-// EnArrow asks these: whether the Rito's bow spawned this arrow (its aim must not be
-// re-derived from the camera), and to fire the thunder ring where a charged one lands.
-u8 MmForm_RitoBowOwnsArrow(Actor* arrow);
-void MmForm_RitoBowOnArrowStick(PlayState* play, Actor* arrow);
+void MmForm_RitoBowReset(void);
+// EnArrow asks this before re-deriving its yaw from the camera: a 1 means the arrow
+// belongs to the Rito's volley and has just been given the aim, pitch included.
+u8 MmForm_RitoBowClaimArrow(PlayState* play, Actor* arrow);
+// A Rito may use Roc's Feather / Roc's Cape in mid-air as often as it likes, each use
+// billed in magic instead of counted. ANSWERING 1 ALSO CHARGES IT, so ask exactly once
+// and only when you are about to jump. Everyone else gets 0 and keeps their own limit.
+u8 MmForm_RitoAirRocsAllowed(Player* player);
 // 1 while the Rito is guarding with its own shield. The Mirror Shield predicates in
 // z_player_lib.c defer to it, so every reflection site inherits the behaviour.
 u8 MmForm_RitoShieldIsUp(void);
@@ -465,6 +491,8 @@ u8 TransformMasks_HandleFormItemUse(PlayState* play, Player* player, s32 item);
 
 TransformMaskId TransformMasks_GetMaskType(s32 item);
 void TransformMasks_HandleMaskUse(PlayState* play, Player* player, s32 item);
+// Transform or swap skin, whichever this item asks for. 1 = handled, wear nothing.
+u8 TransformMasks_TryFormFromItem(PlayState* play, Player* player, s32 item);
 
 // Dev: trigger a transformation directly without a mask item. Toggles between
 // the requested form and Human if already in that form. Currently used for Garo

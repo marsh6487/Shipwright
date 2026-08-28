@@ -12,8 +12,11 @@ extern "C" {
 #include "mods/transformation_masks/transformation_masks.h"
 #include "mods/boss_remains/boss_remains.h"
 #include "mods/extended_equipment.h"
+#include "mods/transformation_masks/mm_mask_wear.h"
 
 MmPlayerTransformation MmForm_GetCurrentForm(void);
+u8 Pacci_UltrahandModeActive(void);
+u8 MasterCycle_IsRiding(void);
 void MmForm_StartDekuSpinFromOot(Player* player, PlayState* play);
 void MmForm_StartGoronCurlFromOot(Player* player, PlayState* play);
 u8 GerudoForm_IsActive(void);
@@ -89,6 +92,29 @@ static bool StatusIsResisted(s32 hitResponse) {
     return true;
 }
 
+// An empty B slot is how you tell OOT to leave the button alone — it is what keeps the sword in its
+// scabbard while a form, a mask or a mount owns the press.
+static s32 ResolveItemOnButton(PlayState* play, s32 index, s32 item) {
+    if ((index >= 4) && (Pacci_UltrahandModeActive() || MasterCycle_IsRiding())) {
+        return ITEM_NONE;
+    }
+    if (index != 0) {
+        return item;
+    }
+    if (MasterCycle_IsRiding() || MmMaskWear_BlocksSword() ||
+        (TransformMasks_IsTransformed() && MmForm_GetCurrentForm() == MM_PLAYER_FORM_DEKU)) {
+        return ITEM_NONE;
+    }
+    // Aim phase only: once the fins are in the air the flag is cleared, so B goes back to punching.
+    if (Player_IsZoraBoomerangActive() && (GET_PLAYER(play)->stateFlags1 & PLAYER_STATE1_USING_BOOMERANG)) {
+        return ITEM_BOOMERANG;
+    }
+    if (Player_IsDekuBubbleActive()) {
+        return ITEM_SLINGSHOT;
+    }
+    return item;
+}
+
 static void RegisterPlayerHooks() {
     REGISTER_VB_SHOULD(VB_PLAYER_ROLL, {
         Player* player = va_arg(args, Player*);
@@ -115,6 +141,13 @@ static void RegisterPlayerHooks() {
         if (ShieldSurvivesFire()) {
             *should = false;
         }
+    });
+
+    REGISTER_VB_SHOULD(VB_GET_ITEM_ON_BUTTON, {
+        s32 index = va_arg(args, s32);
+        s32* item = va_arg(args, s32*);
+        PlayState* play = va_arg(args, PlayState*);
+        *item = ResolveItemOnButton(play, index, *item);
     });
 
     REGISTER_VB_SHOULD(VB_PLAYER_PUTAWAY_HELD_ITEM, {

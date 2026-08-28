@@ -54,8 +54,12 @@ u16 MmBgm_GetSeqId(const char* mmBgmName);
  * including diegetic mask BGM like Bremen March / Kamaro Dance — use
  * MmBgm_PlayLoop instead. No-op if mm.o2r is unavailable or the name is not
  * registered.
+ *
+ * `melodyInstrument` is the Soundfont_0 instrument the sequence should voice its melody
+ * with, delivered on player io port 7 the way MM's Audio_PlayFanfareWithPlayerIOPort7
+ * does — see MmForm_GetSongFanfareInstrument for the per-form value.
  */
-void MmBgm_PlayFanfare(const char* mmBgmName);
+void MmBgm_PlayFanfare(const char* mmBgmName, u8 melodyInstrument);
 
 /**
  * Play an MM BGM on the main BGM channel (looping field/dungeon music).

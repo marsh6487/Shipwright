@@ -1145,6 +1145,8 @@ s32 Player_IsFDHoldingSword(Player* player);
 // Skijer's NEI: exposed to environmental heat. Shared so z_player.c and z_player_lib.c
 // cannot drift apart on it again. See z_player_lib.c.
 s32 Player_SuffersHeat(Player* player);
+s32 Player_IsZoraBoomerangActive(void);
+s32 Player_IsDekuBubbleActive(void);
 s32 Player_GetMeleeWeaponHeld(Player* player);
 s32 Player_HoldsTwoHandedWeapon(Player* player);
 s32 Player_HoldsBrokenKnife(Player* player);

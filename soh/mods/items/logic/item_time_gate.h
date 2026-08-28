@@ -37,8 +37,8 @@
 #define TGATE_HOVER_LOOP_START \
     (Animation_GetLastFrame(&gPlayerAnim_link_demo_warp) - 2.0f) // Last 2 frames for hover loop
 
-// Custom text ID (0x9213 - unused range in custom message space)
-#define TEXT_TIME_GATE_PROMPT 0x9213
+// Mirrors TEXT_TIME_GATE_PROMPT in CustomMessageTypes.h (C++ enum, unreachable from this C TU)
+#define TEXT_TIME_GATE_PROMPT 0x9216
 
 // State aliases
 #define tgActive gCustomItemState.timeGateActive

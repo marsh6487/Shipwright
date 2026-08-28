@@ -23,22 +23,25 @@
 extern u8 ResourceMgr_FileExists(const char* resName);
 extern Gfx* ResourceMgr_LoadGfxByName(const char* path);
 extern u8 Slate_IsDrawn(void); // equip state, owned by item_sheikah_slate.c (same TU)
-extern f32 CVarGetFloat(const char* name, f32 defaultValue);
 
-// Starting point for the sliders, not an answer. The pose below came from a tuning pass whose
-// OffsetX and OffsetZ landed EXACTLY on the old sliders' -20..20 limits — which is what a clamped
-// drag looks like, and the tablet does read wrong in the fist. So the ranges in the Item Editor
-// have been widened well past these values; re-tune there and bake whatever comes out.
+// The tablet's pose in Link's fist. Final: tuned in-game and baked here, and the Item Editor no
+// longer carries Slate sliders at all -- no UI writes these CVars and nothing reads them, so these
+// seven numbers ARE the pose. To change it, edit here and rebuild.
 //
-// The pose before that one was -3.036 / -12.327 / -0.264, 78.416 / 180 / 13.664, 0.146 — which is
-// what 2ship still uses. Do NOT just copy it across: different hand bone, different model scale.
-#define SLATE_DEF_OFF_X 20.0f
-#define SLATE_DEF_OFF_Y -4.571f
-#define SLATE_DEF_OFF_Z -20.0f
-#define SLATE_DEF_ROT_X -53.465f
-#define SLATE_DEF_ROT_Y -7.129f
-#define SLATE_DEF_ROT_Z -50.484f
-#define SLATE_DEF_SCALE 0.034f
+// Two earlier passes are worth remembering rather than repeating. The first baked
+// 20 / -4.571 / -20 with the offsets sitting EXACTLY on the sliders' then -20..20 limits -- two
+// axes pinned to their stops is a clamped drag, not a pose, and it looked it. The ranges were
+// widened to -80..80 and it was re-tuned; nothing below is near a limit now.
+//
+// The pose before both was -3.036 / -12.327 / -0.264, 78.416 / 180 / 13.664, 0.146, which is what
+// 2ship still uses. Do NOT copy it across: different hand bone, different model scale.
+#define SLATE_DEF_OFF_X 3.218f
+#define SLATE_DEF_OFF_Y -13.333f
+#define SLATE_DEF_OFF_Z -17.931f
+#define SLATE_DEF_ROT_X -24.828f
+#define SLATE_DEF_ROT_Y -34.026f
+#define SLATE_DEF_ROT_Z 14.483f
+#define SLATE_DEF_SCALE 0.101f
 
 static Gfx* Slate_GetHandDL(void) {
     static Gfx* sCached = NULL;
@@ -96,18 +99,17 @@ void CustomItems_DrawSheikahSlate(Player* player, PlayState* play) {
     Matrix_RotateY(handYaw, MTXMODE_APPLY);
     Matrix_RotateX(-handPitch, MTXMODE_APPLY);
 
-    // ── Live tuning (Item Editor) ───────────────────────────────────────────
-    Matrix_RotateY(DEG_TO_RAD(CVarGetFloat("gItemEditor.Slate.RotY", SLATE_DEF_ROT_Y)), MTXMODE_APPLY);
-    Matrix_RotateX(DEG_TO_RAD(CVarGetFloat("gItemEditor.Slate.RotX", SLATE_DEF_ROT_X)), MTXMODE_APPLY);
-    Matrix_RotateZ(DEG_TO_RAD(CVarGetFloat("gItemEditor.Slate.RotZ", SLATE_DEF_ROT_Z)), MTXMODE_APPLY);
+    // Placement
+    Matrix_RotateY(DEG_TO_RAD(SLATE_DEF_ROT_Y), MTXMODE_APPLY);
+    Matrix_RotateX(DEG_TO_RAD(SLATE_DEF_ROT_X), MTXMODE_APPLY);
+    Matrix_RotateZ(DEG_TO_RAD(SLATE_DEF_ROT_Z), MTXMODE_APPLY);
 
-    // Offset AFTER the rotations, so the sliders move the tablet along its own axes — dragging
-    // "up" keeps meaning "up the tablet" no matter which way the hand is pointing.
-    Matrix_Translate(CVarGetFloat("gItemEditor.Slate.OffsetX", SLATE_DEF_OFF_X),
-                     CVarGetFloat("gItemEditor.Slate.OffsetY", SLATE_DEF_OFF_Y),
-                     CVarGetFloat("gItemEditor.Slate.OffsetZ", SLATE_DEF_OFF_Z), MTXMODE_APPLY);
+    // Offset AFTER the rotations, so each one slides the tablet along its OWN axis -- "up" means up
+    // the tablet no matter which way the hand is pointing. That is also why these numbers only make
+    // sense together: reordering them is not a refactor.
+    Matrix_Translate(SLATE_DEF_OFF_X, SLATE_DEF_OFF_Y, SLATE_DEF_OFF_Z, MTXMODE_APPLY);
 
-    scale = CVarGetFloat("gItemEditor.Slate.Scale", SLATE_DEF_SCALE);
+    scale = SLATE_DEF_SCALE;
     Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
 
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),

@@ -34,6 +34,7 @@
 #include "overlays/actors/ovl_En_Bom/z_en_bom.h"
 #include "overlays/actors/ovl_En_Ru1/z_en_ru1.h"
 #include "overlays/actors/ovl_En_Siofuki/z_en_siofuki.h"
+#include "overlays/actors/ovl_Bg_Spot00_Hanebasi/z_bg_spot00_hanebasi.h" // the drawbridge's own hinge
 // trirod_echoes.inc.c's Brazier scan gate reads ObjSyokudai.litTimer.
 #include "overlays/actors/ovl_Obj_Syokudai/z_obj_syokudai.h"
 #include "macros.h"

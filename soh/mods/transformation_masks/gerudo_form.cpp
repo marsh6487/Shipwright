@@ -282,11 +282,19 @@ static Gfx* SafeLoadGfx(const char* path) {
 extern "C" Gfx* GerudoForm_GetSwordDL_L(void) {
     if (!GerudoForm_IsActive() || !GerudoMhr_SwordsOut())
         return nullptr;
+    // Demon mode puts the IK Axe in her hands instead. It cannot come back from here —
+    // this returns a bare display list and the axe needs its own matrix — so both
+    // scimitars go away and MmForm_PostLimbDraw draws the axe. Skijer's NEI
+    if (GerudoMhr_RageActive())
+        return nullptr;
     return SafeLoadGfx(kGerudoSword);
 }
 
 extern "C" Gfx* GerudoForm_GetSwordDL_R(void) {
     if (!GerudoForm_IsActive() || !GerudoMhr_SwordsOut())
+        return nullptr;
+    // Demon mode is a two-handed axe: the right hand holds nothing. Skijer's NEI
+    if (GerudoMhr_RageActive())
         return nullptr;
     // The old gerudo-skinned SHIELD branch lived here: while the vanilla Mirror Shield
     // action was up, the right hand drew kGerudoShieldAdultHylian/Mirror/ChildDeku picked

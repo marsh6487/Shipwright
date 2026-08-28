@@ -303,7 +303,10 @@ void EnArrow_Shoot(EnArrow* this, PlayState* play) {
         // through world.rot.y into Actor_SetProjectileSpeed.
         // The Rito's bow is the exception: it spawns with its own yaw AND pitch already
         // resolved (aim assist included), so overwriting the yaw here would flatten it.
-        if (TransformMasks_IsTransformed() && !MmForm_RitoBowOwnsArrow(&this->actor)) {
+        // Every arrow it fires, not just the charged ones the thunder list tracks.
+        // The Rito's volley is the exception: every arrow it fires already carries the yaw
+        // AND the pitch of the target it was given, which the camera would flatten.
+        if (TransformMasks_IsTransformed() && !MmForm_RitoBowClaimArrow(play, &this->actor)) {
             this->actor.world.rot.y = Camera_GetCamDirYaw(GET_ACTIVE_CAM(play));
         }
 
@@ -459,8 +462,6 @@ void EnArrow_Fly(EnArrow* this, PlayState* play) {
 
                 Audio_PlayActorSound2(&this->actor, NA_SE_IT_ARROW_STICK_OBJ);
                 this->hitFlags |= 1;
-                // world.pos was snapped to hitPoint above, so this is the impact point.
-                MmForm_RitoBowOnArrowStick(play, &this->actor);
             }
         }
     } else {

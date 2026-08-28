@@ -1690,7 +1690,17 @@ extern void* HarpoonSkinSync_ResolvePlayerLimbDL(const char* otrPath);
 // patched-vanilla Gfx* directly instead of going through the global
 // ArchiveManager (which would return the LOCAL user's modded bytecode and
 // paint it onto the remote dummy).
+// Defined in mods/transformation_masks/mm_player_form.cpp. Returns the empty-hand Gfx*
+// while the Kafei skin is whistling and the engine just asked for an ocarina hand,
+// NULL otherwise.
+extern void* MmForm_KafeiWhistleHandDL(const char* otrPath);
+
 static Gfx* Player_ResolveLimbDLForDummyOrLocal(void* dlPathOrPtr) {
+    Gfx* kafeiDL = (Gfx*)MmForm_KafeiWhistleHandDL((const char*)dlPathOrPtr);
+    if (kafeiDL != NULL) {
+        return kafeiDL;
+    }
+
     Gfx* harpoonDL = (Gfx*)HarpoonSkinSync_ResolvePlayerLimbDL((const char*)dlPathOrPtr);
     if (harpoonDL != NULL) {
         return harpoonDL;
@@ -1864,6 +1874,15 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
                 if (WeaponUpgrade_ApplyHeldSwordDL(dList, ootHand, this, sPlayerBodyEnvColor.r, sPlayerBodyEnvColor.g,
                                                    sPlayerBodyEnvColor.b)) {
                     sLeftHandType = PLAYER_MODELTYPE_LH_OPEN;
+                } else if (sLeftHandType == PLAYER_MODELTYPE_LH_OPEN) {
+                    // No upgraded sword to draw, so ootHand was resolved and then dropped:
+                    // *dList kept whatever vanilla picked earlier, which is LINK's hand even
+                    // when a custom skin is active. That is why Kafei whistled with an open
+                    // Link hand on the left while his right hand was correct - the right
+                    // hand's branches all assign, this one only assigned on a hit.
+                    // Only for an OPEN hand: any other type means *dList is holding
+                    // something and must not be replaced by an empty palm.
+                    *dList = ootHand;
                 }
             }
         }

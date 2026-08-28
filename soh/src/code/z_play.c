@@ -243,6 +243,10 @@ void Play_Destroy(GameState* thisx) {
 
     if (gSaveContext.linkAge != play->linkAgeOnLoad) {
         Inventory_SwapAgeEquipment();
+        {
+            extern void ExtEquip_ValidateForAge(void);
+            ExtEquip_ValidateForAge(); // NEI: age-restricted page-2 pieces come off with the swap
+        }
         Player_SetEquipmentData(play, player);
     }
 

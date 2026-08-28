@@ -3748,6 +3748,18 @@ typedef enum {
     // #### `args`
     // - `*Player` (this)
     VB_PLAYER_TOGGLE_NAVI,
+
+    // Skijer's NEI: what item a button reports. Mirrors 2Ship's flag of the same name — subscribers
+    // write through the pointer; the returned bool is unused.
+    // #### `result`
+    // ```c
+    // item
+    // ```
+    // #### `args`
+    // - `s32`        button index (0 = B, 1-3 = C, 4-7 = D-pad)
+    // - `*s32`       item, to overwrite
+    // - `*PlayState` (play)
+    VB_GET_ITEM_ON_BUTTON,
 } GIVanillaBehavior;
 
 #endif

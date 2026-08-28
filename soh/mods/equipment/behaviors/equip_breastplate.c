@@ -30,6 +30,10 @@ u8 Breastplate_IsActive(void);
 
 static s16 sBreastplateRupeeTick = 0;
 
+static void Breastplate_Cleanup(void) {
+    sBreastplateRupeeTick = 0;
+}
+
 // ---------------------------------------------------------------------------
 // Main Behavior — passive rupee drain + broke-mode movement penalty (damage interception is
 // separate, in Breastplate_OnHealthChangeBefore; the fire/water timer skip is in z_parameter.c).

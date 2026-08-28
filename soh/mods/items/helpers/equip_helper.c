@@ -55,21 +55,38 @@ u16 ItemInput_GetEquippedButton(u8 itemId, PlayState* play) {
     return sEquipCache.cachedButtons[itemId];
 }
 
-// mods/actors/cane_pacci.c — while Ultrahand mode is up the D-pad rotates and moves
-// the held object.
+// mods/actors/cane_pacci.c - while Ultrahand mode is up the D-pad rotates and moves the held
+// object. mods/actors/master_cycle.c - on the bike D-up is the wheelie and D-down cancels it.
 u8 Pacci_UltrahandModeActive(void);
+u8 MasterCycle_IsRiding(void);
+
+// Is this button spoken for THIS FRAME by something that has taken the pad over?
+//
+// There are four separate places in this fork that decide whether a button press means "use what
+// is equipped here", and they do not share a path: Player_GetItemOnButton for engine items,
+// ItemInput_Update for custom ones, transformation_masks.c for masks worn while transformed, and
+// the in-water Zora clause in custom_items_common.c. The first three all scan the raw pad against
+// buttonItems themselves, which is exactly why a guard placed in any ONE of them keeps not being
+// enough - Roc's Cape leaked through the second, and the Kafei mask through the third.
+//
+// So the ANSWER lives here once and the four sites ask the question. Adding a fifth claimant means
+// editing this function and nothing else.
+u8 ItemInput_ButtonIsClaimed(u16 button) {
+    if (!(button & (BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT))) {
+        return 0; // only the D-pad is ever claimed; B and the C buttons are never taken this way
+    }
+    return (Pacci_UltrahandModeActive() || MasterCycle_IsRiding()) ? 1 : 0;
+}
 
 void ItemInput_Update(ItemInputState* out, u8 itemId, Player* player, PlayState* play) {
     out->equippedButton = ItemInput_GetEquippedButton(itemId, play);
     out->wasEquipped = (out->equippedButton != 0);
 
-    // Custom items never go through Player_GetItemOnButton — they find themselves in
-    // buttonItems and read the raw pad here — so the guard placed in that engine
-    // function did nothing for them. Roc's Cape on a D-pad slot kept firing right
-    // through Ultrahand mode because of exactly this second path. An item sitting on
-    // the D-pad is simply not usable while the mode owns those buttons.
-    if (out->wasEquipped && Pacci_UltrahandModeActive() &&
-        (out->equippedButton & (BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT))) {
+    // Custom items never go through Player_GetItemOnButton - they find themselves in buttonItems
+    // and read the raw pad here - so the guard placed in that engine function did nothing for them.
+    // Roc's Cape on a D-pad slot kept firing right through Ultrahand mode because of exactly this
+    // second path. An item sitting on the D-pad is simply not usable while the mode owns it.
+    if (out->wasEquipped && ItemInput_ButtonIsClaimed(out->equippedButton)) {
         out->isPressed = out->isHeld = out->isReleased = out->otherButtonPressed = out->damageTaken = 0;
         return;
     }

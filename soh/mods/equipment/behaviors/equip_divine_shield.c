@@ -14,6 +14,12 @@
 static s16 sDivineShieldRaiseTimer = 0;
 static u8 sDivineShieldWasShielding = 0;
 
+// Slot change: a stale "was shielding" would skip the rising-edge reset on the next equip.
+static void DivineShield_Cleanup(void) {
+    sDivineShieldRaiseTimer = 0;
+    sDivineShieldWasShielding = 0;
+}
+
 static void DivineShield_Behavior(Player* player, PlayState* play) {
     u8 isShielding = (player->stateFlags1 & PLAYER_STATE1_SHIELDING) ? 1 : 0;
 

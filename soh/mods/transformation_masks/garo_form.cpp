@@ -1,36 +1,9 @@
 /**
- * garo_form.cpp - Garo Transformation Form (custom .o2r mod)
+ * garo_form.cpp - Garo form: skin, moveset and rod.
  *
- * Loads:
- *   * `soh.o2r` Garo Skin-type skeleton (LimbType=Skin, all geometry on
- *     the Torso limb's SkinAnimatedLimbData). The .o2r is built by
- *     tools/glb_to_o2r.py --skin-skeleton.
- *
- * GaroForm_TryDrawSmoothSkin is called from z_player.c whenever the active
- * O2rLoader model is "garo". It invokes OOT's native Skin_DrawImpl driven by
- * the Player's jointTable, producing CPU-blended cross-bone seams.
- *
- * Attack kit (this file) — every B/A/R press is read RAW (TransformMasks_FilterB
- * strips B from the input OOT's action func sees), so combat is fully
- * Garo-owned:
- *   B tap         → GARO_SPIN: free dual-sword spin (garo_spinAttack) — the
- *                   player keeps stick control at 1.5x run speed through it.
- *                   This is Garo's melee — there is deliberately NO slash combo
- *                   and no thrown knives (removed by design).
- *   B hold ≥9f    → GARO_ROD_AIM: charge ball on the borrowed slingshot aim;
- *                   L/R cycle element, release fires the orb (costs magic).
- *   B in mid-air  → AIR_SLASH → LAND_STRIKE on touchdown (the "jump slash").
- *   A, no Z       → GARO_DASH_ATTACK while A is held.
- *   A, Z engaged  → stick back/side = backflip / sidehop, forward+speed =
- *                   jump-attack, neutral = the banish chain (collapse →
- *                   shadow ball → teleport behind target → strike), on a
- *                   GARO_BANISH_COOLDOWN timer.
- *   R hold        → GARO_PARRY_GUARD: stand still, invulnerable; a hit inside
- *                   the 20f window triggers the AOE freeze + riposte.
- *
- * Animation runs on a form-exclusive SkelAnime (sFormSkelAnime) so OOT's
- * action func cannot interrupt it — same trick mm_player_form.cpp uses for
- * the Goron punch combo.
+ * Every button is read RAW: TransformMasks_FilterB strips B from what OOT's
+ * action func sees, so the state machine below owns Garo's combat outright.
+ * Poses run on a form-exclusive SkelAnime so that action func cannot interrupt.
  */
 
 #include "z64.h"
@@ -61,92 +34,76 @@
 #define BGCHECKFLAG_GROUND 0x0001
 #endif
 
-// OPEN_DISPS / CLOSE_DISPS (macros.h) declare these frame-interpolation hooks
-// INLINE inside the macro body. In a C++ TU, that block-scope declaration
-// gets C++ linkage UNLESS a prior extern "C" declaration is visible — which
-// matters for our `static` C++ draw helpers (e.g. GaroForm_DrawOneOrb) that
-// use OPEN_DISPS but aren't themselves `extern "C"`. Without this, the inline
-// decl mangles to a C++ symbol that doesn't match frame_interpolation.cpp's
-// extern "C" definition → LNK2001. File-scope extern "C" here makes every
-// OPEN_DISPS in this TU bind to the correct C-linkage symbol.
+// OPEN_DISPS declares these inline, which takes C++ linkage in this TU unless an
+// extern "C" is already visible — without it the macro's calls fail to link.
 extern "C" void FrameInterpolation_RecordOpenChild(const void* a, int b);
 extern "C" void FrameInterpolation_RecordCloseChild(void);
 
-// Set by the play loop; used by GaroForm_ResetToIdle to tear down the
-// first-person rod-aim camera on any reset path (gPlayState == the active
-// play during GaroForm_Update). Same C-linkage global transformation_masks.c
-// externs.
 extern "C" PlayState* gPlayState;
 
-// v10.11: rod aim REUSES the OOT slingshot aim pipeline (the exact mechanism
-// the Deku bubble uses — Player_StartDekuBubble un-pauses the action func and
-// starts the real first-person/Z-target slingshot aim, so the camera engages
-// properly; a paused-form manual approach could never replicate it). We borrow
-// only the AIM — the shot itself is fired by GARO_ROD_AIM on B release, since
-// the slingshot's own fire path never advances its draw counter for Garo.
-// Both of these are defined in z_player.c.
+// The rod aim borrows OOT's slingshot pipeline, the mechanism the Deku bubble uses: it un-pauses
+// the action func and runs the real aim camera, which a paused form can never reproduce by hand.
 extern "C" void Player_StartDekuBubble(Player* this_, PlayState* play);
 extern "C" void Player_DekuBubbleCleanup(Player* this_);
 
-// Magic consumed per rod orb fired (own magic, per the design — independent
-// of the Deku bubble's MP). Tuned modest so charged combat stays sustainable.
 #define GARO_ROD_MAGIC_COST 4
 
-// ============================================================================
 // Attack tuning
-// ============================================================================
 // 3-slash combo + Garo signature finisher.
 //
-// Garo's melee is a single move: an in-place dual-sword spin (garo_spinAttack)
-// on a B tap. The old 3-slash combo — and the shurikens / paralyzing knives it
-// threw — were removed by design; the only projectile left is the rod orb.
-// The tap-vs-hold decision (spin vs rod charge) happens in GARO_B_HOLD_DETECT,
-// off the idle B-press.
+// Garo's melee is a single move: a free dual-sword spin (garo_spinAttack) that
+// fires on the B press. The old 3-slash combo — and the shurikens / paralyzing
+// knives it threw — were removed by design; the only projectile left is the
+// rod orb. Tap-vs-hold is decided INSIDE the spin (hold B long enough and it
+// converts to the rod charge), so the attack never waits on the button.
 
 #define GARO_SWING_DAMAGE 2 // default damage of the shared swing quad
 #define GARO_SPIN_DAMAGE 2  // B-tap dual-sword spin
-// The spin runs for a FIXED number of frames rather than "until the animation
-// says it is done": garo_spinAttack is short (and if it ever fails to load the
-// state used to end on its first frame, which is why the body never came round
-// and the trail died instantly). The anim just loops underneath. The yaw rate
-// is one full turn spread over exactly that window, so Garo always completes a
-// 360° like Link's spin, and the entry facing is restored at the end so there
-// is no drift.
+// Fixed length, not "until the anim ends": garo_spinAttack is short enough that Garo
+// would leave the state before coming round. The rate spreads the turns over that window.
 #define GARO_SPIN_FRAMES 14
-// Turns completed within those frames. Two, so the spin reads as a fast whirl
-// rather than a single pirouette — same duration, double the angular speed.
 #define GARO_SPIN_TURNS 2
 #define GARO_SPIN_YAW_RATE ((0x10000 * GARO_SPIN_TURNS) / GARO_SPIN_FRAMES)
-// The spin anim runs faster than 1x so the arms keep up with the body turn.
 #define GARO_SPIN_PLAYSPEED 1.5f
-// Free-spin movement: the player keeps full stick control while spinning, at
-// 1.5x Link's run speed (R_RUN_SPEED_LIMIT is 900 → 9.0 units/frame).
-#define GARO_SPIN_MOVE_SPEED (9.0f * 1.5f)
+#define GARO_SPIN_MOVE_SPEED (9.0f * 1.5f) // 1.5x Link's run (R_RUN_SPEED_LIMIT 900)
 
-// Projectile pool size. Only rod orbs live in it now (the knife kinds are gone),
-// but the pool is shared machinery so the name stays generic.
-#define GARO_SWORD_MAX_ACTIVE 12
+#define GARO_ORB_POOL_MAX 12
 
-// ── v8 new skills tuning ────────────────────────────────────────────────────
-#define GARO_PARRY_WINDOW 20 // frames of active block window
-#define GARO_PARRY_DAMAGE 4  // damage of the riposte slash
-// The dash reuses the standard swing quad (GaroAttack_EnableSwingQuad) with
-// GARO_DASH_DAMAGE stamped over it — there is no dash-specific hitbox.
-#define GARO_DASH_SPEED 14.0f     // sustained dash velocity
-#define GARO_DASH_DAMAGE 4        // damage on dash impact (through enemies)
-#define GARO_BANISH_COOLDOWN 300  // frames (5s @ 60fps)
-#define GARO_BANISH_OFFSET 50.0f  // distance behind target to teleport
-#define GARO_BANISH_VANISH_END 16 // frames before teleport (anim duration)
-#define GARO_RIPOSTE_OFFSET 45.0f // distance behind attacker for parry counter
+#define GARO_PARRY_DAMAGE 4
+#define GARO_PARRY_STRIKE_HIT_F 6
+#define GARO_PARRY_FREEZE_FRAMES 60
+// freezeTimer halts an actor's update, and an actor that does not update never re-registers its AC
+// collider: a frozen enemy is untouchable, so both strikes thaw their target just before landing.
+#define GARO_PARRY_THAW_LEAD 2
+#define GARO_BANISH_THAW_LEAD 3
 
-// ── v9.1 banish: stun + shadow-ball travel ──────────────────────────────
-#define GARO_BANISH_STUN_FRAMES 60    // target freezeTimer set on banish trigger
-#define GARO_BANISH_SHADOW_LEN 18     // frames for the shadow ball to cross
-#define GARO_BANISH_STUN_RADIUS 80.0f // particle ring radius around stunned target
+#define GARO_REFLECT_FRAMES 60
+#define GARO_REFLECT_DAMAGE 4
+#define GARO_REFLECT_HALF 10.0f
+#define GARO_REFLECT_MIN_SPEED 8.0f
+#define GARO_REFLECT_INVULN 12
+#define GARO_REFLECT_PUSH_OUT 35.0f // clear of Garo, or the shot pops on his own collider
+// Shots are caught in the air: most projectiles delete themselves on impact, so waiting for
+// the hit leaves nothing to send back.
+#define GARO_GUARD_CATCH_RADIUS 130.0f
+#define GARO_GUARD_CATCH_HEIGHT 40.0f
+#define GARO_GUARD_CATCH_MIN_SPEED 1.0f
+#define GARO_GUARD_MELEE_RANGE 160.0f // past this the counter would chase a shooter across the room
 
-// ── v9.1 parry: AOE freeze on perfect parry ─────────────────────────────
-#define GARO_PARRY_AOE_RADIUS 180.0f // enemies inside this radius are frozen
-#define GARO_PARRY_FREEZE_FRAMES 40  // freezeTimer applied to AOE targets
+// gGaroGuardAnim raises in its first half and returns in its second, so the stance holds at the
+// middle and plays the rest backwards on release.
+#define GARO_GUARD_HOLD_FRACTION 0.5f
+#define GARO_GUARD_RETURN_SPEED 1.5f
+
+#define GARO_DASH_SPEED 14.0f
+#define GARO_DASH_DAMAGE 4
+#define GARO_BANISH_COOLDOWN 300 // 5s @ 60fps
+#define GARO_BANISH_OFFSET 50.0f
+#define GARO_BANISH_VANISH_END 8
+#define GARO_BANISH_STUN_FRAMES 60
+#define GARO_BANISH_SHADOW_LEN 9
+#define GARO_BANISH_STUN_RADIUS 80.0f
+#define GARO_RIPOSTE_OFFSET 45.0f
 
 #define GARO_GUARD_PATH "objects/forms/garo/gPlayerAnim_garo_guard"
 #define GARO_DASHATTACK_PATH "objects/forms/garo/gPlayerAnim_garo_dashAttack"
@@ -164,38 +121,54 @@ extern "C" void Player_DekuBubbleCleanup(Player* this_);
 #define GARO_SLASHLOOP_PATH "objects/forms/garo/gPlayerAnim_garo_slashLoop"
 #define GARO_DRAWSWORDS_PATH "objects/forms/garo/gPlayerAnim_garo_drawSwords"
 
-// v10 A-button damage values
-#define GARO_SHADOW_BALL_DAMAGE 8 // appearDrawSwords frame-20 strike (master, equipment-independent)
-// The Z+A forward leap itself deals no damage — it auto-routes into AIR_SLASH,
-// so the whole hit lands as LAND_STRIKE on touchdown.
-#define GARO_LAND_STRIKE_DAMAGE 8 // post-AIR_SLASH landing quad (frame 12+, equipment-independent)
-#define GARO_SHADOW_BALL_HIT_F 20 // elapsed frame at which SB quad fires
-#define GARO_LAND_STRIKE_HIT_F 12 // elapsed frame at which land-strike quad fires
-#define GARO_LAND_STRIKE_TAIL_F 3 // extra frames quad stays live after anim end
+#define GARO_SHADOW_BALL_DAMAGE 8
+#define GARO_SHADOW_BALL_HIT_F 12
+#define GARO_SHADOW_BALL_PLAYSPEED 2.5f
+#define GARO_LAND_STRIKE_DAMAGE 8
+#define GARO_LAND_STRIKE_HIT_F 12
+#define GARO_LAND_STRIKE_TAIL_F 3
 
-// ── v9 rod mode tuning ──────────────────────────────────────────────────
-// Charge tier thresholds (frames B held in GARO_ROD_AIM). Damage scales
-// linearly with the tier so a tap-and-release does a token 1 damage while
-// a full hold (≥90 frames) delivers the max 4. The timer caps at 120 so
-// holding longer doesn't help.
+// Three charge levels: below TIER2 nothing is fired at all, TIER2 sends one seeking orb,
+// TIER3 sends one that breaks into GARO_ORB_SEEKERS fragments where it lands.
 #define GARO_ROD_CHARGE_MAX 120
-#define GARO_ROD_CHARGE_TIER2 30
-#define GARO_ROD_CHARGE_TIER3 60
-#define GARO_ROD_CHARGE_TIER4 90
-#define GARO_ROD_ELEMENT_COUNT 4 // normal / fire / ice / light
-// Rod release → IDLE cooldown. Prevents B-spam (release → instant B-press
-// re-fires the spin the very next frame, looking like a rapid-fire bug).
-// 10 frames is enough that an organic re-press feels intentional.
-#define GARO_ROD_RELEASE_CD 10
-// v10.8 tap-vs-hold: B released before this many frames from an idle press =
-// spin attack; held at/after it = enter the rod charge ball. ~9 frames is a
-// crisp tap window that doesn't add noticeable attack latency.
+#define GARO_ROD_CHARGE_TIER2 35
+#define GARO_ROD_CHARGE_TIER3 85
+#define GARO_ROD_LEVEL_MAX 3
+#define GARO_ROD_L2_DAMAGE 4
+#define GARO_ROD_L3_DAMAGE 3 // lower: its fragments carry the rest
+
+#define GARO_ORB_SEEKERS 4
+#define GARO_ORB_SEEKER_DAMAGE 2
+#define GARO_ORB_SEEKER_LIFETIME 70
+#define GARO_ORB_SEEKER_SPEED 16.0f
+#define GARO_ORB_SEEKER_TURN 0x1200
+#define GARO_ORB_SEEKER_FAN 0x2000
+#define GARO_ORB_BURST_BALLS 8
+// The target must be roughly AHEAD of the orb, or a shot would turn round and chase
+// something it has already flown past.
+#define GARO_ORB_HOME_RANGE 700.0f
+#define GARO_ORB_HOME_CONE 0.2f
+#define GARO_ORB_TURN_RATE 0x0700
+
+// The six SW97 arrow types, in SW97's own order. Cycled with L/R while aiming.
+#define GARO_ROD_ELEMENT_COUNT 6
+#define GARO_ELEM_FIRE 0
+#define GARO_ELEM_ICE 1
+#define GARO_ELEM_LIGHT 2
+#define GARO_ELEM_DARK 3
+#define GARO_ELEM_SOUL 4
+#define GARO_ELEM_WIND 5
+
+#define GARO_ROD_RELEASE_CD 10 // or a release into an instant re-press reads as rapid fire
+// The spin starts on the press and converts to the rod charge if B is still down this
+// many frames later, so the attack never waits on the button.
 #define GARO_B_HOLD_THRESHOLD 9
-// Post-kill laugh chance — 20% means most kills are silent, a few trigger
-// the taunt (mirrors Garo Master MM behavior).
 #define GARO_LAUGH_CHANCE 0.20f
 
-// Aiming reticle geometry (units, in world space along the aim ray).
+// Half the Trident's head-sized ball: Garo's is a spark, and it hangs in front of the aim camera.
+#define GARO_ROD_BALL_CIRCLE_MAX 0.08f
+#define GARO_ROD_BALL_SCALE_MAX 7.0f
+
 #define GARO_RETICLE_DIST 320.0f
 #define GARO_RETICLE_SPREAD 26.0f
 #define GARO_RETICLE_DOT_SCALE 0.55f
@@ -203,102 +176,95 @@ extern "C" void Player_DekuBubbleCleanup(Player* this_);
 // 67 s16 per frame for the 21-limb Link/Garo PlayerAnimation format.
 static constexpr s32 GARO_ANIM_S16_PER_FRAME = 67;
 
-// ============================================================================
-// State
-// ============================================================================
 enum GaroAttackState {
     GARO_IDLE = 0,
-    GARO_B_HOLD_DETECT, // v10.8: brief window after B-press — tap→spin, hold→rod
-    GARO_SPIN,          // B-tap → in-place dual-sword spin (garo_spinAttack)
-    GARO_ROD_AIM,       // v9: takeOutBomb pose, charge ramp 0..120, L/R cycle element
-                        // (renamed from GARO_CHARGING; old "spin attack" path
-                        // is dead and removed)
-    // ── v8 new skills ────────────────────────────────────────────────────────
-    GARO_PARRY_GUARD,   // R-press → garo_guard, 20-frame parry window
-    GARO_PARRY_RIPOSTE, // successful parry → teleport behind attacker + slash
-    GARO_DASH_ATTACK,   // A-hold no-target → garo_dashAttack, v=14 forward
-    GARO_BANISH_VANISH, // A-press w/ Z-target enemy → stun target + garo_collapse
-    GARO_BANISH_SHADOW, // v9.1 — shadow ball travels Garo → target, then
-                        // teleports and hands off to GARO_SHADOW_BALL
-    // ── v9 ──────────────────────────────────────────────────────────────────
-    GARO_LAUGH_TAUNT, // 20% post-kill garo_laugh — non-pausing
-    // ── v10 A-button overhaul ──────────────────────────────────────────────
-    GARO_SHADOW_BALL, // Z+A stationary (no enemy lock-on): invuln+invisible
-                      // appearDrawSwords slash. Lock-on enemy still routes
-                      // through the older BANISH 4-state chain (kept).
-    GARO_SIDEHOP_L,   // Z+A stick-left  → garo_bounce, no damage
-    GARO_SIDEHOP_R,   // Z+A stick-right → garo_bounce, no damage
-    GARO_BACKFLIP,    // Z+A stick-back  → garo_jumpBack, 2x distance
-    GARO_JUMP_ATTACK, // Z+A stick-fwd + speed>0 → garo_appear leap (dmg 4)
-    GARO_AIR_SLASH,   // B in mid-air → garo_slashLoop loop (no damage)
-    GARO_LAND_STRIKE, // AIR_SLASH lands → garo_drawSwords (dmg 8 @ F12+)
+    GARO_SPIN,          // B press: free dual-sword spin
+    GARO_ROD_AIM,       // B held: charge ball, L/R cycle element
+    GARO_PARRY_GUARD,   // R held: guard stance, holding mid-anim
+    GARO_GUARD_RETURN,  // R released: the stance coming back down
+    GARO_PARRY_RIPOSTE, // hit while guarding: appear behind the attacker and strike
+    GARO_DASH_ATTACK,   // A held, no Z
+    GARO_BANISH_VANISH, // Z+A neutral: stun the target and dissolve
+    GARO_BANISH_SHADOW, // the shadow ball crossing to the target
+    GARO_SHADOW_BALL,   // arrival: appear behind it and strike
+    GARO_LAUGH_TAUNT,   // post-kill taunt, non-pausing
+    GARO_SIDEHOP_L,     // Z+A stick left
+    GARO_SIDEHOP_R,     // Z+A stick right
+    GARO_BACKFLIP,      // Z+A stick back
+    GARO_JUMP_ATTACK,   // Z+A stick forward while moving
+    GARO_AIR_SLASH,     // B in mid-air
+    GARO_LAND_STRIKE,   // AIR_SLASH touching down
 };
 
-// Garo's only projectile: the rod orb, fired from GARO_ROD_AIM. It carries an
-// element dmgFlag (DMG_ARROW_NORMAL/FIRE/ICE/LIGHT) and a charge-tier damage
-// 1..4, routed through a real AC quad so boss vulnerability masks (Phantom
-// Ganon, Ganon2) accept it. The old thrown-knife kinds were removed with the
-// slash combo.
+// The rod orb, Garo's only projectile. Its dmgFlag rides a real AC quad so boss
+// vulnerability masks accept the hit.
+#define GARO_ORB_WAKE_SCALE 85
+// More path samples are kept than are drawn, so a fragment's streak holds its length
+// while the head moves.
+#define GARO_ORB_TRAIL_LEN 15
+#define GARO_ORB_TRAIL_DRAWN 12
+#define GARO_ORB_STREAK_SCALE 0.008f
+
 typedef struct {
     u8 active;
     Vec3f pos;
     s16 yaw;
+    s16 pitch;
     s16 timer;
-    u8 rodElement;  // 0=normal, 1=fire, 2=ice, 3=light (visual tint + cycle)
-    u8 rodDamage;   // 1..4, charge-tier resolved at fire time
-    s16 rodPitch;   // v10.6 aim pitch (focus.rot.x) — drives 3D travel
-    u32 rodDmgFlag; // DMG_ARROW_NORMAL/FIRE/ICE/LIGHT (combined with
-                    // DMG_SLASH_MASTER at AC time so restrictive enemies
-                    // still take the hit).
-} GaroSword;
+    u8 element;  // GARO_ELEM_*
+    u8 damage;
+    u32 dmgFlag; // OR'd with DMG_SLASH_MASTER at AC time, for restrictive enemies
+    u8 bursts;   // the level-3 ball: breaks into seekers instead of vanishing
+    u8 isSeeker; // one of those fragments
+    Actor* target;
+    // Carried from the charge so the shot reads as THAT ball flying off.
+    f32 ballCircle;
+    f32 ballScale;
+    Vec3f trailPos[GARO_ORB_TRAIL_LEN];
+    Vec3f trailRot[GARO_ORB_TRAIL_LEN]; // radians: .x pitch, .y yaw
+    s16 trailIdx;
+} GaroOrb;
 
 static struct {
     GaroAttackState state;
     s16 stateTimer;
-    // ── v9 rod mode state (replaced legacy spinTotal) ───────────────────
-    s16 rodChargeTimer;   // 0..120 — frames B has been held in ROD_AIM. Damage
-                          // tier picks at release (1/30/60/90 thresholds).
-    u8 rodElement;        // 0=normal, 1=fire, 2=ice, 3=light. Cycled via L/R.
-    u8 rodSfxPlayed;      // "fully charged" SFX latch — fires once per aim.
-    u8 rodAimActive;      // v10.11 1 while the slingshot-borrowed rod aim is owned.
-    s16 bHoldDetectTimer; // v10.8 frames B held since IDLE press (tap→spin
-                          // vs hold→charge-ball discriminator).
-    s16 rodReleaseCD;     // frames after release where B-press cannot re-fire
-                          // an attack (prevents rapid alternate-press spam loop).
-    u8 laughPending;      // set when an enemy dies; next IDLE frame rolls 20%.
-    s16 spinEntryYaw;     // facing captured when the spin starts, restored at the
-                          // end so spinning on the spot doesn't re-aim Garo.
-    // ── Sword trail VFX (EffectBlure1) ────────────────────────────────────
-    // index into the effect table (-1 = inactive). Vertex feed happens in
-    // garo_post_limb.cpp during L_HAND limb draw (matrix in scope).
+
+    s16 rodChargeTimer; // frames B has been held in ROD_AIM
+    u8 rodElement;
+    u8 rodSfxPlayed; // full-charge chime latch
+    f32 rodBallCircle;
+    f32 rodBallScale;
+    s16 rodBallRays;
+    u8 rodAimActive;      // the borrowed slingshot aim is ours right now
+    s16 bHoldDetectTimer; // B held since the spin started; tap vs hold
+    s16 rodReleaseCD;
+    u8 laughPending;  // an enemy died; the next idle frame rolls for the taunt
+    s16 spinEntryYaw; // restored at the end, so spinning on the spot does not re-aim him
+
+    // Vertices are fed in garo_hybrid_render.cpp, at the blade bones.
     s32 trailEffectIndex;  // left sword
     s32 trailEffectIndex2; // right sword
     u8 trailActive;
-    // ── v8 new skills state ───────────────────────────────────────────────
-    s16 banishCooldown;   // frames remaining before banish can be re-cast
-    Actor* banishTarget;  // captured at BANISH_VANISH entry
-    s16 parryWindowTimer; // frames remaining in active parry window (≤ 20)
-    Actor* parryAttacker; // captured if parry was successful — riposte target
-    // ── v9.1 banish shadow-ball travel ────────────────────────────────────
-    Vec3f shadowBallStart; // Garo's pos at moment of VANISH end (ball origin)
-    Vec3f shadowBallEnd;   // target's pos snapshot (ball destination)
-    Vec3f shadowBallPos;   // current lerped position — written by the SHADOW
-                           // state, read by GaroForm_DrawProjectiles
-    s16 shadowBallTimer;   // 0..N, increments each SHADOW frame
-    // ── v10 A-button overhaul ─────────────────────────────────────────────
-    u8 shadowBallSlashFired;  // edge-latch so SB quad enables exactly once
-    u8 hopDir;                // 0=back, 1=left-side, 2=right-side, 3=fwd-jump
-    s16 hopAirTimer;          // frames spent airborne in current sidehop/backflip
-    u8 airSlashActive;        // set on B-in-air, cleared on land
-    u8 landStrikeFired;       // edge-latch for LAND_STRIKE quad-SFX
-    s16 landStrikeTailFrames; // counts frames AFTER anim end (tail-out 3f)
-    // ── v9 death/reset state ─────────────────────────────────────────────
-    // GaroForm_OnDeath spawns 9 flame particles once per death. The flag is
-    // cleared on revival (Ikana/Fairy) and on scene reload (MmForm_Reset).
-    u8 deathFlamesSpawned;
-    // Rising-edge jump multiplier — applied once per jump in MmForm_UpdateActive.
-    u8 prevJumping;
-    GaroSword swords[GARO_SWORD_MAX_ACTIVE];
+
+    s16 banishCooldown;
+    Actor* banishTarget;
+    Actor* parryAttacker;
+    Actor* reflectShot;
+    s16 reflectTimer;
+    Vec3f shadowBallStart;
+    Vec3f shadowBallEnd;
+    Vec3f shadowBallPos; // written by the travel state, read by the draw
+    s16 shadowBallTimer;
+    u8 shadowBallSlashFired; // edge latch, so the quad enables exactly once
+
+    u8 hopDir;
+    s16 hopAirTimer;
+    u8 airSlashActive;
+    u8 landStrikeFired;
+    s16 landStrikeTailFrames;
+    u8 deathFlamesSpawned; // cleared on revival and on scene reload
+    u8 prevJumping;        // rising edge for the jump multiplier
+    GaroOrb orbs[GARO_ORB_POOL_MAX];
 } sGaroAttack = {};
 
 // Sword trail LENGTH lives in garo_post_limb.cpp (GARO_POST_LIMB_TRAIL_LENGTH),
@@ -326,20 +292,19 @@ static s8 sFormSkelAnimeAge = -1; // tracks linkAge to detect adult/child swap
 // gives stable iterators across rehash.
 static std::map<std::string, LinkAnimationHeader> sAnimWrappers;
 
-// ============================================================================
 // v9 rod mode helpers — element table + damage tier resolution
-// ============================================================================
-// Maps GaroSword.rodElement → AC damage flag. Element 0 (normal) routes the
-// hit as DMG_ARROW_NORMAL so non-elemental enemies still take damage; the
-// other three (fire/ice/light) hit element-vulnerable bosses (Phantom Ganon
-// = arrow flags, Ganon2 weakpoint = DMG_ARROW_LIGHT, Dodongo = fire, etc.).
+// Maps GARO_ELEM_* → AC damage flag. Only three of the six have a vanilla
+// arrow flag to ride on (which is what makes element-vulnerable bosses react:
+// Phantom Ganon to arrows, Ganon2's weakpoint to LIGHT, Dodongo to FIRE);
+// dark / soul / wind fall back to DMG_ARROW_NORMAL, so they still damage
+// everything ordinary without falsely claiming a boss weakness.
 static u32 GaroAttack_GetRodDmgFlag(u8 element) {
     switch (element) {
-        case 1:
+        case GARO_ELEM_FIRE:
             return DMG_ARROW_FIRE;
-        case 2:
+        case GARO_ELEM_ICE:
             return DMG_ARROW_ICE;
-        case 3:
+        case GARO_ELEM_LIGHT:
             return DMG_ARROW_LIGHT;
         default:
             return DMG_ARROW_NORMAL;
@@ -350,14 +315,13 @@ static u32 GaroAttack_GetRodDmgFlag(u8 element) {
 // rapid-fire shot still inflicts something while a fully-charged release
 // (≥ tier 4 threshold) deals 4 — same scale as the parry/banish counter
 // strikes so element vulnerability is the differentiator, not raw numbers.
-static u8 GaroAttack_GetRodDamage(s16 chargeTimer) {
+// Charge level 1..3 — see the tier thresholds. Level 1 fires nothing.
+static u8 GaroAttack_GetRodLevel(s16 chargeTimer) {
     if (chargeTimer < GARO_ROD_CHARGE_TIER2)
         return 1;
     if (chargeTimer < GARO_ROD_CHARGE_TIER3)
         return 2;
-    if (chargeTimer < GARO_ROD_CHARGE_TIER4)
-        return 3;
-    return 4;
+    return 3;
 }
 
 // Centralized reset for rod-mode latches. Called on release, on interrupt
@@ -366,11 +330,12 @@ static u8 GaroAttack_GetRodDamage(s16 chargeTimer) {
 static void GaroForm_LeaveRodState(void) {
     sGaroAttack.rodChargeTimer = 0;
     sGaroAttack.rodSfxPlayed = 0;
+    sGaroAttack.rodBallCircle = 0.0f;
+    sGaroAttack.rodBallScale = 0.0f;
+    sGaroAttack.rodBallRays = 0;
 }
 
-// ============================================================================
 // Animation loader (pattern from animationViewer.cpp:119-144)
-// ============================================================================
 static LinkAnimationHeader* GaroForm_LoadAnim(const char* path) {
     auto res = ResourceMgr_GetResourceByNameHandlingMQ(path);
     if (res == nullptr) {
@@ -391,21 +356,9 @@ static LinkAnimationHeader* GaroForm_LoadAnim(const char* path) {
     return (LinkAnimationHeader*)ResourceMgr_LoadAnimByName(path);
 }
 
-// ============================================================================
-// Sword trail VFX — Zora-style EffectBlure1 driven from PostLimbDraw L_HAND.
-//
-// Spawn at SWING_1 entry, kill when returning to IDLE. Vertex feed runs in
-// garo_post_limb.cpp where the live bone matrix is in scope.
-// ============================================================================
-// Garo fights with TWO blades, so the trail is two EffectBlure1s — one per
-// sword bone of the hybrid body. Both are spawned and killed together; the
-// vertex feed happens in garo_hybrid_render.cpp, at the L_SWORD / R_SWORD
-// limbs, where the live bone matrix of the blade the player actually SEES is
-// in scope. (It used to be fed from Link's hidden L_HAND, whose skeleton is
-// scaled and proportioned differently from the Garo body — the streak came
-// out detached from the swords.)
+// Two blades, two EffectBlure1s. They are fed in garo_hybrid_render.cpp at the sword
+// bones: fed from Link's hidden hand instead, the streak came out detached from them.
 static void GaroAttack_SpawnTrail(PlayState* play) {
-    // Kill any stale trail first — guards against re-entry without proper cleanup.
     MmForm_KillTrail(play, &sGaroAttack.trailEffectIndex, &sGaroAttack.trailActive);
     MmForm_KillTrail(play, &sGaroAttack.trailEffectIndex2, &sGaroAttack.trailActive);
 
@@ -452,25 +405,14 @@ extern "C" s32 GaroAttack_GetTrailEffectIndex(void) {
     return sGaroAttack.trailEffectIndex;
 }
 
-// Public path-based anim loader so mm_player_form.cpp can fetch soh.o2r anims
-// during the transformation cutscene without depending on MmAnim_LoadByPath
-// (which is gated on mm.o2r availability and a non-zero frame count — both
-// problems for Garo, whose anims live in soh.o2r and have frame counts
-// derived from PlayerAnimation resource size).
+// MmAnim_LoadByPath cannot serve these: it is gated on mm.o2r and on a non-zero frame
+// count, and Garo's anims live in soh.o2r with counts derived from the resource size.
 extern "C" LinkAnimationHeader* GaroForm_LoadAnimPublic(const char* path) {
     return GaroForm_LoadAnim(path);
 }
 
-// ============================================================================
-// Form SkelAnime — uninterruptible combo animation driver
-//
-// Same architectural trick Goron uses (mm_player_form.cpp:2987-2993): keep a
-// SkelAnime independent from player->skelAnime so OOT's action func can't
-// touch the combo's animation state. The pose we produce is then memcpy'd
-// over player->skelAnime.jointTable each frame — Garo's skin draw reads from
-// player->skelAnime.jointTable, so visually it shows our combo pose.
-// ============================================================================
-
+// A SkelAnime independent of player->skelAnime, so OOT's action func cannot touch the
+// pose; each frame it is memcpy'd over the player's jointTable, which the skin draw reads.
 static void GaroAttack_EnsureFormSkelAnime(PlayState* play) {
     if (sFormSkelAnimeReady && sFormSkelAnimeAge == gSaveContext.linkAge) {
         return;
@@ -485,10 +427,7 @@ static void GaroAttack_EnsureFormSkelAnime(PlayState* play) {
     sFormSkelAnimeAge = gSaveContext.linkAge;
 }
 
-// startFrame/endFrame let each combo step play only a SECTION of its source
-// anim (e.g. SWING_1 = motion1 0→25, SWING_2 = motion1 26→43). Pass endFrame
-// < 0 to play through to the natural last frame of the anim. playSpeed can be
-// negative to play in reverse (used by RECOVER's slashStart ping-pong).
+// endFrame < 0 plays to the anim's last frame; a negative playSpeed runs it backwards.
 static void GaroAttack_StartFormAnim(PlayState* play, LinkAnimationHeader* anim, f32 startFrame, f32 endFrame,
                                      f32 playSpeed) {
     if (anim == nullptr)
@@ -509,9 +448,7 @@ static s32 GaroAttack_AdvanceFormAnim(PlayState* play, Player* player) {
     return done;
 }
 
-// ============================================================================
 // Existing Garo form entry points
-// ============================================================================
 extern "C" FlexSkeletonHeader* GaroForm_LoadSkeleton(PlayState* play) {
     SkeletonHeader* hdr = ResourceMgr_LoadSkeletonByName(GARO_SKEL_PATH, NULL);
     if (hdr == NULL) {
@@ -521,10 +458,12 @@ extern "C" FlexSkeletonHeader* GaroForm_LoadSkeleton(PlayState* play) {
     return (FlexSkeletonHeader*)hdr;
 }
 
-// Forward decl of the rod-orb init flag — the actual storage lives near the
-// UpdateSwords helpers further down, but GaroForm_Cleanup needs to clear it
-// before that block is reachable in TU order.
+// Forward decl of the rod-orb and reflect-escort init flags — the actual
+// storage lives near the UpdateSwords helpers further down, but
+// GaroForm_Cleanup needs to clear them before that block is reachable in TU
+// order.
 static u8 sRodOrbQuadsInited;
+static u8 sReflectQuadInited;
 
 extern "C" void GaroForm_Cleanup(void) {
     // Skin teardown handled by GaroSkin_Teardown — called by the engine on
@@ -536,9 +475,11 @@ extern "C" void GaroForm_Cleanup(void) {
     // fire. Without this reset, EnsureRodOrbQuads would early-return and
     // StampRodOrbQuad would write to a quad whose base->ac context is gone.
     sRodOrbQuadsInited = 0;
+    // Same for the reflect escort — and sGaroAttack above already dropped the
+    // Actor* it was following, which the old scene owned.
+    sReflectQuadInited = 0;
 }
 
-// ============================================================================
 // v9 — Death / Reset hooks
 //
 // GaroForm_OnDeath fires SYNCHRONOUSLY from TransformMasks_OnDeath BEFORE
@@ -551,7 +492,6 @@ extern "C" void GaroForm_Cleanup(void) {
 //   - Ikana shield revival (z_player.c)
 //   - Fairy revival (z_player.c)
 //   - Scene reload / form change (MmForm_Reset)
-// ============================================================================
 #define GARO_DEATH_FLAME_COUNT 9
 #define GARO_DEATH_FLAME_RADIUS 20.0f
 
@@ -676,10 +616,8 @@ extern "C" s32 GaroForm_TryDrawSmoothSkin(PlayState* play, Player* player) {
     return 1;
 }
 
-// ============================================================================
 // Garo activity check — true if Garo is active via either the legacy O2rLoader
 // skin-swap path OR the full MmForm transformation pipeline.
-// ============================================================================
 static bool GaroForm_IsActive() {
     if (O2rLoader_HasActiveModel()) {
         const char* name = O2rLoader_GetForcedName();
@@ -691,13 +629,28 @@ static bool GaroForm_IsActive() {
     return false;
 }
 
-// ============================================================================
+// A Garo runs across water. Read by the water-walk gate the Roc Boots own
+// (equip_roc_boots.c), so the pinning itself stays in the one place z_player.c
+// already calls — this only says whether the form grants it.
+extern "C" u8 GaroForm_WalksOnWater(void) {
+    return GaroForm_IsActive() ? 1 : 0;
+}
+
+// A Garo sees through the world: hidden things show themselves and false ones
+// stop pretending, for as long as the form lasts and without touching magic.
+// Same deal as the water walk — the lens itself is driven by the passive-lens
+// gate the Poe lantern owns (Lantern_UpdateLens), so there is exactly one place
+// that decides whether actorCtx.lensActive is on for a reason other than the
+// Lens of Truth item.
+extern "C" u8 GaroForm_HasPassiveLens(void) {
+    return GaroForm_IsActive() ? 1 : 0;
+}
+
 // Attack collider (spinning slash)
 //
 // Mirrors mm_form_combat.c:57-141 — that helper is static and not exported,
 // so we replicate the geometry math inline. Calls public OOT collision API
 // (Collider_SetQuadVertices, Collider_ResetQuadAT, CollisionCheck_SetAT).
-// ============================================================================
 static void GaroAttack_EnableSpinQuad(Player* player, PlayState* play) {
     ColliderQuad* quad = &player->meleeWeaponQuads[0];
 
@@ -920,9 +873,7 @@ static void GaroAttack_EnableSwingQuad(Player* player, PlayState* play) {
     CollisionCheck_SetAT(play, &play->colChkCtx, &quad->base);
 }
 
-// ============================================================================
 // Rod orb projectiles
-// ============================================================================
 static Vec3f GaroAttack_HandOrigin(Player* player) {
     Vec3f origin = player->leftHandPos;
     if (origin.y == 0.0f) {
@@ -933,9 +884,9 @@ static Vec3f GaroAttack_HandOrigin(Player* player) {
     return origin;
 }
 
-static void GaroAttack_SpawnOne(GaroSword src, Player* player) {
-    for (s32 slot = 0; slot < GARO_SWORD_MAX_ACTIVE; slot++) {
-        GaroSword* sw = &sGaroAttack.swords[slot];
+static void GaroAttack_SpawnOne(GaroOrb src, Player* player) {
+    for (s32 slot = 0; slot < GARO_ORB_POOL_MAX; slot++) {
+        GaroOrb* sw = &sGaroAttack.orbs[slot];
         if (!sw->active) {
             *sw = src;
             sw->active = 1;
@@ -954,16 +905,30 @@ static void GaroAttack_SpawnOne(GaroSword src, Player* player) {
 // Iron Knuckle), so the orb still hits them.
 #define GARO_ROD_ORB_SPEED 12.0f
 #define GARO_ROD_ORB_LIFETIME 60
+// The level-3 ball covers half that ground before it breaks. Its damage lives
+// in the fragments, so it is meant to open up near the fight rather than sail
+// across the room first — and the burst reads better close enough to see.
+#define GARO_ROD_BURST_LIFETIME (GARO_ROD_ORB_LIFETIME / 2)
 
-static void GaroAttack_SpawnRodOrb(Player* player, u8 element, u8 damage, u32 dmgFlag, s16 yaw, s16 pitch) {
-    GaroSword tmp = {};
+static void GaroAttack_SpawnRodOrb(Player* player, u8 element, u8 damage, u32 dmgFlag, s16 yaw, s16 pitch,
+                                   u8 bursts) {
+    GaroOrb tmp = {};
     tmp.pos = GaroAttack_HandOrigin(player);
     tmp.yaw = yaw;        // v10.6 first-person aim yaw (focus.rot.y)
-    tmp.rodPitch = pitch; // v10.6 first-person aim pitch (focus.rot.x)
-    tmp.rodElement = element;
-    tmp.rodDamage = damage;
-    tmp.rodDmgFlag = dmgFlag;
-    tmp.timer = GARO_ROD_ORB_LIFETIME;
+    tmp.pitch = pitch; // v10.6 first-person aim pitch (focus.rot.x)
+    tmp.element = element;
+    tmp.damage = damage;
+    tmp.dmgFlag = dmgFlag;
+    tmp.timer = bursts ? GARO_ROD_BURST_LIFETIME : GARO_ROD_ORB_LIFETIME;
+    tmp.bursts = bursts;
+    // Leave at the size it was charged to. Floors guard against a release on
+    // the very first frames, before the eased scales have grown into anything.
+    tmp.ballCircle = (sGaroAttack.rodBallCircle > GARO_ROD_BALL_CIRCLE_MAX * 0.35f)
+                         ? sGaroAttack.rodBallCircle
+                         : GARO_ROD_BALL_CIRCLE_MAX * 0.35f;
+    tmp.ballScale = (sGaroAttack.rodBallScale > GARO_ROD_BALL_SCALE_MAX * 0.35f)
+                        ? sGaroAttack.rodBallScale
+                        : GARO_ROD_BALL_SCALE_MAX * 0.35f;
     GaroAttack_SpawnOne(tmp, player);
 }
 
@@ -978,24 +943,41 @@ extern "C" u8 GaroForm_IsRodAiming(void) {
 // released — NOT from the slingshot's own fire path, which never progressed its
 // bow-draw counter for Garo. The aim direction is already in focus.rot because
 // the borrowed slingshot aim (Player_StartDekuBubble) owns it. Damage tier +
-// ball scale come from rodChargeTimer (our own charge); element from rodElement
+// ball scale come from rodChargeTimer; element from the L/R cycle.
 // (L/R cycle). Consumes our own magic. Charge resets after so the player can
 // hold-charge-release again (rapid-fire), like the Deku bubble.
 extern "C" void GaroForm_FireRodOrb(Player* player, PlayState* play) {
     u8 element = sGaroAttack.rodElement;
-    u8 dmg = GaroAttack_GetRodDamage(sGaroAttack.rodChargeTimer);
+    u8 level = GaroAttack_GetRodLevel(sGaroAttack.rodChargeTimer);
     u32 dmgFlag = GaroAttack_GetRodDmgFlag(element);
+    s16 aimYaw = player->actor.focus.rot.y; // set by the slingshot aim
+    s16 aimPitch = player->actor.focus.rot.x;
 
-    // Own magic: full cost → full charge damage; no magic → weak (1 dmg) orb.
-    if (gSaveContext.magic >= GARO_ROD_MAGIC_COST) {
-        gSaveContext.magic -= GARO_ROD_MAGIC_COST;
+    // Level 1: released too early. The ball had not formed, so nothing leaves
+    // the hand and no magic is spent — just the dry click of a wasted draw.
+    if (level < 2) {
+        Audio_PlayActorSound2(&player->actor, NA_SE_IT_BOW_FLICK);
+        sGaroAttack.rodChargeTimer = 0;
+        sGaroAttack.rodSfxPlayed = 0;
+        return;
+    }
+
+    // Both levels fire ONE ball. What separates them is what happens when it
+    // lands: level 3's breaks apart into seekers.
+    u8 burst = (level >= 3) ? 1 : 0;
+    u8 dmg = burst ? GARO_ROD_L3_DAMAGE : GARO_ROD_L2_DAMAGE;
+
+    // Own magic; the breaking shot costs double, since the fragments are free
+    // damage afterwards. Out of magic → it still flies, for a token 1 damage.
+    s16 cost = (s16)(GARO_ROD_MAGIC_COST * (burst ? 2 : 1));
+    if (gSaveContext.magic >= cost) {
+        gSaveContext.magic -= cost;
     } else {
         dmg = 1;
     }
 
-    s16 aimYaw = player->actor.focus.rot.y; // set by the slingshot aim
-    s16 aimPitch = player->actor.focus.rot.x;
-    GaroAttack_SpawnRodOrb(player, element, dmg, dmgFlag, aimYaw, aimPitch);
+    GaroAttack_SpawnRodOrb(player, element, dmg, dmgFlag, aimYaw, aimPitch, burst);
+
     // Release: the elemental-arrow shot pair — the bow twang plus the magic
     // arrow's own launch sting, so a rod shot sounds like the magic arrow it
     // behaves like (it even carries the DMG_ARROW_* flags).
@@ -1018,10 +1000,10 @@ extern "C" void GaroForm_FireRodOrb(Player* player, PlayState* play) {
 //
 // The dmgFlags mask 0xFFCFFFFF is the canonical "accepts everything except
 // reflection" pattern used by Link's sword quad — combined with per-orb
-// rodDmgFlag at SetAT time, this lets enemies with restrictive AC masks
+// the orb dmgFlag at SetAT time, this lets enemies with restrictive AC masks
 // (Iron Knuckle, Like-Like) still take the hit while element-vulnerable
 // bosses (Phantom Ganon, Ganon2) get routed to their light/fire/ice paths.
-static ColliderQuad sRodOrbQuads[GARO_SWORD_MAX_ACTIVE];
+static ColliderQuad sRodOrbQuads[GARO_ORB_POOL_MAX];
 // sRodOrbQuadsInited is forward-declared near GaroForm_Cleanup so the
 // cleanup hook can reset it without re-ordering this block.
 
@@ -1050,14 +1032,14 @@ static ColliderQuadInit sRodOrbQuadInit = {
 static void GaroAttack_EnsureRodOrbQuads(PlayState* play, Player* player) {
     if (sRodOrbQuadsInited)
         return;
-    for (s32 i = 0; i < GARO_SWORD_MAX_ACTIVE; i++) {
+    for (s32 i = 0; i < GARO_ORB_POOL_MAX; i++) {
         Collider_InitQuad(play, &sRodOrbQuads[i]);
         Collider_SetQuad(play, &sRodOrbQuads[i], &player->actor, &sRodOrbQuadInit);
     }
     sRodOrbQuadsInited = 1;
 }
 
-static void GaroAttack_StampRodOrbQuad(PlayState* play, Player* player, GaroSword* sw, s32 quadIdx) {
+static void GaroAttack_StampRodOrbQuad(PlayState* play, Player* player, GaroOrb* sw, s32 quadIdx) {
     ColliderQuad* quad = &sRodOrbQuads[quadIdx];
 
     // ~12-unit cube around the orb's current pos. Symmetric so the orb hits
@@ -1076,32 +1058,455 @@ static void GaroAttack_StampRodOrbQuad(PlayState* play, Player* player, GaroSwor
     // Combine element flag with DMG_SLASH_MASTER so restrictive-AC enemies
     // (those that only accept weapon flags, not arrow flags) still take the
     // hit. Element-vulnerable enemies route via the matching arrow bit.
-    quad->info.toucher.dmgFlags = sw->rodDmgFlag | DMG_SLASH_MASTER;
-    quad->info.toucher.damage = sw->rodDamage;
+    quad->info.toucher.dmgFlags = sw->dmgFlag | DMG_SLASH_MASTER;
+    quad->info.toucher.damage = sw->damage;
     quad->info.toucherFlags = TOUCH_ON | TOUCH_NEAREST;
 
     CollisionCheck_SetAT(play, &play->colChkCtx, &quad->base);
 }
 
+// Nearest enemy to `origin` that is not already in `taken`. The claim list is
+// what makes the fragments split up instead of dogpiling: same rule as the
+// Trident's Tcb_NearestUntaken.
+static Actor* GaroAttack_NearestUntaken(PlayState* play, Vec3f* origin, Actor** taken, s32 nTaken) {
+    Actor* best = NULL;
+    f32 bestDistSq = GARO_ORB_HOME_RANGE * GARO_ORB_HOME_RANGE;
+
+    for (Actor* enemy = play->actorCtx.actorLists[ACTORCAT_ENEMY].head; enemy != NULL; enemy = enemy->next) {
+        if (enemy->update == NULL) {
+            continue;
+        }
+        s32 claimed = 0;
+        for (s32 i = 0; i < nTaken; i++) {
+            if (taken[i] == enemy) {
+                claimed = 1;
+                break;
+            }
+        }
+        if (claimed) {
+            continue;
+        }
+        f32 dx = enemy->world.pos.x - origin->x;
+        f32 dy = enemy->world.pos.y - origin->y;
+        f32 dz = enemy->world.pos.z - origin->z;
+        f32 distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq < bestDistSq) {
+            bestDistSq = distSq;
+            best = enemy;
+        }
+    }
+    return best;
+}
+
+// The level-3 ball breaking up: Ganondorf's impact signature (a shock plus a
+// spray of light balls) and then GARO_ORB_SEEKERS fragments fanned outward,
+// each claiming a different nearby enemy. With fewer enemies than fragments the
+// claim list is wiped and the sweep starts over, so the spares double up on the
+// closest ones rather than flying off at nothing — the Trident does exactly
+// this in Tcb_SpawnHunters.
+static void GaroAttack_BurstRodOrb(PlayState* play, GaroOrb* src) {
+    Vec3f pos = src->pos;
+    Vec3f zero = { 0.0f, 0.0f, 0.0f };
+    u8 e = src->element % GARO_ROD_ELEMENT_COUNT;
+    static const u8 sBurstBallColor[GARO_ROD_ELEMENT_COUNT] = { 2, 1, 7, 5, 3, 0 };
+
+    EffectSsFhgFlash_SpawnShock(play, NULL, &pos, 200, 0 /* FHGFLASH_SHOCK_NO_ACTOR */);
+    for (s32 i = 0; i < GARO_ORB_BURST_BALLS; i++) {
+        Vec3f vel = { Rand_CenteredFloat(12.0f), Rand_ZeroFloat(8.0f) + 2.0f, Rand_CenteredFloat(12.0f) };
+        EffectSsFhgFlash_SpawnLightBall(play, &pos, &vel, &zero, (s16)(Rand_ZeroOne() * 60.0f) + 110,
+                                        sBurstBallColor[e]);
+    }
+    Audio_PlaySoundGeneral(NA_SE_IT_MAGIC_ARROW_SHOT, &pos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+
+    Actor* taken[GARO_ORB_SEEKERS];
+    s32 nTaken = 0;
+    for (s32 i = 0; i < GARO_ORB_SEEKERS; i++) {
+        Actor* target = GaroAttack_NearestUntaken(play, &pos, taken, nTaken);
+        if ((target == NULL) && (nTaken > 0)) {
+            nTaken = 0; // ran out of fresh enemies: go round again
+            target = GaroAttack_NearestUntaken(play, &pos, taken, nTaken);
+        }
+
+        GaroOrb frag = {};
+        frag.pos = pos;
+        // Fan them around the burst so they visibly disperse before turning in.
+        frag.yaw = (s16)(src->yaw + (s16)(i * GARO_ORB_SEEKER_FAN) - GARO_ORB_SEEKER_FAN);
+        frag.pitch = (s16)(src->pitch - 0x0800); // a touch upward, so they arc
+        frag.element = src->element;
+        frag.damage = GARO_ORB_SEEKER_DAMAGE;
+        frag.dmgFlag = src->dmgFlag;
+        frag.timer = GARO_ORB_SEEKER_LIFETIME;
+        frag.isSeeker = 1;
+        frag.target = target;
+        // Prime the streak at the burst point: left zeroed, the first dozen
+        // frames would draw a ribbon reaching back to the world origin.
+        f32 fragCosP = Math_CosS(frag.pitch);
+        f32 headY = atan2f(Math_SinS(frag.yaw) * fragCosP, Math_CosS(frag.yaw) * fragCosP);
+        f32 headX = atan2f(-Math_SinS(frag.pitch), fragCosP);
+        for (s32 t = 0; t < GARO_ORB_TRAIL_LEN; t++) {
+            frag.trailPos[t] = pos;
+            frag.trailRot[t].x = headX;
+            frag.trailRot[t].y = headY;
+            frag.trailRot[t].z = 0.0f;
+        }
+        GaroAttack_SpawnOne(frag, GET_PLAYER(play));
+
+        if (target != NULL) {
+            taken[nTaken++] = target;
+        }
+    }
+}
+
+// The seeking half of an orb: find the nearest enemy that is AHEAD of it and
+// inside range, and bend the orb's yaw/pitch toward it. Returns without
+// touching the angles when nothing qualifies, which is what makes an orb with
+// no target fly dead straight.
+static void GaroAttack_HomeRodOrb(PlayState* play, GaroOrb* sw) {
+    f32 fwdX = Math_SinS(sw->yaw) * Math_CosS(sw->pitch);
+    f32 fwdY = -Math_SinS(sw->pitch);
+    f32 fwdZ = Math_CosS(sw->yaw) * Math_CosS(sw->pitch);
+
+    Actor* best = NULL;
+    f32 bestDistSq = GARO_ORB_HOME_RANGE * GARO_ORB_HOME_RANGE;
+
+    // A fragment keeps the enemy it claimed at burst time, and ignores the
+    // ahead-of-me cone so it can wheel right around onto it. It drops the claim
+    // if that enemy dies, and hunts freely from then on.
+    if (sw->isSeeker) {
+        if ((sw->target != NULL) && (sw->target->update != NULL)) {
+            Vec3f claimed = { sw->target->world.pos.x, sw->target->world.pos.y + sw->target->shape.yOffset,
+                              sw->target->world.pos.z };
+            Math_ScaledStepToS(&sw->yaw, Math_Vec3f_Yaw(&sw->pos, &claimed), GARO_ORB_SEEKER_TURN);
+            Math_ScaledStepToS(&sw->pitch, Math_Vec3f_Pitch(&sw->pos, &claimed), GARO_ORB_SEEKER_TURN);
+            return;
+        }
+        sw->target = NULL;
+    }
+
+    for (Actor* enemy = play->actorCtx.actorLists[ACTORCAT_ENEMY].head; enemy != NULL; enemy = enemy->next) {
+        if (enemy->update == NULL) {
+            continue;
+        }
+        f32 dx = enemy->world.pos.x - sw->pos.x;
+        f32 dy = (enemy->world.pos.y + enemy->shape.yOffset) - sw->pos.y;
+        f32 dz = enemy->world.pos.z - sw->pos.z;
+        f32 distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq >= bestDistSq || distSq < 1.0f) {
+            continue;
+        }
+        // Ahead-of-me test, so an orb never turns around and chases something
+        // it has already flown past.
+        f32 dist = sqrtf(distSq);
+        if (((dx * fwdX + dy * fwdY + dz * fwdZ) / dist) < GARO_ORB_HOME_CONE) {
+            continue;
+        }
+        bestDistSq = distSq;
+        best = enemy;
+    }
+
+    if (best == NULL) {
+        return;
+    }
+
+    // Engine helpers rather than hand-rolled atan2 calls: Math_Atan2S takes its
+    // arguments in an order that is easy to get backwards (yaw is (dz, dx),
+    // pitch is (distXZ, -dy)), and these two encode it correctly.
+    Vec3f aimAt = { best->world.pos.x, best->world.pos.y + best->shape.yOffset, best->world.pos.z };
+    s16 turn = sw->isSeeker ? GARO_ORB_SEEKER_TURN : GARO_ORB_TURN_RATE;
+    Math_ScaledStepToS(&sw->yaw, Math_Vec3f_Yaw(&sw->pos, &aimAt), turn);
+    Math_ScaledStepToS(&sw->pitch, Math_Vec3f_Pitch(&sw->pos, &aimAt), turn);
+}
+
+// Red ice checks WHO hit it, not what the hit carried: it melts for an actor
+// whose id is EN_ICE_HONO (blue fire) or an EN_ARROW with an ARROW_ICE child
+// (z_bg_ice_shelter.c). Garo's orbs are not actors at all — their AT quads
+// belong to the Player — so no damage flag can ever satisfy that test. This is
+// the same wall SW97's ice arrow hits, and the same way out: call the actor's
+// own public melt directly, exactly as ArrowIce_MeltIceShelters, MagicIce and
+// the Ice Rod do. Nothing in ovl_Bg_Ice_Shelter changes.
+//
+// The other two interactions need no code at all, because those actors DO test
+// the damage flags: torches accept 0x20820, which includes DMG_ARROW_FIRE
+// (z_obj_syokudai.c:172), and sun switches accept 0x00202000, which includes
+// DMG_ARROW_LIGHT (z_obj_lightswitch.c bumper) — both already ride on the orb
+// quad from GaroAttack_GetRodDmgFlag.
+extern "C" void BgIceShelter_MeltInstantly(Actor* thisx, PlayState* play);
+
+#define GARO_ORB_MELT_RADIUS 60.0f
+
+static void GaroAttack_ApplyOrbElementEffects(PlayState* play, GaroOrb* sw) {
+    if ((sw->element % GARO_ROD_ELEMENT_COUNT) != GARO_ELEM_ICE) {
+        return;
+    }
+    for (Actor* actor = play->actorCtx.actorLists[ACTORCAT_BG].head; actor != NULL; actor = actor->next) {
+        if ((actor->id != ACTOR_BG_ICE_SHELTER) || (actor->update == NULL)) {
+            continue;
+        }
+        f32 dx = actor->world.pos.x - sw->pos.x;
+        f32 dz = actor->world.pos.z - sw->pos.z;
+        if (sqrtf(dx * dx + dz * dz) < GARO_ORB_MELT_RADIUS) {
+            BgIceShelter_MeltInstantly(actor, play);
+        }
+    }
+}
+
+// ── Reflected shot ──────────────────────────────────────────────────────
+// A projectile the guard sent back. The actor keeps flying and keeps its own
+// look; what makes it hurt on the way back is this escort — an invisible
+// sword-damage quad stamped on it every frame. Its OWN collider is left alone
+// (it belongs to that actor and there is no generic way to reach it), which is
+// why Garo takes i-frames on the reflect: the shot starts inside him and would
+// otherwise clip him once on its way out.
+static ColliderQuad sReflectQuad;
+// sReflectQuadInited is forward-declared next to GaroForm_Cleanup, same as the
+// rod-orb flag, so the cleanup hook can clear it.
+
+static ColliderQuadInit sReflectQuadInit = {
+    {
+        COLTYPE_NONE,
+        AT_ON | AT_TYPE_PLAYER,
+        AC_NONE,
+        OC1_NONE,
+        OC2_TYPE_PLAYER,
+        COLSHAPE_QUAD,
+    },
+    {
+        ELEMTYPE_UNK0,
+        { 0xFFCFFFFF, 0x00, 0x10 },
+        { 0x00000000, 0x00, 0x00 },
+        TOUCH_ON | TOUCH_NEAREST | TOUCH_SFX_NORMAL,
+        BUMP_NONE,
+        OCELEM_NONE,
+    },
+    { { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } } },
+};
+
+// Ranged or melee? There is no engine flag that says "projectile", so this
+// leans on the one thing every thrown/shot actor has in common and almost no
+// melee attacker does: you cannot lock onto it. The health test that used to
+// ride along with it is gone — plenty of projectiles carry a health value they
+// never use, and a single silent rejection here is enough to make the whole
+// reflect look broken. Whether it is really an attack is settled by the sweep
+// that calls this: close, fast, and heading at him.
+static bool GaroAttack_IsRangedAttacker(Actor* attacker) {
+    if (attacker == NULL) {
+        return false;
+    }
+    if (attacker->category == ACTORCAT_EXPLOSIVE) {
+        return true;
+    }
+    return !(attacker->flags & ACTOR_FLAG_ATTENTION_ENABLED);
+}
+
+// Send the shot back where it came from and start the escort.
+static void GaroAttack_ReflectShot(PlayState* play, Player* player, Actor* shot) {
+    // Flip BOTH the heading and the raw velocity: some projectiles are moved by
+    // Actor_MoveForward along world.rot.y, others integrate velocity directly,
+    // and there is no telling which one this is.
+    shot->world.rot.y += 0x8000;
+    shot->shape.rot.y = shot->world.rot.y;
+    shot->velocity.x = -shot->velocity.x;
+    shot->velocity.z = -shot->velocity.z;
+    if (shot->speedXZ < GARO_REFLECT_MIN_SPEED) {
+        shot->speedXZ = GARO_REFLECT_MIN_SPEED;
+    }
+    // Shove it clear of Garo along its new heading. Projectiles typically kill
+    // themselves the moment their collider touches anything — including him —
+    // so a shot bounced while still overlapping him would simply pop instead of
+    // flying back.
+    shot->world.pos.x += Math_SinS(shot->world.rot.y) * GARO_REFLECT_PUSH_OUT;
+    shot->world.pos.z += Math_CosS(shot->world.rot.y) * GARO_REFLECT_PUSH_OUT;
+
+    SPDLOG_INFO("[Garo] reflect shot id=0x{:X} cat={} speed={}", (u32)shot->id, (s32)shot->category, shot->speedXZ);
+
+    sGaroAttack.reflectShot = shot;
+    sGaroAttack.reflectTimer = GARO_REFLECT_FRAMES;
+    player->invincibilityTimer = GARO_REFLECT_INVULN;
+
+    Audio_PlaySoundGeneral(NA_SE_IT_SHIELD_REFLECT_SW, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+}
+
+// Bounce a shot BEFORE it lands. This is the only reliable moment: most
+// projectiles destroy themselves the instant they connect (the Octorok rock
+// does exactly that in EnOkuta_ProjectileFly unless a shield sets AT_BOUNCED),
+// so by the time the damage shows up in the player's AC there is nothing left
+// to send back — the counter then resolved to the shooter instead, and Garo
+// teleported across the room to sword-swing an Octorok. Catching the shot in
+// flight fixes both halves of that.
+static u8 GaroAttack_TryReflectIncoming(PlayState* play, Player* player) {
+    Vec3f chest = player->actor.world.pos;
+    chest.y += GARO_GUARD_CATCH_HEIGHT;
+
+    // Every category, not a hand-picked few: a projectile can be re-categorised
+    // by its own init (the Octorok's rock moves itself to PROP), and one guess
+    // wrong here looks exactly like the feature not existing. It is one sweep
+    // per frame and only while guarding.
+    for (s32 c = 0; c < ACTORCAT_MAX; c++) {
+        if ((c == ACTORCAT_PLAYER) || (c == ACTORCAT_BG) || (c == ACTORCAT_DOOR) || (c == ACTORCAT_CHEST)) {
+            continue;
+        }
+        for (Actor* actor = play->actorCtx.actorLists[c].head; actor != NULL; actor = actor->next) {
+            if ((actor->update == NULL) || (actor == sGaroAttack.reflectShot)) {
+                continue;
+            }
+            if (!GaroAttack_IsRangedAttacker(actor)) {
+                continue;
+            }
+            f32 dx = chest.x - actor->world.pos.x;
+            f32 dy = chest.y - actor->world.pos.y;
+            f32 dz = chest.z - actor->world.pos.z;
+            if ((dx * dx + dy * dy + dz * dz) > (GARO_GUARD_CATCH_RADIUS * GARO_GUARD_CATCH_RADIUS)) {
+                continue;
+            }
+            // Only things actually coming AT him: a shot already leaving, or a
+            // prop just sitting there, is not an attack to return. Both ways of
+            // moving are summed because some actors drive velocity directly and
+            // others ride speedXZ along world.rot.y.
+            f32 velX = actor->velocity.x + Math_SinS(actor->world.rot.y) * actor->speedXZ;
+            f32 velZ = actor->velocity.z + Math_CosS(actor->world.rot.y) * actor->speedXZ;
+            f32 speedSq = (velX * velX) + (velZ * velZ);
+            f32 approach = (velX * dx) + (velZ * dz);
+
+            // Diagnostic while the reflect is being dialled in: every fourth
+            // frame, report what is inside the catch zone and why it was or was
+            // not taken. Rate-gated on purpose — an unthrottled per-frame log
+            // in a room full of props drowns the file and hides the answer.
+            if ((play->gameplayFrames & 3) == 0) {
+                SPDLOG_INFO("[Garo] guard sees id=0x{:X} cat={} dist={} speed={} approach={}", (u32)actor->id, c,
+                            sqrtf(dx * dx + dy * dy + dz * dz), sqrtf(speedSq), approach);
+            }
+
+            if (speedSq < (GARO_GUARD_CATCH_MIN_SPEED * GARO_GUARD_CATCH_MIN_SPEED)) {
+                continue;
+            }
+            if (approach <= 0.0f) {
+                continue;
+            }
+            GaroAttack_ReflectShot(play, player, actor);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void GaroAttack_UpdateReflect(PlayState* play, Player* player) {
+    if (sGaroAttack.reflectTimer <= 0) {
+        return;
+    }
+    sGaroAttack.reflectTimer--;
+
+    Actor* shot = sGaroAttack.reflectShot;
+    if ((shot == NULL) || (shot->update == NULL)) {
+        sGaroAttack.reflectShot = NULL;
+        sGaroAttack.reflectTimer = 0;
+        return;
+    }
+
+    if (!sReflectQuadInited) {
+        Collider_InitQuad(play, &sReflectQuad);
+        Collider_SetQuad(play, &sReflectQuad, &player->actor, &sReflectQuadInit);
+        sReflectQuadInited = 1;
+    }
+
+    const f32 half = GARO_REFLECT_HALF;
+    Vec3f a = { shot->world.pos.x - half, shot->world.pos.y + half, shot->world.pos.z };
+    Vec3f b = { shot->world.pos.x + half, shot->world.pos.y + half, shot->world.pos.z };
+    Vec3f c = { shot->world.pos.x + half, shot->world.pos.y - half, shot->world.pos.z };
+    Vec3f d = { shot->world.pos.x - half, shot->world.pos.y - half, shot->world.pos.z };
+
+    Collider_ResetQuadAT(play, &sReflectQuad.base);
+    Collider_SetQuadVertices(&sReflectQuad, &a, &b, &c, &d);
+    sReflectQuad.base.atFlags = AT_ON | AT_TYPE_PLAYER;
+    sReflectQuad.info.toucher.dmgFlags = DMG_SLASH_MASTER | DMG_FIXED_DAMAGE;
+    sReflectQuad.info.toucher.damage = GARO_REFLECT_DAMAGE;
+    sReflectQuad.info.toucherFlags = TOUCH_ON | TOUCH_NEAREST;
+    CollisionCheck_SetAT(play, &play->colChkCtx, &sReflectQuad.base);
+}
+
 static void GaroAttack_UpdateSwords(PlayState* play) {
     Player* player = GET_PLAYER(play);
 
-    for (s32 i = 0; i < GARO_SWORD_MAX_ACTIVE; i++) {
-        GaroSword* sw = &sGaroAttack.swords[i];
+    for (s32 i = 0; i < GARO_ORB_POOL_MAX; i++) {
+        GaroOrb* sw = &sGaroAttack.orbs[i];
         if (!sw->active)
             continue;
 
-        // Rod orbs travel in 3D along the first-person aim (yaw + pitch),
+        // Did last frame's quad land? The level-3 ball breaks on contact; a
+        // plain shot keeps going (piercing), which is the old behaviour.
+        if (sRodOrbQuadsInited && (sRodOrbQuads[i].base.atFlags & AT_HIT)) {
+            sRodOrbQuads[i].base.atFlags &= ~AT_HIT;
+            if (sw->bursts) {
+                GaroAttack_BurstRodOrb(play, sw);
+                sw->active = 0;
+                continue;
+            }
+        }
+
+        GaroAttack_HomeRodOrb(play, sw);
+
+        // Rod orbs travel in 3D along their current heading (yaw + pitch),
         // mirroring Actor_SetProjectileSpeed:
         //   speedXZ      = speed * cos(pitch)
         //   velocity.y   = speed * -sin(pitch)
-        f32 cosP = Math_CosS(sw->rodPitch);
-        sw->pos.x += Math_SinS(sw->yaw) * cosP * GARO_ROD_ORB_SPEED;
-        sw->pos.z += Math_CosS(sw->yaw) * cosP * GARO_ROD_ORB_SPEED;
-        sw->pos.y += -Math_SinS(sw->rodPitch) * GARO_ROD_ORB_SPEED;
+        f32 speed = sw->isSeeker ? GARO_ORB_SEEKER_SPEED : GARO_ROD_ORB_SPEED;
+        f32 cosP = Math_CosS(sw->pitch);
+        f32 velX = Math_SinS(sw->yaw) * cosP * speed;
+        f32 velZ = Math_CosS(sw->yaw) * cosP * speed;
+        f32 velY = -Math_SinS(sw->pitch) * speed;
+        sw->pos.x += velX;
+        sw->pos.z += velZ;
+        sw->pos.y += velY;
+
+        // Fragments record their path for the streak, sampled AFTER the move
+        // and paired with the heading they moved on — trident_charge_ball.c:477
+        // does exactly this, and it is what orients each ribbon segment.
+        if (sw->isSeeker) {
+            sw->trailIdx++;
+            if (sw->trailIdx >= GARO_ORB_TRAIL_LEN) {
+                sw->trailIdx = 0;
+            }
+            sw->trailPos[sw->trailIdx] = sw->pos;
+            sw->trailRot[sw->trailIdx].y = atan2f(velX, velZ);
+            sw->trailRot[sw->trailIdx].x = atan2f(velY, sqrtf(velX * velX + velZ * velZ));
+            sw->trailRot[sw->trailIdx].z = 0.0f;
+        }
+
+        // Elemental world interactions — red ice, torches, sun switches.
+        GaroAttack_ApplyOrbElementEffects(play, sw);
+
+        // The Trident's small trail, verbatim: one FhgFlash light ball dropped
+        // at the orb every 4th frame (trident_charge_ball.c:465), which the
+        // effect system then fades and shrinks on its own. Colour picked per
+        // element from the same FHGFLASH_LIGHTBALL_* palette the Trident picks
+        // its purple and blue from.
+        if ((sw->timer & 3) == 0) {
+            // Numeric like the Trident's own TCB_FX_LIGHTBALL_* defines: the
+            // FHGFLASH_LIGHTBALL_* enum lives in the effect overlay's private
+            // header, which no mod TU includes.
+            static const u8 sOrbWakeColor[GARO_ROD_ELEMENT_COUNT] = {
+                2, // fire  — FHGFLASH_LIGHTBALL_RED
+                1, // ice   — FHGFLASH_LIGHTBALL_LIGHTBLUE
+                7, // light — FHGFLASH_LIGHTBALL_WHITE1
+                5, // dark  — FHGFLASH_LIGHTBALL_PURPLE
+                3, // soul  — FHGFLASH_LIGHTBALL_YELLOW
+                0, // wind  — FHGFLASH_LIGHTBALL_GREEN
+            };
+            Vec3f wakePos = sw->pos;
+            Vec3f zero = { 0.0f, 0.0f, 0.0f };
+            EffectSsFhgFlash_SpawnLightBall(play, &wakePos, &zero, &zero, GARO_ORB_WAKE_SCALE,
+                                            sOrbWakeColor[sw->element % GARO_ROD_ELEMENT_COUNT]);
+        }
 
         sw->timer--;
         if (sw->timer <= 0) {
+            // A level-3 ball that reaches the end of its flight without hitting
+            // anything still breaks — the fragments are the point of the shot,
+            // not a reward for connecting.
+            if (sw->bursts) {
+                GaroAttack_BurstRodOrb(play, sw);
+            }
             sw->active = 0;
             continue;
         }
@@ -1126,29 +1531,37 @@ static void GaroAttack_UpdateSwords(PlayState* play) {
 #define GARO_ORB_MATERIAL_DL "__OTR__overlays/ovl_Boss_Ganon2/gGanonLightOrbMaterialDL"
 #define GARO_ORB_MODEL_DL "__OTR__overlays/ovl_Boss_Ganon2/gGanonLightOrbModelDL"
 
-// Per-element {R,G,B}. prim = bright core, env = surrounding glow. Indexed by
-// GaroSword.rodElement / sGaroAttack.rodElement (0=normal 1=fire 2=ice 3=light).
-static const u8 sRodOrbPrim[4][3] = {
-    { 220, 230, 255 }, // normal — pale blue-white core
-    { 255, 240, 170 }, // fire   — warm white core
-    { 220, 245, 255 }, // ice    — cold white core
-    { 255, 245, 190 }, // light  — gold-white core
+// Per-element {R,G,B}, indexed by GARO_ELEM_*. prim/env are lifted VERBATIM
+// from the six SW97 arrows' draws (z_arrow_fire/ice/light/dark/soul/wind
+// .inc.c), so a Garo orb and a SW97 arrow of the same element are the same
+// colour.
+static const u8 sRodOrbPrim[GARO_ROD_ELEMENT_COUNT][3] = {
+    { 255, 200, 0 },   // fire  — z_arrow_fire.inc.c:437
+    { 170, 255, 255 }, // ice   — z_arrow_ice.inc.c:456
+    { 255, 255, 255 }, // light — z_arrow_light.inc.c:431
+    { 0, 0, 0 },       // dark  — z_arrow_dark.inc.c:431
+    { 255, 255, 170 }, // soul  — z_arrow_soul.inc.c:473
+    { 170, 255, 255 }, // wind  — z_arrow_wind.inc.c:543
 };
-static const u8 sRodOrbEnv[4][3] = {
-    { 110, 140, 255 }, // normal — blue glow
-    { 255, 80, 20 },   // fire   — orange-red glow
-    { 70, 190, 255 },  // ice    — cyan glow
-    { 255, 205, 50 },  // light  — gold glow
+static const u8 sRodOrbEnv[GARO_ROD_ELEMENT_COUNT][3] = {
+    { 255, 0, 0 },     // fire
+    { 0, 0, 255 },     // ice
+    { 170, 170, 170 }, // light
+    { 0, 0, 0 },       // dark
+    { 255, 255, 0 },   // soul
+    { 0, 255, 0 },     // wind
 };
 // Dense inner core, drawn with alpha blending instead of additive glow (see
 // GaroForm_DrawLayeredOrb) — this is what gives the ball a solid middle, the
-// same trick the banish shadow ball uses. Saturated, dark version of each
-// element so it stays legible against the halo.
-static const u8 sRodOrbCore[4][3] = {
-    { 25, 45, 160 }, // normal — deep blue
-    { 150, 25, 0 },  // fire   — deep ember red
-    { 0, 70, 150 },  // ice    — deep glacier blue
-    { 165, 110, 0 }, // light  — deep gold
+// same trick the banish shadow ball uses. Not from SW97: the arrows have no
+// core layer, so these are the saturated, dark reading of each element's env.
+static const u8 sRodOrbCore[GARO_ROD_ELEMENT_COUNT][3] = {
+    { 150, 25, 0 },   // fire  — deep ember
+    { 0, 70, 150 },   // ice   — deep glacier
+    { 200, 200, 200 }, // light — near-white, the only element with a bright core
+    { 10, 0, 20 },    // dark  — void
+    { 165, 150, 0 },  // soul  — deep amber
+    { 0, 120, 40 },   // wind  — deep green
 };
 
 // Draw one billboarded, element-tinted light orb at `pos` with `scale`.
@@ -1157,7 +1570,7 @@ static const u8 sRodOrbCore[4][3] = {
 // this is a standalone function (not inside the caller's OPEN_DISPS scope).
 // MUST NOT be called from inside another OPEN_DISPS block (no nesting).
 static void GaroForm_DrawOneOrb(PlayState* play, Vec3f pos, f32 scale, u8 element) {
-    u8 e = element & 0x3;
+    u8 e = element % GARO_ROD_ELEMENT_COUNT;
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, sRodOrbPrim[e][0], sRodOrbPrim[e][1], sRodOrbPrim[e][2], 255);
@@ -1234,9 +1647,170 @@ static void GaroForm_DrawShadowBall(PlayState* play, Vec3f pos, f32 scale) {
 // Rod ball (charging and fired): same construction, element colours. The core
 // is the saturated version of the element so the ball reads as a solid sphere
 // of fire / ice / light instead of a pale flare.
-static void GaroForm_DrawElementBall(PlayState* play, Vec3f pos, f32 scale, u8 element) {
-    u8 e = element & 0x3;
-    GaroForm_DrawLayeredOrb(play, pos, scale, sRodOrbPrim[e], sRodOrbEnv[e], sRodOrbCore[e]);
+// ── Rod charge ball ─────────────────────────────────────────────────────
+// The same five-layer construction the Trident's charge ball uses
+// (TridentBigMagic_Draw in mods/actors/trident_charge_ball.c), which is itself
+// Ganondorf's big-magic draw: scrolling flecks and a backdrop circle, a dot, the
+// light ball, and a fan of rays that opens as the charge fills. Garo's is a
+// head-sized version of a head-sized version — roughly half the Trident's — and
+// every layer is tinted from the element tables instead of Ganondorf's yellow.
+//
+// The segment loads (0x08/0x09/0x0A) and the layer order are verbatim: those
+// DLs index those segments for their scroll matrices, and drawing them out of
+// order or without the segments leaves the tiles pointing at whatever was there
+// before.
+#define GARO_BM_MAT_DL    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightBallMaterialDL"
+#define GARO_BM_BALL_DL   "__OTR__overlays/ovl_Boss_Ganon/gGanondorfSquareDL"
+#define GARO_BM_FLECKS_DL "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightFlecksDL"
+#define GARO_BM_CIRCLE_DL "__OTR__overlays/ovl_Boss_Ganon/gGanondorfBigMagicBGCircleDL"
+#define GARO_BM_DOT_DL    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfDotDL"
+#define GARO_BM_RAY_DL    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightRayTriDL"
+#define GARO_BM_RAYS_MAX  6
+
+static void GaroForm_DrawRodBall(PlayState* play, Vec3f pos, f32 circleScale, f32 ballScale,
+                                 s32 rays, f32 spinRad, u8 element) {
+    if (circleScale <= 0.001f) {
+        return;
+    }
+    u8 e = element % GARO_ROD_ELEMENT_COUNT;
+    const u8* prim = sRodOrbPrim[e];
+    const u8* env = sRodOrbEnv[e];
+    const u8* core = sRodOrbCore[e];
+    GraphicsContext* gfxCtx = play->state.gfxCtx;
+    u32 frame = play->gameplayFrames;
+
+    OPEN_DISPS(gfxCtx);
+    Gfx_SetupDL_25Xlu(gfxCtx);
+
+    // Light flecks — the sparkle cloud around the ball.
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, prim[0], prim[1], prim[2], 255);
+    gDPSetEnvColor(POLY_XLU_DISP++, env[0], env[1], env[2], 128);
+    // The (uintptr_t) casts are the C++ tax: gSPSegment takes an integer
+    // address and C++ will not convert the Gfx* implicitly the way the C
+    // sources this is lifted from do.
+    gSPSegment(POLY_XLU_DISP++, 0x08,
+               (uintptr_t)Gfx_TwoTexScrollEx(gfxCtx, 0, frame * -2, 0, 0x40, 0x40, 1, 0, frame * 0xA, 0x40, 0x40, -2,
+                                             0, 0, 0xA));
+    Matrix_Translate(pos.x, pos.y, pos.z, MTXMODE_NEW);
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    Matrix_Scale(circleScale, circleScale, circleScale, MTXMODE_APPLY);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)GARO_BM_FLECKS_DL);
+
+    // Backdrop circle — the deep element colour, so the ball sits on its own halo.
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, core[0], core[1], core[2], 255);
+    gSPSegment(POLY_XLU_DISP++, 0x09,
+               (uintptr_t)Gfx_TwoTexScrollEx(gfxCtx, 0, 0, 0, 0x20, 0x20, 1, 0, frame * -4, 0x20, 0x20, 0, 0, 0, -4));
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)GARO_BM_CIRCLE_DL);
+
+    // Swirling dot.
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, env[0], env[1], env[2], 255);
+    gSPSegment(POLY_XLU_DISP++, 0x0A,
+               (uintptr_t)Gfx_TwoTexScrollEx(gfxCtx, 0, 0, 0, 0x20, 0x20, 1, frame * 2, frame * -0x14, 0x40, 0x40, 0,
+                                             0, 2, -0x14));
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)GARO_BM_DOT_DL);
+
+    // The light ball itself, spinning on its own axis.
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 255, 255, 255, 255);
+    gDPSetEnvColor(POLY_XLU_DISP++, env[0], env[1], env[2], 0);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)GARO_BM_MAT_DL);
+    Matrix_Translate(pos.x, pos.y, pos.z, MTXMODE_NEW);
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    Matrix_Scale(ballScale, ballScale, ballScale, MTXMODE_APPLY);
+    Matrix_RotateZ(spinRad, MTXMODE_APPLY);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)GARO_BM_BALL_DL);
+
+    // Ray fan — this is the charge-level tell: one more spoke per tier.
+    if (rays > 0) {
+        if (rays > GARO_BM_RAYS_MAX) {
+            rays = GARO_BM_RAYS_MAX;
+        }
+        Matrix_Translate(pos.x, pos.y, pos.z, MTXMODE_NEW);
+        Matrix_RotateY((frame * 10.0f) / 1000.0f, MTXMODE_APPLY);
+        gDPSetEnvColor(POLY_XLU_DISP++, env[0], env[1], env[2], 0);
+        for (s32 i = 0; i < rays; i++) {
+            f32 ang = (f32)i * ((f32)M_PI * 2.0f / (f32)GARO_BM_RAYS_MAX);
+            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, prim[0], prim[1], prim[2], 200);
+            Matrix_Push();
+            Matrix_RotateY(ang, MTXMODE_APPLY);
+            Matrix_RotateX(0.6f * ((i & 1) ? 1.0f : -1.0f), MTXMODE_APPLY);
+            Matrix_RotateZ(ang * 0.5f, MTXMODE_APPLY);
+            Matrix_Translate(0.0f, 0.0f, ballScale * 1.6f, MTXMODE_APPLY);
+            Matrix_Scale(ballScale * 0.115f, ballScale * 0.115f, ballScale * 0.032f, MTXMODE_APPLY);
+            gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+            gSPDisplayList(POLY_XLU_DISP++, (Gfx*)GARO_BM_RAY_DL);
+            Matrix_Pop();
+        }
+    }
+
+    CLOSE_DISPS(gfxCtx);
+}
+
+// ── Fragment streak ─────────────────────────────────────────────────────
+// The Trident seeker's lit streak (Tcb_DrawStreak, itself func_808E324C from
+// z_boss_ganon.c) 1:1: twelve tapering quads laid along the last twelve
+// samples of the fragment's path, each turned to the heading it was flying on
+// there, then the light ball billboarded on the head. Segment 0x0D carries the
+// twelve matrices — that is what the streak display lists index. Only the tint
+// is ours.
+static const char* sGaroStreakDL[GARO_ORB_TRAIL_DRAWN] = {
+    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightStreak12DL",
+    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightStreak11DL",
+    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightStreak10DL",
+    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightStreak9DL",
+    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightStreak8DL",
+    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightStreak7DL",
+    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightStreak6DL",
+    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightStreak5DL",
+    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightStreak4DL",
+    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightStreak3DL",
+    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightStreak2DL",
+    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightStreak1DL",
+};
+
+static void GaroForm_DrawOrbStreak(PlayState* play, GaroOrb* sw) {
+    GraphicsContext* gfxCtx = play->state.gfxCtx;
+    Mtx* mtx = (Mtx*)Graph_Alloc(gfxCtx, GARO_ORB_TRAIL_DRAWN * sizeof(Mtx));
+    if (mtx == NULL) {
+        return;
+    }
+    u8 e = sw->element % GARO_ROD_ELEMENT_COUNT;
+    const u8* env = sRodOrbEnv[e];
+    // Prim stays white like his — the element rides in ENV, which is what keeps
+    // the ribbon reading as light instead of flat paint.
+    u8 alpha = (sw->timer >= 8) ? 255 : (u8)((sw->timer * 255) / 8);
+
+    OPEN_DISPS(gfxCtx);
+    Gfx_SetupDL_25Xlu(gfxCtx);
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, 255, 255, 255, alpha);
+    gDPSetEnvColor(POLY_XLU_DISP++, env[0], env[1], env[2], 128);
+    gSPSegment(POLY_XLU_DISP++, 0x0D, (uintptr_t)mtx);
+
+    for (s32 i = 0; i < GARO_ORB_TRAIL_DRAWN; i++) {
+        s32 t = ((sw->trailIdx - i) + GARO_ORB_TRAIL_LEN) % GARO_ORB_TRAIL_LEN;
+        Matrix_Translate(sw->trailPos[t].x, sw->trailPos[t].y, sw->trailPos[t].z, MTXMODE_NEW);
+        Matrix_RotateY(sw->trailRot[t].y, MTXMODE_APPLY);
+        Matrix_RotateX(-sw->trailRot[t].x, MTXMODE_APPLY);
+        Matrix_Scale(GARO_ORB_STREAK_SCALE, GARO_ORB_STREAK_SCALE, GARO_ORB_STREAK_SCALE, MTXMODE_APPLY);
+        Matrix_RotateY((f32)M_PI / 2.0f, MTXMODE_APPLY);
+        // Not MATRIX_TOMTX: that macro hands __FILE__ to a non-const char*.
+        Matrix_ToMtx(mtx, (char*)__FILE__, __LINE__);
+        gSPMatrix(POLY_XLU_DISP++, mtx, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sGaroStreakDL[i]);
+        mtx++;
+    }
+
+    // The head, exactly as his: the big-magic material + ball spinning on Z.
+    Matrix_Translate(sw->pos.x, sw->pos.y, sw->pos.z, MTXMODE_NEW);
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    Matrix_Scale(6.0f, 6.0f, 6.0f, MTXMODE_APPLY);
+    Matrix_RotateZ((f32)play->gameplayFrames * 0.2f, MTXMODE_APPLY);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)GARO_BM_MAT_DL);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)GARO_BM_BALL_DL);
+
+    CLOSE_DISPS(gfxCtx);
 }
 
 extern "C" void GaroForm_DrawProjectiles(PlayState* play) {
@@ -1278,8 +1852,13 @@ extern "C" void GaroForm_DrawProjectiles(PlayState* play) {
         f32 t = (f32)sGaroAttack.rodChargeTimer / (f32)GARO_ROD_CHARGE_MAX;
         if (t > 1.0f)
             t = 1.0f;
-        f32 scale = (1.5f + t * 3.0f) * (1.0f + 0.08f * Math_SinS(play->gameplayFrames * 0x1000));
-        GaroForm_DrawElementBall(play, ballPos, scale, sGaroAttack.rodElement);
+        // The layered charge ball. Its size steps per tier (eased in the
+        // GARO_ROD_AIM handler) and gets a gentle breath on top; the spin is
+        // driven off the frame counter like the Trident's.
+        f32 pulse = 1.0f + 0.06f * Math_SinS(play->gameplayFrames * 0x1000);
+        GaroForm_DrawRodBall(play, ballPos, sGaroAttack.rodBallCircle * pulse,
+                             sGaroAttack.rodBallScale * pulse, sGaroAttack.rodBallRays,
+                             (f32)play->gameplayFrames * 0.14f, sGaroAttack.rodElement);
 
         // Aiming reticle. OOT draws no crosshair for the slingshot pipeline we
         // borrow — it expects you to aim off the on-screen arm and weapon, and
@@ -1330,20 +1909,29 @@ extern "C" void GaroForm_DrawProjectiles(PlayState* play) {
         GaroForm_DrawShadowBall(play, sGaroAttack.shadowBallPos, scale);
     }
 
-    // Fired rod orbs: billboarded light orb, element-tinted, size by charge
-    // tier (a fully-charged shot fires a visibly bigger orb).
-    for (s32 i = 0; i < GARO_SWORD_MAX_ACTIVE; i++) {
-        GaroSword* sw = &sGaroAttack.swords[i];
-        if (sw->active) {
-            f32 scale = 1.8f + (f32)sw->rodDamage * 0.7f; // dmg1→2.5, dmg4→4.6
-            GaroForm_DrawElementBall(play, sw->pos, scale, sw->rodElement);
+    // Fired shots, drawn the way the Trident draws its two kinds and nothing
+    // else — only recoloured:
+    //   the BALL keeps the exact five-layer big-magic draw it had while
+    //     charging, at the size it was released at, so the shot reads as THAT
+    //     ball flying off (trident_charge_ball.c, TCB_KIND_BALL);
+    //   the FRAGMENTS carry his lit streak (TCB_KIND_HUNTER).
+    // Their wake is not drawn here: it is FhgFlash light balls dropped in the
+    // update, and the effect system draws those itself.
+    for (s32 i = 0; i < GARO_ORB_POOL_MAX; i++) {
+        GaroOrb* sw = &sGaroAttack.orbs[i];
+        if (!sw->active) {
+            continue;
+        }
+        if (sw->isSeeker) {
+            GaroForm_DrawOrbStreak(play, sw);
+        } else {
+            GaroForm_DrawRodBall(play, sw->pos, sw->ballCircle, sw->ballScale, GARO_BM_RAYS_MAX,
+                                 (f32)play->gameplayFrames * 0.2f, sw->element);
         }
     }
 }
 
-// ============================================================================
 // Helpers
-// ============================================================================
 static f32 GaroForm_StickMag(PlayState* play) {
     s8 x = play->state.input[0].cur.stick_x;
     s8 y = play->state.input[0].cur.stick_y;
@@ -1361,10 +1949,7 @@ static s16 GaroForm_StickAngle(PlayState* play) {
     return camYaw + stickYaw;
 }
 
-// ============================================================================
 // Main update (called from z_player.c after Player_UpdateCommon)
-// ============================================================================
-// ============================================================================
 // Garo full moveset — Goron-style action dispatch
 //
 // Architecture (mirrors mm_player_form.cpp Goron):
@@ -1376,21 +1961,27 @@ static s16 GaroForm_StickAngle(PlayState* play) {
 //     drives the pose via formSkelAnime + memcpy + handles its own quad.
 //   - B is stripped before Player_UpdateCommon (TransformMasks_FilterB), so
 //     OOT's slash action never starts — combat is fully Garo-owned.
-// ============================================================================
+
+// Stop the spin mid-turn and leave Garo facing somewhere sensible. If he was
+// steering, keep the direction he was travelling — ending a free spin snapped
+// back to where he started would fight the player's input. A spin done on the
+// spot hands back the entry yaw. `yaw` is written too: it is the field
+// Player_UpdateCommon copies into world.rot.y, so leaving it stale would turn
+// him again on the first frame after the move.
+static void GaroForm_SettleSpinFacing(Player* player) {
+    player->actor.shape.rot.y =
+        (player->linearVelocity > 0.5f) ? player->actor.world.rot.y : sGaroAttack.spinEntryYaw;
+    player->yaw = player->actor.shape.rot.y;
+}
 
 static void GaroForm_ResetToIdle(Player* player) {
-    // Settle the spin's facing, whether the move ended naturally or was cut
-    // short (damage, mask swap, scene change all land here). If he was
-    // steering, keep the direction he was travelling — ending a free spin
-    // snapped back to where he started would fight the player's input. Only a
-    // spin done on the spot hands back the entry yaw.
+    // Covers the natural end of the spin AND every interruption (damage, mask
+    // swap, scene change all land here).
     if (sGaroAttack.state == GARO_SPIN) {
-        player->actor.shape.rot.y =
-            (player->linearVelocity > 0.5f) ? player->actor.world.rot.y : sGaroAttack.spinEntryYaw;
+        GaroForm_SettleSpinFacing(player);
     }
     sGaroAttack.state = GARO_IDLE;
     sGaroAttack.stateTimer = 0;
-    sGaroAttack.parryWindowTimer = 0;
     sGaroAttack.parryAttacker = NULL;
     sGaroAttack.banishTarget = NULL;
     // v10 defensive cleanup — any state that takes ownership of these
@@ -1433,7 +2024,9 @@ static void GaroForm_ResetToIdle(Player* player) {
     }
 }
 
-// Enter the in-place dual-sword spin — Garo's only melee attack.
+// Enter the free dual-sword spin — Garo's only melee attack. Fires on the B
+// PRESS, so the hold-to-charge branch is decided inside the spin instead of
+// making the attack wait for the button to come up.
 static void GaroForm_StartSpin(PlayState* play, Player* player) {
     LinkAnimationHeader* spin = GaroForm_LoadAnim(GARO_SPINATTACK_PATH);
     if (spin != NULL) {
@@ -1441,6 +2034,7 @@ static void GaroForm_StartSpin(PlayState* play, Player* player) {
     }
     sGaroAttack.state = GARO_SPIN;
     sGaroAttack.stateTimer = 0;
+    sGaroAttack.bHoldDetectTimer = 0;
     sGaroAttack.spinEntryYaw = player->actor.shape.rot.y;
     if (!sGaroAttack.trailActive) {
         GaroAttack_SpawnTrail(play);
@@ -1453,6 +2047,10 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
     // Sword trail belongs to every blade-swinging state (see trailWanted below).
     // Centralized kill so individual exit paths don't need to remember.
     GaroAttack_UpdateSwords(play);
+    // The escort on a reflected shot lives outside the state machine: the
+    // stance that started it is over by the next frame, and the shot has to
+    // keep hurting all the way out.
+    GaroAttack_UpdateReflect(play, player);
 
     if (!GaroForm_IsActive()) {
         GaroAttack_KillTrail(play);
@@ -1505,11 +2103,13 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
         }
         return;
     }
-    // v9.1: DAMAGED is a "soft" block — every state except PARRY_GUARD bails
-    // to idle on damage so Link's knockback anim plays freely. PARRY_GUARD
-    // intentionally observes the flag (when our invincibility somehow
-    // failed to catch the hit) and handles it via parry/absorb logic.
-    if ((player->stateFlags1 & PLAYER_STATE1_DAMAGED) && sGaroAttack.state != GARO_PARRY_GUARD) {
+    // DAMAGED is a "soft" block — states bail to idle on damage so Link's
+    // knockback anim plays freely. The guard chain is exempt: PARRY_GUARD reads
+    // the flag on purpose (being hit is what arms its counter) and
+    // PARRY_RIPOSTE is the counter itself, which starts on the very frame the
+    // hit lands and would otherwise be cancelled by the flag that summoned it.
+    if ((player->stateFlags1 & PLAYER_STATE1_DAMAGED) && (sGaroAttack.state != GARO_PARRY_GUARD) &&
+        (sGaroAttack.state != GARO_PARRY_RIPOSTE)) {
         if (sGaroAttack.state != GARO_IDLE) {
             GaroAttack_KillTrail(play);
             GaroForm_ResetToIdle(player);
@@ -1634,12 +2234,17 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             if (rPress && !bHold) {
                 LinkAnimationHeader* guard = GaroForm_LoadAnim(GARO_GUARD_PATH);
                 if (guard != NULL) {
-                    GaroAttack_StartFormAnim(play, guard, 0.0f, -1.0f, 1.0f);
+                    // Raise only: stop at the hold frame, not the anim's end.
+                    GaroAttack_StartFormAnim(play, guard, 0.0f,
+                                             Animation_GetLastFrame(guard) * GARO_GUARD_HOLD_FRACTION, 1.0f);
                 }
                 sGaroAttack.state = GARO_PARRY_GUARD;
                 sGaroAttack.stateTimer = 0;
-                sGaroAttack.parryWindowTimer = GARO_PARRY_WINDOW;
                 sGaroAttack.parryAttacker = NULL;
+                // Anything that touches him from here on arms the counter, so
+                // clear the AC slot first: a bumper left set from before the
+                // stance would fire it on the very first guarding frame.
+                player->cylinder.base.ac = NULL;
                 break;
             }
             // ─── v10 Z+A air slash entry ─────────────────────────────────
@@ -1732,22 +2337,8 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
                     Audio_PlayActorSound2(&player->actor, NA_SE_VO_LI_AUTO_JUMP);
                     break;
                 }
-                // Stationary (stick neutral) — full SHADOW_BALL chain.
-                // Phase 1: garo_collapse (visible, "Garo dissolves").
-                // Phase 2: BANISH_SHADOW — invisible Garo, particle cluster
-                //          travels Garo → enemy.
-                // Phase 3: GARO_SHADOW_BALL — teleport behind enemy (if
-                //          locked), Garo VISIBLE, plays appearDrawSwords
-                //          @1.5x, damage 6 at elapsed frame 20.
-                // If no enemy is locked, the chain still runs but the
-                // "destination" defaults to Garo's own position (in-place
-                // anim with no teleport).
-                //
-                // This is the ONE entry point of the banish chain (the old
-                // "A + zEnemy" handler below it was unreachable — zEnemy
-                // implies zEngaged, so this branch always won — which is how
-                // the 5s cooldown and the target stun silently stopped
-                // applying). Both now live here.
+                // The ONE entry to the banish chain: the old "A + zEnemy" branch was
+                // unreachable, which is how the cooldown and the stun stopped applying.
                 if (!stickActive && sGaroAttack.banishCooldown == 0) {
                     LinkAnimationHeader* collapse = GaroForm_LoadAnim(GARO_COLLAPSE_PATH);
                     if (collapse != NULL) {
@@ -1791,38 +2382,27 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
                 }
             }
 
-            // v10: A-press + Z-target NPC handler removed. The v10 Z+A
-            // dispatcher above routes "Z + stationary" to the banish chain,
-            // which replaces the old look_around fluff with a proper combat
-            // option.
-            // v10 A-PRESS no Z-target → Goron-roll-style dash. Stick
-            // direction doesn't gate entry (the dash handler steers itself
-            // via stick each frame, like Pegasus boots / Goron rolling),
-            // so even stick-back A spins Garo's facing during the dash
-            // rather than triggering a vanilla backflip (no Z-target = no
-            // backflip in vanilla anyway). Do NOT StartFormAnim here;
-            // ANIMMODE_ONCE would freeze; DASH_ATTACK handler re-inits
-            // with ANIMMODE_LOOP.
-            // v10.4: dash only when Z is NOT engaged (neither held nor
-            // toggle-locked). When Z is engaged, A is owned by the
-            // hop/shadow-ball/jump-attack dispatch above; when it's not,
-            // A is the Goron-roll-style dash. aForGaro ensures we don't
-            // dash when vanilla owns A (speak/open/etc.).
+            // No anim started here: ANIMMODE_ONCE would freeze, so DASH_ATTACK re-inits it
+            // as a loop. aForGaro keeps it off the presses vanilla owns (speak/open).
             if (aForGaro && !zEngaged && onGround && sGaroAttack.rodReleaseCD == 0) {
                 GaroAttack_EnsureFormSkelAnime(play);
                 sGaroAttack.state = GARO_DASH_ATTACK;
                 sGaroAttack.stateTimer = 0;
                 break;
             }
-            // B-press on ground → tap-vs-hold detect window. A quick tap
-            // (released within GARO_B_HOLD_THRESHOLD frames) fires the spin;
-            // holding past the threshold enters the rod charge ball
-            // directly (no attack plays first). Air-B is captured by the v10
-            // AIR_SLASH dispatcher above; this only runs grounded. Gated on
-            // rodReleaseCD so a rod release → instant B re-press doesn't loop.
+            // B-press on ground → the spin fires ON THE PRESS, this frame. It
+            // used to go through a detect state that stood still waiting for
+            // the release to tell a tap from a hold, which put up to
+            // GARO_B_HOLD_THRESHOLD frames of dead air between the button and
+            // the attack. The tap-vs-hold decision now happens INSIDE the
+            // spin: keep B down and it converts to the rod charge (see
+            // GARO_SPIN), so holding still gets you the ball and tapping gets
+            // you an attack with no latency at all.
+            // Air-B is captured by the v10 AIR_SLASH dispatcher above; this
+            // only runs grounded. Gated on rodReleaseCD so a rod release →
+            // instant B re-press doesn't loop.
             if (bPress && onGround && sGaroAttack.rodReleaseCD == 0) {
-                sGaroAttack.state = GARO_B_HOLD_DETECT;
-                sGaroAttack.bHoldDetectTimer = 0;
+                GaroForm_StartSpin(play, player);
                 break;
             }
 
@@ -1850,68 +2430,64 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             break;
         }
 
-        // ────────────────────────────────────────────────────────────────────
-        // v10.8 B HOLD DETECT: brief window after an idle B-press. Released
-        // early → melee (3-slash combo, or the spin if Z is engaged); held
-        // past the threshold → rod charge ball.
-        // PAUSE so Link doesn't roll/jump during the window.
-        // ────────────────────────────────────────────────────────────────────
-        case GARO_B_HOLD_DETECT: {
-            player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
-            player->actor.velocity.x = 0;
-            player->actor.velocity.z = 0;
-            player->linearVelocity = 0;
-            sGaroAttack.bHoldDetectTimer++;
 
-            if (!bHold) {
-                // Tap → the in-place dual-sword spin, Z or no Z. It is Garo's
-                // whole melee kit; there is no slash combo to branch to.
-                GaroForm_StartSpin(play, player);
-                break;
-            }
-            if (sGaroAttack.bHoldDetectTimer >= GARO_B_HOLD_THRESHOLD) {
-                // Hold → rod charge ball directly. The ROD_AIM handler drives
-                // the aim camera: first-person (stick) when not Z-targeting,
-                // or aim-at-target when Z-locked. Hold the takeOutBomb pose.
-                GaroForm_LeaveRodState();
-                LinkAnimationHeader* aim = GaroForm_LoadAnim(GARO_TAKEOUTBOMB_PATH);
-                if (aim != NULL) {
-                    GaroAttack_StartFormAnim(play, aim, 0.0f, -1.0f, 1.0f);
-                }
-                // Enter the EXACT Deku-bubble aim: the OOT slingshot pipeline.
-                // It un-pauses the action func and runs the real first-person
-                // / Z-target aim (camera engages, focus.rot tracks the stick).
-                Player_StartDekuBubble(player, play);
-                sGaroAttack.rodAimActive = 1;
-                sGaroAttack.state = GARO_ROD_AIM;
-                sGaroAttack.stateTimer = 0;
-            }
-            break;
-        }
-
-        // ────────────────────────────────────────────────────────────────────
         // GARO_SPIN — B tap: free dual-sword spin, Garo's only melee. The
         // radial spin quad (EnableSpinQuad, DMG_FIXED_DAMAGE) sweeps around
         // Garo at sword height for the whole move, and the player keeps full
         // stick control at 1.5x run speed while it lasts, so the spin can be
         // carried into a group of enemies instead of being a standing move.
-        // ────────────────────────────────────────────────────────────────────
         case GARO_SPIN: {
             player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
+
+            // Hold B through the spin → it converts into the rod charge. This
+            // is where tap-vs-hold is decided now, so the attack itself never
+            // has to wait for the button to come up.
+            if (bHold) {
+                sGaroAttack.bHoldDetectTimer++;
+                if (sGaroAttack.bHoldDetectTimer >= GARO_B_HOLD_THRESHOLD) {
+                    player->meleeWeaponQuads[0].base.atFlags &= ~AT_ON;
+                    GaroForm_SettleSpinFacing(player);
+                    GaroForm_LeaveRodState();
+                    LinkAnimationHeader* aim = GaroForm_LoadAnim(GARO_TAKEOUTBOMB_PATH);
+                    if (aim != NULL) {
+                        GaroAttack_StartFormAnim(play, aim, 0.0f, -1.0f, 1.0f);
+                    }
+                    // Enter the EXACT Deku-bubble aim: the OOT slingshot
+                    // pipeline. It un-pauses the action func and runs the real
+                    // first-person / Z-target aim (camera engages, focus.rot
+                    // tracks the stick).
+                    Player_StartDekuBubble(player, play);
+                    sGaroAttack.rodAimActive = 1;
+                    sGaroAttack.state = GARO_ROD_AIM;
+                    sGaroAttack.stateTimer = 0;
+                    break;
+                }
+            }
 
             // FREE SPIN: the two yaws are driven apart on purpose.
             //   shape.rot.y — the spin itself. The visible body (the hybrid
             //     draw builds its matrix from it) and the radial quad both
-            //     read this, so the whirl and its hitbox stay together.
-            //   world.rot.y — where he TRAVELS. Actor_MoveForward pushes the
-            //     player along this yaw at linearVelocity, so steering the
-            //     stick moves him while the body keeps spinning.
-            // Same trick the sidehop/backflip use, just the other way round.
-            player->actor.shape.rot.y += GARO_SPIN_YAW_RATE;
+            //     read this, so the whirl and its hitbox stay together. It is
+            //     written ABSOLUTELY, from the entry yaw plus elapsed frames,
+            //     never as `+= rate`: Player_UpdateShapeYaw runs earlier in
+            //     the same frame and drags shape.rot.y toward the Z-target
+            //     while locked on, which would silently eat part of every
+            //     turn. Deriving it from the timer makes the spin rate exact.
+            //   yaw / world.rot.y — where he TRAVELS. Player_UpdateCommon
+            //     assigns world.rot.y = this->yaw and speedXZ = linearVelocity
+            //     every frame, so the STEERING field is `yaw`; writing
+            //     world.rot.y alone (what the hops do) is overwritten before
+            //     it can move him. Both are set so the direction also holds
+            //     for anything reading world.rot.y this frame.
+            sGaroAttack.stateTimer++;
+            player->actor.shape.rot.y =
+                (s16)(sGaroAttack.spinEntryYaw + sGaroAttack.stateTimer * GARO_SPIN_YAW_RATE);
 
             f32 stickMag = GaroForm_StickMag(play);
             if (stickMag > 0.1f) {
-                player->actor.world.rot.y = GaroForm_StickAngle(play);
+                s16 moveYaw = GaroForm_StickAngle(play);
+                player->yaw = moveYaw;
+                player->actor.world.rot.y = moveYaw;
                 player->linearVelocity = stickMag * GARO_SPIN_MOVE_SPEED;
             } else {
                 player->linearVelocity = 0.0f;
@@ -1924,14 +2500,14 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             GaroAttack_EnableSpinQuad(player, play);
 
             // Loop the anim under the fixed-length spin: the state ends on the
-            // frame count, never on the animation.
+            // frame count, never on the animation. (stateTimer was already
+            // advanced above — the spin yaw is derived from it.)
             if (GaroAttack_AdvanceFormAnim(play, player)) {
                 LinkAnimationHeader* spin = GaroForm_LoadAnim(GARO_SPINATTACK_PATH);
                 if (spin != NULL) {
                     GaroAttack_StartFormAnim(play, spin, 0.0f, -1.0f, GARO_SPIN_PLAYSPEED);
                 }
             }
-            sGaroAttack.stateTimer++;
             if (sGaroAttack.stateTimer >= GARO_SPIN_FRAMES) {
                 player->meleeWeaponQuads[0].base.atFlags &= ~AT_ON;
                 // (ResetToIdle restores the entry facing — it has to handle
@@ -1941,7 +2517,6 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             break;
         }
 
-        // ────────────────────────────────────────────────────────────────────
         // v10.11 GARO_ROD_AIM — borrows the OOT slingshot aim (entered via
         // Player_StartDekuBubble, the EXACT Deku-bubble mechanism). That runs
         // UN-paused and owns the camera + focus.rot (real first-person aim, or
@@ -1950,7 +2525,6 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
         // shortcuts never worked). We only: track charge, cycle element, hold
         // the pose. The FIRE happens below, the frame B is released, by calling
         // GaroForm_FireRodOrb directly (charge resets there).
-        // ────────────────────────────────────────────────────────────────────
         case GARO_ROD_AIM: {
             // Exit the aim on A-press (matches the Deku bubble, where A cancels
             // aim). FilterB strips A from the slingshot's input, so OOT won't
@@ -1986,6 +2560,33 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
                 sGaroAttack.rodChargeTimer++;
             }
 
+            // Charge-ball geometry, stepped BY TIER rather than ramped
+            // continuously: the ball visibly jumps a size at each damage
+            // threshold, so what you see is what the shot will do. Eased with
+            // Math_ApproachF so each step is a swell, not a pop, and the ray
+            // fan opens one spoke per tier — filling out completely once the
+            // charge tops out, the same "full" tell the Trident uses.
+            {
+                // Level 1 is deliberately small and ray-less: it is the "not
+                // ready yet" state, and releasing there fires nothing.
+                static const f32 sRodBallLevelScale[GARO_ROD_LEVEL_MAX] = { 0.35f, 0.7f, 1.0f };
+                static const s16 sRodBallLevelRays[GARO_ROD_LEVEL_MAX] = { 0, GARO_BM_RAYS_MAX / 2,
+                                                                           GARO_BM_RAYS_MAX };
+                u8 level = GaroAttack_GetRodLevel(sGaroAttack.rodChargeTimer);
+                f32 f = sRodBallLevelScale[(level - 1) % GARO_ROD_LEVEL_MAX];
+                Math_ApproachF(&sGaroAttack.rodBallCircle, GARO_ROD_BALL_CIRCLE_MAX * f, 0.3f, 0.01f);
+                Math_ApproachF(&sGaroAttack.rodBallScale, GARO_ROD_BALL_SCALE_MAX * f, 0.3f, 1.0f);
+
+                s16 wantRays = sRodBallLevelRays[(level - 1) % GARO_ROD_LEVEL_MAX];
+                if ((sGaroAttack.stateTimer & 3) == 0) {
+                    if (sGaroAttack.rodBallRays < wantRays) {
+                        sGaroAttack.rodBallRays++;
+                    } else if (sGaroAttack.rodBallRays > wantRays) {
+                        sGaroAttack.rodBallRays--;
+                    }
+                }
+            }
+
             // Charge loop, refreshed every frame the ball is still growing —
             // the same "keep re-playing a flagged SFX while charging" pattern
             // the elemental arrows use in ovl_Arrow_Fire/Ice/Light, and the
@@ -2012,8 +2613,8 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
                 Actor_PlaySfx_Flagged(&player->actor, chargeSfx - SFX_FLAG);
             }
 
-            // Fully-charged chime (one shot when the max tier unlocks).
-            if (!sGaroAttack.rodSfxPlayed && sGaroAttack.rodChargeTimer >= GARO_ROD_CHARGE_TIER4) {
+            // Chime when the triple-shot level unlocks (one shot per aim).
+            if (!sGaroAttack.rodSfxPlayed && sGaroAttack.rodChargeTimer >= GARO_ROD_CHARGE_TIER3) {
                 Audio_PlayActorSound2(&player->actor, NA_SE_SY_SYNTH_MAGIC_ARROW);
                 sGaroAttack.rodSfxPlayed = 1;
             }
@@ -2034,127 +2635,206 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             break;
         }
 
-        // ────────────────────────────────────────────────────────────────────
-        // PARRY: garo_guard for 20 frames. If hit in window → riposte.
-        // ────────────────────────────────────────────────────────────────────
+        // GUARD (R held): Garo plants himself in gGaroGuardAnim and waits. The
+        // anim runs ONCE and then holds on its last frame — the raised guard IS
+        // the pose, so looping it would replay the wind-up over and over; the
+        // return half only plays when R comes up (GARO_GUARD_RETURN).
+        //
+        // The counter is no longer a timed window: ANY hit that lands while he
+        // is guarding triggers it. The old version made him invulnerable for
+        // the whole stance and then tried to notice the hit that invulnerability
+        // had already rejected — which is why the parry never fired. He takes
+        // the hit now, and the attacker pays for it immediately: it freezes,
+        // Garo appears behind it from wherever he was standing, and he opens up
+        // with the drawSwords strike, the same swing the jump attack lands.
         case GARO_PARRY_GUARD: {
             player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
             player->actor.velocity.x = 0;
             player->actor.velocity.z = 0;
             player->linearVelocity = 0;
 
-            // v9.1: full damage immunity while shielding (mirrors Goron's
-            // spike defense — while you're committed to guard, nothing
-            // gets through). Sustain invincibilityTimer each frame so
-            // every AC hit this frame is rejected at the chokepoint
-            // (func_80837B18_modified short-circuits when invuln > 0).
-            if (player->invincibilityTimer < 5) {
-                player->invincibilityTimer = 5;
+            // Advance, but never re-issue: LinkAnimation_Update clamps at the
+            // end frame and AdvanceFormAnim keeps copying that pose every
+            // frame, which is exactly "hold the last frame".
+            (void)GaroAttack_AdvanceFormAnim(play, player);
+
+            // Shots are answered in the air, before they can land and delete
+            // themselves. This runs ahead of the damage test on purpose: a
+            // bounced shot never becomes a hit at all.
+            if (GaroAttack_TryReflectIncoming(play, player)) {
+                LinkAnimationHeader* guard = GaroForm_LoadAnim(GARO_GUARD_PATH);
+                if (guard != NULL) {
+                    GaroAttack_StartFormAnim(play, guard,
+                                             Animation_GetLastFrame(guard) * GARO_GUARD_HOLD_FRACTION, 0.0f,
+                                             -GARO_GUARD_RETURN_SPEED);
+                    sGaroAttack.state = GARO_GUARD_RETURN;
+                    sGaroAttack.stateTimer = 0;
+                } else {
+                    GaroForm_ResetToIdle(player);
+                }
+                break;
             }
 
-            bool rStillHeld = CHECK_BTN_ALL(input->cur.button, BTN_R) != 0;
-            bool inPerfectWindow = (sGaroAttack.parryWindowTimer > 0);
-
-            // Hit detection. Persistent invincibility prevents
-            // PLAYER_STATE1_DAMAGED from ever being set (the damage is
-            // rejected before the action func switch), so we observe the
-            // AC engine's bumper trigger directly: cylinder.base.ac is the
-            // attacker that touched our cylinder this frame regardless of
-            // damage outcome. We clear it after handling so consecutive
-            // frames don't re-fire on the same touch.
+            // Who hit him. cylinder.base.ac is the actor that touched Garo's AC
+            // cylinder this frame; DAMAGED confirms a hit actually landed.
+            // Either alone arms the counter — damage dealt without leaving an
+            // `ac` still deserves it, and falls back to his lock-on.
             Actor* attacker = player->cylinder.base.ac;
-            bool gotHit = (attacker != NULL && attacker->update != NULL);
+            bool gotHit = ((attacker != NULL) && (attacker->update != NULL)) ||
+                          ((player->stateFlags1 & PLAYER_STATE1_DAMAGED) != 0);
+
             if (gotHit) {
                 player->cylinder.base.ac = NULL;
-                player->stateFlags1 &= ~PLAYER_STATE1_DAMAGED; // defensive
-                player->invincibilityTimer = 20;
+                if ((attacker == NULL) || (attacker->update == NULL)) {
+                    attacker = player->focusActor;
+                }
+                // NO i-frames: the guard is a straight trade. He keeps the
+                // health he just lost and answers. Only the DAMAGED flag goes,
+                // because Link's knockback would drag him out of what comes
+                // next — the HP is already gone by the time that flag is set,
+                // so clearing it costs the player nothing back.
+                player->stateFlags1 &= ~PLAYER_STATE1_DAMAGED;
 
-                if (inPerfectWindow) {
-                    // Perfect parry — clone divine_shield's AOE: freeze
-                    // every enemy in radius + ice-violet sparkles + sound.
-                    Actor* enemy = play->actorCtx.actorLists[ACTORCAT_ENEMY].head;
-                    while (enemy != NULL) {
-                        f32 dx = enemy->world.pos.x - player->actor.world.pos.x;
-                        f32 dz = enemy->world.pos.z - player->actor.world.pos.z;
-                        if ((dx * dx + dz * dz) <= (GARO_PARRY_AOE_RADIUS * GARO_PARRY_AOE_RADIUS)) {
-                            enemy->freezeTimer = GARO_PARRY_FREEZE_FRAMES;
-                            // Dark-blue color filter — mirrors divine
-                            // shield's 0x0000 blue but stronger alpha.
-                            Actor_SetColorFilter(enemy, 0x0000, 0xF8, 0x0000, GARO_PARRY_FREEZE_FRAMES);
+                // Something ranged got through the catch zone — a shot that
+                // died on impact leaves only its shooter behind, and that
+                // shooter is across the room. Distance is the honest test at
+                // this point: too far to be the thing that just touched him
+                // means the stance simply ends, with no teleport chase.
+                f32 dx = (attacker != NULL) ? (attacker->world.pos.x - player->actor.world.pos.x) : 0.0f;
+                f32 dz = (attacker != NULL) ? (attacker->world.pos.z - player->actor.world.pos.z) : 0.0f;
+                bool tooFarToCounter =
+                    (attacker != NULL) && ((dx * dx + dz * dz) > (GARO_GUARD_MELEE_RANGE * GARO_GUARD_MELEE_RANGE));
 
-                            Vec3f spPos;
-                            Vec3f spVel = { 0.0f, 1.0f, 0.0f };
-                            Vec3f spAccel = { 0.0f, 0.0f, 0.0f };
-                            Color_RGBA8 primColor = { 200, 220, 255, 255 };
-                            Color_RGBA8 envColor = { 100, 150, 255, 0 };
-                            for (s32 k = 0; k < 6; k++) {
-                                spPos.x = enemy->world.pos.x + Rand_CenteredFloat(60.0f);
-                                spPos.y = enemy->world.pos.y + 20.0f + Rand_ZeroFloat(40.0f);
-                                spPos.z = enemy->world.pos.z + Rand_CenteredFloat(60.0f);
-                                spVel.x = Rand_CenteredFloat(3.0f);
-                                spVel.y = Rand_ZeroFloat(2.0f) + 1.0f;
-                                spVel.z = Rand_CenteredFloat(3.0f);
-                                EffectSsKiraKira_SpawnSmall(play, &spPos, &spVel, &spAccel, &primColor, &envColor);
-                            }
-                        }
-                        enemy = enemy->next;
+                if (tooFarToCounter || GaroAttack_IsRangedAttacker(attacker)) {
+                    if (GaroAttack_IsRangedAttacker(attacker)) {
+                        GaroAttack_ReflectShot(play, player, attacker);
                     }
-
-                    // Riposte: teleport behind the attacker (captured at the
-                    // top of this case before we cleared cylinder.base.ac).
-                    // Fall back to focusActor if the attacker pointer turned
-                    // stale between the AC trigger and now.
-                    Actor* riposteTarget =
-                        (attacker != NULL && attacker->update != NULL) ? attacker : player->focusActor;
-                    sGaroAttack.parryAttacker = riposteTarget;
-                    if (riposteTarget != NULL) {
-                        s16 aYaw = riposteTarget->shape.rot.y;
-                        f32 sx = Math_SinS(aYaw), cz = Math_CosS(aYaw);
-                        player->actor.world.pos.x = riposteTarget->world.pos.x - sx * GARO_RIPOSTE_OFFSET;
-                        player->actor.world.pos.z = riposteTarget->world.pos.z - cz * GARO_RIPOSTE_OFFSET;
-                        player->actor.world.pos.y = riposteTarget->world.pos.y;
-                        player->actor.world.rot.y = aYaw;
-                        player->actor.shape.rot.y = aYaw;
+                    LinkAnimationHeader* guard = GaroForm_LoadAnim(GARO_GUARD_PATH);
+                    if (guard != NULL) {
+                        GaroAttack_StartFormAnim(play, guard,
+                                                 Animation_GetLastFrame(guard) * GARO_GUARD_HOLD_FRACTION, 0.0f,
+                                                 -GARO_GUARD_RETURN_SPEED);
+                        sGaroAttack.state = GARO_GUARD_RETURN;
+                        sGaroAttack.stateTimer = 0;
+                    } else {
+                        GaroForm_ResetToIdle(player);
                     }
-                    LinkAnimationHeader* slash = GaroForm_LoadAnim(GARO_SLASHSTART_PATH);
-                    if (slash != NULL) {
-                        GaroAttack_StartFormAnim(play, slash, 0.0f, -1.0f, 1.0f);
-                    }
-                    sGaroAttack.state = GARO_PARRY_RIPOSTE;
-                    sGaroAttack.stateTimer = 0;
-                    if (!sGaroAttack.trailActive)
-                        GaroAttack_SpawnTrail(play);
-                    Audio_PlaySoundGeneral(NA_SE_IT_SHIELD_REFLECT_SW, &player->actor.world.pos, 4,
-                                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                                           &gSfxDefaultReverb);
                     break;
                 }
-                // Outside the perfect window — passive full-block. No AOE,
-                // no riposte, just absorbed. The shield SFX still plays
-                // so the player gets audio feedback that the hit landed.
-                Audio_PlayActorSound2(&player->actor, NA_SE_IT_SHIELD_BOUND);
+
+                if (attacker != NULL) {
+                    // Freeze the attacker for the whole counter and mark it
+                    // with the violet ring the banish uses.
+                    attacker->freezeTimer = GARO_PARRY_FREEZE_FRAMES;
+                    Actor_SetColorFilter(attacker, 0x0000, 0xF8, 0x0000, GARO_PARRY_FREEZE_FRAMES);
+
+                    Vec3f spPos;
+                    Vec3f spVel = { 0.0f, 1.0f, 0.0f };
+                    Vec3f spAccel = { 0.0f, 0.0f, 0.0f };
+                    Color_RGBA8 primColor = { 140, 80, 220, 255 };
+                    Color_RGBA8 envColor = { 40, 10, 100, 0 };
+                    for (s32 k = 0; k < 8; k++) {
+                        f32 ang = (f32)k * ((f32)M_PI * 2.0f / 8.0f);
+                        spPos.x = attacker->world.pos.x + cosf(ang) * GARO_BANISH_STUN_RADIUS;
+                        spPos.y = attacker->world.pos.y + 30.0f;
+                        spPos.z = attacker->world.pos.z + sinf(ang) * GARO_BANISH_STUN_RADIUS;
+                        spVel.x = cosf(ang) * 0.5f;
+                        spVel.z = sinf(ang) * 0.5f;
+                        EffectSsKiraKira_SpawnSmall(play, &spPos, &spVel, &spAccel, &primColor, &envColor);
+                    }
+
+                    // Appear behind it, facing its back, from wherever he was.
+                    s16 aYaw = attacker->shape.rot.y;
+                    player->actor.world.pos.x = attacker->world.pos.x - Math_SinS(aYaw) * GARO_RIPOSTE_OFFSET;
+                    player->actor.world.pos.z = attacker->world.pos.z - Math_CosS(aYaw) * GARO_RIPOSTE_OFFSET;
+                    player->actor.world.pos.y = attacker->world.pos.y;
+                    player->actor.world.rot.y = aYaw;
+                    player->actor.shape.rot.y = aYaw;
+                    player->yaw = aYaw;
+                    Audio_PlayActorSound2(attacker, NA_SE_IT_SHIELD_REFLECT_SW);
+                }
+                sGaroAttack.parryAttacker = attacker;
+
+                // The jump attack's swing: garo_drawSwords, landed with the
+                // wide land-strike sweep (see GARO_PARRY_RIPOSTE).
+                LinkAnimationHeader* strike = GaroForm_LoadAnim(GARO_DRAWSWORDS_PATH);
+                if (strike != NULL) {
+                    GaroAttack_StartFormAnim(play, strike, 0.0f, -1.0f, 1.0f);
+                }
+                sGaroAttack.state = GARO_PARRY_RIPOSTE;
+                sGaroAttack.stateTimer = 0;
+                sGaroAttack.landStrikeFired = 0;
+                if (!sGaroAttack.trailActive)
+                    GaroAttack_SpawnTrail(play);
+                Audio_PlayActorSound2(&player->actor, NA_SE_EV_FANTOM_WARP_S);
+                break;
             }
 
-            if (sGaroAttack.parryWindowTimer > 0)
-                sGaroAttack.parryWindowTimer--;
             sGaroAttack.stateTimer++;
-            // v9.1: window expiring no longer exits to idle — the guard is
-            // passive-block from that point on. Only an R release ends it.
-            if (!rStillHeld) {
+            // Only an R release ends the stance — into the return half of the
+            // anim rather than snapping straight back to idle.
+            if (!CHECK_BTN_ALL(input->cur.button, BTN_R)) {
+                LinkAnimationHeader* guard = GaroForm_LoadAnim(GARO_GUARD_PATH);
+                if (guard != NULL) {
+                    // Back down from the hold frame, not from the anim's end.
+                    GaroAttack_StartFormAnim(play, guard,
+                                             Animation_GetLastFrame(guard) * GARO_GUARD_HOLD_FRACTION, 0.0f,
+                                             -GARO_GUARD_RETURN_SPEED);
+                    sGaroAttack.state = GARO_GUARD_RETURN;
+                    sGaroAttack.stateTimer = 0;
+                } else {
+                    GaroForm_ResetToIdle(player);
+                }
+            }
+            break;
+        }
+
+        // GUARD RETURN: the stance coming back down — the same anim played
+        // backwards, which is the return the held last frame was waiting on.
+        case GARO_GUARD_RETURN: {
+            player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
+            player->actor.velocity.x = 0;
+            player->actor.velocity.z = 0;
+            player->linearVelocity = 0;
+
+            sGaroAttack.stateTimer++;
+            if (GaroAttack_AdvanceFormAnim(play, player)) {
                 GaroForm_ResetToIdle(player);
             }
             break;
         }
 
+        // COUNTER: the strike Garo lands after appearing behind his attacker.
+        // It uses the land-strike quad — the wide sweep the jump attack
+        // finishes with — so it connects on the frozen target from behind.
         case GARO_PARRY_RIPOSTE: {
             player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
             player->actor.velocity.x = 0;
             player->actor.velocity.z = 0;
             player->linearVelocity = 0;
 
-            if (sGaroAttack.stateTimer >= 4 && sGaroAttack.stateTimer <= 14) {
-                GaroAttack_EnableSwingQuad(player, play);
+            // THAW THE TARGET BEFORE SWINGING. freezeTimer halts the actor's
+            // update, and an actor that does not update never re-registers its
+            // AC collider that frame — so a frozen enemy is untouchable, and
+            // the counter was landing on nothing. Release it a couple of frames
+            // early so it is back in the AC list by the time the quad goes
+            // live; the colour filter carries the stunned look, and the hit
+            // itself takes over from there.
+            {
+                Actor* target = sGaroAttack.parryAttacker;
+                if ((sGaroAttack.stateTimer >= GARO_PARRY_STRIKE_HIT_F - GARO_PARRY_THAW_LEAD) && (target != NULL) &&
+                    (target->update != NULL)) {
+                    target->freezeTimer = 0;
+                }
+            }
+
+            if (sGaroAttack.stateTimer >= GARO_PARRY_STRIKE_HIT_F) {
+                GaroAttack_EnableLandStrikeQuad(player, play);
                 player->meleeWeaponQuads[0].info.toucher.damage = GARO_PARRY_DAMAGE;
+                if (!sGaroAttack.landStrikeFired) {
+                    sGaroAttack.landStrikeFired = 1;
+                    Audio_PlayActorSound2(&player->actor, NA_SE_IT_SWORD_SWING_HARD);
+                }
             } else {
                 player->meleeWeaponQuads[0].base.atFlags &= ~AT_ON;
             }
@@ -2168,9 +2848,7 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             break;
         }
 
-        // ────────────────────────────────────────────────────────────────────
         // DASH: A-hold forward at v=14. Stick lateral → spin variant.
-        // ────────────────────────────────────────────────────────────────────
         case GARO_DASH_ATTACK: {
             player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
 
@@ -2218,9 +2896,7 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             break;
         }
 
-        // ────────────────────────────────────────────────────────────────────
         // BANISH: collapse → teleport → appear → slash.
-        // ────────────────────────────────────────────────────────────────────
         case GARO_BANISH_VANISH: {
             player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
             player->actor.velocity.x = 0;
@@ -2289,6 +2965,11 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
 
             sGaroAttack.shadowBallPos = ballPos;
 
+            // The warp hum, requested per frame the way this looping sfx is
+            // meant to be used. It ends on its own when the state does — no
+            // stop call to forget.
+            Actor_PlaySfx_Flagged(&player->actor, NA_SE_EV_FANTOM_WARP_L - SFX_FLAG);
+
             // Dark wake: two dust puffs per frame, dropped just behind the
             // ball and shrinking fast. Keeps the motion readable without the
             // sparkle "fairy dust" look the old cluster had.
@@ -2336,10 +3017,18 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
                 }
                 LinkAnimationHeader* appear = GaroForm_LoadAnim(GARO_APPEARDRAWSWORDS_PATH);
                 if (appear != NULL) {
-                    GaroAttack_StartFormAnim(play, appear, 0.0f, -1.0f, 1.5f);
+                    GaroAttack_StartFormAnim(play, appear, 0.0f, -1.0f, GARO_SHADOW_BALL_PLAYSPEED);
                 }
                 player->stateFlags2 &= ~PLAYER_STATE2_DISABLE_DRAW;
-                Audio_PlayActorSound2(&player->actor, NA_SE_EV_FANTOM_WARP_L);
+                // WARP_S, not WARP_L. The long one is a LOOPING sfx — vanilla
+                // only ever plays it flagged (`NA_SE_EV_FANTOM_WARP_L -
+                // SFX_FLAG`, re-requested every frame, see z_boss_mo.c and
+                // z_en_fhg_fire.c) so it dies when the request stops. Fired
+                // one-shot the way it was here, the loop starts and nothing
+                // ever asks it to stop: that is the hum that never went away.
+                // The travel hum now lives in GARO_BANISH_SHADOW, where it is
+                // re-requested per frame and ends with the state.
+                Audio_PlayActorSound2(&player->actor, NA_SE_EV_FANTOM_WARP_S);
                 sGaroAttack.state = GARO_SHADOW_BALL;
                 sGaroAttack.stateTimer = 0;
                 sGaroAttack.shadowBallSlashFired = 0;
@@ -2348,13 +3037,11 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             }
             break;
         }
-        // ────────────────────────────────────────────────────────────────────
         // v9 GARO_LAUGH_TAUNT — non-pausing post-kill taunt anim. Link's
         // actionFunc is intentionally NOT suppressed so the player can
         // immediately interrupt by walking / attacking. The form skel anime
         // drives the laugh pose blended over Link's lower-body motion via
         // memcpy in GaroAttack_AdvanceFormAnim.
-        // ────────────────────────────────────────────────────────────────────
         case GARO_LAUGH_TAUNT: {
             s32 done = GaroAttack_AdvanceFormAnim(play, player);
             sGaroAttack.stateTimer++;
@@ -2364,7 +3051,6 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             break;
         }
 
-        // ────────────────────────────────────────────────────────────────────
         // v10 GARO_SHADOW_BALL — Z+A stationary self-cast invuln slash.
         // Garo is invisible (DISABLE_DRAW) + invincible (sustained
         // invincibilityTimer) for the entire anim. At elapsed frame 20
@@ -2372,7 +3058,6 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
         // the master-sword damage quad with damage 6. The quad stays live
         // for 4 frames; after that, anim continues to its natural end and
         // we restore visibility + reset to idle.
-        // ────────────────────────────────────────────────────────────────────
         // v10.1: SHADOW_BALL is the final phase of the chain (entered
         // from BANISH_SHADOW after particle travel + teleport). Garo is
         // VISIBLE here — appearDrawSwords IS the appear anim, so hiding
@@ -2390,6 +3075,20 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             // but defensively clear again here in case anything else
             // touched the flag.
             player->stateFlags2 &= ~PLAYER_STATE2_DISABLE_DRAW;
+
+            // THAW THE TARGET BEFORE SWINGING. The banish froze it on the way
+            // in, and freezeTimer halts an actor's update — an actor that does
+            // not update never re-registers its AC collider, so the collision
+            // system has nothing to test the quad against. That, not the quad's
+            // shape, is why this strike never connected. Let it go a few frames
+            // early so it is back in the AC list when the blade arrives.
+            {
+                Actor* target = sGaroAttack.banishTarget;
+                if ((sGaroAttack.stateTimer >= GARO_SHADOW_BALL_HIT_F - GARO_BANISH_THAW_LEAD) && (target != NULL) &&
+                    (target->update != NULL)) {
+                    target->freezeTimer = 0;
+                }
+            }
 
             // v10.3: quad-based strike (NOT direct Actor_ApplyDamage). The
             // direct path silently dropped HP without triggering the enemy's
@@ -2419,18 +3118,20 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
 
             s32 done = GaroAttack_AdvanceFormAnim(play, player);
             sGaroAttack.stateTimer++;
-            if (done) {
+            // Never leave before the quad has had its window. Playing the
+            // arrival faster shortened the animation past the strike frame, and
+            // an early exit would end the move without a hitbox ever going
+            // live — silently, which is the worst way for a strike to fail.
+            if (done && (sGaroAttack.stateTimer > GARO_SHADOW_BALL_HIT_F + 4)) {
                 player->meleeWeaponQuads[0].base.atFlags &= ~AT_ON;
                 GaroForm_ResetToIdle(player);
             }
             break;
         }
 
-        // ────────────────────────────────────────────────────────────────────
         // v10 GARO_SIDEHOP_L / _R — Z+A stick-side. Vanilla-distance hop
         // with garo_bounce anim. No damage. Gravity decays velocity.y; we
         // wait for ground contact + a minimum airtime before re-idling.
-        // ────────────────────────────────────────────────────────────────────
         case GARO_SIDEHOP_L:
         case GARO_SIDEHOP_R: {
             player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
@@ -2445,10 +3146,8 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             break;
         }
 
-        // ────────────────────────────────────────────────────────────────────
         // v10 GARO_BACKFLIP — Z+A stick-back. 2x distance (linearVelocity
         // 12.0). Anim: garo_jumpBack. No damage.
-        // ────────────────────────────────────────────────────────────────────
         case GARO_BACKFLIP: {
             player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
             player->meleeWeaponQuads[0].base.atFlags &= ~AT_ON;
@@ -2461,11 +3160,9 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             break;
         }
 
-        // ────────────────────────────────────────────────────────────────────
         // v10 GARO_JUMP_ATTACK — Z+A forward + speed>0. 2x distance leap,
         // anim garo_appear @ 1.5x, damage 4 from elapsed frame 4 to land.
         // Garo's facing is locked at entry so the leap is straight forward.
-        // ────────────────────────────────────────────────────────────────────
         // v10.1: JUMP_ATTACK is now just the LAUNCH phase of a parabolic
         // forward leap — no damage during the rise. After ~6 frames of
         // airtime (roughly past apex of the 8-frame jump arc), we
@@ -2510,11 +3207,9 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             break;
         }
 
-        // ────────────────────────────────────────────────────────────────────
         // v10 GARO_AIR_SLASH — B in mid-air. Plays garo_slashLoop in a loop
         // (no damage, purely cosmetic — the damage lives in LAND_STRIKE).
         // On ground contact, transitions to LAND_STRIKE for the heavy hit.
-        // ────────────────────────────────────────────────────────────────────
         case GARO_AIR_SLASH: {
             player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
             // No damage during the air segment.
@@ -2546,12 +3241,10 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             break;
         }
 
-        // ────────────────────────────────────────────────────────────────────
         // v10 GARO_LAND_STRIKE — Garo drives garo_drawSwords on landing,
         // with a damage-8 master-sword quad live from elapsed frame 12 to
         // anim end + 3 tail frames. Forward motion is killed so the strike
         // is a planted hit.
-        // ────────────────────────────────────────────────────────────────────
         case GARO_LAND_STRIKE: {
             player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
             player->actor.velocity.x = player->actor.velocity.z = 0;

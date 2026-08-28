@@ -111,6 +111,18 @@ void ExtEquip_Equip(s16 equipType, u8 index);
 void ExtEquip_Unequip(s16 equipType);
 
 /**
+ * The single writer of an equipped ext slot: cleans up the outgoing piece synchronously, applies
+ * the vanilla base the new value implies (0 = bare sword/shield, Kokiri tunic/boots) and refreshes
+ * the player. Equip/Unequip/C-button/kaleido/age swap/FleetSync all end here.
+ */
+void ExtEquip_SetSlot(s16 equipType, u8 index);
+void ExtEquip_RefreshPlayer(void);       // Player_SetEquipmentData on the live player, if any
+void ExtEquip_ResyncFromSave(void);      // Nei_Save()->extEquip* -> RAM copy (after a FleetSync apply)
+void ExtEquip_ValidateForAge(void);      // after Inventory_SwapAgeEquipment: drop age-restricted pieces
+u8 ExtEquip_TridentAllowsShield(u8 extIndex, u16 vanillaValue); // Divine or a Mirror only
+void ExtEquip_SagesFlashReset(void);
+
+/**
  * @param equipType EQUIP_TYPE_SWORD/SHIELD/TUNIC/BOOTS
  * @return Current extended equipment index (0=none, 1-3=equipped)
  */
@@ -239,8 +251,6 @@ typedef struct {
     u8 ikAxeDrawing; // 1 when hammer is out (hide vanilla sword DL), 0 in free mode
 
     // Four Sword (Ext Sword 2)
-    u8 fourSwordSavedSwordEquip;       // Original equips.equipment sword nibble
-    u8 fourSwordSavedButtonItem;       // Original equips.buttonItems[0]
     u8 fourSwordActive;                // pak loader is live
     s16 fourSwordBHoldTimer;           // frames B has been held while shielding
     u8 fourSwordCharging;              // 1 while charge is armed (B+shield >= threshold)

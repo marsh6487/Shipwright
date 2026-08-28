@@ -135,15 +135,13 @@ static RodProjSet* FireRod_FindFreeSet(PlayState* play) {
 // BACKFIRE - Sets Link on fire when using fire rod without magic
 // =============================================================================
 
-// func_8083821C: Sets Link's body on fire (initializes bodyFlameTimers and bodyIsBurning)
-extern void func_8083821C(Player* this);
+extern void Player_CatchFire(Player* this); // formerly func_8083821C
 
 static void FireRod_Backfire(Player* p, PlayState* play) {
     Audio_PlayActorSound2(&p->actor, FIRE_ROD_SFX_BACKFIRE_HIT);
     ItemVoice_PlayId(p, NA_SE_VO_LI_FALL_L);
 
-    // Set Link on fire using the real burn system
-    func_8083821C(p);
+    Player_CatchFire(p);
 
     // Actor_SetPlayerKnockbackLarge: Applies knockback (speed, direction, height, type)
     Actor_SetPlayerKnockbackLarge(play, &p->actor, 4.0f, p->actor.shape.rot.y + 0x8000, 6.0f, 0);

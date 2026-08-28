@@ -2429,6 +2429,14 @@ u8 Item_Give(PlayState* play, u8 item) {
     } else if (item == ITEM_BOTTLE) {
         temp = SLOT(item);
 
+        // Skijer's NEI — a give that grants a NEW bottle (this branch and the
+        // ITEM_MILK_BOTTLE/ITEM_LETTER_RUTO one below look for a FREE slot, unlike content refills
+        // which look for an empty bottle) belongs in the 8-slot wheel: NEI permanently owns all four
+        // vanilla slots, so the loops below never matched and the bottle was silently lost.
+        if (Bottle_GiveBottle(item)) {
+            return Return_Item(item, MOD_NONE, ITEM_NONE);
+        }
+
         for (i = 0; i < 4; i++) {
             if (gSaveContext.inventory.items[temp + i] == ITEM_NONE) {
                 gSaveContext.inventory.items[temp + i] = item;
@@ -2474,6 +2482,9 @@ u8 Item_Give(PlayState* play, u8 item) {
         } else {
             if (item == ITEM_LETTER_RUTO) {
                 Flags_SetRandomizerInf(RAND_INF_OBTAINED_RUTOS_LETTER);
+            }
+            if (Bottle_GiveBottle(item)) {
+                return Return_Item(item, MOD_NONE, ITEM_NONE);
             }
             for (i = 0; i < 4; i++) {
                 if (gSaveContext.inventory.items[temp + i] == ITEM_NONE) {
@@ -2669,6 +2680,9 @@ u8 Item_CheckObtainability(u8 item) {
                 }
             }
         } else {
+            if (Bottle_HasFreeSlot()) {
+                return ITEM_NONE;
+            }
             for (i = 0; i < 4; i++) {
                 if (gSaveContext.inventory.items[temp + i] == ITEM_NONE) {
                     return ITEM_NONE;
@@ -2741,7 +2755,9 @@ s32 Inventory_HasEmptyBottle(void) {
 bool Inventory_HasEmptyBottleSlot(void) {
     u8* items = gSaveContext.inventory.items;
 
-    return (items[SLOT_BOTTLE_1] == ITEM_NONE || items[SLOT_BOTTLE_2] == ITEM_NONE ||
+    // Skijer's NEI: the four vanilla slots are permanently owned by the Bottle Randomizer row
+    // ([Wheel A][Wheel B][Net][Bottomless]), so room for a new bottle means room in the 8-slot wheel.
+    return (Bottle_HasFreeSlot() || items[SLOT_BOTTLE_1] == ITEM_NONE || items[SLOT_BOTTLE_2] == ITEM_NONE ||
             items[SLOT_BOTTLE_3] == ITEM_NONE || items[SLOT_BOTTLE_4] == ITEM_NONE);
 }
 
@@ -3749,7 +3765,11 @@ void Interface_DrawMagicBar(PlayState* play) {
 // not), and only while the Gerudo form is up. Skijer's NEI
 void GerudoMhr_DrawRageMeter(PlayState* play) {
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
-    const s16 rageWidth = 48; // one normal magic meter
+    // The bar is exactly a magic meter, and it grows with the magic upgrade the same way
+    // the magic bar does (z_parameter.c computes that one as magicLevel * MAGIC_NORMAL_METER).
+    // Demon mode's tank scales x1/x2/x4, but there are only two bar widths, so double magic
+    // is where it widens. Skijer's NEI
+    const s16 rageWidth = (gSaveContext.magicLevel >= 2) ? MAGIC_DOUBLE_METER : MAGIC_NORMAL_METER;
     s16 magicDrop = R_MAGIC_BAR_LARGE_Y - R_MAGIC_BAR_SMALL_Y + 2;
     s32 lineLength = CVarGetInteger(CVAR_COSMETIC("HUD.Hearts.LineLength"), 10);
     s16 barY;

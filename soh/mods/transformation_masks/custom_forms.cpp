@@ -49,10 +49,15 @@ extern "C" const CustomFormDef gCustomForms[] = {
       { EXT_ITEM_SHADOW_CRYSTAL, ITEM_NONE, ITEM_NONE },
       1.0f },
 
-    // Visual skins (Link-rigged skeleton swap via O2rLoader)
+    // Kafei: FULL transformation, but the ONLY form that keeps vanilla Link's draw
+    // path. He ships a complete 1126-file mirror of object_link_boy AND
+    // object_link_child — every weapon, shield, gauntlet, boot and eye/mouth texture —
+    // and MmForm_Draw would never ask for any of it. MmForm_IsKafeiFormActive() makes
+    // MmForm_IsTransformed() report 0 for him so the vanilla path stays in charge; see
+    // that function in mm_player_form.cpp for the full reasoning.
     { "kafei",
       "Kafei",
-      CUSTOM_FORM_SKIN,
+      CUSTOM_FORM_FULL,
       "gMods.KafeiMaskTransform",
       0,
       { ITEM_MM_MASK_KAFEI, ITEM_NONE, ITEM_NONE },

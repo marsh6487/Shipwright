@@ -834,12 +834,18 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                     }
 
                     if (CHECK_OWNED_EQUIP(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP] - 1)) {
-                        Inventory_ChangeEquipment(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP]);
-                        // Clear extended equipment when vanilla is equipped
-                        // Boots are jewelry (anklets) — don't unequip when changing vanilla boots
-                        if (pauseCtx->cursorY[PAUSE_EQUIP] != EQUIP_TYPE_BOOTS) {
-                            ExtEquip_Unequip(pauseCtx->cursorY[PAUSE_EQUIP]);
+                        // The Trident tolerates only the Divine Shield or the Mirror.
+                        if ((pauseCtx->cursorY[PAUSE_EQUIP] == EQUIP_TYPE_SHIELD) &&
+                            (ExtEquip_GetCurrent(EQUIP_TYPE_SWORD) == 3) &&
+                            !ExtEquip_TridentAllowsShield(0, pauseCtx->cursorX[PAUSE_EQUIP])) {
+                            goto EQUIP_FAIL;
                         }
+                        // The ext piece of this type comes off FIRST (synchronous cleanup, slot left
+                        // bare/Kokiri), then the vanilla value goes on top — the old order let the
+                        // ext piece's deferred cleanup overwrite the sword just equipped. All four
+                        // types: the ext boots are real boots now, exclusive with Iron/Hover.
+                        ExtEquip_Unequip(pauseCtx->cursorY[PAUSE_EQUIP]);
+                        Inventory_ChangeEquipment(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP]);
                     } else {
                         goto EQUIP_FAIL;
                     }

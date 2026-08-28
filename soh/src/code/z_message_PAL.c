@@ -20,6 +20,7 @@
 #include "mods/extended_inventory.h"
 #include "mods/extended_equipment.h"
 #include "mods/nei_save.h" // Skijer's NEI: mmQuestItems (MM/custom song ownership for the MM quest page)
+#include "mods/transformation_masks/transformation_masks.h" // MmForm_GetOcarinaPlaybackInstrument
 
 // SOH [Enhancement] Text Speed which fills whole box in one frame
 #define TEXT_SPEED_INSTANT 6
@@ -3757,12 +3758,17 @@ void Message_DrawMain(PlayState* play, Gfx** p) {
                     } else {
                         Message_DrawText(play, &gfx);
                     }
+                    // MM resets to DEFAULT and then re-selects the FORM's instrument before
+                    // starting the replay (z_message.c MSGMODE_SETUP_DISPLAY_SONG_PLAYED), so
+                    // a song played while transformed is replayed in that form's voice. Both
+                    // of MM's calls were transcribed as DEFAULT here, which is why the replay
+                    // always came back as the plain ocarina.
                     AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_DEFAULT);
-                    AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_DEFAULT);
+                    AudioOcarina_SetInstrument(MmForm_GetOcarinaPlaybackInstrument());
                     AudioOcarina_SetPlaybackSong(msgCtx->lastPlayedSong + 1, 1);
                 } else {
                     AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_DEFAULT);
-                    AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_DEFAULT);
+                    AudioOcarina_SetInstrument(MmForm_GetOcarinaPlaybackInstrument());
                 }
                 // Skijer's NEI: sOcarinaSongFanfares has 12 entries — slots 12+ (scarecrow, memory
                 // game, MM songs 14-20, customs 21-23) must not index it. MM songs get their real MM
@@ -3778,8 +3784,12 @@ void Message_DrawMain(PlayState* play, Gfx** p) {
                         "ElegyOfEmptiness(Ocarina)_5E",  "OathToOrder(Ocarina)_5F",  "SongOfSoaring(Ocarina)_47",
                         "SongOfHealing(Ocarina)_48",
                     };
-                    extern void MmBgm_PlayFanfare(const char* mmBgmName); // mods/sound_translator
-                    MmBgm_PlayFanfare(sNeiMmSongFanfareNames[msgCtx->lastPlayedSong - OCARINA_SONG_MM_FIRST]);
+                    extern void MmBgm_PlayFanfare(const char* mmBgmName, u8 melodyInstrument); // sound_translator
+                    // MM voices the fanfare's melody with the FORM's instrument too, not just
+                    // the note replay above (z_message.c: Audio_PlayFanfareWithPlayerIOPort7
+                    // with sOcarinaSongFanfareIoData[CUR_FORM]).
+                    MmBgm_PlayFanfare(sNeiMmSongFanfareNames[msgCtx->lastPlayedSong - OCARINA_SONG_MM_FIRST],
+                                      MmForm_GetSongFanfareInstrument());
                 }
                 play->msgCtx.ocarinaMode = OCARINA_MODE_01;
                 if (msgCtx->ocarinaAction == OCARINA_ACTION_FREE_PLAY) {

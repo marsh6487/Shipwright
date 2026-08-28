@@ -8,6 +8,7 @@
 #include "mods/transformation_masks/transformation_masks.h"
 #include "mods/transformation_masks/assets/mm_asset_loader.h"
 #include "mods/transformation_masks/gerudo_form.h"
+#include "mods/transformation_masks/custom_forms.h"
 #include "mods/transformation_masks/boss_super_damage.h"
 #include "mods/items/logic/weapon_upgrades.h" // NEI Real Master Sword super-damage
 #include "mods/actors/trident_charge_ball.h"  // Trident charged ball super-damage claim
@@ -91,7 +92,6 @@ extern u8 GaroForm_VanillaWantsAButton(Player* player);
 // Link is holding a melee weapon). FilterB uses it to tell "draw" from "swing".
 extern u8 GerudoMhr_SwordsOut(void);
 extern u8 GerudoMhr_LOwnsB(void);
-extern u8 MmForm_RitoBowOwnsB(void);
 
 // (GerudoForm_Update is gone — see the tombstone at the bottom of
 // gerudo_form.cpp. Gerudo combat is dispatched by MmForm_GerudoMhrUpdate from
@@ -218,25 +218,51 @@ u8 TransformMasks_TryPlayMmVoice(u16 ootVoiceSfxId, Vec3f* pos) {
             // bank's NA_SE_EN_BOSU_* set. That needs an explicit per-action map rather than
             // an offset, because these ids are scattered, not contiguous.
             //
-            // Unmapped actions return 0 so the caller falls back to Link's OOT voice, which
-            // is the current behaviour for them anyway. Fill rows in as they are heard.
+            // EVERY action is mapped, so Garo never speaks with Link's voice: a row left
+            // at 0 falls through to the OOT sample, and hearing Link grunt out of a Garo
+            // was the whole complaint. Where Igos has no obvious counterpart the nearest
+            // one in character is reused — his bank is small (roughly attack / damage /
+            // shock / cynical / laugh / talk / stand / dead), so the pairing is by TONE,
+            // not by a literal match.
             static const u16 sGaroVoiceByAction[0x20] = {
-                [0x00] = 0x3A30, // SWORD_N      -> BOSU_ATTACK
-                [0x01] = 0x3A4C, // SWORD_L      -> BOSU_ATTACK_K
-                [0x02] = 0x3A4A, // LASH         -> BOSU_ATTACK_W
-                [0x04] = 0x3A2A, // CLIMB_END    -> BOSU_STAND
-                [0x05] = 0x3A3A, // DAMAGE_S     -> BOSU_DAMAGE
-                [0x06] = 0x3A2E, // FREEZE       -> BOSU_SHOCK
-                [0x07] = 0x3A90, // FALL_S       -> BOSU_TALK
-                [0x08] = 0x3A3A, // FALL_L       -> BOSU_DAMAGE
-                [0x0B] = 0x3A5B, // DOWN         -> BOSU_DEAD_VOICE
-                [0x13] = 0x3A31, // GROAN        -> BOSU_CYNICAL
-                [0x16] = 0x3A2E, // SURPRISE     -> BOSU_SHOCK
-                [0x1A] = 0x3A3A, // LAND_DAMAGE_S-> BOSU_DAMAGE
+                [0x00] = 0x3A30, // SWORD_N        -> BOSU_ATTACK
+                [0x01] = 0x3A4C, // SWORD_L        -> BOSU_ATTACK_K
+                [0x02] = 0x3A4A, // LASH           -> BOSU_ATTACK_W
+                [0x03] = 0x3A2B, // HANG           -> BOSU_HAND    (effort, hanging on)
+                [0x04] = 0x3A2A, // CLIMB_END      -> BOSU_STAND
+                [0x05] = 0x3A3A, // DAMAGE_S       -> BOSU_DAMAGE
+                [0x06] = 0x3A2E, // FREEZE         -> BOSU_SHOCK
+                [0x07] = 0x3A90, // FALL_S         -> BOSU_TALK
+                [0x08] = 0x3A3A, // FALL_L         -> BOSU_DAMAGE
+                [0x09] = 0x3A9C, // BREATH_REST    -> BOSU_STAND_RAPID (panting)
+                [0x0A] = 0x3A90, // BREATH_DRINK   -> BOSU_TALK
+                [0x0B] = 0x3A5B, // DOWN           -> BOSU_DEAD_VOICE
+                [0x0C] = 0x3A2E, // TAKEN_AWAY     -> BOSU_SHOCK
+                [0x0D] = 0x3A2B, // HELD           -> BOSU_HAND
+                [0x0E] = 0x3A2F, // SNEEZE         -> BOSU_SHIT     (his short splutter)
+                [0x0F] = 0x3A90, // SWEAT          -> BOSU_TALK
+                [0x10] = 0x3A90, // DRINK          -> BOSU_TALK
+                [0x11] = 0x3A29, // RELAX          -> BOSU_SIT
+                [0x12] = 0x3A4D, // SWORD_PUTAWAY  -> BOSU_SWORD
+                [0x13] = 0x3A31, // GROAN          -> BOSU_CYNICAL
+                [0x14] = 0x3A2A, // AUTO_JUMP      -> BOSU_STAND
+                [0x15] = 0x3A32, // MAGIC_NALE     -> BOSU_LAUGH
+                [0x16] = 0x3A2E, // SURPRISE       -> BOSU_SHOCK
+                [0x17] = 0x3A47, // MAGIC_FROL     -> BOSU_LAUGH_K
+                [0x18] = 0x3A2B, // PUSH           -> BOSU_HAND
+                [0x19] = 0x3A2B, // HOOKSHOT_HANG  -> BOSU_HAND
+                [0x1A] = 0x3A3A, // LAND_DAMAGE_S  -> BOSU_DAMAGE
+                [0x1B] = 0x3A90, // NULL_0x1b      -> BOSU_TALK     (unused in OOT)
+                [0x1C] = 0x3A33, // MAGIC_ATTACK   -> BOSU_LAUGH_DEMO
+                [0x1D] = 0x3A45, // (unused id)    -> BOSU_LAUGH_DEMO_K
+                [0x1E] = 0x3A3D, // DEMO_DAMAGE    -> BOSU_DEAD
+                [0x1F] = 0x3A2E, // ELECTRIC_SHOCK -> BOSU_SHOCK
             };
             u16 garoSfx = sGaroVoiceByAction[action];
             if (garoSfx == 0) {
-                return 0; // no Igos sample for this action — let OOT's voice play
+                // Every row is filled, so this is unreachable today; kept as the
+                // safe landing for a row someone blanks out later.
+                return 0;
             }
             lusprintf(__FILE__, __LINE__, LUSLOG_LEVEL_INFO, "[MmVoice] GARO oot=0x%04X action=0x%X -> BOSU 0x%04X",
                       (u32)ootVoiceSfxId, (u32)action, (u32)garoSfx);
@@ -410,10 +436,9 @@ void TransformMasks_FilterB(Input* input) {
         input->press.button &= ~BTN_B;
     }
 
-    // Rito: B is the bow, always. There is no bow item and no C-slot involved, so
-    // unlike the Gerudo nothing of OOT's own B pipeline is wanted — without this
-    // strip the sword swings on the same press that draws the bow.
-    if (MmForm_RitoBowOwnsB()) {
+    // Rito: B is the bow entirely. Stripping it here only hides it from OOT's own scan
+    // — the form controller reads the raw play->state.input[0] and still sees the press.
+    if (MmForm_GetCurrentForm() == MM_PLAYER_FORM_RITO) {
         input->cur.button &= ~BTN_B;
         input->press.button &= ~BTN_B;
     }
@@ -461,7 +486,16 @@ void TransformMasks_Update(PlayState* play, Player* player) {
         }
         if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
             static const u16 sDpad[] = { BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
+            // mods/items/helpers/equip_helper.c - the one place that knows who owns the pad.
+            // This hand-scan is a THIRD path past Player_GetItemOnButton and ItemInput_Update,
+            // and it is how the Kafei mask kept coming on during Ultrahand: both of those were
+            // guarded, and none of that reaches here.
+            extern u8 ItemInput_ButtonIsClaimed(u16 button);
+
             for (s32 i = 0; i < 4; i++) {
+                if (ItemInput_ButtonIsClaimed(sDpad[i])) {
+                    continue;
+                }
                 if (CHECK_BTN_ALL(sControlInput->press.button, sDpad[i])) {
                     s32 item = DPAD_ITEM(i);
                     if (item != ITEM_NONE && MmForm_GetMaskType(item) != TRANSFORM_MASK_NONE) {
@@ -562,6 +596,22 @@ u8 TransformMasks_GetShieldMode(void) {
 
 u8 TransformMasks_GetWaterMode(void) {
     return MmForm_GetWaterMode();
+}
+
+// These bodies ship in soh.o2r, so they must not be gated on mm.o2r being mounted.
+static u8 MaskShipsOutsideMmAssets(s32 item) {
+    return item == ITEM_MM_MASK_GARO || item == ITEM_MM_MASK_KEATON || item == ITEM_MM_MASK_KAFEI ||
+           item == ITEM_RITO_MASK || item == ITEM_MASK_KEATON;
+}
+
+u8 TransformMasks_TryFormFromItem(PlayState* play, Player* player, s32 item) {
+    if (TransformMasks_IsEnabled() || MaskShipsOutsideMmAssets(item)) {
+        if (TransformMasks_GetMaskType(item) != TRANSFORM_MASK_NONE) {
+            TransformMasks_HandleMaskUse(play, player, item);
+            return 1;
+        }
+    }
+    return CustomForms_TrySkinItem(play, player, item);
 }
 
 // =============================================================================

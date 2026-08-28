@@ -149,14 +149,19 @@ static void DekuLeaf_StartBlow(Player* p, PlayState* play) {
     ItemEquip_PlayEquipSFX(play, p);
 }
 
+u8 RocBoots_IsWorn(void); // equip_roc_boots.c (later in this TU)
+
 static void DekuLeaf_UpdateGlide(Player* p, PlayState* play) {
+    // Roc's Boots halve every descent — the glide's fixed fall speed included.
+    f32 fallVelocity = RocBoots_IsWorn() ? DEKULEAF_FALL_VELOCITY * 0.5f : DEKULEAF_FALL_VELOCITY;
+
     if (p->skelAnime.animation != &DEKULEAF_ANIM_GLIDE) {
         LinkAnimation_Change(play, &p->skelAnime, &DEKULEAF_ANIM_GLIDE, 1.0f, 0.0f,
                              Animation_GetLastFrame(&DEKULEAF_ANIM_GLIDE), ANIMMODE_LOOP, -4.0f);
     }
 
-    if (p->actor.velocity.y < DEKULEAF_FALL_VELOCITY) {
-        p->actor.velocity.y = DEKULEAF_FALL_VELOCITY;
+    if (p->actor.velocity.y < fallVelocity) {
+        p->actor.velocity.y = fallVelocity;
     }
 
     // Paraglider forward momentum: keep at least a gentle forward drift (Link's yaw already follows

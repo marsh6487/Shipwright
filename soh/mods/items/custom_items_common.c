@@ -812,9 +812,14 @@ void CustomItems_Update(Player* p, PlayState* play) {
     if (p->stateFlags1 & PLAYER_STATE1_IN_WATER) {
         static const u16 sMaskBtns[] = { BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT, BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
         Input* ctrl = &play->state.input[0];
+        // The fourth raw-pad scan; same question, same single answer. See equip_helper.c.
+        extern u8 ItemInput_ButtonIsClaimed(u16 button);
+
         for (s32 mi = 0; mi < 7; mi++) {
             if (mi >= 3 && !CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0))
                 break;
+            if (ItemInput_ButtonIsClaimed(sMaskBtns[mi]))
+                continue;
             if (CHECK_BTN_ALL(ctrl->press.button, sMaskBtns[mi])) {
                 u8 slot = (mi < 3) ? (mi + 1) : (mi - 3 + 5); // C-buttons: slots 1-3, D-pad: slots 5-8
                 u8 maskItem = gSaveContext.equips.buttonItems[slot];
@@ -961,6 +966,9 @@ void CustomItems_Update(Player* p, PlayState* play) {
         extern void Pacci_ThrowTick(PlayState * play);
         Pacci_CutTick(play);
         Pacci_ThrowTick(play);
+        // Last, so it tears down a frame that everything above has already had its say in.
+        extern void Pacci_UhAbortTick(PlayState * play);
+        Pacci_UhAbortTick(play);
     }
     // The same job for anything the switch magnet put on a plate — Stasis, mostly. Outside the
     // cane's block on purpose: a switch a frozen block was left standing on has to stay down while

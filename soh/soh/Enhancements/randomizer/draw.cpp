@@ -8,6 +8,7 @@
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
+#include "mods/extended_inventory.h" // Skijer's NEI — Seasons_* (Rod of Seasons flame colour)
 
 extern "C" {
 #include "z64.h"
@@ -2288,36 +2289,129 @@ void Randomizer_DrawExtTrident(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Generic version of the Pegasus copy-and-remap above: one-time local copy of a GI DL with every
+// G_SETPRIMCOLOR/G_SETENVCOLOR pushed through `remap`. Per-SECTION recolors (Climb: yellow leather
+// vs silver iron) are only possible this way — a grayscale tint is one color for the whole mesh.
+static Gfx* BuildRecoloredGiDL(const char* dlName, uint32_t (*remap)(uint32_t), std::vector<Gfx>& out) {
+    if (!out.empty()) {
+        return out.data();
+    }
+    auto isTwoWord = [](uint8_t op) {
+        return op == 0x20 || op == 0x24 || op == 0x25 || op == 0x27 || op == 0x31 || op == 0x32 ||
+               op == 0x33 || op == 0x35 || op == 0x36 || op == 0x42;
+    };
+    Gfx* src = (Gfx*)ResourceMgr_LoadGfxByName((char*)dlName);
+    if (src == NULL) {
+        return NULL;
+    }
+    size_t count = 0;
+    while (count < 4096) {
+        uint8_t op = (uint8_t)((src[count].words.w0 >> 24) & 0xFF);
+        count++;
+        if (op == 0xDF) { // G_ENDDL
+            break;
+        }
+        if (isTwoWord(op)) {
+            count++;
+        }
+    }
+    out.assign(src, src + count);
+    for (size_t i = 0; i < out.size(); i++) {
+        uint8_t op = (uint8_t)((out[i].words.w0 >> 24) & 0xFF);
+        if (op == 0xDF) {
+            break;
+        }
+        if (op == G_SETPRIMCOLOR || op == G_SETENVCOLOR) {
+            out[i].words.w1 = (uintptr_t)remap((uint32_t)out[i].words.w1);
+        } else if (isTwoWord(op)) {
+            i++; // payload word, never an opcode
+        }
+    }
+    return out.data();
+}
+
+// Climb Boots: YELLOW leather + SILVER iron. The GI mesh tells the sections apart by color
+// temperature — every leather prim/env is warm brown (r >> b), every iron one is cool gray —
+// so classify per color and ramp by luminance.
+static uint32_t ClimbBoots_YellowIronRamp(uint32_t rgba) {
+    uint8_t r = (rgba >> 24) & 0xFF, g = (rgba >> 16) & 0xFF, b = (rgba >> 8) & 0xFF, a = rgba & 0xFF;
+    float lum = 0.299f * r + 0.587f * g + 0.114f * b;
+    float nrF, ngF, nbF;
+
+    if (r > b + 30) { // warm brown = leather → yellow
+        nrF = lum * 2.2f;
+        ngF = lum * 1.75f;
+        nbF = lum * 0.35f;
+    } else { // cool gray = iron → bright silver
+        nrF = lum * 1.2f + 25.0f;
+        ngF = lum * 1.25f + 25.0f;
+        nbF = lum * 1.35f + 28.0f;
+    }
+    uint8_t nr = (uint8_t)(nrF > 255.0f ? 255.0f : nrF);
+    uint8_t ng = (uint8_t)(ngF > 255.0f ? 255.0f : ngF);
+    uint8_t nb = (uint8_t)(nbF > 255.0f ? 255.0f : nbF);
+    return ((uint32_t)nr << 24) | ((uint32_t)ng << 16) | ((uint32_t)nb << 8) | a;
+}
+
+// Roc's Boots: the whole hover-boots mesh in ONE metallic gold (mids rich gold, highlights
+// toward white-gold).
+static uint32_t RocBoots_GoldRamp(uint32_t rgba) {
+    uint8_t r = (rgba >> 24) & 0xFF, g = (rgba >> 16) & 0xFF, b = (rgba >> 8) & 0xFF, a = rgba & 0xFF;
+    float lum = 0.299f * r + 0.587f * g + 0.114f * b;
+    float nrF = lum * 1.6f;
+    float ngF = lum * 1.22f;
+    float nbF = lum * 0.5f;
+    uint8_t nr = (uint8_t)(nrF > 255.0f ? 255.0f : nrF);
+    uint8_t ng = (uint8_t)(ngF > 255.0f ? 255.0f : ngF);
+    uint8_t nb = (uint8_t)(nbF > 255.0f ? 255.0f : nbF);
+    return ((uint32_t)nr << 24) | ((uint32_t)ng << 16) | ((uint32_t)nb << 8) | a;
+}
+
 void Randomizer_DrawExtClimbBoots(PlayState* play, GetItemEntry* getItemEntry) {
     // Iron Boots GI at vanilla size and composition (GetItem_DrawOpa0Xlu1: main DL Opa + rivets
-    // Xlu), pushed through the pacci-style BRIGHT grayscale (cane_pacci.c): grayscale × color keeps
-    // the mesh's own light and shade, so a near-white multiplier turns the brown leather sections
-    // steel gray too — the whole boot reads as iron.
+    // Xlu), palette-remapped per section: yellow leather + silver iron.
+    static std::vector<Gfx> sMain;
+    static std::vector<Gfx> sRivets;
+    Gfx* mainDL = BuildRecoloredGiDL(gGiIronBootsDL, ClimbBoots_YellowIronRamp, sMain);
+    Gfx* rivetsDL = BuildRecoloredGiDL(gGiIronBootsRivetsDL, ClimbBoots_YellowIronRamp, sRivets);
     s16 rotation = play->gameplayFrames * 0x2;
+
+    if (mainDL == NULL || rivetsDL == NULL) {
+        return; // resource not resolvable yet — try again next frame
+    }
 
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
               G_MTX_MODELVIEW | G_MTX_LOAD);
-    gDPSetGrayscaleColor(POLY_OPA_DISP++, 245, 248, 255, 255);
-    gSPGrayscale(POLY_OPA_DISP++, true);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiIronBootsDL);
-    gSPGrayscale(POLY_OPA_DISP++, false);
+    gSPDisplayList(POLY_OPA_DISP++, mainDL);
 
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
               G_MTX_MODELVIEW | G_MTX_LOAD);
-    gDPSetGrayscaleColor(POLY_XLU_DISP++, 245, 248, 255, 255);
-    gSPGrayscale(POLY_XLU_DISP++, true);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gGiIronBootsRivetsDL);
-    gSPGrayscale(POLY_XLU_DISP++, false);
+    gSPDisplayList(POLY_XLU_DISP++, rivetsDL);
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
 void Randomizer_DrawExtRocBoots(PlayState* play, GetItemEntry* getItemEntry) {
-    // Hover Boots mesh with gold/metallic filter (spec). Pegasus keeps the red pair.
-    DrawCustomItemDiamondTint(play, (Gfx*)gGiHoverBootsDL, NULL, 0.45f, 255, 195, 60);
+    // Hover Boots GI at vanilla size, whole palette remapped to one metallic gold. Pegasus keeps
+    // the red pair.
+    static std::vector<Gfx> sDL;
+    Gfx* dl = BuildRecoloredGiDL(gGiHoverBootsDL, RocBoots_GoldRamp, sDL);
+    s16 rotation = play->gameplayFrames * 0x2;
+
+    if (dl == NULL) {
+        return; // resource not resolvable yet — try again next frame
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_RotateY(rotation * 0.01f, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, dl);
+    CLOSE_DISPS(play->state.gfxCtx);
 }
 
 void Randomizer_DrawClawshot(PlayState* play, GetItemEntry* getItemEntry) {
@@ -2450,6 +2544,22 @@ void Randomizer_DrawNeiShadowCrystal(PlayState* play, GetItemEntry* getItemEntry
 void Randomizer_DrawNeiRodOfSeasons(PlayState* play, GetItemEntry* getItemEntry) {
     static Gfx* c = NULL;
     static u8 t = 0;
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    // The rod is progressive, so the flame has to name the season this pickup is about to light —
+    // the first one still missing, which is exactly what the grant handler will hand over.
+    uint8_t season = SEASON_SPRING;
+
+    for (uint8_t s = 0; s < SEASON_COUNT; s++) {
+        if (!Seasons_SeasonOwned(s)) {
+            season = s;
+            break;
+        }
+    }
+
+    Seasons_SeasonColor(season, &r, &g, &b);
+    DrawWeaponFlameOverlay(play, r, g, b);
     DrawCustomItemDiamondByPath(play, "__OTR__objects/object_nei_rod_of_seasons/gNeiRodOfSeasonsDL", &c, &t, 0.35f);
 }
 

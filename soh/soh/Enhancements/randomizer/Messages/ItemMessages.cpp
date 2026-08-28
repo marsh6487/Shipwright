@@ -476,7 +476,7 @@ void RegisterLanternCatchMessage() {
 
 // Time Gate message registration (always available, not rando-dependent)
 void RegisterTimeGateMessage() {
-    COND_ID_HOOK(OnOpenText, 0x9213, true, BuildTimeGateMessage);
+    COND_ID_HOOK(OnOpenText, TEXT_TIME_GATE_PROMPT, true, BuildTimeGateMessage);
 }
 
 // Chateau Romani get-item message (always available, not rando-dependent)

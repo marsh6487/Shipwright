@@ -56,6 +56,15 @@ extern "C" {
 // Future runes with art already staged in icon_item_custom: Magnesis, Camera
 // (gItemIconSlateRuneMagnesisTex / gItemIconSlateRuneCameraTex).
 
+// Rod of Seasons (Skijer's NEI) — four seasons in ONE page-2 cell, slate idiom: sibling obtainable
+// items over one slot (each with its own textbox), gettable in any order, no levels.
+// Index order IS the wheel order, and it is the natural year order so the wheel reads as a calendar.
+#define SEASON_SPRING 0
+#define SEASON_SUMMER 1
+#define SEASON_AUTUMN 2
+#define SEASON_WINTER 3
+#define SEASON_COUNT 4
+
 // Randomizer treatment of Bomb Arrows.
 #define BOMB_ARROWS_RANDO_OFF 0      // never granted on their own (Twilight Upgrade still works)
 #define BOMB_ARROWS_RANDO_BOMB_BAG 1 // auto-granted the moment any bomb bag is owned
@@ -220,6 +229,12 @@ typedef struct NeiSaveData {
     // one (flavour duplicates). Appended at the END so older blobs stay readable.
     uint8_t trirodLayoutVersion;
     uint8_t trirodFullList; // 0 = compressed (default), 1 = full
+    // Rod of Seasons — Skijer's NEI. Four seasons share the one SLOT_ROD_OF_SEASONS cell; each
+    // pickup grants one season (slate idiom, no levels). The active season drives the weather
+    // everywhere, so it is save state and not per-scene. Appended at the END so older blobs stay
+    // readable.
+    uint8_t season;       // SEASON_* — the season the cell shows / the world is currently in
+    uint8_t seasonsOwned; // SEASON_* bitmask (four bits) — 0 = rod not owned at all
 } NeiSaveData;
 
 #define RITO_FLAG_MASK_OWNED (1 << 0)

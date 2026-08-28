@@ -24,8 +24,8 @@
  *     the form by default. These states are deliberately NOT listed as
  *     form-specific there, so the pose the clip puts on Link IS what gets drawn.
  *
- * The bow lives next door in rito_bow.inc.c, on B. The two compose: you can shoot
- * out of a glide, and neither may advance the other's clip (MmForm_RitoBowHoldsAnim).
+ * The bow lives next door in rito_bow.inc.c, on B. The two compose for free: the bow is
+ * UPPER BODY only, so it never contends for the clip this file drives.
  *
  * ORDER MATTERS: include AFTER gerudo_mhr_combat.inc.c — its MmForm_MhrLoadPath
  * is reused for the graceful "clip missing → move disabled" lookup.
@@ -38,22 +38,38 @@ extern u8 MmForm_InputOwnedByMessage(void);
 // and therefore in the same linkage context. `func_80839FFC` is the clean idle
 // action the Trident's flight also lays down before taking over.
 extern void func_80839FFC(Player* player, PlayState* play);
+// The upper-body guard and vanilla's own release for it. The bow needs the release:
+// func_80834B5C only ever exits when R comes UP, and R is the bow's draw button.
+extern void func_80834894(Player* player);
+// Torso and arms from upperSkelAnime, legs from whatever skelAnime is playing —
+// vanilla's own split. The bow next door rides it so it never takes the legs.
+extern void ExtPlayer_CopyUpperBody(PlayState* play, Player* player);
+extern s32 func_80834B5C(Player* player, PlayState* play);
+extern s32 func_80834BD4(Player* player, PlayState* play);
 extern LinkAnimationHeader* ExtPlayer_GetAnimGroupAnim(s32 group, s32 animType);
 extern void ExtPlayer_SetAnimGroupAnim(s32 group, s32 animType, LinkAnimationHeader* anim);
 
-// rito_bow.inc.c is included right after this file; the glide asks it whether the
-// bow currently owns the body so the two never advance the same track twice.
-extern u8 MmForm_RitoBowHoldsAnim(void);
+// Defined further down; the reset above it has to be able to tear the ribbons down.
+static void MmForm_RitoWindTrailsOff(PlayState* play);
 
 // ── clips ───────────────────────────────────────────────────────────────────
 #define RITO_ANIM(name) "__OTR__misc/link_animetion/" name
 
 #define RITO_CLIP_LAUNCH RITO_ANIM("gMonsterHunterRise_InsectGlaive_BackwardRisingDoubleChargedStaffCombo")
 #define RITO_CLIP_FLY RITO_ANIM("gPlayerAnim_mhr_npc_takkuri_fly")
-#define RITO_CLIP_LAND RITO_ANIM("gMonsterHunterRise_DualBlade_ForwardRisingAerialMove")
-#define RITO_CLIP_HOP RITO_ANIM("gMonsterHunterRise_InsectGlaive_StationaryHighAerialTripleSilkbindStaffStrike")
-#define RITO_CLIP_BACKFLIP \
+#define RITO_CLIP_LAND RITO_ANIM("gMonsterHunterRise_InsectGlaive_ForwardSingleAdvancingStaffSweep")
+// One clip per hop direction, indexed by OOT's controlStickDirection
+// (0 front, 1 side-left, 2 backflip, 3 side-right). Hand-picked, so the direction in
+// the MHR name does NOT always match the hop's — the side pair reads better mirrored.
+#define RITO_CLIP_HOP_FRONT \
+    RITO_ANIM("gMonsterHunterRise_InsectGlaive_ForwardRisingMultiHitAerialStaffStrike_Variant08")
+#define RITO_CLIP_HOP_LEFT RITO_ANIM("gMonsterHunterRise_InsectGlaive_RightHighAerialDoubleSilkbindStaffStrike")
+#define RITO_CLIP_HOP_BACK \
     RITO_ANIM("gMonsterHunterRise_InsectGlaive_BackwardHighAerialMultiHitSilkbindStaffStrike_Variant06")
+#define RITO_CLIP_HOP_RIGHT RITO_ANIM("gMonsterHunterRise_InsectGlaive_LeftHighAerialSingleSilkbindStaffStrike")
+// A hop's strike is a one-shot: rather than freeze on its last frame for the rest of
+// the fall, it settles into this ready pose and holds it until touchdown.
+#define RITO_CLIP_HOP_SETTLE RITO_ANIM("gMonsterHunterRise_InsectGlaive_StationaryStaffReadyIdle_Variant10")
 #define RITO_CLIP_THROW RITO_ANIM("gMonsterHunterRise_InsectGlaive_ForwardDoubleStaffStrike")
 
 // Playback rate the MHR clips are resampled to, exactly like TRI_ANIM_SPEED.
@@ -77,9 +93,14 @@ extern u8 MmForm_RitoBowHoldsAnim(void);
 // each — that hook lives with those items, not here.)
 #define RITO_LAUNCH_MAGIC_COST 12
 #define RITO_ROCS_AIR_COST 12
+// A Roc's used mid-glide breaks OUT of the glide for this long: the wings stop
+// holding the rito level and it climbs on the item's own velocity, then settles
+// back. Long enough for the 11.0f the items give to bleed down to the sink rate.
+#define RITO_BOOST_FRAMES 16
 
 #define RITO_DRAW_Y_BASE -1059.0f                        // 2 world units lower again
 #define RITO_LAND_LIFT 1500.0f                           // +15 world units, so the landing clip stands normally
+#define RITO_HOP_LAND_GUARD 4                            // frames before a hop may register a landing
 #define RITO_HOP_SCALE 1.5f                              // roll     -> 1.5 Roc's Feather jumps
 #define RITO_BACKFLIP_SCALE 1.0f                         // backflip -> exactly 1
 #define RITO_ROCS_VELOCITY (LINK_IS_ADULT ? 7.5f : 7.0f) // RocsFeather.cpp's own values
@@ -91,7 +112,7 @@ typedef enum {
     RITO_FLY_GLIDE,  // A held in the air: Zora swim in 3D
     RITO_FLY_FALL,   // A released in the air: falling
     RITO_FLY_LAND,
-    RITO_FLY_HOP,   // roll / backflip
+    RITO_FLY_HOP,   // roll and the three dodge hops
     RITO_FLY_THROW, // mid-air item
 } RitoFlyState;
 
@@ -99,6 +120,9 @@ typedef struct {
     u8 loaded;
     u8 state;
     s16 charge; // frames A has been held on the ground
+    s16 boost;   // frames left of a Roc's climb punched through the glide
+    s16 windT;   // frames the updraft has been running; drives spin, scroll and the burst
+    u8 hopArmed; // A has been released since the hop started, so it may glide now
     s16 magicTimer;
     s16 timer;
     s16 yaw;                    // heading, accumulated the same way
@@ -107,8 +131,8 @@ typedef struct {
     LinkAnimationHeader* launch;
     LinkAnimationHeader* fly;
     LinkAnimationHeader* land;
-    LinkAnimationHeader* hop;
-    LinkAnimationHeader* backflip;
+    LinkAnimationHeader* hopClips[4]; // by controlStickDirection: front, left, back, right
+    LinkAnimationHeader* hopSettle;   // the pose a hop holds once its strike is done
     LinkAnimationHeader* throwItem;
 } RitoFlight;
 
@@ -187,8 +211,11 @@ static void MmForm_RitoLoadClips(void) {
     sRito.launch = MmForm_RitoLoadClip(RITO_CLIP_LAUNCH);
     sRito.fly = MmForm_RitoLoadClip(RITO_CLIP_FLY);
     sRito.land = MmForm_RitoLoadClip(RITO_CLIP_LAND);
-    sRito.hop = MmForm_RitoLoadClip(RITO_CLIP_HOP);
-    sRito.backflip = MmForm_RitoLoadClip(RITO_CLIP_BACKFLIP);
+    sRito.hopClips[0] = MmForm_RitoLoadClip(RITO_CLIP_HOP_FRONT);
+    sRito.hopClips[1] = MmForm_RitoLoadClip(RITO_CLIP_HOP_LEFT);
+    sRito.hopClips[2] = MmForm_RitoLoadClip(RITO_CLIP_HOP_BACK);
+    sRito.hopClips[3] = MmForm_RitoLoadClip(RITO_CLIP_HOP_RIGHT);
+    sRito.hopSettle = MmForm_RitoLoadClip(RITO_CLIP_HOP_SETTLE);
     sRito.throwItem = MmForm_RitoLoadClip(RITO_CLIP_THROW);
     MmForm_RitoInstallLanding();
     if (sRito.fly == NULL) {
@@ -234,8 +261,16 @@ static s32 MmForm_RitoAdvance(PlayState* play, Player* player) {
 
 extern "C" void MmForm_RitoResetFlight(void) {
     MmForm_RitoRestoreLanding();
+    if (gPlayState != NULL) {
+        // The controller's own teardown never runs once the form is gone, so the
+        // ribbons have to be killed from here or they outlive the transformation.
+        MmForm_RitoWindTrailsOff(gPlayState);
+    }
     sRito.state = RITO_FLY_OFF;
     sRito.charge = 0;
+    sRito.boost = 0;
+    sRito.windT = 0;
+    sRito.hopArmed = 0;
     sRito.magicTimer = 0;
     sRito.timer = 0;
     sRito.yaw = 0;
@@ -271,6 +306,10 @@ extern "C" u8 MmForm_RitoAirRocsAllowed(Player* player) {
         return 0;
     }
     gSaveContext.magic -= RITO_ROCS_AIR_COST;
+    // The glide pins velocity.y every frame, so without this the item took the magic
+    // and bought nothing. Arming here — the one place that knows a rito just paid —
+    // keeps the item files from needing to know the flight exists at all.
+    sRito.boost = RITO_BOOST_FRAMES;
     return 1;
 }
 
@@ -289,33 +328,223 @@ static u8 MmForm_RitoSpendLaunchMagic(void) {
     return 1;
 }
 
-// The updraft: dust rising around the rito, denser as the charge fills. Same idea
-// (and the same effect call) as the Trident's flight wind, which is deliberate —
-// it already reads as "the air is moving" without being a tornado.
-static Color_RGBA8 sRitoWindPrim = { 235, 240, 255, 140 };
-static Color_RGBA8 sRitoWindEnv = { 130, 160, 200, 0 };
+// ── the updraft ─────────────────────────────────────────────────────────────
+// Revali's Gale: the ground kicks (a quake), a burst of green flames erupts and
+// then settles down to a few circling the rito, and full-height wind curtains snake
+// upward around him for as long as the charge is held.
+//
+// THE COLUMN is the shared wind cone (object_tornado.h — the gust jar's, built to be
+// reused), stood on its tip and aimed straight up. Its texture is intensity+alpha, so
+// the colour is entirely ours, and colour.a is the whole cone's fade: that is the
+// "semi-alpha" knob. Tornado_RibbonsUpdate wraps it in spiral streaks and owns their
+// blure slots — the engine has 25 in total, so leaking them starves every other trail
+// in the scene, which is why the stop path is not optional.
+//
+// Tornado_GetAxis is axis.y = -sin(pitch), so straight up is pitch -0x4000.
+#define RITO_WIND_PITCH_UP (-0x4000)
+#define RITO_WIND_HEIGHT 82.0f  // tip at the feet, mouth this far above
+#define RITO_WIND_RADIUS 30.0f  // mouth radius
+#define RITO_WIND_SPIN 0x0900   // roll about the column, per frame
+#define RITO_WIND_SCROLL 18     // streaks travelling UP the column, in quarter-texels
+#define RITO_WIND_RIBBONS 5     // spiral streaks wrapping it
+#define RITO_WIND_ALPHA 70      // barely there: the cone is a hint, the streaks carry it
+// The streaks spread WIDER than the cone they wrap. Feeding the ribbons their own copy of
+// the params is all it takes — Tornado_RibbonsUpdate lays them out from p->radius.
+#define RITO_WIND_RIBBON_SPREAD 2.0f
+// The column swells as the charge fills, so how far along it is readable at a glance.
+#define RITO_WIND_GROW_MIN 0.35f
+static const Color_RGB8 sRitoWindColor = { 190, 255, 200 }; // green-white, Revali's own
 
-static void MmForm_RitoWind(PlayState* play, Player* player, f32 strength) {
-    Vec3f pos;
-    Vec3f vel;
-    Vec3f accel = { 0.0f, 0.3f, 0.0f };
+// The flames: many on the burst, RITO_FLAME_KEEP left circling once it settles.
+#define RITO_FLAME_MAX 8
+#define RITO_FLAME_KEEP 4
+#define RITO_FLAME_BURST_FRAMES 7 // logic frames the full burst stays up
+#define RITO_FLAME_RADIUS 17.0f
+#define RITO_FLAME_BURST_RADIUS 40.0f
+#define RITO_FLAME_HEIGHT 12.0f
+#define RITO_FLAME_DRIFT 0x0700
+// Index 6 in EnLight's D_80A9E840 is the green flame. It must be POSITIVE: bit 15 is
+// the "small candle" variant, and EnLight_Draw's candle branch hardcodes orange
+// (255,200,0) — only the point light stays green there, which is why a negative param
+// gave an orange mote with a green glow. An even index also skips the Y-flip that
+// EnLight_Draw applies on `params & 1`.
+#define RITO_LIGHT_PARAMS 6
+#define RITO_LIGHT_SCALE 0.0010f // a torch flame is 0.0075; these are motes
+
+// How long the whole thing takes to die away once the rito leaves the ground.
+#define RITO_WIND_FADE_FRAMES 14.0f
+
+// The kick that starts it. Same call shape as the Mortal Draw's (equip_pendant.c), but
+// snappier and much shallower: a jolt you feel rather than a shake you watch.
+#define RITO_QUAKE_SPEED 32000
+#define RITO_QUAKE_AMPLITUDE 2
+#define RITO_QUAKE_FRAMES 5
+
+static TornadoParams sRitoWind;
+static TornadoRibbons sRitoWindRibbons;
+static u8 sRitoWindOn;
+// Where the updraft was raised. The whole effect is pinned here and does NOT follow the
+// rito: he rides the wind up and out of it, the column stays on the ground he left.
+static Vec3f sRitoWindOrigin;
+static f32 sRitoWindFade;
+static f32 sRitoWindGrow;
+static Actor* sRitoFlames[RITO_FLAME_MAX];
+static f32 sRitoFlamePhase[RITO_FLAME_MAX];
+
+static void MmForm_RitoWindTrailsOff(PlayState* play) {
     s32 i;
-    s32 count = 2 + (s32)(4.0f * strength); // denser as the charge fills
 
-    // A ring around the feet, rising. One mote every other frame (the first cut of
-    // this) is invisible under a standing player — this is what "the wind does not
-    // show up" was.
-    for (i = 0; i < count; i++) {
-        f32 ang = Rand_ZeroFloat(6.28f);
-        f32 rad = 8.0f + Rand_ZeroFloat(22.0f);
-        pos = player->actor.world.pos;
-        pos.x += Math_SinF(ang) * rad;
-        pos.z += Math_CosF(ang) * rad;
-        pos.y += Rand_ZeroFloat(10.0f);
-        vel.x = Math_SinF(ang) * 0.4f;
-        vel.y = 3.0f + (6.0f * strength);
-        vel.z = Math_CosF(ang) * 0.4f;
-        EffectSsDust_Spawn(play, 0, &pos, &vel, &accel, &sRitoWindPrim, &sRitoWindEnv, 90, 16, 10, 0);
+    sRitoWindOn = 0;
+    Tornado_RibbonsStop(play, &sRitoWindRibbons);
+    // En_Light has no lifetime of its own — nothing in EnLight_Update ever kills one —
+    // so whoever spawns it owns it until they say otherwise.
+    for (i = 0; i < RITO_FLAME_MAX; i++) {
+        if (sRitoFlames[i] != NULL) {
+            Actor_Kill(sRitoFlames[i]);
+            sRitoFlames[i] = NULL;
+        }
+    }
+}
+
+// A scene change destroys every effect and actor for us, so the updraft's bookkeeping
+// must be FORGOTTEN, not freed: MmForm_Init deliberately keeps gFormState alive across
+// a transition while transformed, and killing a pointer into the old scene's arena is
+// exactly how that turns into a crash.
+extern "C" void MmForm_RitoWindClear(void) {
+    memset(&sRitoWindRibbons, 0, sizeof(sRitoWindRibbons));
+    memset(sRitoFlames, 0, sizeof(sRitoFlames));
+    sRitoWindOn = 0;
+    sRitoWindFade = 0.0f;
+    sRitoWindGrow = RITO_WIND_GROW_MIN;
+    sRito.windT = 0;
+}
+
+// Frozen on purpose. EnLight_Update is the ONLY thing that plays NA_SE_EV_TORCH and the
+// only thing that puts the light's radius back every frame, so replacing it is what makes
+// these motes silent and stops them washing the ground in a green disc. The billboard
+// survives: EnLight_Draw derives it from the camera itself. The one thing lost is the
+// flame texture's scroll, which at this size reads as a mote either way.
+static void MmForm_RitoFlameUpdate(Actor* thisx, PlayState* play) {
+}
+
+static Actor* MmForm_RitoSpawnFlame(PlayState* play) {
+    Actor* flame = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_LIGHT, sRitoWindOrigin.x, sRitoWindOrigin.y,
+                               sRitoWindOrigin.z, 0, 0, 0, RITO_LIGHT_PARAMS);
+
+    if (flame != NULL) {
+        // EnLight_Init sizes it as a torch flame; these are motes.
+        Actor_SetScale(flame, RITO_LIGHT_SCALE);
+        // Re-seat the light as a NO-GLOW point of radius 0. EnLight_Init made it a glowing
+        // one — that is the wide green disc on the floor. The node keeps pointing at this
+        // same LightInfo, so EnLight_Destroy still has something valid to remove.
+        Lights_PointNoGlowSetInfo(&((EnLight*)flame)->lightInfo, (s16)sRitoWindOrigin.x, (s16)sRitoWindOrigin.y,
+                                  (s16)sRitoWindOrigin.z, 0, 0, 0, 0);
+        flame->update = MmForm_RitoFlameUpdate;
+    }
+    return flame;
+}
+
+static void MmForm_RitoWindTrailsOn(PlayState* play, Player* player) {
+    s16 quake;
+    s32 i;
+
+    if (sRitoWindOn) {
+        return;
+    }
+    sRito.windT = 0;
+    sRitoWindOn = 1;
+    sRitoWindFade = 1.0f;
+    sRitoWindGrow = RITO_WIND_GROW_MIN;
+    sRitoWindOrigin = player->actor.world.pos; // pinned here for the rest of its life
+    // Everything erupts at once; MmForm_RitoWindTick culls it back down to
+    // RITO_FLAME_KEEP once the burst is over.
+    for (i = 0; i < RITO_FLAME_MAX; i++) {
+        sRitoFlamePhase[i] = ((f32)i * (2.0f * M_PI / RITO_FLAME_MAX)) + Rand_ZeroFloat(0.6f);
+        sRitoFlames[i] = MmForm_RitoSpawnFlame(play);
+    }
+    quake = Quake_Add(Play_GetCamera(play, 0), 3);
+    Quake_SetSpeed(quake, RITO_QUAKE_SPEED);
+    Quake_SetQuakeValues(quake, RITO_QUAKE_AMPLITUDE, 0, 0, 0);
+    Quake_SetCountdown(quake, RITO_QUAKE_FRAMES);
+}
+
+// One frame of the updraft: the column rolls and its streaks travel up it, the flames
+// circle. The cone itself is emitted later, from MmForm_RitoWindDraw.
+static void MmForm_RitoWindTick(PlayState* play) {
+    u8 bursting = (sRito.windT < RITO_FLAME_BURST_FRAMES);
+    s32 i;
+
+    sRito.windT++;
+    // The wind only holds while it is being built. The moment the rito rides it off the
+    // ground everything left behind dies away instead of cutting out.
+    if (sRito.state == RITO_FLY_CHARGE) {
+        f32 filled = (f32)sRito.charge / RITO_CHARGE_FULL;
+
+        sRitoWindFade = 1.0f;
+        if (filled > 1.0f) {
+            filled = 1.0f;
+        }
+        sRitoWindGrow = RITO_WIND_GROW_MIN + ((1.0f - RITO_WIND_GROW_MIN) * filled);
+    } else {
+        sRitoWindFade -= (1.0f / RITO_WIND_FADE_FRAMES);
+        if (sRitoWindFade <= 0.0f) {
+            MmForm_RitoWindTrailsOff(play);
+            return;
+        }
+    }
+
+    sRitoWind.origin = sRitoWindOrigin;
+    sRitoWind.pitch = RITO_WIND_PITCH_UP;
+    sRitoWind.length = RITO_WIND_HEIGHT * sRitoWindGrow;
+    sRitoWind.radius = RITO_WIND_RADIUS * sRitoWindGrow;
+    sRitoWind.color.r = sRitoWindColor.r;
+    sRitoWind.color.g = sRitoWindColor.g;
+    sRitoWind.color.b = sRitoWindColor.b;
+    sRitoWind.color.a = (u8)(RITO_WIND_ALPHA * sRitoWindFade);
+    sRitoWind.spin += RITO_WIND_SPIN;
+    // Positive scrollT runs the pattern from the tip toward the mouth. The tip is on the
+    // ground, so that is the streaks climbing — which is the whole point of the effect.
+    Tornado_AdvanceScroll(&sRitoWind, 0, RITO_WIND_SCROLL);
+    {
+        TornadoParams spread = sRitoWind;
+
+        spread.radius *= RITO_WIND_RIBBON_SPREAD;
+        Tornado_RibbonsUpdate(play, &sRitoWindRibbons, &spread, RITO_WIND_RIBBONS);
+    }
+
+    for (i = 0; i < RITO_FLAME_MAX; i++) {
+        f32 ang = sRitoFlamePhase[i] + (BINANG_TO_RAD(RITO_FLAME_DRIFT) * sRito.windT);
+        f32 radius = bursting ? RITO_FLAME_BURST_RADIUS : RITO_FLAME_RADIUS;
+
+        if (sRitoFlames[i] == NULL) {
+            continue;
+        }
+        // Once the burst is spent only a few stay, gathered in close around the column.
+        if (!bursting && (i >= RITO_FLAME_KEEP)) {
+            Actor_Kill(sRitoFlames[i]);
+            sRitoFlames[i] = NULL;
+            continue;
+        }
+        sRitoFlames[i]->world.pos = sRitoWindOrigin;
+        sRitoFlames[i]->world.pos.x += Math_SinF(ang) * radius;
+        sRitoFlames[i]->world.pos.z += Math_CosF(ang) * radius;
+        sRitoFlames[i]->world.pos.y += RITO_FLAME_HEIGHT;
+        Actor_SetScale(sRitoFlames[i], RITO_LIGHT_SCALE * sRitoWindFade);
+    }
+}
+
+// The water void-out borrows the glide clip: a rito that cannot swim keeps beating its
+// wings all the way down. That handler lives far above this file, hence the getter.
+extern "C" LinkAnimationHeader* MmForm_RitoFlyAnim(void) {
+    MmForm_RitoLoadClips();
+    return sRito.fly;
+}
+
+// Emitted from MmForm_Draw. Separate from the tick because the cone is geometry on the
+// XLU list, and only the update side knows where it should be.
+extern "C" void MmForm_RitoWindDraw(PlayState* play) {
+    if (sRitoWindOn) {
+        Tornado_Draw(play, &sRitoWind);
     }
 }
 
@@ -336,6 +565,7 @@ static void MmForm_RitoRelease(Player* player, u8 land) {
     player->stateFlags1 &= ~PLAYER_STATE1_JUMPING;
     player->actor.gravity = RITO_FLY_GRAVITY_DEFAULT;
     player->actor.minVelocityY = -20.0f;
+    sRito.boost = 0;
     sRito.state = land ? RITO_FLY_LAND : RITO_FLY_OFF;
 }
 
@@ -359,7 +589,9 @@ static void MmForm_RitoGlideMove(PlayState* play, Player* player) {
     // Forward only. The stick does NOT aim up or down — no climbing, no diving; the
     // rito flies level and sinks slowly, and altitude comes from the launch alone.
     player->linearVelocity = RITO_GLIDE_SPEED;
-    player->actor.velocity.y = RITO_GLIDE_SINK;
+    if (sRito.boost <= 0) {
+        player->actor.velocity.y = RITO_GLIDE_SINK;
+    }
     player->actor.gravity = 0.0f;
 }
 
@@ -372,13 +604,33 @@ static u8 MmForm_RitoFlightUpdate(Player* player, PlayState* play) {
     if (gFormState.currentForm != MM_PLAYER_FORM_RITO) {
         return 0;
     }
+    // The updraft outlives the state that raised it: the rito leaves the ground, the
+    // column stays behind and dies away on its own clock. So it is ticked from ONE place,
+    // ahead of every early return below, and MmForm_RitoWindTick is what ends it.
+    if (sRitoWindOn) {
+        MmForm_RitoWindTick(play);
+    }
     MmForm_RitoLoadClips();
     if (MmForm_InputOwnedByMessage()) {
         return 0; // a textbox or the ocarina owns the buttons
     }
     aHeld = CHECK_BTN_ALL(input->cur.button, BTN_A);
+    // Only the glide pins velocity.y, so only the glide needs breaking out of. Armed
+    // anywhere else the boost has nothing to do, and leaving it set would fire a
+    // phantom climb the next time a glide started.
+    if ((sRito.boost > 0) && (sRito.state != RITO_FLY_GLIDE)) {
+        sRito.boost = 0;
+    }
+    // One teardown point instead of one per exit: the moment the state stops being
+    // "building or riding the wind", the ribbons go.
 
-    // Anything that takes Link away (damage, water, a cutscene) ends the flight.
+    // Water is a hard stop now that the rito sinks: hand it straight to the form's
+    // void-out instead of letting a glide skim the surface forever.
+    if ((sRito.state != RITO_FLY_OFF) && (player->stateFlags1 & PLAYER_STATE1_IN_WATER)) {
+        MmForm_RitoRelease(player, 0);
+        return 0;
+    }
+    // Anything else that takes Link away (damage, a cutscene) ends the flight too.
     if ((sRito.state != RITO_FLY_OFF) && (sRito.flyAction != NULL) && (player->actionFunc != sRito.flyAction) &&
         (sRito.state != RITO_FLY_CHARGE)) {
         MmForm_RitoRelease(player, 0);
@@ -396,12 +648,12 @@ static u8 MmForm_RitoFlightUpdate(Player* player, PlayState* play) {
             // showed no animation at all on the ground.
             MmForm_RitoAdvance(play, player);
             player->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
-            MmForm_RitoWind(play, player, (f32)sRito.charge / RITO_CHARGE_FULL);
             if ((sRito.charge % 4) == 0) {
                 Player_PlaySfx(&player->actor, NA_SE_EN_KAICHO_FLUTTER);
             }
 
-            if (aHeld) {
+            // A full column lets go by itself — there is no sitting on a charged updraft.
+            if (aHeld && (sRito.charge < RITO_CHARGE_FULL)) {
                 return 1; // keep charging
             }
             // Released: ride the wind up. A short tap gives a small hop of a launch.
@@ -432,7 +684,6 @@ static u8 MmForm_RitoFlightUpdate(Player* player, PlayState* play) {
 
         case RITO_FLY_LAUNCH:
             sRito.timer++;
-            MmForm_RitoWind(play, player, 1.0f);
             player->actor.velocity.y -= 0.8f; // the push runs out
             // Once the climb tops out, A decides: glide on, or fall.
             if ((player->actor.velocity.y <= 1.0f) || (sRito.timer > 20)) {
@@ -461,9 +712,24 @@ static u8 MmForm_RitoFlightUpdate(Player* player, PlayState* play) {
                 return 0;
             }
             MmForm_RitoGlideMove(play, player);
-            if (!MmForm_RitoBowHoldsAnim()) {
-                MmForm_RitoAdvance(play, player);
+            // A Roc's punched through the glide (MmForm_RitoAirRocsAllowed armed it as
+            // it took the magic): stop holding level, climb on the item's own velocity
+            // with the launch clip and the updraft on, then settle back into the glide.
+            if (sRito.boost > 0) {
+                if (sRito.boost == RITO_BOOST_FRAMES) {
+                    MmForm_RitoWindTrailsOn(play, player);
+                    MmForm_RitoPlay(play, player, sRito.launch, 0, 1.0f);
+                    Player_PlaySfx(&player->actor, NA_SE_PL_ROLL);
+                }
+                player->actor.velocity.y -= 0.8f; // the push runs out, exactly as the launch's does
+                if ((--sRito.boost <= 0) || (player->actor.velocity.y <= RITO_GLIDE_SINK)) {
+                    sRito.boost = 0;
+                    // The column is not torn down here — it is left behind, mid-air this
+                    // time, and fades on its own like the one raised from the ground.
+                    MmForm_RitoPlay(play, player, sRito.fly, 1, 1.0f);
+                }
             }
+            MmForm_RitoAdvance(play, player);
             if ((++sRito.timer % 8) == 0) {
                 Player_PlaySfx(&player->actor, NA_SE_EN_KAICHO_FLUTTER);
             }
@@ -478,20 +744,32 @@ static u8 MmForm_RitoFlightUpdate(Player* player, PlayState* play) {
             return 1;
 
         case RITO_FLY_HOP:
-            // A during the hop turns it into real flight, so a hop can be extended.
-            if (aHeld && (sRito.timer > 2) && (sRito.fly != NULL)) {
+            // A during the hop turns it into real flight, so a hop can be extended —
+            // but ONLY after A has been let go of once. Roll, backflip and side hop are
+            // all STARTED by A, so the button is still down on the frames right after,
+            // and testing it raw turned every single hop into an instant glide.
+            if (!aHeld) {
+                sRito.hopArmed = 1;
+            }
+            if (sRito.hopArmed && aHeld && (sRito.fly != NULL)) {
                 MmForm_RitoEnterAir(play, player);
                 sRito.state = RITO_FLY_GLIDE;
                 MmForm_RitoPlay(play, player, sRito.fly, 1, 1.0f);
                 return 1;
             }
             sRito.timer++;
-            if (MMFORM_ON_GROUND(player) && (sRito.timer > 4)) {
+            if (MMFORM_ON_GROUND(player) && (sRito.timer > RITO_HOP_LAND_GUARD)) {
                 MmForm_RitoRelease(player, 0);
                 Player_PlaySfx(&player->actor, NA_SE_PL_LAND);
                 return 0;
             }
-            MmForm_RitoAdvance(play, player);
+            // Comparing the running clip is the re-entry guard: the settle pose loops,
+            // so Advance never reports it finished and this can only fire once.
+            if (MmForm_RitoAdvance(play, player) && (sRito.hopSettle != NULL) &&
+                (player->skelAnime.animation != sRito.hopSettle)) {
+                MmForm_RitoPlay(play, player, sRito.hopSettle, 1, 1.0f);
+                sRito.timer = RITO_HOP_LAND_GUARD; // RitoPlay zeroes it; the takeoff guard is spent
+            }
             return 1;
 
         case RITO_FLY_THROW:
@@ -510,9 +788,6 @@ static u8 MmForm_RitoFlightUpdate(Player* player, PlayState* play) {
     if (!CHECK_BTN_ALL(input->press.button, BTN_A) || (player->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE)) {
         return 0;
     }
-    if (MmForm_RitoBowHoldsAnim()) {
-        return 0; // the bow has the body; A does not start a second clip on top of it
-    }
     if (MMFORM_ON_GROUND(player)) {
         if ((sRito.charge_ == NULL) || (fabsf(player->linearVelocity) > 1.0f)) {
             return 0; // moving: leave the roll/hop path alone
@@ -521,6 +796,7 @@ static u8 MmForm_RitoFlightUpdate(Player* player, PlayState* play) {
         sRito.flyAction = player->actionFunc;
         sRito.state = RITO_FLY_CHARGE;
         sRito.charge = 0;
+        MmForm_RitoWindTrailsOn(play, player);
         MmForm_RitoPlay(play, player, sRito.charge_, 1, 1.0f); // already a wait loop
         return 1;
     }
@@ -533,25 +809,41 @@ static u8 MmForm_RitoFlightUpdate(Player* player, PlayState* play) {
     return 0;
 }
 
-// Roll / backflip → Roc's-Feather hops. z_player.c asks before starting either.
-extern "C" u8 MmForm_RitoTryHop(Player* player, PlayState* play, u8 isBackflip) {
+// Roll and every dodge hop → Roc's-Feather hops. z_player.c asks before starting one.
+// `dir` is OOT's controlStickDirection (1 side-left, 2 backflip, 3 side-right), or -1
+// for the roll, which is the forward hop and takes the front clip. Only the roll gets
+// the taller 1.5x height; the three dodges are 1x.
+extern "C" u8 MmForm_RitoTryHop(Player* player, PlayState* play, s32 dir) {
+    u8 isRoll = (dir < 0);
     LinkAnimationHeader* clip;
 
     if (gFormState.currentForm != MM_PLAYER_FORM_RITO) {
         return 0;
     }
     MmForm_RitoLoadClips();
-    clip = isBackflip ? sRito.backflip : sRito.hop;
+    clip = sRito.hopClips[isRoll ? 0 : (dir & 3)];
     if (clip == NULL) {
         return 0;
     }
 
     MmForm_RitoEnterAir(play, player);
-    player->actor.velocity.y = RITO_ROCS_VELOCITY * (isBackflip ? RITO_BACKFLIP_SCALE : RITO_HOP_SCALE);
+    player->actor.velocity.y = RITO_ROCS_VELOCITY * (isRoll ? RITO_HOP_SCALE : RITO_BACKFLIP_SCALE);
     player->actor.gravity = RITO_FLY_GRAVITY_DEFAULT;
     player->stateFlags2 &= ~PLAYER_STATE2_HOPPING; // ledges stay grabbable, as Roc's does
+    // A hop that only goes up is not a dodge any more, so each direction keeps its
+    // ground travel at OOT's own speed. Only the backflip is purely vertical, which is
+    // the arc it already had. NOTE: the roll is dir -1 and `-1 & 1` is 1 in C, so the
+    // side-hop test has to exclude it explicitly or the forward hop veers left.
+    if (isRoll || (dir & 1)) {
+        player->yaw = player->actor.shape.rot.y + (isRoll ? 0 : (dir << 0xE));
+        player->linearVelocity = isRoll ? 6.0f : 8.5f;
+        // PAUSE_ACTION_FUNC means no vanilla action syncs yaw into world.rot.y, and
+        // world.rot.y is what Actor_MoveXZGravity actually steers by.
+        player->actor.world.rot.y = player->yaw;
+    }
     sRito.state = RITO_FLY_HOP;
     sRito.timer = 0;
+    sRito.hopArmed = 0;
     MmForm_RitoPlay(play, player, clip, 0, 1.0f);
     Player_PlaySfx(&player->actor, NA_SE_PL_SKIP);
     return 1;

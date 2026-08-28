@@ -57,12 +57,14 @@ struct CapeFloatParam {
     const char* tooltip;
 };
 
-// Sheikah Slate: los sliders se retiraron el 2026-08-17 dando la colocacion por
-// buena, y estaba mal -- el pase de ajuste habia quedado PELLIZCADO contra los
-// limites de los propios sliders (OffsetX y OffsetZ acabaron clavados en -20 y 20,
-// que es justo lo que se ve cuando un drag topa). Vuelven aqui, y con rangos muy
-// por encima de esos valores para que el ajuste no se coma el limite otra vez.
-// Cuando la pose este bien, se hornea en SLATE_DEF_* (object_sheikah_slate.c).
+// Sheikah Slate: sin sliders, y esta vez de verdad. Se retiraron el 2026-08-17 dando
+// la pose por buena y estaba mal -- aquel ajuste habia quedado PELLIZCADO contra los
+// limites de los propios sliders (OffsetX y OffsetZ clavados en -20 y 20, que es justo
+// lo que se ve cuando un drag topa). Volvieron con rangos de -80..80, se reajusto sin
+// tocar ningun tope, y la pose resultante esta horneada en SLATE_DEF_* dentro de
+// object_sheikah_slate.c. Ese codigo ya no lee un solo CVar: los gItemEditor.Slate.*
+// estan muertos, ni se escriben ni se leen. Para retocarla hay que editarla alli y
+// recompilar.
 
 // El trident ya NO tiene NADA en el Item Editor (2026-08-18). Las tres colocaciones
 // -- lanza en mano, estela/hitbox y glow de carga -- son constantes en
@@ -70,6 +72,26 @@ struct CapeFloatParam {
 // codigo ya no lee un solo CVar: los gItemEditor.Trident.* estan muertos, ni se
 // escriben ni se leen. Para retocar cualquiera de esos numeros hay que editarlos alli
 // y recompilar.
+
+// Gerudo demon mode: where the IK Axe sits in her hand, PER ANIMATION FAMILY ------
+// The hammer and the great sword hold their weapon at different angles, so one placement
+// cannot serve both; the InsectGlaive clip of the long parry is a third case. The suffix
+// is picked at runtime (Gs / Hm / Ig) - these entries carry the shared shape of a row.
+// Everything here only bites while "Live tuning" is on; otherwise the baked numbers in
+// sGerudoAxePlacements (mm_player_form.cpp) are what draws.
+const CapeFloatParam kGerudoAxeParams[] = {
+    { "Offset Fwd/Back", "OffX", -3000.0f, 3000.0f, 465.5f, "Slides the axe along the hand, out of or into the palm." },
+    { "Offset Up/Down", "OffY", -3000.0f, 3000.0f, -34.5f, "Slides the axe up or down the grip." },
+    { "Offset Left/Right", "OffZ", -3000.0f, 3000.0f, -310.3f, "Slides the axe sideways out of the hand." },
+    { "Pitch (deg)", "RotX", -180.0f, 180.0f, 82.8f, "Tips the head of the axe forwards or backwards." },
+    { "Yaw (deg)", "RotY", -180.0f, 180.0f, 180.0f, "Turns the blade around the handle." },
+    { "Roll (deg)", "RotZ", -180.0f, 180.0f, -75.6f, "Rolls the axe along the handle." },
+    { "Scale", "Scale", 0.01f, 4.00f, 0.801f, "Size of the drawn axe. The damage quad comes from the animation, not from this." },
+};
+
+const char* kGerudoAxeFamilies[] = { "gItemEditor.GerudoAxe.Gs", "gItemEditor.GerudoAxe.Hm",
+                                     "gItemEditor.GerudoAxe.Ig" };
+const char* kGerudoAxeFamilyLabels[] = { "Great Sword (gs_*)", "Hammer (hm_*)", "Insect Glaive (long parry)" };
 
 // Master Cycle: where Link sits on the bike, and how big the bike draws --------
 // The player-side ride code puts Link at riderPos - 27 in Y (Epona's saddle offset), so
@@ -83,21 +105,6 @@ const CapeFloatParam kCycleSeatParams[] = {
       "Slides Link along the bike. Negative is toward the rear wheel." },
     { "Bike Scale", "gItemEditor.Cycle.Scale", 0.5f, 2.0f, 1.0f,
       "Size of the drawn bike. Collision does not follow it." },
-};
-
-// Sheikah Slate: where the tablet sits in Link's fist ------------------------
-// Offsets are applied AFTER the rotations, so each one slides the tablet along its OWN axis
-// rather than along the world. Ranges are deliberately far wider than any sane pose needs:
-// the last tuning pass was silently clamped at +/-20 and the result had to be thrown away.
-const CapeFloatParam kSlateParams[] = {
-    { "Offset X", "gItemEditor.Slate.OffsetX", -80.0f, 80.0f, 20.0f, "Slides the tablet across the palm." },
-    { "Offset Y", "gItemEditor.Slate.OffsetY", -80.0f, 80.0f, -4.571f, "Slides it up and down the tablet's own face." },
-    { "Offset Z", "gItemEditor.Slate.OffsetZ", -80.0f, 80.0f, -20.0f, "Slides it in and out of the fist." },
-    { "Pitch (deg)", "gItemEditor.Slate.RotX", -180.0f, 180.0f, -53.465f,
-      "Tips the top of the tablet toward or away from Link." },
-    { "Yaw (deg)", "gItemEditor.Slate.RotY", -180.0f, 180.0f, -7.129f, "Turns the face of the tablet left and right." },
-    { "Roll (deg)", "gItemEditor.Slate.RotZ", -180.0f, 180.0f, -50.484f, "Rotates it in the plane of its own screen." },
-    { "Scale", "gItemEditor.Slate.Scale", 0.005f, 0.6f, 0.034f, "Size of the drawn tablet. Nothing else follows it." },
 };
 
 // Shape ------------------------------------------------------------------
@@ -212,6 +219,76 @@ void ItemEditorCapePopupGroup(const char* heading, const CapeFloatParam* params,
 // "Configure Master Cycle" — same shape as the cape popup: one button, one modal, so the seat
 // sliders do not take a section of the tab. Summon the bike with the slate's fourth rune, mount
 // it, and drag until Link sits on the saddle.
+void ItemEditorGerudoAxePopupWidget(WidgetInfo& info) {
+    static const char* kPopupId = "Configure Gerudo Axe";
+    static int sFamily = 0;
+
+    if (ImGui::Button("Configure Gerudo Axe...")) {
+        ImGui::OpenPopup(kPopupId);
+    }
+    UIWidgets::Tooltip("Where the IK Axe sits in Gerudo's hand, per animation family. "
+                       "Ctrl+click a slider to type an exact value.");
+
+    ImVec2 centre = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(centre, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(600.0f, 470.0f), ImGuiCond_Appearing);
+
+    if (ImGui::BeginPopupModal(kPopupId, NULL, ImGuiWindowFlags_NoSavedSettings)) {
+        bool tuning = CVarGetInteger("gItemEditor.GerudoAxe.Tune", 0) != 0;
+        if (ImGui::Checkbox("Live tuning (otherwise the baked values draw)", &tuning)) {
+            CVarSetInteger("gItemEditor.GerudoAxe.Tune", tuning ? 1 : 0);
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        }
+        bool freeDemon = CVarGetInteger("gItemEditor.GerudoAxe.FreeDemon", 0) != 0;
+        if (ImGui::Checkbox("Free demon mode (L enters with an empty meter)", &freeDemon)) {
+            CVarSetInteger("gItemEditor.GerudoAxe.FreeDemon", freeDemon ? 1 : 0);
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        }
+
+        ImGui::SeparatorText("Family being edited");
+        for (int f = 0; f < 3; f++) {
+            if (f > 0) {
+                ImGui::SameLine();
+            }
+            if (ImGui::RadioButton(kGerudoAxeFamilyLabels[f], sFamily == f)) {
+                sFamily = f;
+            }
+        }
+
+        const char* prefix = kGerudoAxeFamilies[sFamily];
+        if (ImGui::Button("Reset this family")) {
+            for (const auto& p : kGerudoAxeParams) {
+                CVarSetFloat((std::string(prefix) + "." + p.cvar).c_str(), p.def);
+            }
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        }
+
+        for (int i = 0; i < (int)(sizeof(kGerudoAxeParams) / sizeof(kGerudoAxeParams[0])); i++) {
+            const CapeFloatParam& p = kGerudoAxeParams[i];
+            std::string cvar = std::string(prefix) + "." + p.cvar;
+            if (i == 0) {
+                ImGui::SeparatorText("Placement");
+            } else if (i == 3) {
+                ImGui::SeparatorText("Rotation");
+            } else if (i == 6) {
+                ImGui::SeparatorText("Size");
+            }
+            float v = CVarGetFloat(cvar.c_str(), p.def);
+            std::string id = std::string(p.label) + "##" + cvar;
+            const char* fmt = (i == 6) ? "%.3f" : "%.1f";
+            if (ImGui::SliderFloat(id.c_str(), &v, p.min, p.max, fmt)) {
+                CVarSetFloat(cvar.c_str(), v);
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            }
+            UIWidgets::Tooltip(p.tooltip);
+        }
+        if (ImGui::Button("Close")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
 void ItemEditorCyclePopupWidget(WidgetInfo& info) {
     static const char* kPopupId = "Configure Master Cycle";
 
@@ -239,52 +316,6 @@ void ItemEditorCyclePopupWidget(WidgetInfo& info) {
             float v = CVarGetFloat(p.cvar, p.def);
             std::string id = std::string(p.label) + "##" + p.cvar;
             if (ImGui::SliderFloat(id.c_str(), &v, p.min, p.max, "%.2f")) {
-                CVarSetFloat(p.cvar, v);
-                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-            }
-            UIWidgets::Tooltip(p.tooltip);
-        }
-        if (ImGui::Button("Close")) {
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-    }
-}
-
-// "Configure Sheikah Slate" — same shape as the bike popup. Draw the tablet (equip it to a C
-// button and press it) and drag until it sits in the fist the way the Hookshot does; everything
-// applies live. Bake the result into SLATE_DEF_* when it looks right.
-void ItemEditorSlatePopupWidget(WidgetInfo& info) {
-    static const char* kPopupId = "Configure Sheikah Slate";
-
-    if (ImGui::Button("Configure Sheikah Slate...")) {
-        ImGui::OpenPopup(kPopupId);
-    }
-    UIWidgets::Tooltip("Where the tablet sits in Link's hand.\n"
-                       "Take it out on a C button first — the sliders do nothing while it is stowed.");
-
-    ImVec2 centre = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(centre, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(560.0f, 380.0f), ImGuiCond_Appearing);
-
-    if (ImGui::BeginPopupModal(kPopupId, NULL, ImGuiWindowFlags_NoSavedSettings)) {
-        if (ImGui::Button("Reset to Defaults")) {
-            for (const auto& p : kSlateParams) {
-                CVarSetFloat(p.cvar, p.def);
-            }
-            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-        }
-        UIWidgets::Tooltip("Back to the baked SLATE_DEF_* pose — which is itself known to be off.");
-
-        // No master switch, same as the bike: the defaults ARE the baked values, so every slider
-        // is always live.
-        ImGui::SeparatorText("Position & Rotation");
-        for (const auto& p : kSlateParams) {
-            float v = CVarGetFloat(p.cvar, p.def);
-            std::string id = std::string(p.label) + "##" + p.cvar;
-            // %.3f, not %.2f: the scale slider lives down at 0.034 and two decimals cannot show a
-            // change at all there.
-            if (ImGui::SliderFloat(id.c_str(), &v, p.min, p.max, "%.3f")) {
                 CVarSetFloat(p.cvar, v);
                 Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
             }
@@ -583,11 +614,14 @@ void RegisterNEIMenu() {
         .CustomFunction(ItemEditorCyclePopupWidget)
         .HideInSearch(true);
 
-    // Sheikah Slate in-hand pose. Back after the 2026-08-17 bake turned out to have been
-    // tuned against clamped sliders. Skijer's NEI
-    mSohMenu->AddWidget(path, "Sheikah Slate", WIDGET_CUSTOM)
-        .CustomFunction(ItemEditorSlatePopupWidget)
+    // Gerudo demon mode. The axe placement is dialled and baked (GERUDO_AXE_* in
+    // mm_player_form.cpp); what is left is a way INTO demon mode while the rest of its
+    // moveset is being built. Skijer's NEI
+    mSohMenu->AddWidget(path, "Gerudo Demon Mode", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Gerudo Axe", WIDGET_CUSTOM)
+        .CustomFunction(ItemEditorGerudoAxePopupWidget)
         .HideInSearch(true);
+
 
     // --- MM Quest Page (mirror of the 2ship-side OoT quest page). Skijer's NEI ---
     mSohMenu->AddWidget(path, "MM Quest Page", WIDGET_SEPARATOR_TEXT);
@@ -762,6 +796,63 @@ void RegisterNEIMenu() {
             "Remove the mask to revert. If the Keaton model isn't shipped yet the\n"
             "mask falls back to plain cosmetic wear.\n\n"
             "Model ships inside soh.o2r (objects/forms/keaton)."));
+
+    mSohMenu->AddWidget(path, "Keaton tails", WIDGET_SEPARATOR_TEXT);
+
+    mSohMenu->AddWidget(path, "Tail motion amount", WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar("gMods.KeatonTail.Amount")
+        .RaceDisable(false)
+        .Options(FloatSliderOptions()
+                     .Tooltip("Scales the baked animation. 1.0 is Keaton's own.")
+                     .Min(0.0f)
+                     .Max(2.0f)
+                     .DefaultValue(1.0f));
+
+    mSohMenu->AddWidget(path, "Keaton flute placement", WIDGET_SEPARATOR_TEXT);
+
+    struct FluteSlider {
+        const char* label;
+        const char* cvar;
+        float min;
+        float max;
+        const char* tip;
+    };
+    static const FluteSlider kFluteSliders[] = {
+        { "Flute X", "gMods.KeatonFlute.X", -600.0f, 600.0f, "Across the hand." },
+        { "Flute Y", "gMods.KeatonFlute.Y", -600.0f, 600.0f, "Up and down." },
+        { "Flute Z", "gMods.KeatonFlute.Z", -600.0f, 600.0f, "Toward and away from the face." },
+        { "Flute scale", "gMods.KeatonFlute.Scale", 0.1f, 3.0f, "1.0 is the size baked into the model." },
+    };
+    for (const FluteSlider& fs : kFluteSliders) {
+        mSohMenu->AddWidget(path, fs.label, WIDGET_CVAR_SLIDER_FLOAT)
+            .CVar(fs.cvar)
+            .RaceDisable(false)
+            .Options(FloatSliderOptions()
+                         .Tooltip(fs.tip)
+                         .Min(fs.min)
+                         .Max(fs.max)
+                         .DefaultValue(strcmp(fs.cvar, "gMods.KeatonFlute.Scale") == 0 ? 1.0f : 0.0f));
+    }
+
+    struct FluteRot {
+        const char* label;
+        const char* cvar;
+    };
+    static const FluteRot kFluteRots[] = {
+        { "Flute pitch", "gMods.KeatonFlute.RotX" },
+        { "Flute yaw", "gMods.KeatonFlute.RotY" },
+        { "Flute roll", "gMods.KeatonFlute.RotZ" },
+    };
+    for (const FluteRot& fr : kFluteRots) {
+        mSohMenu->AddWidget(path, fr.label, WIDGET_CVAR_SLIDER_INT)
+            .CVar(fr.cvar)
+            .RaceDisable(false)
+            .Options(IntSliderOptions()
+                         .Tooltip("Binary angle: 16384 is a quarter turn.")
+                         .Min(-32768)
+                         .Max(32767)
+                         .DefaultValue(0));
+    }
 
     mSohMenu->AddWidget(path, "Gerudo Mask Transform", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.GerudoMaskTransform")

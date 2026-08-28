@@ -26,6 +26,12 @@ static u8 sIkanaGuardActive = 0;        // Whether shield is currently raised
 static u8 sIkanaDeathSaveUsed = 0;      // Prevent double-revive per life
 static u8 sIkanaDeathSaveAvailable = 1; // Reset on scene change or respawn
 
+// Slot change: the guard window must not survive a swap. The death save is progress, it stays.
+static void Ikana_Cleanup(void) {
+    sIkanaGuardTimer = 0;
+    sIkanaGuardActive = 0;
+}
+
 // ---------------------------------------------------------------------------
 // Soul Drain: guard-window tracker (per-frame)
 //

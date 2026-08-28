@@ -368,13 +368,18 @@ static void MmBgm_PrimeSideChannel(u8 playerIdx, u16 fullSeqId) {
     Audio_PrimeMmSideChannel(playerIdx, fullSeqId);
 }
 
-void MmBgm_PlayFanfare(const char* mmBgmName) {
+void MmBgm_PlayFanfare(const char* mmBgmName, u8 melodyInstrument) {
     u16 id = MmBgm_GetSeqId(mmBgmName);
     if (id == 0xFFFF)
         return; // GetSeqId already logged the failure
-    MMBGM_LOG("[MmBgm] PlayFanfare '%s' (id=0x%04X)", mmBgmName, id);
+    MMBGM_LOG("[MmBgm] PlayFanfare '%s' (id=0x%04X) inst=%u", mmBgmName, id, melodyInstrument);
     MmBgm_PrimeSideChannel(/*SEQ_PLAYER_FANFARE=*/1, id);
     Audio_PlayFanfare(id);
+    // MM's Audio_PlayFanfareWithPlayerIOPort7: an MM song fanfare reads its melody
+    // instrument off the sequence PLAYER's io port 7 (seq cmd 0x7 = set global io port),
+    // which is how the same jingle comes out as drums, guitar or a sung voice depending on
+    // the form. Queued after the play command so the sequence sees it as it starts.
+    Audio_QueueSeqCmd(0x70000000 | (1u << 24) | (7u << 16) | melodyInstrument);
 }
 
 void MmBgm_PlayMain(const char* mmBgmName) {

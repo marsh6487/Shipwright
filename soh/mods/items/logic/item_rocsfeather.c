@@ -29,6 +29,7 @@
 
 // MM Animation API
 #include "mods/anim_translator/mm_anim_loader.h"
+#include "mods/transformation_masks/transformation_masks.h"
 
 // Pending animation type (stored when waiting for delay)
 static s32 sRfPendingAnimType = 0; // 0=none, 1=backflip, 2=roll jump
@@ -88,6 +89,18 @@ void Handle_RocsFeather(Player* p, PlayState* play) {
         if (RocsFeather_MmAnimEnabled()) {
             rfMmAnimTimer = -2; // Negative = pending, will count up to 0
             sRfPendingAnimType = CVarGetInteger("gMods.RocsItems.InvertAnims", 0) ? 2 : 1;
+        }
+    } else if (MmForm_RitoAirRocsAllowed(p)) {
+        // A Rito beats its wings again instead of needing the ground. The call above
+        // has already taken the magic, so this branch only has to do the jump.
+        p->actor.velocity.y = ROCSFEATHER_JUMP_VELOCITY;
+        p->stateFlags2 &= ~PLAYER_STATE2_HOPPING; // ledges stay grabbable, as the rando Roc's does
+        ItemVoice_Play(p, ROCSFEATHER_SOUND_JUMP_ADULT, ROCSFEATHER_SOUND_JUMP_CHILD);
+        FX_SpawnSparkles(p, play);
+
+        if (RocsFeather_MmAnimEnabled()) {
+            rfMmAnimTimer = -2;
+            sRfPendingAnimType = CVarGetInteger("gMods.RocsItems.InvertAnims", 0) ? 1 : 2;
         }
     }
 }

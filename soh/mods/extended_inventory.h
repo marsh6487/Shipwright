@@ -168,6 +168,19 @@ uint8_t Slate_RuneNeighbor(uint8_t rune, int32_t dir);
 void* Slate_RuneMiniIcon(uint8_t rune); // 24x24 rune glyph (wheel previews / textbox)
 void* Slate_RuneIcon(uint8_t rune);     // 32x32 slate-with-rune-badge (cell / HUD)
 
+// ── Rod of Seasons (Skijer's NEI) — slate idiom over SLOT_ROD_OF_SEASONS ──
+uint8_t Seasons_SeasonOwned(uint8_t season);
+void Seasons_GrantSeason(uint8_t season); // also hands over the rod on the first season
+uint8_t Seasons_SeasonCount(void);        // owned seasons
+uint8_t Seasons_SeasonAt(uint8_t index);
+uint8_t Seasons_GetSeason(void); // active season (self-healing to an owned one)
+void Seasons_SetSeason(uint8_t season);
+uint8_t Seasons_SeasonNeighbor(uint8_t season, int32_t dir);
+void* Seasons_SeasonIcon(uint8_t season); // 32x32 season glyph (wheel / cell / HUD)
+// A season's identity colour — the get-item flame, the icon, the rod's own gem. NOT the colour its
+// weather draws with: Winter's snow stays the vanilla grey (see item_rod_of_seasons.c).
+void Seasons_SeasonColor(uint8_t season, uint8_t* r, uint8_t* g, uint8_t* b);
+
 typedef struct {
     int currentPage;         // 0 = vanilla, 1 = custom items, 2 = MM masks
     int16_t pageSwitchTimer; // Cooldown to prevent rapid switching
