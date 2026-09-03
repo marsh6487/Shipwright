@@ -1834,7 +1834,12 @@ void Environment_UpdateLightningStrike(PlayState* play) {
                                                   (u8)(Rand_ZeroOne() * (ARRAY_COUNT(sLightningBolts) - 0.1f)) + 1);
                     sLightningFlashAlpha = 0;
                     if (!Audio_IsNatureLightningEnabled()) {
-                        Sfx_PlaySfxCentered2(NA_SE_EV_LIGHTNING);
+                        u16 thunderSfx = ConcurrentWeatherAudio_ResolveThunderSfx(CVarGetInteger(
+                            CVAR_AUDIO("ProximityWeatherThunderSfx"),
+                            CONCURRENT_WEATHER_THUNDER_SFX_CINEMATIC_LIGHTNING));
+                        if (thunderSfx != 0) {
+                            Sfx_PlaySfxCentered2(thunderSfx);
+                        }
                     }
                     gLightningStrike.state++;
                 }
