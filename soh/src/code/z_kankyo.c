@@ -7,6 +7,7 @@
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/savestate_serialize.h"
+#include "concurrent_weather_audio.h"
 
 typedef enum {
     /* 0 */ LENS_FLARE_CIRCLE0,
@@ -1832,6 +1833,9 @@ void Environment_UpdateLightningStrike(PlayState* play) {
                     Environment_AddLightningBolts(play,
                                                   (u8)(Rand_ZeroOne() * (ARRAY_COUNT(sLightningBolts) - 0.1f)) + 1);
                     sLightningFlashAlpha = 0;
+                    if (!Audio_IsNatureLightningEnabled()) {
+                        Sfx_PlaySfxCentered2(NA_SE_EV_LIGHTNING);
+                    }
                     gLightningStrike.state++;
                 }
                 break;

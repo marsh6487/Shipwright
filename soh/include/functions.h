@@ -2134,6 +2134,8 @@ void Audio_StopBgmAndFanfare(u16);
 void Audio_PreNMI();
 // ? func_800F6C34(?);
 void Audio_SetNatureAmbienceChannelIO(u8 channelIdxRange, u8 port, u8 val);
+u8 Audio_IsNatureRainEnabled(void);
+u8 Audio_IsNatureLightningEnabled(void);
 void Audio_PlayNatureAmbienceSequence(u8 natureAmbienceId);
 void Audio_Init();
 void Audio_InitSound();
