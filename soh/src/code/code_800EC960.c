@@ -5593,6 +5593,7 @@ void func_800F6C34(void) {
     D_8016B9F3 = 1;
     sMalonSingingDisabled = 0;
     sConcurrentWeatherAudioState.natureRainEnabled = false;
+    sConcurrentWeatherAudioState.natureLightningEnabled = false;
 }
 
 void Audio_SetNatureAmbienceChannelIO(u8 channelIdxRange, u8 port, u8 val) {
@@ -5606,7 +5607,7 @@ void Audio_SetNatureAmbienceChannelIO(u8 channelIdxRange, u8 port, u8 val) {
     }
 
     ConcurrentWeatherAudio_TrackNatureChannel(&sConcurrentWeatherAudioState, channelIdxRange, port, val,
-                                               NATURE_CHANNEL_RAIN, CHANNEL_IO_PORT_1);
+                                               NATURE_CHANNEL_RAIN, NATURE_CHANNEL_LIGHTNING, CHANNEL_IO_PORT_1);
 
     // channelIdxRange = 01 on port 1
     if (((channelIdxRange << 8) + port) == ((NATURE_CHANNEL_CRITTER_0 << 8) + CHANNEL_IO_PORT_1)) {
@@ -5628,7 +5629,15 @@ void Audio_SetNatureAmbienceChannelIO(u8 channelIdxRange, u8 port, u8 val) {
 }
 
 u8 Audio_IsNatureRainEnabled(void) {
-    return sConcurrentWeatherAudioState.natureRainEnabled;
+    return !ConcurrentWeatherAudio_ShouldPlayRainSfx(&sConcurrentWeatherAudioState,
+                                                      func_800FA0B4(SEQ_PLAYER_BGM_MAIN),
+                                                      NA_BGM_NATURE_AMBIENCE);
+}
+
+u8 Audio_IsNatureLightningEnabled(void) {
+    return !ConcurrentWeatherAudio_ShouldPlayThunderSfx(&sConcurrentWeatherAudioState,
+                                                         func_800FA0B4(SEQ_PLAYER_BGM_MAIN),
+                                                         NA_BGM_NATURE_AMBIENCE);
 }
 
 void Audio_StartNatureAmbienceSequence(u16 playerIO, u16 channelMask) {
