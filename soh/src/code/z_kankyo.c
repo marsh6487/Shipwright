@@ -1833,8 +1833,7 @@ void Environment_UpdateLightningStrike(PlayState* play) {
                     Environment_AddLightningBolts(play,
                                                   (u8)(Rand_ZeroOne() * (ARRAY_COUNT(sLightningBolts) - 0.1f)) + 1);
                     sLightningFlashAlpha = 0;
-                    if (ConcurrentWeatherAudio_ShouldPlayThunder(func_800FA0B4(SEQ_PLAYER_BGM_MAIN),
-                                                                  NA_BGM_NATURE_AMBIENCE)) {
+                    if (!Audio_IsNatureLightningEnabled()) {
                         Sfx_PlaySfxCentered2(NA_SE_EV_LIGHTNING);
                     }
                     gLightningStrike.state++;
