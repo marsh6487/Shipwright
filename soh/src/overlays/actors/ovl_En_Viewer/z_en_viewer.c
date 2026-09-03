@@ -14,6 +14,9 @@
 #include "objects/object_gndd/object_gndd.h"
 #include "objects/object_ganon/object_ganon.h"
 #include "objects/object_opening_demo1/object_opening_demo1.h"
+#include "objects/object_ma1/object_ma1.h"
+#include "objects/object_sa/object_sa.h"
+#include "static_story_actor.h"
 #include "soh/frame_interpolation.h"
 #include <assert.h>
 
@@ -29,6 +32,7 @@ void EnViewer_DrawFireEffects(EnViewer* this2, PlayState* play);
 void EnViewer_UpdateGanondorfCape(PlayState* play, EnViewer* this);
 void EnViewer_InitImpl(EnViewer* this, PlayState* play);
 void EnViewer_UpdateImpl(EnViewer* this, PlayState* play);
+s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
 
 static u8 sHorseSfxPlayed = false;
 
@@ -82,6 +86,17 @@ static EnViewerInitData sInitData[] = {
       &gGanondorfEndingFloatAnim },
 };
 
+static EnViewerInitData sStaticInitData[] = {
+    /* STATIC_STORY_ACTOR_IMPA */
+    { OBJECT_IM, OBJECT_IM, 1, 0, ENVIEWER_SHADOW_CIRCLE, 18, ENVIEWER_DRAW_IMPA, &gImpaSkel, &gImpaIdleAnim },
+    /* STATIC_STORY_ACTOR_CHILD_MALON */
+    { OBJECT_MA1, OBJECT_MA1, 1, 0, ENVIEWER_SHADOW_CIRCLE, 18, ENVIEWER_DRAW_STATIC_CHILD_MALON, &gMalonChildSkel,
+      &gMalonChildIdleAnim },
+    /* STATIC_STORY_ACTOR_SARIA */
+    { OBJECT_SA, OBJECT_SA, 1, 0, ENVIEWER_SHADOW_CIRCLE, 18, ENVIEWER_DRAW_STATIC_SARIA, &gSariaSkel,
+      &gSariaWaitArmsToSideAnim },
+};
+
 static EnGanonMant* sGanondorfCape;
 
 static Vec3f sGanondorfNeckWorldPos;
@@ -97,7 +112,7 @@ void EnViewer_Init(Actor* thisx, PlayState* play) {
     Actor_ProcessInitChain(&this->actor, sInitChain);
     EnViewer_SetupAction(this, EnViewer_InitImpl);
     sHorseSfxPlayed = false;
-    type = this->actor.params >> 8;
+    type = (u16)this->actor.params >> 8;
     this->unused = 0;
     this->state = 0;
     this->isVisible = false;
@@ -140,6 +155,12 @@ void EnViewer_InitAnimImpa(EnViewer* this, PlayState* play, void* skeletonHeader
     Animation_PlayLoopSetSpeed(&this->skin.skelAnime, anim, 3.0f);
 }
 
+void EnViewer_InitAnimStatic(EnViewer* this, PlayState* play, void* skeletonHeaderSeg, AnimationHeader* anim) {
+    SkelAnime_InitFlex(play, &this->skin.skelAnime, skeletonHeaderSeg, NULL, NULL, NULL, 0);
+    gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[this->animObjBankIndex].segment);
+    Animation_PlayLoopSetSpeed(&this->skin.skelAnime, anim, 1.0f);
+}
+
 void EnViewer_InitAnimHorse(EnViewer* this, PlayState* play, void* skeletonHeaderSeg, AnimationHeader* anim) {
     u8 type;
 
@@ -155,10 +176,9 @@ void EnViewer_InitAnimHorse(EnViewer* this, PlayState* play, void* skeletonHeade
 }
 
 static EnViewerInitAnimFunc sInitAnimFuncs[] = {
-    EnViewer_InitAnimGanondorfOrZelda,
-    EnViewer_InitAnimHorse,
-    EnViewer_InitAnimGanondorfOrZelda,
-    EnViewer_InitAnimImpa,
+    EnViewer_InitAnimGanondorfOrZelda, EnViewer_InitAnimHorse,
+    EnViewer_InitAnimGanondorfOrZelda, EnViewer_InitAnimImpa,
+    EnViewer_InitAnimStatic,           EnViewer_InitAnimStatic,
 };
 
 static ActorShadowFunc sShadowDrawFuncs[] = {
@@ -168,12 +188,22 @@ static ActorShadowFunc sShadowDrawFuncs[] = {
 };
 
 void EnViewer_InitImpl(EnViewer* this, PlayState* play) {
-    EnViewerInitData* initData = &sInitData[this->actor.params >> 8];
+    s32 staticType = StaticStoryActor_GetType(this->actor.params);
+    EnViewerInitData* initData =
+        staticType != 0 ? &sStaticInitData[staticType - 1] : &sInitData[(u16)this->actor.params >> 8];
     s32 skelObjBankIndex = Object_GetIndex(&play->objectCtx, initData->skeletonObject);
 
+    if (staticType != 0 && skelObjBankIndex < 0) {
+        skelObjBankIndex = Object_Spawn(&play->objectCtx, initData->skeletonObject);
+    }
     assert(skelObjBankIndex >= 0);
 
     this->animObjBankIndex = Object_GetIndex(&play->objectCtx, initData->animObject);
+    if (staticType != 0 && this->animObjBankIndex < 0) {
+        this->animObjBankIndex = initData->animObject == initData->skeletonObject
+                                     ? skelObjBankIndex
+                                     : Object_Spawn(&play->objectCtx, initData->animObject);
+    }
     assert(this->animObjBankIndex >= 0);
 
     if (!Object_IsLoaded(&play->objectCtx, skelObjBankIndex) ||
@@ -196,11 +226,14 @@ void EnViewer_InitImpl(EnViewer* this, PlayState* play) {
 static s16 sTimer = 0;
 
 void EnViewer_UpdateImpl(EnViewer* this, PlayState* play) {
-    u8 type = this->actor.params >> 8;
+    u8 type = (u16)this->actor.params >> 8;
     u16 csFrames;
     s32 animationEnded;
 
-    if (type == ENVIEWER_TYPE_2_ZELDA) {
+    if (StaticStoryActor_IsParam(this->actor.params)) {
+        SkelAnime_Update(&this->skin.skelAnime);
+        return;
+    } else if (type == ENVIEWER_TYPE_2_ZELDA) {
         if (gSaveContext.sceneLayer == 5) {
             csFrames = play->csCtx.frames;
             if (csFrames == 792) {
@@ -684,11 +717,34 @@ void EnViewer_DrawImpa(EnViewer* this, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+s32 EnViewer_StaticMalonOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
+                                         void* thisx) {
+    if (limbIndex == 2 || limbIndex == 5) {
+        *dList = NULL;
+    }
+    return false;
+}
+
+void EnViewer_DrawStaticChildMalon(EnViewer* this, PlayState* play) {
+    OPEN_DISPS(play->state.gfxCtx);
+    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(gMalonChildEyeOpenTex));
+    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(gMalonChildNeutralMouthTex));
+    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, EnViewer_StaticMalonOverrideLimbDraw, NULL, this);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+void EnViewer_DrawStaticSaria(EnViewer* this, PlayState* play) {
+    OPEN_DISPS(play->state.gfxCtx);
+    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(gSariaEyeOpenTex));
+    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(gSariaEyeOpenTex));
+    gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(gSariaMouthClosedTex));
+    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, NULL, NULL, this);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 static EnViewerDrawFunc sDrawFuncs[] = {
-    EnViewer_DrawGanondorf,
-    EnViewer_DrawHorse,
-    EnViewer_DrawZelda,
-    EnViewer_DrawImpa,
+    EnViewer_DrawGanondorf,        EnViewer_DrawHorse,       EnViewer_DrawZelda, EnViewer_DrawImpa,
+    EnViewer_DrawStaticChildMalon, EnViewer_DrawStaticSaria,
 };
 
 void EnViewer_Draw(Actor* thisx, PlayState* play) {
@@ -698,8 +754,11 @@ void EnViewer_Draw(Actor* thisx, PlayState* play) {
 
     OPEN_DISPS(play->state.gfxCtx);
     if (this->isVisible) {
-        type = this->actor.params >> 8;
-        if (type <= ENVIEWER_TYPE_2_ZELDA) { // zelda's horse, impa and zelda
+        type = (u16)this->actor.params >> 8;
+        if (StaticStoryActor_IsParam(this->actor.params)) {
+            Gfx_SetupDL_25Opa(play->state.gfxCtx);
+            sDrawFuncs[this->drawFuncIndex](this, play);
+        } else if (type <= ENVIEWER_TYPE_2_ZELDA) { // zelda's horse, impa and zelda
             if (play->csCtx.state != CS_STATE_IDLE && play->csCtx.npcActions[0] != NULL) {
                 Gfx_SetupDL_25Opa(play->state.gfxCtx);
                 sDrawFuncs[this->drawFuncIndex](this, play);

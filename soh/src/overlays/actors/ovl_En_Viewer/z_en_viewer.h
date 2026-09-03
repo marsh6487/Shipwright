@@ -27,7 +27,9 @@ typedef enum {
     /* 0 */ ENVIEWER_DRAW_GANONDORF,
     /* 1 */ ENVIEWER_DRAW_HORSE,
     /* 2 */ ENVIEWER_DRAW_ZELDA,
-    /* 3 */ ENVIEWER_DRAW_IMPA
+    /* 3 */ ENVIEWER_DRAW_IMPA,
+    /* 4 */ ENVIEWER_DRAW_STATIC_CHILD_MALON,
+    /* 5 */ ENVIEWER_DRAW_STATIC_SARIA
 } EnViewerDrawType;
 
 typedef enum {
