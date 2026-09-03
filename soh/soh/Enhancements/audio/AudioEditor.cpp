@@ -15,7 +15,7 @@
 #include "soh/Enhancements/enhancementTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/randomizer/SeedContext.h"
-#include "concurrent_weather_audio.h"
+#include "../../../src/code/concurrent_weather_audio.h"
 
 extern "C" {
 #include "z64save.h"
