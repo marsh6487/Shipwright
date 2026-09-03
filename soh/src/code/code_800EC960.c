@@ -6,6 +6,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/savestate_serialize.h"
+#include "concurrent_weather_audio.h"
 
 // TODO: can these macros be shared between files? code_800F9280 seems to use
 // versions without any casts...
@@ -2730,6 +2731,7 @@ u8 sAudioBlkChgBgmWork[2] = { 0 };
 u8 sAudioBlkChgBgmSel = 0;
 char sBoolStrs[3][5] = { "OFF", "ON", "STBY" };
 u8 sAudioNatureFailed = false;
+ConcurrentWeatherAudioState sConcurrentWeatherAudioState = { 0 };
 u8 sPeakNumNotes = 0;
 
 void AudioDebug_SetInput(void) {
@@ -5590,6 +5592,7 @@ void func_800F6C34(void) {
     sFanfareStartTimer = 0;
     D_8016B9F3 = 1;
     sMalonSingingDisabled = 0;
+    sConcurrentWeatherAudioState.natureRainEnabled = false;
 }
 
 void Audio_SetNatureAmbienceChannelIO(u8 channelIdxRange, u8 port, u8 val) {
@@ -5601,6 +5604,9 @@ void Audio_SetNatureAmbienceChannelIO(u8 channelIdxRange, u8 port, u8 val) {
         sAudioNatureFailed = true;
         return;
     }
+
+    ConcurrentWeatherAudio_TrackNatureChannel(&sConcurrentWeatherAudioState, channelIdxRange, port, val,
+                                               NATURE_CHANNEL_RAIN, CHANNEL_IO_PORT_1);
 
     // channelIdxRange = 01 on port 1
     if (((channelIdxRange << 8) + port) == ((NATURE_CHANNEL_CRITTER_0 << 8) + CHANNEL_IO_PORT_1)) {
@@ -5619,6 +5625,10 @@ void Audio_SetNatureAmbienceChannelIO(u8 channelIdxRange, u8 port, u8 val) {
     for (channelIdx = firstChannelIdx; channelIdx <= lastChannelIdx; channelIdx++) {
         Audio_SeqCmd8(SEQ_PLAYER_BGM_MAIN, port, channelIdx, val);
     }
+}
+
+u8 Audio_IsNatureRainEnabled(void) {
+    return sConcurrentWeatherAudioState.natureRainEnabled;
 }
 
 void Audio_StartNatureAmbienceSequence(u16 playerIO, u16 channelMask) {
