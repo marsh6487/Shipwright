@@ -97,11 +97,9 @@ static const std::map<int32_t, const char*> proximityWeatherThunderSfxOptions = 
     { CONCURRENT_WEATHER_THUNDER_SFX_OFF, "Off" },
     { CONCURRENT_WEATHER_THUNDER_SFX_CINEMATIC_LIGHTNING, "Cinematic Lightning (0x282E)" },
     { CONCURRENT_WEATHER_THUNDER_SFX_GANONDORF_LIGHT_ARROW_HIT, "Ganondorf Light Arrow Hit (0x3827)" },
-    { CONCURRENT_WEATHER_THUNDER_SFX_PHANTOM_GANON_LIGHTNING_ATTACK,
-      "Phantom Ganon Lightning Attack (0x38A2)" },
+    { CONCURRENT_WEATHER_THUNDER_SFX_PHANTOM_GANON_LIGHTNING_ATTACK, "Phantom Ganon Lightning Attack (0x38A2)" },
     { CONCURRENT_WEATHER_THUNDER_SFX_PHANTOM_GANON_LIGHTNING_HIT, "Phantom Ganon Lightning Hit (0x38A8)" },
-    { CONCURRENT_WEATHER_THUNDER_SFX_PHANTOM_GANON_GROUND_THUNDER,
-      "Phantom Ganon Ground Thunder (0x38AD)" },
+    { CONCURRENT_WEATHER_THUNDER_SFX_PHANTOM_GANON_GROUND_THUNDER, "Phantom Ganon Ground Thunder (0x38AD)" },
     { CONCURRENT_WEATHER_THUNDER_SFX_GANONDORF_THUNDER_IMPACT, "Ganondorf Thunder Impact (0x390B)" },
     { CONCURRENT_WEATHER_THUNDER_SFX_BARINADE_LIGHTNING_ATTACK, "Barinade Lightning Attack (0x3942)" },
 };
@@ -955,16 +953,14 @@ void RegisterAudioWidgets() {
                      .Size(ImVec2(300.0f, 0.0f)));
     SohGui::mSohMenu->AddSearchWidget({ voicePitch, "Enhancements", "Audio Editor", "Audio Options" });
 
-    proximityWeatherThunderSfx = { .name = "Proximity Weather Thunder SFX",
-                                   .type = WidgetType::WIDGET_CVAR_COMBOBOX };
+    proximityWeatherThunderSfx = { .name = "Proximity Weather Thunder SFX", .type = WidgetType::WIDGET_CVAR_COMBOBOX };
     proximityWeatherThunderSfx.CVar(CVAR_AUDIO("ProximityWeatherThunderSfx"))
         .Options(ComboboxOptions()
                      .DefaultIndex(CONCURRENT_WEATHER_THUNDER_SFX_CINEMATIC_LIGHTNING)
                      .ComboMap(proximityWeatherThunderSfxOptions)
                      .Tooltip("Selects the standalone sound effect played at the synchronized lightning strike "
                               "point for proximity weather. This does not alter rain, scene music, or flash timing."));
-    SohGui::mSohMenu->AddSearchWidget(
-        { proximityWeatherThunderSfx, "Enhancements", "Audio Editor", "Audio Options" });
+    SohGui::mSohMenu->AddSearchWidget({ proximityWeatherThunderSfx, "Enhancements", "Audio Editor", "Audio Options" });
 
     testProximityWeatherThunderSfx = { .name = "Test Thunder SFX", .type = WidgetType::WIDGET_BUTTON };
     testProximityWeatherThunderSfx
