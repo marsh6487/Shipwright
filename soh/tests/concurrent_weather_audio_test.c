@@ -37,8 +37,7 @@ int main(void) {
            0x38A8);
     assert(ConcurrentWeatherAudio_ResolveThunderSfx(CONCURRENT_WEATHER_THUNDER_SFX_PHANTOM_GANON_GROUND_THUNDER) ==
            0x38AD);
-    assert(ConcurrentWeatherAudio_ResolveThunderSfx(CONCURRENT_WEATHER_THUNDER_SFX_GANONDORF_THUNDER_IMPACT) ==
-           0x390B);
+    assert(ConcurrentWeatherAudio_ResolveThunderSfx(CONCURRENT_WEATHER_THUNDER_SFX_GANONDORF_THUNDER_IMPACT) == 0x390B);
     assert(ConcurrentWeatherAudio_ResolveThunderSfx(CONCURRENT_WEATHER_THUNDER_SFX_BARINADE_LIGHTNING_ATTACK) ==
            0x3942);
     assert(ConcurrentWeatherAudio_ResolveThunderSfx(-1) == 0x0000);
