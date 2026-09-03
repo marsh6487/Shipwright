@@ -255,15 +255,17 @@ void EnWeatherTag_EnabledCloudySnow(EnWeatherTag* this, PlayState* play) {
 
 void EnWeatherTag_DisabledRainLakeHylia(EnWeatherTag* this, PlayState* play) {
     if (WeatherTag_CheckEnableWeatherEffect(this, play, 0, 1, 0, 2, 100, 4)) {
-        Environment_PlayStormNatureAmbience(play);
         play->envCtx.unk_EE[0] = 25;
         EnWeatherTag_SetupAction(this, EnWeatherTag_EnabledRainLakeHylia);
     }
 }
 
 void EnWeatherTag_EnabledRainLakeHylia(EnWeatherTag* this, PlayState* play) {
+    if (!Audio_IsNatureRainEnabled()) {
+        Sfx_PlaySfxCentered2(NA_SE_EV_RAIN - SFX_FLAG);
+    }
+
     if (WeatherTag_CheckRestoreWeather(this, play, 1, 0, 2, 0, 100)) {
-        Environment_StopStormNatureAmbience(play);
         play->envCtx.unk_EE[0] = 0;
         EnWeatherTag_SetupAction(this, EnWeatherTag_DisabledRainLakeHylia);
     }
@@ -271,7 +273,6 @@ void EnWeatherTag_EnabledRainLakeHylia(EnWeatherTag* this, PlayState* play) {
 
 void EnWeatherTag_DisabledCloudyRainThunderKakariko(EnWeatherTag* this, PlayState* play) {
     if (WeatherTag_CheckEnableWeatherEffect(this, play, 0, 1, 0, 4, 100, 5)) {
-        Environment_PlayStormNatureAmbience(play);
         play->envCtx.lightningMode = LIGHTNING_MODE_ON;
         play->envCtx.unk_EE[0] = 30;
         EnWeatherTag_SetupAction(this, EnWeatherTag_EnabledCloudyRainThunderKakariko);
@@ -279,8 +280,11 @@ void EnWeatherTag_DisabledCloudyRainThunderKakariko(EnWeatherTag* this, PlayStat
 }
 
 void EnWeatherTag_EnabledCloudyRainThunderKakariko(EnWeatherTag* this, PlayState* play) {
+    if (!Audio_IsNatureRainEnabled()) {
+        Sfx_PlaySfxCentered2(NA_SE_EV_RAIN - SFX_FLAG);
+    }
+
     if (WeatherTag_CheckRestoreWeather(this, play, 1, 0, 4, 0, 100)) {
-        Environment_StopStormNatureAmbience(play);
         play->envCtx.lightningMode = LIGHTNING_MODE_LAST;
         play->envCtx.unk_EE[0] = 0;
         EnWeatherTag_SetupAction(this, EnWeatherTag_DisabledCloudyRainThunderKakariko);
@@ -303,7 +307,6 @@ void EnWeatherTag_DisabledRainThunder(EnWeatherTag* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
 
     if (Actor_WorldDistXZToActor(&player->actor, &this->actor) < WEATHER_TAG_RANGE100(this->actor.params)) {
-        Environment_PlayStormNatureAmbience(play);
         play->envCtx.lightningMode = LIGHTNING_MODE_ON;
         play->envCtx.unk_EE[0] = 25;
         EnWeatherTag_SetupAction(this, EnWeatherTag_EnabledRainThunder);
@@ -313,8 +316,11 @@ void EnWeatherTag_DisabledRainThunder(EnWeatherTag* this, PlayState* play) {
 void EnWeatherTag_EnabledRainThunder(EnWeatherTag* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
 
+    if (!Audio_IsNatureRainEnabled()) {
+        Sfx_PlaySfxCentered2(NA_SE_EV_RAIN - SFX_FLAG);
+    }
+
     if ((WEATHER_TAG_RANGE100(this->actor.params) + 10.0f) < Actor_WorldDistXZToActor(&player->actor, &this->actor)) {
-        Environment_StopStormNatureAmbience(play);
         play->envCtx.lightningMode = LIGHTNING_MODE_LAST;
         play->envCtx.unk_EE[0] = 0;
         play->envCtx.unk_EE[1] = 10;
