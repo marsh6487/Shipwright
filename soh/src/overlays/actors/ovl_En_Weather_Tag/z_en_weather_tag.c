@@ -5,7 +5,7 @@
  */
 
 #include "z_en_weather_tag.h"
-#include "concurrent_weather_audio.h"
+#include "code/concurrent_weather_audio.h"
 #include "soh/cvar_prefixes.h"
 #include "vt.h"
 
