@@ -45,6 +45,7 @@ typedef enum {
     STATIC_SKELETON_CHILD_RUTO,
     STATIC_SKELETON_KOKIRI,
     STATIC_SKELETON_MALON_ADULT,
+    STATIC_SKELETON_ADULT_ZELDA,
 } StaticStorySkeletonFamily;
 
 typedef enum {
@@ -80,6 +81,7 @@ typedef enum {
     STATIC_ANIM_ADULT_MALON_IDLE,
     STATIC_ANIM_ADULT_MALON_BASKET,
     STATIC_ANIM_ADULT_MALON_SING,
+    STATIC_ANIM_ADULT_ZELDA_NEUTRAL,
 } StaticStoryAnimation;
 
 enum {

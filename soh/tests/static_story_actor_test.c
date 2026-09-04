@@ -12,6 +12,7 @@ int main(void) {
     assert(StaticStoryActor_GetType(0x7F01) == STATIC_STORY_ACTOR_IMPA);
     assert(StaticStoryActor_GetType(0x7F02) == STATIC_STORY_ACTOR_CHILD_MALON);
     assert(StaticStoryActor_GetType(0x7F03) == STATIC_STORY_ACTOR_SARIA);
+    assert(StaticStoryActor_GetType(0x7F04) == STATIC_STORY_ACTOR_ADULT_ZELDA);
     assert(StaticStoryActor_GetType(0x7F05) == STATIC_STORY_ACTOR_SHEIK);
     assert(StaticStoryActor_GetType(0x7F06) == STATIC_STORY_ACTOR_ADULT_RUTO);
     assert(StaticStoryActor_GetType(0x7F07) == STATIC_STORY_ACTOR_CHILD_RUTO);
@@ -39,6 +40,11 @@ int main(void) {
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->objectId == OBJECT_RU1);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_CHILD_RUTO, 2)->animation ==
            STATIC_ANIM_CHILD_RUTO_SITTING);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_ZELDA)->objectId == OBJECT_ZL2);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_ZELDA, 0) != NULL);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_ZELDA, 1) != NULL);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_ZELDA, 1)->skeletonFamily ==
+           STATIC_SKELETON_ADULT_ZELDA);
 
     for (int type = STATIC_STORY_ACTOR_IMPA; type < STATIC_STORY_ACTOR_MAX; ++type) {
         definition = StaticStoryActor_GetDefinition(type);
@@ -59,7 +65,7 @@ int main(void) {
         }
     }
 
-    assert(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_ADULT_ZELDA));
+    assert(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_ADULT_ZELDA));
     assert(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_ADULT_MALON));
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_RUTO)->colliderRadius >
            StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->colliderRadius);

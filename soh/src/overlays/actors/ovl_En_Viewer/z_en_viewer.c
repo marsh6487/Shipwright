@@ -22,6 +22,7 @@
 #include "objects/object_kw1/object_kw1.h"
 #include "objects/object_fa/object_fa.h"
 #include "objects/object_ma2/object_ma2.h"
+#include "objects/object_zl2/object_zl2.h"
 #include "objects/object_os_anime/object_os_anime.h"
 #include "static_story_actor.h"
 #include "static_story_kokiri.h"
@@ -300,6 +301,9 @@ static void EnViewerStatic_InitSkeleton(EnViewer* this, PlayState* play,
         case STATIC_SKELETON_MALON_ADULT:
             SkelAnime_InitFlex(play, &this->skin.skelAnime, &gMalonAdultSkel, NULL, NULL, NULL, 0);
             break;
+        case STATIC_SKELETON_ADULT_ZELDA:
+            SkelAnime_InitFlex(play, &this->skin.skelAnime, &gZelda2Skel, NULL, NULL, NULL, 0);
+            return;
         default:
             return;
     }
@@ -400,7 +404,8 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
     if (definition == NULL || poseDescriptor == NULL) {
         return;
     }
-    if (poseDescriptor->skeletonFamily != STATIC_SKELETON_NONE) {
+    if (poseDescriptor->skeletonFamily != STATIC_SKELETON_NONE &&
+        poseDescriptor->animation != STATIC_ANIM_ADULT_ZELDA_NEUTRAL) {
         SkelAnime_Update(&this->skin.skelAnime);
     }
     if (poseDescriptor->flags & STATIC_POSE_FLAG_OCARINA) {
@@ -1066,6 +1071,21 @@ void EnViewer_DrawStaticAdultMalon(EnViewer* this, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+void EnViewer_DrawStaticAdultZelda(EnViewer* this, PlayState* play) {
+    static void* sEyes[] = { gZelda2EyeOpenTex, gZelda2EyeHalfTex, gZelda2EyeShutTex };
+
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
+    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
+    gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(gZelda2MouthSeriousTex));
+    gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
+    gSPSegment(POLY_OPA_DISP++, 0x0B, &D_80116280[2]);
+    POLY_OPA_DISP = SkelAnime_DrawFlex(play, this->skin.skelAnime.skeleton, this->skin.skelAnime.jointTable,
+                                       this->skin.skelAnime.dListCount, NULL, NULL, this, POLY_OPA_DISP);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 void EnViewerStatic_Draw(EnViewer* this, PlayState* play) {
     switch ((StaticStoryActorType)this->staticState.type) {
         case STATIC_STORY_ACTOR_IMPA:
@@ -1076,6 +1096,9 @@ void EnViewerStatic_Draw(EnViewer* this, PlayState* play) {
             break;
         case STATIC_STORY_ACTOR_SARIA:
             EnViewer_DrawStaticSaria(this, play);
+            break;
+        case STATIC_STORY_ACTOR_ADULT_ZELDA:
+            EnViewer_DrawStaticAdultZelda(this, play);
             break;
         case STATIC_STORY_ACTOR_SHEIK:
             EnViewer_DrawStaticSheik(this, play);
