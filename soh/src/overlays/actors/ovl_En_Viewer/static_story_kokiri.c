@@ -62,6 +62,18 @@ static s32 StaticStoryKokiri_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gf
                                             : sGirlEyes[this->staticState.eyeIndex]));
         gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[this->staticState.objectSlots[2]].segment);
     }
+    if (StaticStoryActor_CanTrack((StaticStoryActorType)this->staticState.type, this->staticState.pose)) {
+        /* Native En_Ko torso/head matrix convention. */
+        if (limbIndex == 8) {
+            Matrix_RotateX(BINANG_TO_RAD(-this->staticState.interactInfo.torsoRot.y), MTXMODE_APPLY);
+            Matrix_RotateZ(BINANG_TO_RAD(this->staticState.interactInfo.torsoRot.x), MTXMODE_APPLY);
+        } else if (limbIndex == 15) {
+            Matrix_Translate(1200.0f, 0.0f, 0.0f, MTXMODE_APPLY);
+            Matrix_RotateX(BINANG_TO_RAD(this->staticState.interactInfo.headRot.y), MTXMODE_APPLY);
+            Matrix_RotateZ(BINANG_TO_RAD(this->staticState.interactInfo.headRot.x), MTXMODE_APPLY);
+            Matrix_Translate(-1200.0f, 0.0f, 0.0f, MTXMODE_APPLY);
+        }
+    }
     return false;
 }
 

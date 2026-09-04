@@ -1,6 +1,7 @@
 #ifndef STATIC_STORY_ACTOR_H
 #define STATIC_STORY_ACTOR_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #define STATIC_STORY_ACTOR_PARAM_PREFIX 0x7F00
@@ -49,6 +50,18 @@ typedef enum {
 } StaticStorySkeletonFamily;
 
 typedef enum {
+    STATIC_TRACKING_NONE,
+    STATIC_TRACKING_IMPA,
+    STATIC_TRACKING_CHILD_MALON,
+    STATIC_TRACKING_SARIA,
+    STATIC_TRACKING_SHEIK,
+    STATIC_TRACKING_ADULT_RUTO,
+    STATIC_TRACKING_CHILD_RUTO,
+    STATIC_TRACKING_KOKIRI,
+    STATIC_TRACKING_ADULT_MALON,
+} StaticStoryTrackingAdapter;
+
+typedef enum {
     STATIC_ANIM_NONE,
     STATIC_ANIM_IMPA_IDLE,
     STATIC_ANIM_MALON_IDLE,
@@ -89,7 +102,17 @@ enum {
     STATIC_POSE_FLAG_VOCAL = 1 << 0,
     STATIC_POSE_FLAG_OCARINA = 1 << 1,
     STATIC_POSE_FLAG_BASKET = 1 << 2,
+    /* Performance and seated poses preserve their authored silhouette. */
+    STATIC_POSE_FLAG_NO_TRACKING = 1 << 3,
 };
+
+/* A read-only snapshot: selectors never inspect or mutate save state directly. */
+typedef struct {
+    bool metZelda;
+    bool forestComplete;
+    bool waterComplete;
+    bool eponaComplete;
+} StaticStoryProgression;
 
 typedef struct {
     uint16_t animation;
@@ -110,6 +133,11 @@ typedef struct {
     int16_t colliderYShift;
     int16_t blinkMin;
     int16_t blinkRange;
+    float talkDistance;
+    StaticStoryTrackingAdapter trackingAdapter;
+    int16_t trackingPreset;
+    float trackingYOffset;
+    float trackingTargetYOffset;
 } StaticStoryActorDefinition;
 
 int StaticStoryActor_IsParam(int16_t params);
@@ -119,5 +147,7 @@ uint8_t StaticStoryActor_SanitizePose(StaticStoryActorType type, uint8_t pose);
 int StaticStoryActor_IsAvailable(StaticStoryActorType type);
 const StaticStoryActorDefinition* StaticStoryActor_GetDefinition(StaticStoryActorType type);
 const StaticStoryPoseDescriptor* StaticStoryActor_ResolvePose(StaticStoryActorType type, uint8_t pose);
+uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticStoryProgression* progression);
+int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose);
 
 #endif

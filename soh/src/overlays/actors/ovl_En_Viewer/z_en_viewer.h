@@ -73,8 +73,11 @@ typedef struct {
     uint8_t pose;
     uint8_t initialized;
     uint8_t eyeIndex;
+    uint8_t talking;
+    uint8_t tracking;
     int16_t blinkTimer;
     int16_t objectSlots[4];
+    NpcInteractInfo interactInfo;
     ColliderCylinder collider;
 } EnViewerStaticState;
 

@@ -51,6 +51,8 @@ void EnViewerStatic_Init(EnViewer* this, PlayState* play);
 void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play);
 void EnViewerStatic_Update(EnViewer* this, PlayState* play);
 void EnViewerStatic_Draw(EnViewer* this, PlayState* play);
+void EnViewerStatic_OfferTalk(EnViewer* this, PlayState* play);
+static void EnViewerStatic_UpdateTracking(EnViewer* this, PlayState* play);
 s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
 
 static u8 sHorseSfxPlayed = false;
@@ -391,6 +393,10 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
     this->actor.colChkInfo.mass = MASS_IMMOVABLE;
     this->staticState.blinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
     this->staticState.eyeIndex = poseDescriptor->flags & STATIC_POSE_FLAG_OCARINA ? 2 : 0;
+    this->actor.flags |= ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY;
+    this->staticState.talking = false;
+    this->staticState.tracking = false;
+    this->staticState.interactInfo.talkState = NPC_TALK_STATE_IDLE;
     this->staticState.initialized = true;
     EnViewer_SetupAction(this, EnViewerStatic_Update);
 }
@@ -419,6 +425,8 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
     Collider_UpdateCylinder(&this->actor, &this->staticState.collider);
     CollisionCheck_SetOC(play, &play->colChkCtx, &this->staticState.collider.base);
     Actor_SetFocus(&this->actor, definition->focusHeight);
+    EnViewerStatic_OfferTalk(this, play);
+    EnViewerStatic_UpdateTracking(this, play);
 }
 
 void EnViewer_InitImpl(EnViewer* this, PlayState* play) {
@@ -448,6 +456,69 @@ void EnViewer_InitImpl(EnViewer* this, PlayState* play) {
 }
 
 static s16 sTimer = 0;
+
+static StaticStoryProgression EnViewerStatic_ReadProgression(void) {
+    StaticStoryProgression progression = {
+        .metZelda = Flags_GetEventChkInf(EVENTCHKINF_ZELDA_FLED_HYRULE_CASTLE),
+        .forestComplete = CHECK_QUEST_ITEM(QUEST_SONG_SARIA),
+        .waterComplete = Flags_GetEventChkInf(EVENTCHKINF_USED_WATER_TEMPLE_BLUE_WARP),
+        .eponaComplete = Flags_GetEventChkInf(EVENTCHKINF_EPONA_OBTAINED),
+    };
+
+    return progression;
+}
+
+static void EnViewerStatic_UpdateTracking(EnViewer* this, PlayState* play) {
+    const StaticStoryActorDefinition* definition =
+        StaticStoryActor_GetDefinition((StaticStoryActorType)this->staticState.type);
+    NpcInteractInfo* interactInfo = &this->staticState.interactInfo;
+
+    if (definition != NULL && StaticStoryActor_CanTrack((StaticStoryActorType)this->staticState.type,
+                                                         this->staticState.pose) &&
+        this->staticState.tracking) {
+        interactInfo->trackPos = GET_PLAYER(play)->actor.world.pos;
+        interactInfo->trackPos.y += definition->trackingTargetYOffset;
+        interactInfo->yOffset = definition->trackingYOffset;
+        Npc_TrackPoint(&this->actor, interactInfo, definition->trackingPreset, NPC_TRACKING_HEAD_AND_TORSO);
+    } else {
+        Npc_TrackPoint(&this->actor, interactInfo, definition != NULL ? definition->trackingPreset : 0,
+                       NPC_TRACKING_NONE);
+    }
+}
+
+static void EnViewerStatic_RestorePlacementPose(EnViewer* this) {
+    /* Talk never changes the animation; clearing the state preserves the selected placement pose exactly. */
+    this->staticState.talking = false;
+    this->staticState.tracking = false;
+    this->staticState.interactInfo.talkState = NPC_TALK_STATE_IDLE;
+}
+
+void EnViewerStatic_OfferTalk(EnViewer* this, PlayState* play) {
+    const StaticStoryActorDefinition* definition =
+        StaticStoryActor_GetDefinition((StaticStoryActorType)this->staticState.type);
+    StaticStoryProgression progression;
+
+    if (this->staticState.talking) {
+        this->staticState.tracking = true;
+        if (Message_GetState(&play->msgCtx) == TEXT_STATE_CLOSING) {
+            EnViewerStatic_RestorePlacementPose(this);
+        }
+        return;
+    }
+
+    progression = EnViewerStatic_ReadProgression();
+    this->actor.textId = StaticStoryActor_SelectTextId((StaticStoryActorType)this->staticState.type, &progression);
+    if (definition == NULL) {
+        return;
+    }
+    if (Actor_ProcessTalkRequest(&this->actor, play)) {
+        this->staticState.talking = true;
+        this->staticState.tracking = true;
+        this->staticState.interactInfo.talkState = NPC_TALK_STATE_TALKING;
+    } else {
+        this->staticState.tracking = Actor_OfferTalk(&this->actor, play, definition->talkDistance);
+    }
+}
 
 void EnViewer_UpdateImpl(EnViewer* this, PlayState* play) {
     u8 type = (u16)this->actor.params >> 8;
@@ -929,9 +1000,21 @@ void EnViewer_DrawZelda(EnViewer* this, PlayState* play) {
 }
 
 s32 EnViewer_ImpaOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, void* thisx) {
+    EnViewer* this = (EnViewer*)thisx;
+
     if (limbIndex == 16) {
-        EnViewer* this = (EnViewer*)thisx;
         *dList = this->staticState.type != STATIC_STORY_ACTOR_NONE ? gImpaHeadUnmaskedDL : gImpaHeadMaskedDL;
+    }
+    if (this->staticState.type == STATIC_STORY_ACTOR_IMPA &&
+        StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_IMPA, this->staticState.pose)) {
+        /* Native Demo_Im chest/head convention. */
+        if (limbIndex == 9) {
+            rot->x += this->staticState.interactInfo.torsoRot.y;
+            rot->y -= this->staticState.interactInfo.torsoRot.x;
+        } else if (limbIndex == 16) {
+            rot->x += this->staticState.interactInfo.headRot.y;
+            rot->z += this->staticState.interactInfo.headRot.x;
+        }
     }
     return false;
 }
@@ -950,8 +1033,21 @@ void EnViewer_DrawImpa(EnViewer* this, PlayState* play) {
 
 static s32 EnViewer_StaticChildMalonOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
                                                       Vec3s* rot, void* thisx) {
+    EnViewer* this = (EnViewer*)thisx;
+
     if (limbIndex == 2 || limbIndex == 5) {
         *dList = NULL;
+    }
+    if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_CHILD_MALON, this->staticState.pose)) {
+        if (limbIndex == 15) {
+            Matrix_Translate(1400.0f, 0.0f, 0.0f, MTXMODE_APPLY);
+            Matrix_RotateX(BINANG_TO_RAD(this->staticState.interactInfo.headRot.y), MTXMODE_APPLY);
+            Matrix_RotateZ(BINANG_TO_RAD(this->staticState.interactInfo.headRot.x), MTXMODE_APPLY);
+            Matrix_Translate(-1400.0f, 0.0f, 0.0f, MTXMODE_APPLY);
+        } else if (limbIndex == 8) {
+            Matrix_RotateX(BINANG_TO_RAD(-this->staticState.interactInfo.torsoRot.y), MTXMODE_APPLY);
+            Matrix_RotateZ(BINANG_TO_RAD(-this->staticState.interactInfo.torsoRot.x), MTXMODE_APPLY);
+        }
     }
     return false;
 }
@@ -974,6 +1070,17 @@ static s32 EnViewer_StaticSariaOverrideLimbDraw(PlayState* play, s32 limbIndex, 
                               ->flags & STATIC_POSE_FLAG_OCARINA)) {
         *dList = gSariaRightHandAndOcarinaDL;
     }
+    if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SARIA, this->staticState.pose)) {
+        if (limbIndex == 16) {
+            Matrix_Translate(900.0f, 0.0f, 0.0f, MTXMODE_APPLY);
+            Matrix_RotateX(BINANG_TO_RAD(this->staticState.interactInfo.headRot.y), MTXMODE_APPLY);
+            Matrix_RotateZ(BINANG_TO_RAD(this->staticState.interactInfo.headRot.x), MTXMODE_APPLY);
+            Matrix_Translate(-900.0f, 0.0f, 0.0f, MTXMODE_APPLY);
+        } else if (limbIndex == 9) {
+            Matrix_RotateY(BINANG_TO_RAD(this->staticState.interactInfo.torsoRot.y), MTXMODE_APPLY);
+            Matrix_RotateX(BINANG_TO_RAD(this->staticState.interactInfo.torsoRot.x), MTXMODE_APPLY);
+        }
+    }
     return false;
 }
 
@@ -991,6 +1098,16 @@ static s32 EnViewer_StaticSheikOverrideLimbDraw(PlayState* play, s32 limbIndex, 
                                                  void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
 
+    if (StaticStoryActor_CanTrack((StaticStoryActorType)this->staticState.type, this->staticState.pose)) {
+        /* Native En_Xc limb map: torso 9, head 16. */
+        if (limbIndex == 9) {
+            rot->x += this->staticState.interactInfo.torsoRot.y;
+            rot->y -= this->staticState.interactInfo.torsoRot.x;
+        } else if (limbIndex == 16) {
+            rot->x += this->staticState.interactInfo.headRot.y;
+            rot->z += this->staticState.interactInfo.headRot.x;
+        }
+    }
     if (limbIndex == 12 && StaticStoryActor_ResolvePose((StaticStoryActorType)this->staticState.type,
                                                          this->staticState.pose)
                               ->animation == STATIC_ANIM_SHEIK_HARP) {
@@ -1011,6 +1128,23 @@ void EnViewer_DrawStaticSheik(EnViewer* this, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+static s32 EnViewer_StaticAdultRutoOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
+                                                     Vec3s* rot, void* thisx) {
+    EnViewer* this = (EnViewer*)thisx;
+
+    if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_RUTO, this->staticState.pose)) {
+        /* object_ru2's 23-limb hierarchy: torso 9, head 20. */
+        if (limbIndex == 9) {
+            rot->x += this->staticState.interactInfo.torsoRot.y;
+            rot->y -= this->staticState.interactInfo.torsoRot.x;
+        } else if (limbIndex == 20) {
+            rot->x += this->staticState.interactInfo.headRot.y;
+            rot->z += this->staticState.interactInfo.headRot.x;
+        }
+    }
+    return false;
+}
+
 void EnViewer_DrawStaticAdultRuto(EnViewer* this, PlayState* play) {
     static void* sEyes[] = { gAdultRutoEyeOpenTex, gAdultRutoEyeHalfTex, gAdultRutoEyeClosedTex };
 
@@ -1020,8 +1154,25 @@ void EnViewer_DrawStaticAdultRuto(EnViewer* this, PlayState* play) {
     gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(gAdultRutoMouthTex));
     gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
     gSPSegment(POLY_OPA_DISP++, 0x0C, &D_80116280[2]);
-    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, NULL, NULL, this);
+    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, EnViewer_StaticAdultRutoOverrideLimbDraw, NULL, this);
     CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static s32 EnViewer_StaticChildRutoOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
+                                                     Vec3s* rot, void* thisx) {
+    EnViewer* this = (EnViewer*)thisx;
+
+    if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_CHILD_RUTO, this->staticState.pose)) {
+        /* Native En_Ru1 convention: left upper arm 8 carries torso, torso 15 carries head. */
+        if (limbIndex == 8) {
+            rot->x += this->staticState.interactInfo.torsoRot.y;
+            rot->y -= this->staticState.interactInfo.torsoRot.x;
+        } else if (limbIndex == 15) {
+            rot->x += this->staticState.interactInfo.headRot.y;
+            rot->z += this->staticState.interactInfo.headRot.x;
+        }
+    }
+    return false;
 }
 
 void EnViewer_DrawStaticChildRuto(EnViewer* this, PlayState* play) {
@@ -1033,7 +1184,7 @@ void EnViewer_DrawStaticChildRuto(EnViewer* this, PlayState* play) {
     gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(gRutoChildMouthClosedTex));
     gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
     gSPSegment(POLY_OPA_DISP++, 0x0C, &D_80116280[2]);
-    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, NULL, NULL, this);
+    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, EnViewer_StaticChildRutoOverrideLimbDraw, NULL, this);
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
@@ -1043,6 +1194,17 @@ static s32 EnViewer_StaticAdultMalonOverrideLimbDraw(PlayState* play, s32 limbIn
 
     if (limbIndex == 3 || limbIndex == 6) {
         *dList = NULL;
+    }
+    if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_MALON, this->staticState.pose)) {
+        if (limbIndex == 18) {
+            Matrix_Translate(1400.0f, 0.0f, 0.0f, MTXMODE_APPLY);
+            Matrix_RotateX(BINANG_TO_RAD(this->staticState.interactInfo.headRot.y), MTXMODE_APPLY);
+            Matrix_RotateZ(BINANG_TO_RAD(this->staticState.interactInfo.headRot.x), MTXMODE_APPLY);
+            Matrix_Translate(-1400.0f, 0.0f, 0.0f, MTXMODE_APPLY);
+        } else if (limbIndex == 11) {
+            Matrix_RotateY(BINANG_TO_RAD(-this->staticState.interactInfo.torsoRot.y), MTXMODE_APPLY);
+            Matrix_RotateX(BINANG_TO_RAD(-this->staticState.interactInfo.torsoRot.x), MTXMODE_APPLY);
+        }
     }
     return false;
 }

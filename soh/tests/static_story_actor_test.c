@@ -7,6 +7,13 @@
 
 int main(void) {
     const StaticStoryActorDefinition* definition;
+    StaticStoryProgression early = { 0 };
+    StaticStoryProgression complete = {
+        .metZelda = true,
+        .forestComplete = true,
+        .waterComplete = true,
+        .eponaComplete = true,
+    };
 
     assert(StaticStoryActor_IsParam((int16_t)0x7F01));
     assert(StaticStoryActor_GetType(0x7F01) == STATIC_STORY_ACTOR_IMPA);
@@ -53,6 +60,7 @@ int main(void) {
         assert(definition->focusHeight > 0.0f);
         assert(definition->colliderRadius > 0);
         assert(definition->colliderHeight > definition->colliderRadius);
+        assert(definition->talkDistance > 0.0f);
         if (definition->available) {
             assert(definition->adapter != STATIC_ADAPTER_NONE);
             for (uint8_t pose = 0; pose <= definition->maxPose; ++pose) {
@@ -61,9 +69,70 @@ int main(void) {
                 assert(poseDescriptor != NULL);
                 assert(poseDescriptor->animation != STATIC_ANIM_NONE);
                 assert(poseDescriptor->skeletonFamily != STATIC_SKELETON_NONE);
+                assert(StaticStoryActor_CanTrack((StaticStoryActorType)type, pose) ==
+                       ((definition->trackingAdapter != STATIC_TRACKING_NONE) &&
+                        !(poseDescriptor->flags & STATIC_POSE_FLAG_NO_TRACKING)));
             }
         }
+        assert(StaticStoryActor_SelectTextId((StaticStoryActorType)type, &early) != 0);
+        assert(StaticStoryActor_SelectTextId((StaticStoryActorType)type, &complete) != 0);
     }
+
+    assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SHEIK, 0));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SHEIK, 2));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_FADO, 3));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_ZELDA, 0));
+    assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_RUTO, 0));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_CHILD_MALON, 1));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SARIA, 2));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SARIA, 3));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_CHILD_RUTO, 2));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_KOKIRI_GIRL, 3));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_MALON, 2));
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_IMPA)->trackingAdapter == STATIC_TRACKING_IMPA);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_MALON)->trackingAdapter ==
+           STATIC_TRACKING_CHILD_MALON);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_SARIA)->trackingAdapter == STATIC_TRACKING_SARIA);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_SHEIK)->trackingAdapter == STATIC_TRACKING_SHEIK);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->trackingAdapter ==
+           STATIC_TRACKING_CHILD_RUTO);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_KOKIRI_GIRL)->trackingAdapter ==
+           STATIC_TRACKING_KOKIRI);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_FADO)->trackingAdapter == STATIC_TRACKING_KOKIRI);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_MALON)->trackingAdapter ==
+           STATIC_TRACKING_ADULT_MALON);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_ZELDA)->trackingAdapter == STATIC_TRACKING_NONE);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_RUTO)->trackingAdapter ==
+           STATIC_TRACKING_ADULT_RUTO);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_IMPA)->trackingPreset == 12);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_MALON)->trackingPreset == 0);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_SARIA)->trackingPreset == 2);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->trackingPreset == 12);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_RUTO)->trackingPreset == 12);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_KOKIRI_GIRL)->trackingPreset == 2);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_MALON)->trackingPreset == 0);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_MALON)->trackingYOffset == 0.0f);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_MALON)->trackingTargetYOffset == 10.0f);
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_MALON, &early) !=
+           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_MALON, &complete));
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_SARIA, &early) !=
+           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_SARIA, &complete));
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_IMPA, &early) !=
+           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_IMPA, &complete));
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_ZELDA, &early) !=
+           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_ZELDA, &complete));
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_SHEIK, &early) !=
+           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_SHEIK, &complete));
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_RUTO, &early) !=
+           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_RUTO, &complete));
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &early) !=
+           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &complete));
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_KOKIRI_GIRL, &early) !=
+           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_KOKIRI_GIRL, &complete));
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_FADO, &early) !=
+           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_FADO, &complete));
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_MALON, &early) !=
+           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_MALON, &complete));
 
     assert(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_ADULT_ZELDA));
     assert(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_ADULT_MALON));
