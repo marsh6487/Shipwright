@@ -42,6 +42,8 @@ static WidgetInfo proximityWeatherThunder;
 static WidgetInfo proximityWeatherThunderStyle;
 static WidgetInfo proximityWeatherRainVolume;
 static WidgetInfo proximityWeatherThunderVolume;
+static WidgetInfo hyruleFieldNightMusic;
+static WidgetInfo globalOutdoorRain;
 
 namespace SohGui {
 extern std::shared_ptr<SohMenu> mSohMenu;
@@ -99,6 +101,41 @@ static const std::map<int32_t, const char*> proximityWeatherThunderStyles = {
     { CONCURRENT_WEATHER_THUNDER_LOW, "Low Thunder" },
     { CONCURRENT_WEATHER_THUNDER_LAYERED, "Layered Thunder" },
 };
+
+static void DrawHyruleFieldNightTrack() {
+    if (!CVarGetInteger(CVAR_AUDIO("HyruleFieldNightMusic"), 0)) {
+        return;
+    }
+
+    const auto sequences = AudioCollection::Instance->GetAllSequences();
+    int selected = CVarGetInteger(CVAR_AUDIO("HyruleFieldNightSequence"), NA_BGM_KAKARIKO_ADULT);
+    if (!sequences.contains(selected) || !sequences.at(selected).canBeUsedAsReplacement) {
+        selected = NA_BGM_KAKARIKO_ADULT;
+    }
+
+    ImGui::TextUnformatted("Hyrule Field Night Track");
+    ImGui::SameLine(300.0f);
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    UIWidgets::PushStyleCombobox(THEME_COLOR);
+    if (ImGui::BeginCombo("##HyruleFieldNightTrack", sequences.at(selected).label.c_str())) {
+        for (const auto& [id, sequence] : sequences) {
+            if (!sequence.canBeUsedAsReplacement ||
+                !(sequence.category & (SEQ_BGM_WORLD | SEQ_BGM_EVENT | SEQ_BGM_BATTLE))) {
+                continue;
+            }
+            if (ImGui::Selectable(sequence.label.c_str(), id == selected)) {
+                CVarSetInteger(CVAR_AUDIO("HyruleFieldNightSequence"), id);
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            }
+            if (id == selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+    UIWidgets::PopStyleCombobox();
+    UIWidgets::Tooltip("Selects the nighttime BGM used only in Hyrule Field. Audio Editor replacements still apply.");
+}
 
 // Grabs the current BGM sequence ID and replays it
 // which will lookup the proper override, or reset back to vanilla
@@ -619,6 +656,11 @@ void AudioEditor::DrawElement() {
                                       UIWidgets::ButtonOptions().Size(ImVec2(80, 36)).Padding(ImVec2(5.0f, 0.0f)))) {
                     CVarSetFloat(CVAR_AUDIO("LinkVoiceFreqMultiplier"), 1.0f);
                 }
+                SohGui::mSohMenu->MenuDrawItem(hyruleFieldNightMusic,
+                                               static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
+                DrawHyruleFieldNightTrack();
+                SohGui::mSohMenu->MenuDrawItem(globalOutdoorRain,
+                                               static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunder,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunderStyle,
@@ -956,6 +998,26 @@ void RegisterAudioWidgets() {
                      .DefaultValue(1.0f)
                      .Size(ImVec2(300.0f, 0.0f)));
     SohGui::mSohMenu->AddSearchWidget({ voicePitch, "Enhancements", "Audio Editor", "Audio Options" });
+
+    hyruleFieldNightMusic = { .name = "Enable Hyrule Field Night Music",
+                              .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    hyruleFieldNightMusic.CVar(CVAR_AUDIO("HyruleFieldNightMusic"))
+        .Options(CheckboxOptions()
+                     .Color(THEME_COLOR)
+                     .DefaultValue(false)
+                     .Tooltip("Plays the selected night track only in Hyrule Field while preserving crickets, "
+                              "ordinary SFX, and proximity weather."));
+    SohGui::mSohMenu->AddSearchWidget({ hyruleFieldNightMusic, "Enhancements", "Audio Editor", "Audio Options" });
+
+    globalOutdoorRain = { .name = "Enable Rain in Outdoor Scenes",
+                          .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    globalOutdoorRain.CVar(CVAR_AUDIO("GlobalOutdoorRain"))
+        .Options(CheckboxOptions()
+                     .Color(THEME_COLOR)
+                     .DefaultValue(false)
+                     .Tooltip("Displays rain and plays the concurrent rain loop in outdoor scenes without requiring "
+                              "a proximity-weather actor. Does not force lightning or thunder."));
+    SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRain, "Enhancements", "Audio Editor", "Audio Options" });
 
     proximityWeatherThunder = { .name = "Enable Proximity Weather Thunder",
                                 .type = WidgetType::WIDGET_CVAR_CHECKBOX };
