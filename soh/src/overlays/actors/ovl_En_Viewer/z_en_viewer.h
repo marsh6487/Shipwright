@@ -27,7 +27,9 @@ typedef enum {
     /* 0 */ ENVIEWER_DRAW_GANONDORF,
     /* 1 */ ENVIEWER_DRAW_HORSE,
     /* 2 */ ENVIEWER_DRAW_ZELDA,
-    /* 3 */ ENVIEWER_DRAW_IMPA
+    /* 3 */ ENVIEWER_DRAW_IMPA,
+    /* 4 */ ENVIEWER_DRAW_STATIC_CHILD_MALON,
+    /* 5 */ ENVIEWER_DRAW_STATIC_SARIA
 } EnViewerDrawType;
 
 typedef enum {
@@ -68,6 +70,9 @@ typedef struct EnViewer {
     /* 0x01E4 */ u8 unused;
     /* 0x01E5 */ u8 state;
     /* 0x01E6 */ u8 isVisible;
+    ColliderCylinder collider;
+    s16 blinkTimer;
+    u8 eyeIndex;
     /* 0x01E8 */ EnViewerFireEffect fireEffects[20];
 } EnViewer; // size = 0x05F8
 

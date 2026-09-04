@@ -8,6 +8,7 @@
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/savestate_serialize.h"
 #include "concurrent_weather_audio.h"
+#include "soh/Enhancements/audio/WeatherSamplePlayer.h"
 
 typedef enum {
     /* 0 */ LENS_FLARE_CIRCLE0,
@@ -1833,12 +1834,21 @@ void Environment_UpdateLightningStrike(PlayState* play) {
                     Environment_AddLightningBolts(play,
                                                   (u8)(Rand_ZeroOne() * (ARRAY_COUNT(sLightningBolts) - 0.1f)) + 1);
                     sLightningFlashAlpha = 0;
-                    if (!Audio_IsNatureLightningEnabled()) {
-                        u16 thunderSfx = ConcurrentWeatherAudio_ResolveThunderSfx(
-                            CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunderSfx"),
-                                           CONCURRENT_WEATHER_THUNDER_SFX_CINEMATIC_LIGHTNING));
-                        if (thunderSfx != 0) {
-                            Sfx_PlaySfxCentered2(thunderSfx);
+                    if (!Audio_IsNatureLightningEnabled() &&
+                        CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunder"), 1)) {
+                        f32 thunderGain = ConcurrentWeatherAudio_ClampPercent(
+                                              CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunderVolume"), 70)) /
+                                          100.0f;
+                        ConcurrentWeatherThunderStyle thunderStyle = ConcurrentWeatherAudio_ThunderStyle(
+                            CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunderStyle"),
+                                           CONCURRENT_WEATHER_THUNDER_LOW));
+
+                        WeatherSamplePlayer_Play("audio/samples/Low Thunder_META",
+                                                 thunderStyle == CONCURRENT_WEATHER_THUNDER_LAYERED
+                                                     ? thunderGain * 0.7f
+                                                     : thunderGain);
+                        if (thunderStyle == CONCURRENT_WEATHER_THUNDER_LAYERED) {
+                            WeatherSamplePlayer_Play("audio/samples/Lightning_META", thunderGain * 0.7f);
                         }
                     }
                     gLightningStrike.state++;
