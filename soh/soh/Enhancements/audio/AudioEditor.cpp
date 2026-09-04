@@ -834,4 +834,187 @@ void AudioEditor::DrawElement() {
 
         ImGui::EndTabBar();
     }
-    UIWidgets::PopStyleTabs/:ïŸ-¢G§²ÚîÆ­yÒæ–æFö÷'2ÇÂ‡Æ’ÓæVçd7G‚çVæµô$bÒ„db’’°¢&–Ô6öÆ÷"ç"Ò56æG7F÷&Õ&–Ô6öÆ÷'5³Òç#°¢&–Ô6öÆ÷"ærÒ56æG7F÷&Õ&–Ô6öÆ÷'5³Òæs°¢&–Ô6öÆ÷"æ"Ò56æG7F÷&Õ&–Ô6öÆ÷'5³Òæ#°¢Vçd6öÆ÷"ç"Ò56æG7F÷&ÔVçd6öÆ÷'5³Òç#°¢Vçd6öÆ÷"ærÒ56æG7F÷&ÔVçd6öÆ÷'5³Òæs°¢Vçd6öÆ÷"æ"Ò56æG7F÷&ÔVçd6öÆ÷'5³Òæ#°¢ÒVÇ6R–b„EóƒdD42ÓÒEóƒdDC’°¢&–Ô6öÆ÷"ç"Ò56æG7F÷&Õ&–Ô6öÆ÷'5´EóƒdD45Òç#°¢&–Ô6öÆ÷"ærÒ56æG7F÷&Õ&–Ô6öÆ÷'5´EóƒdD45Òæs°¢&–Ô6öÆ÷"æ"Ò56æG7F÷&Õ&–Ô6öÆ÷'5´EóƒdD45Òæ#°¢Vçd6öÆ÷"ç"Ò56æG7F÷&ÔVçd6öÆ÷'5´EóƒdD45Òç#°¢Vçd6öÆ÷"ærÒ56æG7F÷&ÔVçd6öÆ÷'5´EóƒdD45Òæs°¢Vçd6öÆ÷"æ"Ò56æG7F÷&ÔVçd6öÆ÷'5´EóƒdD45Òæ#°¢ÒVÇ6R°¢&–Ô6öÆ÷"ç"Ò‡33"”c3%ôÄU%‡56æG7F÷&Õ&–Ô6öÆ÷'5´EóƒdD45Òç"Â56æG7F÷&Õ&–Ô6öÆ÷'5´EóƒdDCÒç"ÂEóƒdDCB“°¢&–Ô6öÆ÷"ærÒ‡33"”c3%ôÄU%‡56æG7F÷&Õ&–Ô6öÆ÷'5´EóƒdD45ÒærÂ56æG7F÷&Õ&–Ô6öÆ÷'5´EóƒdDCÒærÂEóƒdDCB“°¢&–Ô6öÆ÷"æ"Ò‡33"”c3%ôÄU%‡56æG7F÷&Õ&–Ô6öÆ÷'5´EóƒdD45Òæ"Â56æG7F÷&Õ&–Ô6öÆ÷'5´EóƒdDCÒæ"ÂEóƒdDCB“°¢Vçd6öÆ÷"ç"Ò‡33"”c3%ôÄU%‡56æG7F÷&ÔVçd6öÆ÷'5´EóƒdD45Òç"Â56æG7F÷&ÔVçd6öÆ÷'5´EóƒdDCÒç"ÂEóƒdDCB“°¢Vçd6öÆ÷"ærÒ‡33"”c3%ôÄU%‡56æG7F÷&ÔVçd6öÆ÷'5´EóƒdD45ÒærÂ56æG7F÷&ÔVçd6öÆ÷'5´EóƒdDCÒærÂEóƒdDCB“°¢Vçd6öÆ÷"æ"Ò‡33"”c3%ôÄU%‡56æG7F÷&ÔVçd6öÆ÷'5´EóƒdD45Òæ"Â56æG7F÷&ÔVçd6öÆ÷'5´EóƒdDCÒæ"ÂEóƒdDCB“°¢Ð ¢Vçd6öÆ÷"ç"Ò‚†Vçd6öÆ÷"ç"¢7“‚’²‚ƒbãbÒ7“‚’¢&–Ô6öÆ÷"ç"’’¢ƒãbòbãb“°¢Vçd6öÆ÷"ærÒ‚†Vçd6öÆ÷"ær¢7“‚’²‚ƒbãbÒ7“‚’¢&–Ô6öÆ÷"ær’’¢ƒãbòbãb“°¢Vçd6öÆ÷"æ"Ò‚†Vçd6öÆ÷"æ"¢7“‚’²‚ƒbãbÒ7“‚’¢&–Ô6öÆ÷"æ"’’¢ƒãbòbãb“° ¢7“bÒ‡33"’„EóƒTdD#¢ƒãbòbãb’“°¢7“BÒ‡33"’„EóƒTdD#¢ƒ’ãbòbãb’“°¢7“"Ò‡33"’„EóƒTdD#¢ƒbãbòbãb’“° ¢õTåôD•52‡Æ’Óç7FFRævg„7G‚“° ¢ôÅ•õ„ÅUôD•5Òvg…õ6WGWDÅócB…ôÅ•õ„ÅUôD•5“°¢tE6WDÇ†F—F†W"…ôÅ•õ„ÅUôD•5²²ÂuôEôäô•4R“°¢tE6WD6öÆ÷$F—F†W"…ôÅ•õ„ÅUôD•5²²Âuô4Eôäô•4R“°¢tE6WE&–Ô6öÆ÷"…ôÅ•õ„ÅUôD•5²²ÂÂƒƒÂ&–Ô6öÆ÷"ç"Â&–Ô6öÆ÷"ærÂ&–Ô6öÆ÷"æ"ÂÆ’ÓæVçd7G‚ç6æG7F÷&Õ&–Ô“°¢tE6WDVçd6öÆ÷"…ôÅ•õ„ÅUôD•5²²ÂVçd6öÆ÷"ç"ÂVçd6öÆ÷"ærÂVçd6öÆ÷"æ"ÂÆ’ÓæVçd7G‚ç6æG7F÷&ÔVçd“°¢u56VvÖVçB…ôÅ•õ„ÅUôD•5²²Âƒ‚À¢vg…õGvõFW…67&öÆÄW‚‡Æ’Óç7FFRævg„7G‚ÂÂ‡S3"—7“bRƒÂÂƒ#Âƒ#ÂÂ‡S3"—7“BRƒÀ¢„ddbÒ‚‡S3"—7“"Rƒ’ÂƒÂƒCÂ7“‚ÂÂ7“‚¢ãVbÂ×7“‚’“°¢tE6WEFW‡GW&TÅUB…ôÅ•õ„ÅUôD•5²²ÂuõEEôäôäR“° ¢u5F—7Æ”Æ—7B…ôÅ•õ„ÅUôD•5²²Âtf–VÆE6æG7F÷&ÔDÂ“°¢4Äõ4UôD•52‡Æ’Óç7FFRævg„7G‚“° ¢EóƒTdD#³Ò‡33"—7“ƒ°§Ð §fö–BVçf—&öæÖVçEôF§W7DÆ–v‡G2…Æ•7FFR¢Æ’Âc3"&sÂc3"&s"Âc3"&s2Âc3"&sB’°¢c3"FV×°¢33"“° ¢–b‡Æ’Óç&ööÔ7G‚æ7W%&ööÒæ&V†f–÷%G—SÒ$ôôÕô$T„d”õ%õE•SóRbbÆ•ô6Ô—4æ÷Df—†VB‡Æ’’’°¢&sÒ4ÄÕôÔ”â†&sÂãb“°¢&sÒ4ÄÕôÔ‚†&sÂãb“° ¢FV×Ò&sÒ&s3°¢–b†&sÂ&s2’°¢FV×Òãc°¢Ð ¢Æ’ÓæVçd7G‚æF¤fötæV"Ò†&s"ÒÆ’ÓæVçd7G‚æÆ–v‡E6WGF–æw2æfötæV"’¢FV×° ¢–b†&sÓÒãb’°¢f÷"†’Ò²’Â3²’²²’°¢Æ’ÓæVçd7G‚æF¤föt6öÆ÷%¶•ÒÒ°¢Ð¢ÒVÇ6R°¢FV×Ò&s¢Rãc°¢FV×Ò4ÄÕôÔ‚‡FV×Âãb“° ¢f÷"†’Ò²’Â3²’²²’°¢Æ’ÓæVçd7G‚æF¤föt6öÆ÷%¶•ÒÒÒ‡3b’‡Æ’ÓæVçd7G‚æÆ–v‡E6WGF–æw2æföt6öÆ÷%¶•Ò¢FV×“°¢Ð¢Ð ¢–b†&sBÃÒãb’°¢&WGW&ã°¢Ð ¢&s£Ò&sC° ¢f÷"†’Ò²’Â3²’²²’°¢Æ’ÓæVçd7G‚æF¤Ö&–VçD6öÆ÷%¶•ÒÒÒ‡3b’‡Æ’ÓæVçd7G‚æÆ–v‡E6WGF–æw2æÖ&–VçD6öÆ÷%¶•Ò¢&s“°¢Æ’ÓæVçd7G‚æF¤Æ–v‡C6öÆ÷%¶•ÒÒÒ‡3b’‡Æ’ÓæVçd7G‚æÆ–v‡E6WGF–æw2æÆ–v‡C6öÆ÷%¶•Ò¢&s“°¢Ð¢Ð§Ð §33"Vçf—&öæÖVçEôvWD&w4F”6÷VçB‡fö–B’°¢&WGW&âu6fT6öçFW‡Bæ&w4F”6÷VçC°§Ð §fö–BVçf—&öæÖVçEô6ÆV$&w4F”6÷VçB‡fö–B’°¢u6fT6öçFW‡Bæ&w4F”6÷VçBÒ°§Ð §33"Vçf—&öæÖVçEôvWEF÷FÄF—2‡fö–B’°¢&WGW&âu6fT6öçFW‡BçF÷FÄF—3°§Ð §fö–BVçf—&öæÖVçEôf÷&6UÆ•6WVVæ6R‡Sb6W–B’°¢u6fT6öçFW‡Bæf÷&6VE6W–BÒ6W–C°§Ð §33"Vçf—&öæÖVçEô—4f÷&6VE6WVVæ6TF—6&ÆVB‡fö–B’°¢33"—4F—6&ÆVBÒfÇ6S° ¢–b†u6fT6öçFW‡Bæf÷&6VE6W–BÓÒäô$tÕôD•4$ÄTB’°¢—4F—6&ÆVBÒG'VS°¢Ð ¢&WGW&â—4F—6&ÆVC°§Ð §fö–BVçf—&öæÖVçEõÆ•7F÷&ÔæGW&TÖ&–Væ6R…Æ•7FFR¢Æ’’°¢–b‡Æ’Óç6WVVæ6T7G‚ææGW&TÖ&–Væ6T–BÓÒäEU$Uô”EôäôäR’°¢VF–õõÆ”æGW&TÖ&–Væ6U6WVVæ6R„äEU$Uô”EôÔ$´UEôä”t…B“°¢ÒVÇ6R°¢VF–õõÆ”æGW&TÖ&–Væ6U6WVVæ6R‡Æ’Óç6WVVæ6T7G‚ææGW&TÖ&–Væ6T–B“°¢Ð ¢VF–õõ6WDæGW&TÖ&–Væ6T6†ææVÄ”ò„äEU$Uô4„ääTÅõ$”âÂ4„ääTÅô”õõõ%EóÂ“°¢VF–õõ6WDæGW&TÖ&–Væ6T6†ææVÄ”ò„äEU$Uô4„ääTÅôÄ”t…Dä”ärÂ4„ääTÅô”õõõ%EóÂ“°§Ð §fö–BVçf—&öæÖVçEõ7F÷7F÷&ÔæGW&TÖ&–Væ6R…Æ•7FFR¢Æ’’°¢VF–õõ6WDæGW&TÖ&–Væ6T6†ææVÄ”ò„äEU$Uô4„ääTÅõ$”âÂ4„ääTÅô”õõõ%EóÂ“°¢VF–õõ6WDæGW&TÖ&–Væ6T6†ææVÄ”ò„äEU$Uô4„ääTÅôÄ”t…Dä”ärÂ4„ääTÅô”õõõ%EóÂ“° ¢–b†gVæ5óƒd#B…4UõÄ”U%ô$tÕôÔ”â’ÓÒäô$tÕôäEU$UôÔ$”Tä4R’°¢u6fT6öçFW‡Bç6W–BÒäô$tÕôäEU$Uõ4e…õ$”ã°¢Vçf—&öæÖVçEõÆ•66VæU6WVVæ6R‡Æ’“°¢Ð§Ð §fö–BVçf—&öæÖVçEõv'6öætÆVfR…Æ•7FFR¢Æ’’°¢uvVF†W$ÖöFRÒ°¢u6fT6öçFW‡Bæ7WG66VæT–æFW‚Ò°¢u6fT6öçFW‡Bç&W7väfÆrÒÓ3°¢Æ’ÓææW‡DVçG&æ6T–æFW‚Òu6fT6öçFW‡Bç&W7våµ$U5tåôÔôDUõ$UEU$åÒæVçG&æ6T–æFWƒ°¢Æ’ÓçG&ç6—F–öåG&–vvW"ÒE$å5õE$”ttU%õ5D%C°¢Æ’ÓçG&ç6—F–öåG—RÒE$å5õE•UôdDUõt„•DS°¢u6fT6öçFW‡BææW‡EG&ç6—F–öåG—RÒE$å5õE•UôdDUõt„•DS° ¢7v—F6‚‡Æ’ÓææW‡DVçG&æ6T–æFW‚’°¢66RTåE%ôDTD…ôÔõTåD”åô5$DU%õUU%ôU„•C ¢fÆw5õ6WDWfVçD6†´–æb„UdTåD4„´”äeôTåDU$TEôDTD…ôÔõTåD”åô5$DU"“°¢'&V³°¢66RTåE%ôÄ´Uô…”Ä”ôäõ%D…ôU„•C ¢fÆw5õ6WDWfVçD6†´–æb„UdTåD4„´”äeôTåDU$TEôÄ´Uô…”Ä”“°¢'&V³°¢66RTåE%ôDU4U%Eô4ôÄõ55U5ôT5EôU„•C ¢fÆw5õ6WDWfVçD6†´–æb„UdTåD4„´”äeôTåDU$TEôDU4U%Eô4ôÄõ55U2“°¢'&V³°¢66RTåE%ôu$dU”$EôTåE$ä4S ¢fÆw5õ6WDWfVçD6†´–æb„UdTåD4„´”äeôTåDU$TEôu$dU”$B“°¢'&V³°¢66RTåE%õDTÕÄUôôeõD”ÔUôTåE$ä4S ¢fÆw5õ6WDWfVçD6†´–æb„UdTåD4„´”äeôTåDU$TEõDTÕÄUôôeõD”ÔR“°¢'&V³°¢66RTåE%õ45$TEôdõ$U5EôÔTDõuõ4õUD…ôU„•C ¢'&V³°¢Ð§Ð
+    UIWidgets::PopStyleTabs();
+}
+
+std::vector<SeqType> allTypes = {
+    SEQ_BGM_WORLD,  SEQ_BGM_EVENT, SEQ_BGM_BATTLE, SEQ_OCARINA, SEQ_FANFARE,
+    SEQ_INSTRUMENT, SEQ_SFX,       SEQ_VOICE,      SEQ_ENDING,
+};
+
+void AudioEditor_RandomizeAll() {
+    for (auto type : allTypes) {
+        RandomizeGroup(type);
+    }
+
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    ReplayCurrentBGM();
+}
+
+void AudioEditor_AutoRandomizeAll() {
+    for (auto type : allTypes) {
+        RandomizeGroup(type, false);
+    }
+
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    ReplayCurrentBGM();
+}
+
+void AudioEditor_RandomizeGroup(SeqType group) {
+    RandomizeGroup(group);
+
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    ReplayCurrentBGM();
+}
+
+void AudioEditor_ResetAll() {
+    for (auto type : allTypes) {
+        ResetGroup(AudioCollection::Instance->GetAllSequences(), type);
+    }
+
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    ReplayCurrentBGM();
+}
+
+void AudioEditor_ResetGroup(SeqType group) {
+    ResetGroup(AudioCollection::Instance->GetAllSequences(), group);
+
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    ReplayCurrentBGM();
+}
+
+void AudioEditor_LockAll() {
+    for (auto type : allTypes) {
+        LockGroup(AudioCollection::Instance->GetAllSequences(), type);
+    }
+
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+}
+
+void AudioEditor_UnlockAll() {
+    for (auto type : allTypes) {
+        UnlockGroup(AudioCollection::Instance->GetAllSequences(), type);
+    }
+
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+}
+
+void RegisterAudioWidgets() {
+    lowHpAlarm = { .name = "Mute Low HP Alarm", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    lowHpAlarm.CVar(CVAR_AUDIO("LowHpAlarm"))
+        .Options(CheckboxOptions().Color(THEME_COLOR).Tooltip("Disable the low HP beeping sound."));
+    SohGui::mSohMenu->AddSearchWidget({ lowHpAlarm, "Enhancements", "Audio Editor", "Audio Options" });
+
+    naviCall = { .name = "Disable Navi Call Audio", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    naviCall.CVar(CVAR_AUDIO("DisableNaviCallAudio"))
+        .Options(CheckboxOptions().Color(THEME_COLOR).Tooltip("Disables the voice audio when Navi calls you."));
+    SohGui::mSohMenu->AddSearchWidget({ naviCall, "Enhancements", "Audio Editor", "Audio Options" });
+
+    enemyProx = { .name = "Disable Enemy Proximity Music", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    enemyProx.CVar(CVAR_AUDIO("EnemyBGMDisable"))
+        .Options(CheckboxOptions()
+                     .Color(THEME_COLOR)
+                     .Tooltip("Disables the music change when getting close to enemies. Useful for hearing "
+                              "your custom music for each scene more often."));
+
+    leeverProx = { .name = "Enable Enemy Proximity Music for Leever", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    leeverProx.CVar(CVAR_AUDIO("LeeverEnemyBGM"))
+        .Options(CheckboxOptions()
+                     .Color(THEME_COLOR)
+                     .Tooltip("Plays the battle music when getting close to a Leever, like in Majora's Mask."));
+
+    leadingMusic = { .name = "Disable Leading Music in Lost Woods", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    leadingMusic.CVar(CVAR_AUDIO("LostWoodsConsistentVolume"))
+        .Options(CheckboxOptions()
+                     .Color(THEME_COLOR)
+                     .Tooltip("Disables the volume shifting in the Lost Woods. Useful for hearing "
+                              "your custom music in the Lost Woods if you don't need the navigation assitance "
+                              "the volume changing provides. If toggling this while in the Lost Woods, reload "
+                              "the area for the effect to kick in."));
+    SohGui::mSohMenu->AddSearchWidget({ leadingMusic, "Enhancements", "Audio Editor", "Audio Options" });
+
+    displaySeqName = { .name = "Display Sequence Name in Notifications", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    displaySeqName.CVar(CVAR_AUDIO("SeqNameNotification"))
+        .Options(CheckboxOptions()
+                     .Color(THEME_COLOR)
+                     .Tooltip("Emits a notification with the current song name whenever it changes. "
+                              "(does not apply to fanfares or enemy BGM)."));
+    SohGui::mSohMenu->AddSearchWidget({ displaySeqName, "Enhancements", "Audio Editor", "Audio Options" });
+
+    ovlDuration = { .name = "Sequence Notification Duration: %d seconds", .type = WidgetType::WIDGET_CVAR_SLIDER_INT };
+    ovlDuration.CVar(CVAR_AUDIO("SeqNameNotificationDuration"))
+        .Options(IntSliderOptions().Color(THEME_COLOR).Min(1).Max(20).DefaultValue(10).Size(ImVec2(300.0f, 0.0f)));
+    SohGui::mSohMenu->AddSearchWidget({ ovlDuration, "Enhancements", "Audio Editor", "Audio Options" });
+
+    voicePitch = { .name = "Link's Voice Pitch Multiplier", .type = WidgetType::WIDGET_CVAR_SLIDER_FLOAT };
+    voicePitch.CVar(CVAR_AUDIO("LinkVoiceFreqMultiplier"))
+        .Options(FloatSliderOptions()
+                     .Color(THEME_COLOR)
+                     .IsPercentage()
+                     .Min(0.4f)
+                     .Max(2.5f)
+                     .DefaultValue(1.0f)
+                     .Size(ImVec2(300.0f, 0.0f)));
+    SohGui::mSohMenu->AddSearchWidget({ voicePitch, "Enhancements", "Audio Editor", "Audio Options" });
+
+    proximityWeatherThunder = { .name = "Enable Proximity Weather Thunder",
+                                .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    proximityWeatherThunder.CVar(CVAR_AUDIO("ProximityWeatherThunder"))
+        .Options(CheckboxOptions()
+                     .Color(THEME_COLOR)
+                     .DefaultValue(true)
+                     .Tooltip("Plays native OoT thunder at the synchronized proximity-weather lightning strike."));
+    SohGui::mSohMenu->AddSearchWidget({ proximityWeatherThunder, "Enhancements", "Audio Editor", "Audio Options" });
+
+    proximityWeatherThunderStyle = { .name = "Thunder Style", .type = WidgetType::WIDGET_CVAR_COMBOBOX };
+    proximityWeatherThunderStyle.CVar(CVAR_AUDIO("ProximityWeatherThunderStyle"))
+        .Options(ComboboxOptions()
+                     .DefaultIndex(CONCURRENT_WEATHER_THUNDER_LOW)
+                     .ComboMap(proximityWeatherThunderStyles)
+                     .Tooltip("Low Thunder plays the native rumble. Layered Thunder adds the native lightning crack."));
+    SohGui::mSohMenu->AddSearchWidget(
+        { proximityWeatherThunderStyle, "Enhancements", "Audio Editor", "Audio Options" });
+
+    proximityWeatherRainVolume = { .name = "Proximity Rain Volume: %d%%",
+                                   .type = WidgetType::WIDGET_CVAR_SLIDER_INT };
+    proximityWeatherRainVolume.CVar(CVAR_AUDIO("ProximityWeatherRainVolume"))
+        .Options(IntSliderOptions().Color(THEME_COLOR).Min(0).Max(100).DefaultValue(50).Size(ImVec2(300.0f, 0.0f)));
+    SohGui::mSohMenu->AddSearchWidget(
+        { proximityWeatherRainVolume, "Enhancements", "Audio Editor", "Audio Options" });
+
+    proximityWeatherThunderVolume = { .name = "Proximity Thunder Volume: %d%%",
+                                      .type = WidgetType::WIDGET_CVAR_SLIDER_INT };
+    proximityWeatherThunderVolume.CVar(CVAR_AUDIO("ProximityWeatherThunderVolume"))
+        .Options(IntSliderOptions().Color(THEME_COLOR).Min(0).Max(100).DefaultValue(70).Size(ImVec2(300.0f, 0.0f)));
+    SohGui::mSohMenu->AddSearchWidget(
+        { proximityWeatherThunderVolume, "Enhancements", "Audio Editor", "Audio Options" });
+
+    randomAudioGenModes = { .name = "Automatically Randomize All Music and Sound Effects",
+                            .type = WidgetType::WIDGET_CVAR_COMBOBOX };
+    randomAudioGenModes.CVar(CVAR_AUDIO("RandomizeAudioGenModes"))
+        .Options(
+            ComboboxOptions()
+                .DefaultIndex(RANDOMIZE_OFF)
+                .ComboMap(audioRandomizerModes)
+                .Tooltip(
+                    "Set when the music and sound effects is automaticly randomized:\n"
+                    "- Manual: Manually randomize music or sound effects by pressing the 'Randomize all Groups' "
+                    "button\n"
+                    "- On New Scene : Randomizes when you enter a new scene.\n"
+                    "- On Rando Gen Only: Randomizes only when you generate a new randomizer.\n"
+                    "- On File Load: Randomizes on File Load.\n"
+                    "- On File Load (Seeded): Randomizes on file load based on the current randomizer seed/file."));
+    SohGui::mSohMenu->AddSearchWidget({ randomAudioGenModes, "Enhancements", "Audio Editor", "Audio Options" });
+
+    lowerOctaves = { .name = "Lower Octaves of Unplayable High Notes", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    lowerOctaves.CVar(CVAR_AUDIO("ExperimentalOctaveDrop"))
+        .Options(CheckboxOptions()
+                     .Color(THEME_COLOR)
+                     .Tooltip("Some custom sequences may have notes that are too high for the game's audio "
+                              "engine to play. Enabling this checkbox will cause these notes to drop a "
+                              "couple of octaves so they can still harmonize with the other notes of the "
+                              "sequence."));
+    SohGui::mSohMenu->AddSearchWidget({ lowerOctaves, "Enhancements", "Audio Editor", "Audio Options" });
+}
+
+static RegisterMenuInitFunc menuInitFunc(RegisterAudioWidgets);
