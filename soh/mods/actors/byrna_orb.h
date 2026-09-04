@@ -1,29 +1,22 @@
 /**
- * byrna_orb.h — Cane of Byrna (ext sword 1) light orb / Insect Glaive Kinsect.
+ * byrna_orb.h — Cane of Byrna (ext sword 1) Kinsect: the Insect Glaive's orb.
  *
- * ONE object, two polarities. The Cane of Byrna in A Link to the Past spirals a
- * barrier around Link that blocks hits and damages what it touches; the Insect
- * Glaive's Kinsect flies OUT to a monster and comes back carrying an extract.
- * They are the same orb with the sign flipped, so this is a single actor with
- * two travelling states:
+ * NEAR     orbits the cane's tip. Link is INVULNERABLE while it is there, but
+ *          every hit it eats costs magic — which is what makes keeping it home
+ *          expensive and launching it the better play.
+ * OUTBOUND launched with R. Aimed at the Z-target, or straight ahead when there
+ *          is none. One Master-Sword-class hit.
+ * RETURN   flying home; R recalls it once it has banked a charge.
  *
- *   ORBIT    — circles Link. Damages on contact. Absorbs exactly ONE incoming
- *              hit and shatters (no drain, no invulnerability: see the design
- *              decision in MHR_EXT_SWORD_PORT_SPEC.md §12.4).
- *   OUTBOUND — launched at a target with R+B. Deals one sword hit and harvests
- *              an extract. While it is out, Link is NOT protected — that is the
- *              risk half of the trade.
- *   RETURN   — flies back to Link and resumes orbiting, applying the extract.
+ * CHARGE: one per DISTINCT enemy struck, or a full bar from a single boss. At
+ * BORB_CHARGE_MAX a wind column marks Link and R stops launching the orb and
+ * launches HIM instead. Touching the ground spends the whole bar.
  *
- * SUPER DAMAGE: only the OUTBOUND orb (plus its post-impact grace) claims
- * Fierce-Deity-class damage against bosses. An orbiting orb must NOT, or simply
- * standing next to a boss with the orb up would paralyse it every frame — the
- * same trap trident_charge_ball.h documents. The claim lives on the projectile,
- * never on Link's state.
+ * SUPER DAMAGE: the launched orb claims it, plus its post-impact grace. An orb
+ * sitting at the tip must NOT, or standing near a boss would paralyse it every
+ * frame — the trap trident_charge_ball.h documents.
  *
- * The implementation (byrna_orb.c) is TEXT-INCLUDED from extended_equipment.c —
- * it is not a standalone translation unit and is not in the vcxproj. Only the
- * accessors below are exported.
+ * Text-included from extended_equipment.c; only these accessors are exported.
  *
  * Skijer's NEI
  */
@@ -37,76 +30,55 @@
 extern "C" {
 #endif
 
-/** Kinsect extract colours. Which one an enemy yields is a static table keyed by
- *  actor id (byrna_orb.c), because OoT enemies have no per-part hitboxes to
- *  harvest the way MHR monsters do. */
-typedef enum {
-    BYRNA_EX_NONE = 0,
-    BYRNA_EX_RED,    // attack up
-    BYRNA_EX_WHITE,  // movement speed + vault height
-    BYRNA_EX_ORANGE, // defence up
-    BYRNA_EX_GREEN,  // heal (instant, does not linger)
-    BYRNA_EX_MAX
-} ByrnaExtract;
+#define BYRNA_CHARGE_MAX 3
 
-/**
- * True while a LAUNCHED orb is in flight or inside the post-impact grace window.
+/** True while a LAUNCHED orb is in flight or inside the post-impact grace window.
  *
- * The grace window is NOT optional. Actors update in category order (PLAYER = 2
- * before BOSS = 9). The orb is driven from the player-side dispatch, so on the
- * frame after its AT lands it sees its own AT_HIT and dies BEFORE the boss gets
- * to read BUMP_HIT — the boss would then find this predicate already false and
- * drop the super hit in silence. Same bug already chased down for Mario's
- * fireball (sm64_mario_items.c, sFireGraceTimer / MARIO_FB_GRACE).
- */
+ * The grace is NOT optional. Actors update in category order (PLAYER = 2 before
+ * BOSS = 9), so on the frame after its AT lands the orb sees its own AT_HIT and
+ * dies BEFORE the boss reads BUMP_HIT — the boss would find this false and drop
+ * the super hit in silence. Same bug as Mario's fireball (sm64_mario_items.c). */
 u8 ByrnaOrb_IsActive(void);
 
-/** Summon the orb into ORBIT. Pays BORB_MAGIC_COST. Returns 0 if there is not
- *  enough magic or an orb already exists. */
-u8 ByrnaOrb_Summon(PlayState* play);
+/** The R button. Summons and launches the orb, or recalls it once it has banked
+ *  a charge. Returns 0 when nothing happened. */
+u8 ByrnaOrb_PressR(PlayState* play);
 
-/** Send the orbiting orb at a target (R+B). Returns 0 if no orb is orbiting. */
-u8 ByrnaOrb_Launch(PlayState* play);
+/** Z + R: a damageless seed that tints whatever it touches, the way the Cane of
+ *  Pacci marks an Ultrahand target. */
+u8 ByrnaOrb_ThrowSeed(PlayState* play);
 
-/** Called from the player damage path. If an orb is ORBITing it shatters and
- *  eats the hit; returns 1 to tell the caller the damage was consumed. */
+/** Player damage path. While the orb is home Link cannot be hurt; the hit is
+ *  paid for in magic instead. Returns 1 when the damage was consumed. */
 u8 ByrnaOrb_TryAbsorb(PlayState* play);
 
-/** Per-frame tick for the grace window and the buff timers. Driven from
- *  ExtEquip_Update so both still expire when no orb is alive. */
+/** Grace window + per-frame upkeep. Driven from ExtEquip_Update so it still runs
+ *  with no orb alive. */
 void ByrnaOrb_Tick(void);
 
-/** Drop the orb and clear every buff — called when the slot is unequipped. */
+/** Drop the orb and the charge — the slot was unequipped. */
 void ByrnaOrb_Cleanup(void);
 
-/**
- * Forget the orb WITHOUT touching the actor. Call on scene load: every spawned
- * actor has already been freed by then, so Cleanup's Actor_Kill would dereference
- * a dangling pointer — and doing nothing at all would leave sOrb.actor non-NULL
- * forever, which makes Summon refuse for the rest of the session. Extract buffs
- * are timed and deliberately survive the transition.
- */
+/** Forget the orb WITHOUT touching the actor. On scene load every actor is
+ *  already freed, so Cleanup's Actor_Kill would follow a dangling pointer, and
+ *  doing nothing would leave the pointer non-NULL forever, blocking every future
+ *  summon for the rest of the session. */
 void ByrnaOrb_Forget(void);
 
-/** True while that extract's buff is running. */
-u8 ByrnaOrb_HasBuff(u8 extract);
+/** Banked charges, 0..BYRNA_CHARGE_MAX. */
+u8 ByrnaOrb_GetCharge(void);
 
-/** True while the ORANGE (defence) buff is up. Its own accessor so the damage
- *  chokepoint in z_player.c does not have to know the extract enum. */
-u8 ByrnaOrb_DefenseActive(void);
+/** True at a full bar: the wind column shows, and R launches Link. */
+u8 ByrnaOrb_IsCharged(void);
 
-/** Multiplier the damage chokepoint should apply to incoming damage: 0.5 while
- *  ORANGE is up, 1.0 otherwise. */
-f32 ByrnaOrb_IncomingDamageMul(void);
+/** True while the orb is home and therefore shielding Link. */
+u8 ByrnaOrb_IsGuarding(void);
 
-/** Multipliers for the moveset to apply. All return 1.0f with no buff up. */
-f32 ByrnaOrb_AttackMul(void);
-f32 ByrnaOrb_SpeedMul(void);
-f32 ByrnaOrb_VaultMul(void);
+/** Landing spends the bar. */
+void ByrnaOrb_OnLand(void);
 
-/** True while RED + WHITE + ORANGE are all up — MHR's "final form": incoming
- *  knockback is ignored. */
-u8 ByrnaOrb_NoFlinch(void);
+/** Draw hook for the orb and the full-charge wind column. */
+void ByrnaOrb_Draw(PlayState* play);
 
 #ifdef __cplusplus
 }

@@ -51,6 +51,8 @@ extern void ExtPlayer_SetAnimGroupAnim(s32 group, s32 animType, LinkAnimationHea
 
 // Defined further down; the reset above it has to be able to tear the ribbons down.
 static void MmForm_RitoWindTrailsOff(PlayState* play);
+// rito_bow.inc.c, text-included after this file: how far its running clip sits off the rest.
+static f32 MmForm_RitoBowDrawLift(Player* player);
 
 // ── clips ───────────────────────────────────────────────────────────────────
 #define RITO_ANIM(name) "__OTR__misc/link_animetion/" name
@@ -119,7 +121,7 @@ typedef enum {
 typedef struct {
     u8 loaded;
     u8 state;
-    s16 charge; // frames A has been held on the ground
+    s16 charge;  // frames A has been held on the ground
     s16 boost;   // frames left of a Roc's climb punched through the glide
     s16 windT;   // frames the updraft has been running; drives spin, scroll and the burst
     u8 hopArmed; // A has been released since the hop started, so it may glide now
@@ -251,6 +253,32 @@ static void MmForm_RitoPlay(PlayState* play, Player* player, LinkAnimationHeader
     sRito.timer = 0;
 }
 
+// A health drop is the one damage signal that cannot be missed: PLAYER_STATE1_DAMAGED is
+// raised and cleared inside a single action chain, and both controllers run after it.
+static struct {
+    s16 lastHealth;
+    u8 hurt;
+} sRitoDamage;
+
+static void MmForm_RitoTickDamage(void) {
+    s16 health = gSaveContext.health;
+
+    sRitoDamage.hurt = (sRitoDamage.lastHealth > 0) && (health < sRitoDamage.lastHealth);
+    sRitoDamage.lastHealth = health;
+}
+
+// OOT has the frame back. Asked before any MHR clip ticks, because a clip that keeps
+// re-arming PAUSE_ACTION_FUNC pauses OOT's own recovery along with it.
+static u8 MmForm_RitoOotTookOver(Player* player, PlayerActionFunc owned) {
+    if (sRitoDamage.hurt) {
+        return 1;
+    }
+    if (player->stateFlags1 & (PLAYER_STATE1_DAMAGED | PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE)) {
+        return 1;
+    }
+    return (owned != NULL) && (player->actionFunc != owned);
+}
+
 // Advance both tracks. Returns 1 when a one-shot clip has finished.
 static s32 MmForm_RitoAdvance(PlayState* play, Player* player) {
     s32 done;
@@ -289,10 +317,13 @@ extern "C" void MmForm_RitoResetFlight(void) {
 // The landing clip is authored standing on the floor, so during it the model must come
 // back UP by RITO_LAND_LIFT or the rito sinks through the ground as it touches down.
 extern "C" f32 MmForm_RitoDrawYOffset(Player* player) {
-    if ((player != NULL) && (sRito.land != NULL) && (player->skelAnime.animation == sRito.land)) {
+    if (player == NULL) {
+        return RITO_DRAW_Y_BASE;
+    }
+    if ((sRito.land != NULL) && (player->skelAnime.animation == sRito.land)) {
         return RITO_DRAW_Y_BASE + RITO_LAND_LIFT;
     }
-    return RITO_DRAW_Y_BASE;
+    return RITO_DRAW_Y_BASE + MmForm_RitoBowDrawLift(player);
 }
 
 extern "C" u8 MmForm_RitoAirRocsAllowed(Player* player) {
@@ -342,12 +373,12 @@ static u8 MmForm_RitoSpendLaunchMagic(void) {
 //
 // Tornado_GetAxis is axis.y = -sin(pitch), so straight up is pitch -0x4000.
 #define RITO_WIND_PITCH_UP (-0x4000)
-#define RITO_WIND_HEIGHT 82.0f  // tip at the feet, mouth this far above
-#define RITO_WIND_RADIUS 30.0f  // mouth radius
-#define RITO_WIND_SPIN 0x0900   // roll about the column, per frame
-#define RITO_WIND_SCROLL 18     // streaks travelling UP the column, in quarter-texels
-#define RITO_WIND_RIBBONS 5     // spiral streaks wrapping it
-#define RITO_WIND_ALPHA 70      // barely there: the cone is a hint, the streaks carry it
+#define RITO_WIND_HEIGHT 82.0f // tip at the feet, mouth this far above
+#define RITO_WIND_RADIUS 30.0f // mouth radius
+#define RITO_WIND_SPIN 0x0900  // roll about the column, per frame
+#define RITO_WIND_SCROLL 18    // streaks travelling UP the column, in quarter-texels
+#define RITO_WIND_RIBBONS 5    // spiral streaks wrapping it
+#define RITO_WIND_ALPHA 70     // barely there: the cone is a hint, the streaks carry it
 // The streaks spread WIDER than the cone they wrap. Feeding the ribbons their own copy of
 // the params is all it takes — Tornado_RibbonsUpdate lays them out from p->radius.
 #define RITO_WIND_RIBBON_SPREAD 2.0f
@@ -630,9 +661,10 @@ static u8 MmForm_RitoFlightUpdate(Player* player, PlayState* play) {
         MmForm_RitoRelease(player, 0);
         return 0;
     }
-    // Anything else that takes Link away (damage, a cutscene) ends the flight too.
-    if ((sRito.state != RITO_FLY_OFF) && (sRito.flyAction != NULL) && (player->actionFunc != sRito.flyAction) &&
-        (sRito.state != RITO_FLY_CHARGE)) {
+    // The charge is exempt from the action-function half only: it installs its own idle
+    // and would otherwise abort on its opening frame.
+    if ((sRito.state != RITO_FLY_OFF) &&
+        MmForm_RitoOotTookOver(player, (sRito.state == RITO_FLY_CHARGE) ? NULL : sRito.flyAction)) {
         MmForm_RitoRelease(player, 0);
         return 0;
     }
@@ -871,6 +903,7 @@ extern "C" u8 MmForm_RitoTryAirThrow(Player* player, PlayState* play, s32 itemAc
     }
     sRito.state = RITO_FLY_THROW;
     sRito.timer = 0;
+    sRito.flyAction = player->actionFunc; // whatever it interrupted is what it must yield to
     MmForm_RitoPlay(play, player, sRito.throwItem, 0, RITO_THROW_SPEED);
     return 1;
 }

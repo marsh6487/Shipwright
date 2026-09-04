@@ -100,8 +100,8 @@ extern "C" void KeatonTails_Update(Player* player) {
         sFrame = 0;
     }
     sFrame = (sFrame + 1) % (u32)kTailClipFrames[sPose];
-    const s16 (*clip)[3] = kTailClip[sPose][sFrame];
-    f32 amount = CVarGetFloat("gMods.KeatonTail.Amount", 1.0f);
+    const s16(*clip)[3] = kTailClip[sPose][sFrame];
+    const f32 amount = 0.39f; // tuned in-game, then baked
 
     // Eased rather than assigned: a clip switch would otherwise snap, and the three
     // clips do not start from the same tail pose.

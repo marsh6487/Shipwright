@@ -390,7 +390,7 @@ void EnMThunder_SpinAttacking(EnMThunder* this, PlayState* play) {
             // flag every frame (same trap as the sword beam further down).
             f32 wedgeR = GERUDO_WEDGE_WORLD_RADIUS(this->actor.scale.x);
             if (this->collider.base.atFlags & AT_HIT) {
-                GerudoMhr_AddChargeRage();
+                GerudoMhr_AddChargeRage(this->collider.base.at);
             }
             this->collider.dim.radius = (s16)(wedgeR * 0.62f);
             this->collider.dim.height = 70;
@@ -646,13 +646,90 @@ static void EnMThunder_DrawGerudoWedge(EnMThunder* this, PlayState* play, u8 alp
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-void EnMThunder_Draw(Actor* thisx, PlayState* play2) {
+void EnMThunder_DrawChargeGlow(EnMThunder* thunder, PlayState* play, MtxF* handMtx) {
     static f32 sSpinChargeScale[] = { 0.1f, 0.15f, 0.2f, 0.25f, 0.3f, 0.25f, 0.2f, 0.15f };
+    f32 pulse;
+    s32 scrollRate;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Matrix_Mult(handMtx, MTXMODE_NEW);
+
+    // The trident hides the sword and draws a lance with its own placement, so the glow has to be
+    // built in the LANCE's frame or it sits off the weapon entirely.
+    if (!ExtEquip_TridentThunderTransform()) {
+        switch (thunder->swordType) {
+            case 1:
+                Matrix_Translate(0.0f, 220.0f, 0.0f, MTXMODE_APPLY);
+                Matrix_Scale(-0.7f, -0.6f, -0.4f, MTXMODE_APPLY);
+                Matrix_RotateX(16384.0f, MTXMODE_APPLY);
+                break;
+            case 0:
+                Matrix_Translate(0.0f, 300.0f, -100.0f, MTXMODE_APPLY);
+                Matrix_Scale(-1.2f, -1.0f, -0.7f, MTXMODE_APPLY);
+                Matrix_RotateX(16384.0f, MTXMODE_APPLY);
+                break;
+            case 2:
+                Matrix_Translate(200.0f, 350.0f, 0.0f, MTXMODE_APPLY);
+                Matrix_Scale(-1.8f, -1.4f, -0.7f, MTXMODE_APPLY);
+                Matrix_RotateX(16384.0f, MTXMODE_APPLY);
+                break;
+        }
+    }
+
+    if (thunder->spinChargePercent >= 0.85f) {
+        pulse = (sSpinChargeScale[(play->gameplayFrames & 7)] * 6.0f) + 1.0f;
+        if (CVarGetInteger(CVAR_COSMETIC("SpinAttack.Level2Primary.Changed"), 0)) {
+            Color_RGB8 color =
+                CVarGetColor24(CVAR_COSMETIC("SpinAttack.Level2Primary.Value"), (Color_RGB8){ 255, 255, 170 });
+            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, color.r, color.g, color.b, thunder->chargeAlpha);
+        } else {
+            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, 255, 255, 170, thunder->chargeAlpha);
+        }
+        if (CVarGetInteger(CVAR_COSMETIC("SpinAttack.Level2Secondary.Changed"), 0)) {
+            Color_RGB8 color =
+                CVarGetColor24(CVAR_COSMETIC("SpinAttack.Level2Secondary.Value"), (Color_RGB8){ 255, 100, 0 });
+            gDPSetEnvColor(POLY_XLU_DISP++, color.r, color.g, color.b, 128);
+        } else {
+            gDPSetEnvColor(POLY_XLU_DISP++, 255, 100, 0, 128);
+        }
+        scrollRate = 0x28;
+    } else {
+        pulse = (sSpinChargeScale[play->gameplayFrames & 7] * 2.0f) + 1.0f;
+        if (CVarGetInteger(CVAR_COSMETIC("SpinAttack.Level1Primary.Changed"), 0)) {
+            Color_RGB8 color =
+                CVarGetColor24(CVAR_COSMETIC("SpinAttack.Level1Primary.Value"), (Color_RGB8){ 170, 255, 255 });
+            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, color.r, color.g, color.b, thunder->chargeAlpha);
+        } else {
+            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, 170, 255, 255, thunder->chargeAlpha);
+        }
+        if (CVarGetInteger(CVAR_COSMETIC("SpinAttack.Level1Secondary.Changed"), 0)) {
+            Color_RGB8 color =
+                CVarGetColor24(CVAR_COSMETIC("SpinAttack.Level1Secondary.Value"), (Color_RGB8){ 0, 100, 255 });
+            gDPSetEnvColor(POLY_XLU_DISP++, color.r, color.g, color.b, 128);
+        } else {
+            gDPSetEnvColor(POLY_XLU_DISP++, 0, 100, 255, 128);
+        }
+        scrollRate = 0x14;
+    }
+
+    Matrix_Scale(1.0f, pulse, pulse, MTXMODE_APPLY);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+
+    gSPSegment(POLY_XLU_DISP++, 0x09,
+               Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, (play->gameplayFrames * 5) & 0xFF, 0, 0x20, 0x20, 1,
+                                  (play->gameplayFrames * 20) & 0xFF, (play->gameplayFrames * scrollRate) & 0xFF, 8, 8,
+                                  5, 0, 20, scrollRate));
+
+    gSPDisplayList(POLY_XLU_DISP++, gSpinAttackChargingDL);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+void EnMThunder_Draw(Actor* thisx, PlayState* play2) {
     PlayState* play = play2;
     EnMThunder* this = (EnMThunder*)thisx;
     Player* player = GET_PLAYER(play);
-    f32 phi_f14;
-    s32 phi_t1;
 
     // Sword beam: draw blue crescent energy disk from mm.o2r.
     // From MM EnMThunder_Draw (lines 480-535): uses Matrix_Scale(0.02f), segment 0x08 TwoTexScroll,
@@ -738,108 +815,15 @@ void EnMThunder_Draw(Actor* thisx, PlayState* play2) {
             break;
     }
 
-    Matrix_Mult(&player->mf_9E0, MTXMODE_NEW);
-
-    // Trident (ext sword 3): the cases below place the charge glow along the sword
-    // blade, in the raw hand frame. The trident hides that sword and draws a lance
-    // with its own placement, so the glow has to be built in the LANCE's frame or it
-    // sits off the weapon entirely. Same frame the sword trail uses
-    // (ExtEquip_TridentTrailBegin). Self-guards; returns 0 for every other weapon.
-    // Skijer's NEI
-    if (!ExtEquip_TridentThunderTransform()) {
-        switch (this->swordType) {
-            case 1:
-                Matrix_Translate(0.0f, 220.0f, 0.0f, MTXMODE_APPLY);
-                Matrix_Scale(-0.7f, -0.6f, -0.4f, MTXMODE_APPLY);
-                Matrix_RotateX(16384.0f, MTXMODE_APPLY);
-                break;
-            case 0:
-                Matrix_Translate(0.0f, 300.0f, -100.0f, MTXMODE_APPLY);
-                Matrix_Scale(-1.2f, -1.0f, -0.7f, MTXMODE_APPLY);
-                Matrix_RotateX(16384.0f, MTXMODE_APPLY);
-                break;
-            case 2:
-                Matrix_Translate(200.0f, 350.0f, 0.0f, MTXMODE_APPLY);
-                Matrix_Scale(-1.8f, -1.4f, -0.7f, MTXMODE_APPLY);
-                Matrix_RotateX(16384.0f, MTXMODE_APPLY);
-                break;
-        }
-    }
-
-    if (this->spinChargePercent >= 0.85f) {
-        phi_f14 = (sSpinChargeScale[(play->gameplayFrames & 7)] * 6.0f) + 1.0f;
-        if (CVarGetInteger(CVAR_COSMETIC("SpinAttack.Level2Primary.Changed"), 0)) {
-            Color_RGB8 color =
-                CVarGetColor24(CVAR_COSMETIC("SpinAttack.Level2Primary.Value"), (Color_RGB8){ 255, 255, 170 });
-            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, color.r, color.g, color.b, this->chargeAlpha);
-        } else {
-            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, 255, 255, 170, this->chargeAlpha);
-        }
-        if (CVarGetInteger(CVAR_COSMETIC("SpinAttack.Level2Secondary.Changed"), 0)) {
-            Color_RGB8 color =
-                CVarGetColor24(CVAR_COSMETIC("SpinAttack.Level2Secondary.Value"), (Color_RGB8){ 255, 100, 0 });
-            gDPSetEnvColor(POLY_XLU_DISP++, color.r, color.g, color.b, 128);
-        } else {
-            gDPSetEnvColor(POLY_XLU_DISP++, 255, 100, 0, 128);
-        }
-        phi_t1 = 0x28;
-    } else {
-        phi_f14 = (sSpinChargeScale[play->gameplayFrames & 7] * 2.0f) + 1.0f;
-        if (CVarGetInteger(CVAR_COSMETIC("SpinAttack.Level1Primary.Changed"), 0)) {
-            Color_RGB8 color =
-                CVarGetColor24(CVAR_COSMETIC("SpinAttack.Level1Primary.Value"), (Color_RGB8){ 170, 255, 255 });
-            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, color.r, color.g, color.b, this->chargeAlpha);
-        } else {
-            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, 170, 255, 255, this->chargeAlpha);
-        }
-        if (CVarGetInteger(CVAR_COSMETIC("SpinAttack.Level1Secondary.Changed"), 0)) {
-            Color_RGB8 color =
-                CVarGetColor24(CVAR_COSMETIC("SpinAttack.Level1Secondary.Value"), (Color_RGB8){ 0, 100, 255 });
-            gDPSetEnvColor(POLY_XLU_DISP++, color.r, color.g, color.b, 128);
-        } else {
-            gDPSetEnvColor(POLY_XLU_DISP++, 0, 100, 255, 128);
-        }
-        phi_t1 = 0x14;
-    }
-    Matrix_Scale(1.0f, phi_f14, phi_f14, MTXMODE_APPLY);
-    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-
-    gSPSegment(POLY_XLU_DISP++, 0x09,
-               Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, (play->gameplayFrames * 5) & 0xFF, 0, 0x20, 0x20, 1,
-                                  (play->gameplayFrames * 20) & 0xFF, (play->gameplayFrames * phi_t1) & 0xFF, 8, 8, 5,
-                                  0, 20, phi_t1));
-
-    gSPDisplayList(POLY_XLU_DISP++, gSpinAttackChargingDL);
-
-    // Gerudo Dual Blades: everything above hung the glow off player->mf_9E0, which is the
-    // LEFT hand and nothing else — vanilla captures it at PLAYER_LIMB_L_HAND because Link
-    // holds his sword left-handed, and Link only ever has one weapon. She charges with a
-    // blade in each hand, so the same glow goes up a second time in the RIGHT hand's frame
-    // (captured in MmForm_PostLimbDraw). Colours, the 0x09 scroll and the pulse scale are
-    // already set: only the matrix changes. Skijer's NEI
-    if (GerudoMhr_UsesConeBurst(player)) {
-        Matrix_Mult(&gGerudoRightHandMtx, MTXMODE_NEW);
-        switch (this->swordType) {
-            case 1:
-                Matrix_Translate(0.0f, 220.0f, 0.0f, MTXMODE_APPLY);
-                Matrix_Scale(-0.7f, -0.6f, -0.4f, MTXMODE_APPLY);
-                Matrix_RotateX(16384.0f, MTXMODE_APPLY);
-                break;
-            case 0:
-                Matrix_Translate(0.0f, 300.0f, -100.0f, MTXMODE_APPLY);
-                Matrix_Scale(-1.2f, -1.0f, -0.7f, MTXMODE_APPLY);
-                Matrix_RotateX(16384.0f, MTXMODE_APPLY);
-                break;
-            case 2:
-                Matrix_Translate(200.0f, 350.0f, 0.0f, MTXMODE_APPLY);
-                Matrix_Scale(-1.8f, -1.4f, -0.7f, MTXMODE_APPLY);
-                Matrix_RotateX(16384.0f, MTXMODE_APPLY);
-                break;
-        }
-        Matrix_Scale(1.0f, phi_f14, phi_f14, MTXMODE_APPLY);
-        gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-        gSPDisplayList(POLY_XLU_DISP++, gSpinAttackChargingDL);
-    }
-
     CLOSE_DISPS(play->state.gfxCtx);
+
+    EnMThunder_DrawChargeGlow(this, play, &player->mf_9E0);
+
+    // Gerudo Dual Blades: she charges with a blade in each hand, so the glow goes up twice. Her
+    // right-hand frame is captured in MmForm_PostLimbDraw.
+    if (GerudoMhr_UsesConeBurst(player)) {
+        EnMThunder_DrawChargeGlow(this, play, &gGerudoRightHandMtx);
+    }
+
+    FourSwordClone_DrawChargeGlowAll(this, play);
 }

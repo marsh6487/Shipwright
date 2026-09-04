@@ -5,6 +5,7 @@
 #include "soh/resource/type/PlayerAnimation.h"
 #include "soh/resource/type/SohResourceType.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/randomizer/static_data.h" // the Sensor rune's item picker names its wishes
 #include "soh/Notification/Notification.h"
 #include "soh/FleetShipCombo/FleetShipCombo.h"
 #include <ship/resource/ResourceManager.h>
@@ -18,6 +19,13 @@
 #include <map>
 #include <vector>
 #include <string>
+#ifdef __APPLE__
+#include <SDL_scancode.h>
+#include <SDL_gamecontroller.h>
+#else
+#include <SDL2/SDL_scancode.h>
+#include <SDL2/SDL_gamecontroller.h>
+#endif
 
 extern "C" {
 #include <z64.h>
@@ -57,14 +65,10 @@ struct CapeFloatParam {
     const char* tooltip;
 };
 
-// Sheikah Slate: sin sliders, y esta vez de verdad. Se retiraron el 2026-08-17 dando
-// la pose por buena y estaba mal -- aquel ajuste habia quedado PELLIZCADO contra los
-// limites de los propios sliders (OffsetX y OffsetZ clavados en -20 y 20, que es justo
-// lo que se ve cuando un drag topa). Volvieron con rangos de -80..80, se reajusto sin
-// tocar ningun tope, y la pose resultante esta horneada en SLATE_DEF_* dentro de
-// object_sheikah_slate.c. Ese codigo ya no lee un solo CVar: los gItemEditor.Slate.*
-// estan muertos, ni se escriben ni se leen. Para retocarla hay que editarla alli y
-// recompilar.
+// The Sheikah Slate, Rod of Seasons, Elemental Wand and Master Cycle sliders are GONE (2026-09-02):
+// every one of those poses is baked into its own item now (the ItemHandPose in each
+// mods/items/objects/object_*.c, and MC_SEAT_* / MC_MODEL_SCALE in mods/actors/master_cycle.c).
+// The Magic Cape is the only rig left live, and it moved out of this tab into its own window.
 
 // El trident ya NO tiene NADA en el Item Editor (2026-08-18). Las tres colocaciones
 // -- lanza en mano, estela/hitbox y glow de carga -- son constantes en
@@ -72,40 +76,6 @@ struct CapeFloatParam {
 // codigo ya no lee un solo CVar: los gItemEditor.Trident.* estan muertos, ni se
 // escriben ni se leen. Para retocar cualquiera de esos numeros hay que editarlos alli
 // y recompilar.
-
-// Gerudo demon mode: where the IK Axe sits in her hand, PER ANIMATION FAMILY ------
-// The hammer and the great sword hold their weapon at different angles, so one placement
-// cannot serve both; the InsectGlaive clip of the long parry is a third case. The suffix
-// is picked at runtime (Gs / Hm / Ig) - these entries carry the shared shape of a row.
-// Everything here only bites while "Live tuning" is on; otherwise the baked numbers in
-// sGerudoAxePlacements (mm_player_form.cpp) are what draws.
-const CapeFloatParam kGerudoAxeParams[] = {
-    { "Offset Fwd/Back", "OffX", -3000.0f, 3000.0f, 465.5f, "Slides the axe along the hand, out of or into the palm." },
-    { "Offset Up/Down", "OffY", -3000.0f, 3000.0f, -34.5f, "Slides the axe up or down the grip." },
-    { "Offset Left/Right", "OffZ", -3000.0f, 3000.0f, -310.3f, "Slides the axe sideways out of the hand." },
-    { "Pitch (deg)", "RotX", -180.0f, 180.0f, 82.8f, "Tips the head of the axe forwards or backwards." },
-    { "Yaw (deg)", "RotY", -180.0f, 180.0f, 180.0f, "Turns the blade around the handle." },
-    { "Roll (deg)", "RotZ", -180.0f, 180.0f, -75.6f, "Rolls the axe along the handle." },
-    { "Scale", "Scale", 0.01f, 4.00f, 0.801f, "Size of the drawn axe. The damage quad comes from the animation, not from this." },
-};
-
-const char* kGerudoAxeFamilies[] = { "gItemEditor.GerudoAxe.Gs", "gItemEditor.GerudoAxe.Hm",
-                                     "gItemEditor.GerudoAxe.Ig" };
-const char* kGerudoAxeFamilyLabels[] = { "Great Sword (gs_*)", "Hammer (hm_*)", "Insect Glaive (long parry)" };
-
-// Master Cycle: where Link sits on the bike, and how big the bike draws --------
-// The player-side ride code puts Link at riderPos - 27 in Y (Epona's saddle offset), so
-// "Seat Height" is the seat's real height plus 27. These move only the RIDER; the model is
-// four rigid parts and scales as one with "Bike Scale". Live while riding.
-const CapeFloatParam kCycleSeatParams[] = {
-    { "Seat Right/Left", "gItemEditor.Cycle.SeatX", -20.0f, 20.0f, 0.0f, "Slides Link across the seat." },
-    { "Seat Height", "gItemEditor.Cycle.SeatY", 30.0f, 100.0f, 66.0f,
-      "Raises or lowers Link on the bike. Adjust until he sits on the saddle." },
-    { "Seat Fwd/Back", "gItemEditor.Cycle.SeatZ", -40.0f, 40.0f, -8.0f,
-      "Slides Link along the bike. Negative is toward the rear wheel." },
-    { "Bike Scale", "gItemEditor.Cycle.Scale", 0.5f, 2.0f, 1.0f,
-      "Size of the drawn bike. Collision does not follow it." },
-};
 
 // Shape ------------------------------------------------------------------
 const CapeFloatParam kCapeShapeParams[] = {
@@ -169,7 +139,7 @@ const CapeFloatParam kCapePhysicsParams[] = {
       "How quickly leftover motion bleeds away when Link stops. Vanilla: 0.1." },
 };
 
-void ItemEditorCapeColorWidget(WidgetInfo& info) {
+void ItemEditorCapeColorWidget() {
     float col[4] = {
         CVarGetInteger("gItemEditor.Cape.ColorR", 255) / 255.0f,
         CVarGetInteger("gItemEditor.Cape.ColorG", 255) / 255.0f,
@@ -192,14 +162,7 @@ void ItemEditorCapeColorWidget(WidgetInfo& info) {
 // Defined below; the popup's "Reset to Defaults" needs it before that point.
 void ItemEditorResetCape();
 
-// One group of cape sliders inside the popup. Kept as a helper so the three groups
-// read the same and the gate is applied in exactly one place.
-void ItemEditorCapePopupGroup(const char* heading, const CapeFloatParam* params, size_t count, float step,
-                              const char* fmt) {
-    bool enabled = CVarGetInteger("gItemEditor.Cape.Custom", 0) != 0;
-
-    ImGui::SeparatorText(heading);
-    ImGui::BeginDisabled(!enabled);
+void ItemEditorFloatSliders(const CapeFloatParam* params, size_t count, const char* fmt) {
     for (size_t i = 0; i < count; i++) {
         const CapeFloatParam& p = params[i];
         float v = CVarGetFloat(p.cvar, p.def);
@@ -212,173 +175,80 @@ void ItemEditorCapePopupGroup(const char* heading, const CapeFloatParam* params,
         }
         UIWidgets::Tooltip(p.tooltip);
     }
+}
+
+// One group of cape sliders. The cape's master switch gates them all, which is why the sliders are
+// drawn disabled rather than hidden: OFF is meant to A/B against vanilla, not to hide the tune.
+void ItemEditorCapePopupGroup(const char* heading, const CapeFloatParam* params, size_t count, const char* fmt) {
+    ImGui::SeparatorText(heading);
+    ImGui::BeginDisabled(CVarGetInteger("gItemEditor.Cape.Custom", 0) == 0);
+    ItemEditorFloatSliders(params, count, fmt);
     ImGui::EndDisabled();
-    (void)step;
 }
 
-// "Configure Master Cycle" — same shape as the cape popup: one button, one modal, so the seat
-// sliders do not take a section of the tab. Summon the bike with the slate's fourth rune, mount
-// it, and drag until Link sits on the saddle.
-void ItemEditorGerudoAxePopupWidget(WidgetInfo& info) {
-    static const char* kPopupId = "Configure Gerudo Axe";
-    static int sFamily = 0;
+// El Cane of Byrna ya NO tiene nada en el Item Editor (2026-08-29). Su colocacion
+// en la mano quedo dialada y horneada en BYRNA_CANE_* dentro de extended_equipment.c,
+// y los gItemEditor.Byrna.* estan muertos: ni se escriben ni se leen. Para retocarla
+// hay que editarla alli y recompilar. Mismo camino que el Trident y el Slate.
 
-    if (ImGui::Button("Configure Gerudo Axe...")) {
-        ImGui::OpenPopup(kPopupId);
+// The Magic Cape's 25-slider rig, in a window of its OWN rather than a modal. A modal is trapped
+// inside the viewport and dies with the escape menu; dialling cloth means watching Link move with
+// the sliders still reachable, so this one has to outlive the menu and be draggable off-screen.
+class MagicCapeEditorWindow final : public Ship::GuiWindow {
+  public:
+    using GuiWindow::GuiWindow;
+    void InitElement() override {
     }
-    UIWidgets::Tooltip("Where the IK Axe sits in Gerudo's hand, per animation family. "
-                       "Ctrl+click a slider to type an exact value.");
-
-    ImVec2 centre = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(centre, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(600.0f, 470.0f), ImGuiCond_Appearing);
-
-    if (ImGui::BeginPopupModal(kPopupId, NULL, ImGuiWindowFlags_NoSavedSettings)) {
-        bool tuning = CVarGetInteger("gItemEditor.GerudoAxe.Tune", 0) != 0;
-        if (ImGui::Checkbox("Live tuning (otherwise the baked values draw)", &tuning)) {
-            CVarSetInteger("gItemEditor.GerudoAxe.Tune", tuning ? 1 : 0);
-            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-        }
-        bool freeDemon = CVarGetInteger("gItemEditor.GerudoAxe.FreeDemon", 0) != 0;
-        if (ImGui::Checkbox("Free demon mode (L enters with an empty meter)", &freeDemon)) {
-            CVarSetInteger("gItemEditor.GerudoAxe.FreeDemon", freeDemon ? 1 : 0);
-            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-        }
-
-        ImGui::SeparatorText("Family being edited");
-        for (int f = 0; f < 3; f++) {
-            if (f > 0) {
-                ImGui::SameLine();
-            }
-            if (ImGui::RadioButton(kGerudoAxeFamilyLabels[f], sFamily == f)) {
-                sFamily = f;
-            }
-        }
-
-        const char* prefix = kGerudoAxeFamilies[sFamily];
-        if (ImGui::Button("Reset this family")) {
-            for (const auto& p : kGerudoAxeParams) {
-                CVarSetFloat((std::string(prefix) + "." + p.cvar).c_str(), p.def);
-            }
-            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-        }
-
-        for (int i = 0; i < (int)(sizeof(kGerudoAxeParams) / sizeof(kGerudoAxeParams[0])); i++) {
-            const CapeFloatParam& p = kGerudoAxeParams[i];
-            std::string cvar = std::string(prefix) + "." + p.cvar;
-            if (i == 0) {
-                ImGui::SeparatorText("Placement");
-            } else if (i == 3) {
-                ImGui::SeparatorText("Rotation");
-            } else if (i == 6) {
-                ImGui::SeparatorText("Size");
-            }
-            float v = CVarGetFloat(cvar.c_str(), p.def);
-            std::string id = std::string(p.label) + "##" + cvar;
-            const char* fmt = (i == 6) ? "%.3f" : "%.1f";
-            if (ImGui::SliderFloat(id.c_str(), &v, p.min, p.max, fmt)) {
-                CVarSetFloat(cvar.c_str(), v);
-                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-            }
-            UIWidgets::Tooltip(p.tooltip);
-        }
-        if (ImGui::Button("Close")) {
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
+    void UpdateElement() override {
     }
+    void DrawElement() override;
+};
+
+void MagicCapeEditorWindow::DrawElement() {
+    bool custom = CVarGetInteger("gItemEditor.Cape.Custom", 0) != 0;
+
+    if (ImGui::Checkbox("Enable Custom Cape Settings", &custom)) {
+        CVarSetInteger("gItemEditor.Cape.Custom", custom);
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    }
+    UIWidgets::Tooltip("Master switch. OFF (default) makes the cape use its built-in values and\n"
+                       "ignore everything below, so you can A/B a tune against vanilla without\n"
+                       "resetting anything.");
+
+    ImGui::SameLine();
+    if (ImGui::Button("Reset to Defaults")) {
+        ItemEditorResetCape();
+    }
+
+    ImGui::BeginChild("capeScroll");
+    ItemEditorCapePopupGroup("Shape & Size", kCapeShapeParams, ARRAY_COUNT(kCapeShapeParams), "%.2f");
+    ItemEditorCapePopupGroup("Placement & Rotation", kCapePlacementParams, ARRAY_COUNT(kCapePlacementParams), "%.1f");
+    ItemEditorCapePopupGroup("Physics", kCapePhysicsParams, ARRAY_COUNT(kCapePhysicsParams), "%.2f");
+
+    ImGui::SeparatorText("Colour");
+    ItemEditorCapeColorWidget();
+    ImGui::EndChild();
 }
 
-void ItemEditorCyclePopupWidget(WidgetInfo& info) {
-    static const char* kPopupId = "Configure Master Cycle";
+std::shared_ptr<MagicCapeEditorWindow> sCapeEditorWindow = nullptr;
 
-    if (ImGui::Button("Configure Master Cycle...")) {
-        ImGui::OpenPopup(kPopupId);
+// Registered from the menu build, where the Gui already exists (SohMenu is itself a GuiWindow).
+// Idempotent, so a second call is free.
+void EnsureMagicCapeEditorWindow() {
+    if (sCapeEditorWindow != nullptr) {
+        return;
     }
-    UIWidgets::Tooltip("Where Link sits on the Master Cycle, and the bike's drawn size.\n"
-                       "Everything applies live while riding.");
-
-    ImVec2 centre = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(centre, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(520.0f, 300.0f), ImGuiCond_Appearing);
-
-    if (ImGui::BeginPopupModal(kPopupId, NULL, ImGuiWindowFlags_NoSavedSettings)) {
-        if (ImGui::Button("Reset to Defaults")) {
-            for (const auto& p : kCycleSeatParams) {
-                CVarSetFloat(p.cvar, p.def);
-            }
-            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-        }
-        // Not ItemEditorCapePopupGroup: that one is gated on the CAPE's master switch, and the
-        // bike has none — its defaults are its baked values, so every slider is always live.
-        ImGui::SeparatorText("Rider Seat & Scale");
-        for (const auto& p : kCycleSeatParams) {
-            float v = CVarGetFloat(p.cvar, p.def);
-            std::string id = std::string(p.label) + "##" + p.cvar;
-            if (ImGui::SliderFloat(id.c_str(), &v, p.min, p.max, "%.2f")) {
-                CVarSetFloat(p.cvar, v);
-                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-            }
-            UIWidgets::Tooltip(p.tooltip);
-        }
-        if (ImGui::Button("Close")) {
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
+    auto ctx = Ship::Context::GetRawInstance();
+    if (ctx == nullptr || ctx->GetWindow() == nullptr) {
+        return;
     }
-}
-
-// "Configure Magic Cape Position" — the cape is the ONLY custom item that still has
-// live placement controls (2026-08-17), so instead of a whole Item Editor section it
-// gets one button here that opens everything in a modal. Slate and Trident lost
-// theirs once their placement was dialled in and baked into their own code.
-void ItemEditorCapePopupWidget(WidgetInfo& info) {
-    static const char* kPopupId = "Configure Magic Cape Position";
-
-    if (ImGui::Button("Configure Magic Cape Position...")) {
-        ImGui::OpenPopup(kPopupId);
+    auto gui = ctx->GetWindow()->GetGui();
+    if (gui == nullptr) {
+        return;
     }
-    UIWidgets::Tooltip("Shape, placement, physics and colour of the Magic Cape's cloth.\n"
-                       "Everything applies live while the cape is worn.");
-
-    // Centred, and sized so the three groups fit without the modal growing past the
-    // window — the physics group alone is 10 sliders.
-    ImVec2 centre = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(centre, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(560.0f, 620.0f), ImGuiCond_Appearing);
-
-    if (ImGui::BeginPopupModal(kPopupId, NULL, ImGuiWindowFlags_NoSavedSettings)) {
-        bool custom = CVarGetInteger("gItemEditor.Cape.Custom", 0) != 0;
-        if (ImGui::Checkbox("Enable Custom Cape Settings", &custom)) {
-            CVarSetInteger("gItemEditor.Cape.Custom", custom);
-            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-        }
-        UIWidgets::Tooltip("Master switch. OFF (default) makes the cape use its built-in values and\n"
-                           "ignore everything below, so you can A/B a tune against vanilla without\n"
-                           "resetting anything.");
-
-        ImGui::SameLine();
-        if (ImGui::Button("Reset to Defaults")) {
-            ItemEditorResetCape();
-        }
-
-        ImGui::BeginChild("capeScroll", ImVec2(0.0f, -ImGui::GetFrameHeightWithSpacing() - 4.0f));
-        ItemEditorCapePopupGroup("Shape & Size", kCapeShapeParams,
-                                 sizeof(kCapeShapeParams) / sizeof(kCapeShapeParams[0]), 0.05f, "%.2f");
-        ItemEditorCapePopupGroup("Placement & Rotation", kCapePlacementParams,
-                                 sizeof(kCapePlacementParams) / sizeof(kCapePlacementParams[0]), 0.5f, "%.1f");
-        ItemEditorCapePopupGroup("Physics", kCapePhysicsParams,
-                                 sizeof(kCapePhysicsParams) / sizeof(kCapePhysicsParams[0]), 0.05f, "%.2f");
-
-        ImGui::SeparatorText("Colour");
-        ItemEditorCapeColorWidget(info);
-        ImGui::EndChild();
-
-        if (ImGui::Button("Close")) {
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-    }
+    sCapeEditorWindow =
+        std::make_shared<MagicCapeEditorWindow>(CVAR_WINDOW("MagicCapeEditor"), "Magic Cape Editor", ImVec2(560, 620));
+    gui->AddGuiWindow(sCapeEditorWindow);
 }
 
 void ItemEditorResetCape() {
@@ -417,7 +287,20 @@ const NeiRandoSetting kNeiRandoSettings[] = {
     { CVAR_RANDOMIZER_SETTING("SW97Spells"), "gEnhancements.SkijerNEI.SW97Medallions", 1 },
     { CVAR_RANDOMIZER_SETTING("ShuffleBombArrows"), "gMods.BombArrows.Mode", RO_BOMB_ARROWS_SHUFFLED },
     { CVAR_RANDOMIZER_SETTING("ElementalWandShuffle"), nullptr, RO_WAND_ELEMENTAL_SHUFFLE },
+    // No mirror: both Crossover items share ONE feature toggle, so the generic mirror (which
+    // copies the setting's value) would let unchecking either one switch the selector off while
+    // the other item is still shuffled. NeiRando_EnableCrossover below only ever turns it on.
+    { CVAR_RANDOMIZER_SETTING("CrossoverPokeball"), nullptr, 1 },
+    { CVAR_RANDOMIZER_SETTING("CrossoverMarioMask"), nullptr, 1 },
 };
+
+static void NeiRando_EnableCrossover() {
+    if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("CrossoverPokeball"), 0) ||
+        CVarGetInteger(CVAR_RANDOMIZER_SETTING("CrossoverMarioMask"), 0)) {
+        CVarSetInteger("gBrokenItems.Enabled", 1);
+    }
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+}
 
 void NeiRando_MirrorSetting(const NeiRandoSetting& s) {
     if (s.mirror != nullptr) {
@@ -441,6 +324,7 @@ void NeiRando_SetAll(bool on) {
         NeiRando_MirrorSetting(s);
     }
     CVarSetInteger(CVAR_RANDOMIZER_SETTING("MmMasksTransform"), 0); // MmMasksAll already covers those 4
+    NeiRando_EnableCrossover();
     Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
 }
 
@@ -587,41 +471,51 @@ void RegisterNEIMenu() {
                               "its own end-item (Trirod / Ultrahand) is owned, so the cell can\n"
                               "never lose the only cane you have."));
 
+    // The Magic Cape is the last item still tuned live; the slate, rod, wand and Master Cycle poses
+    // are baked into their own code. It pops out as a real window so it survives closing the menu
+    // and can be dragged wherever it does not cover Link. Skijer's NEI
+    mSohMenu->AddWidget(path, "Magic Cape", WIDGET_SEPARATOR_TEXT);
+    EnsureMagicCapeEditorWindow();
+    mSohMenu->AddWidget(path, "Popout Magic Cape Editor", WIDGET_WINDOW_BUTTON)
+        .CVar(CVAR_WINDOW("MagicCapeEditor"))
+        .WindowName("Magic Cape Editor")
+        .HideInSearch(true)
+        .Options(WindowButtonOptions().Tooltip("Shape, placement, physics and colour of the Magic Cape's cloth.\n"
+                                               "Everything applies live while the cape is worn."));
+
+    mSohMenu->AddWidget(path, "Sheikah Sensor: Desired Items", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Desired Items", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
+        DrawSensorDesirePicker();
+    });
+
     // ===================== Tab: Modes =====================
     path.sidebarName = "Modes";
     path.column = SECTION_COLUMN_1;
-    mSohMenu->AddWidget(path, "Broken Modes", WIDGET_SEPARATOR_TEXT);
-    mSohMenu->AddWidget(path, "Enable Broken Modes", WIDGET_CVAR_CHECKBOX)
+    mSohMenu->AddWidget(path, "Crossover Items", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Enable Crossover Items", WIDGET_CVAR_CHECKBOX)
         .CVar("gBrokenItems.Enabled")
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip(
-            "Form selector (Link / Mario / Pikachu) on the equipment page's transform sub-page (L cycles)."));
+            "Form selector (Link / Mario / Pikachu) on the equipment page's transform sub-page (L cycles).\n"
+            "Mario needs the Mario Mask and Pikachu needs the Pokeball; both are randomizer items\n"
+            "(see 'Include Mario Mask' / 'Include Pikachu Pokeball' in the Randomizer tab)."));
 
     // ===================== Tab: Custom Items =====================
     path.sidebarName = "Custom Items";
     path.column = SECTION_COLUMN_1;
     mSohMenu->AddWidget(path, "Custom Items", WIDGET_SEPARATOR_TEXT);
 
-    // Magic Cape placement, in a popup so a 25-slider tuning rig does not push the
-    // rest of this tab off screen. It is the only custom item that still has live
-    // placement controls. Skijer's NEI
-    mSohMenu->AddWidget(path, "Magic Cape Position", WIDGET_CUSTOM)
-        .CustomFunction(ItemEditorCapePopupWidget)
-        .HideInSearch(true);
-
-    // Master Cycle rider seat + bike scale, same popup shape. Skijer's NEI
-    mSohMenu->AddWidget(path, "Master Cycle", WIDGET_CUSTOM)
-        .CustomFunction(ItemEditorCyclePopupWidget)
-        .HideInSearch(true);
-
     // Gerudo demon mode. The axe placement is dialled and baked (GERUDO_AXE_* in
     // mm_player_form.cpp); what is left is a way INTO demon mode while the rest of its
     // moveset is being built. Skijer's NEI
     mSohMenu->AddWidget(path, "Gerudo Demon Mode", WIDGET_SEPARATOR_TEXT);
-    mSohMenu->AddWidget(path, "Gerudo Axe", WIDGET_CUSTOM)
-        .CustomFunction(ItemEditorGerudoAxePopupWidget)
-        .HideInSearch(true);
-
+    // The axe placement is baked per animation family (sGerudoAxePlacements); only the way
+    // INTO demon mode is left here, for building the rest of its moveset. Skijer's NEI
+    mSohMenu->AddWidget(path, "Free demon mode (testing)", WIDGET_CVAR_CHECKBOX)
+        .CVar("gItemEditor.GerudoAxe.FreeDemon")
+        .Options(CheckboxOptions().Tooltip(
+            "L enters demon mode with an empty meter and the fuel stops draining, so the axe moveset "
+            "can be tested without farming the rage bar first. Turn it off to play normally."));
 
     // --- MM Quest Page (mirror of the 2ship-side OoT quest page). Skijer's NEI ---
     mSohMenu->AddWidget(path, "MM Quest Page", WIDGET_SEPARATOR_TEXT);
@@ -796,63 +690,6 @@ void RegisterNEIMenu() {
             "Remove the mask to revert. If the Keaton model isn't shipped yet the\n"
             "mask falls back to plain cosmetic wear.\n\n"
             "Model ships inside soh.o2r (objects/forms/keaton)."));
-
-    mSohMenu->AddWidget(path, "Keaton tails", WIDGET_SEPARATOR_TEXT);
-
-    mSohMenu->AddWidget(path, "Tail motion amount", WIDGET_CVAR_SLIDER_FLOAT)
-        .CVar("gMods.KeatonTail.Amount")
-        .RaceDisable(false)
-        .Options(FloatSliderOptions()
-                     .Tooltip("Scales the baked animation. 1.0 is Keaton's own.")
-                     .Min(0.0f)
-                     .Max(2.0f)
-                     .DefaultValue(1.0f));
-
-    mSohMenu->AddWidget(path, "Keaton flute placement", WIDGET_SEPARATOR_TEXT);
-
-    struct FluteSlider {
-        const char* label;
-        const char* cvar;
-        float min;
-        float max;
-        const char* tip;
-    };
-    static const FluteSlider kFluteSliders[] = {
-        { "Flute X", "gMods.KeatonFlute.X", -600.0f, 600.0f, "Across the hand." },
-        { "Flute Y", "gMods.KeatonFlute.Y", -600.0f, 600.0f, "Up and down." },
-        { "Flute Z", "gMods.KeatonFlute.Z", -600.0f, 600.0f, "Toward and away from the face." },
-        { "Flute scale", "gMods.KeatonFlute.Scale", 0.1f, 3.0f, "1.0 is the size baked into the model." },
-    };
-    for (const FluteSlider& fs : kFluteSliders) {
-        mSohMenu->AddWidget(path, fs.label, WIDGET_CVAR_SLIDER_FLOAT)
-            .CVar(fs.cvar)
-            .RaceDisable(false)
-            .Options(FloatSliderOptions()
-                         .Tooltip(fs.tip)
-                         .Min(fs.min)
-                         .Max(fs.max)
-                         .DefaultValue(strcmp(fs.cvar, "gMods.KeatonFlute.Scale") == 0 ? 1.0f : 0.0f));
-    }
-
-    struct FluteRot {
-        const char* label;
-        const char* cvar;
-    };
-    static const FluteRot kFluteRots[] = {
-        { "Flute pitch", "gMods.KeatonFlute.RotX" },
-        { "Flute yaw", "gMods.KeatonFlute.RotY" },
-        { "Flute roll", "gMods.KeatonFlute.RotZ" },
-    };
-    for (const FluteRot& fr : kFluteRots) {
-        mSohMenu->AddWidget(path, fr.label, WIDGET_CVAR_SLIDER_INT)
-            .CVar(fr.cvar)
-            .RaceDisable(false)
-            .Options(IntSliderOptions()
-                         .Tooltip("Binary angle: 16384 is a quarter turn.")
-                         .Min(-32768)
-                         .Max(32767)
-                         .DefaultValue(0));
-    }
 
     mSohMenu->AddWidget(path, "Gerudo Mask Transform", WIDGET_CVAR_CHECKBOX)
         .CVar("gMods.GerudoMaskTransform")
@@ -1476,6 +1313,27 @@ void RegisterNEIMenu() {
                               "Elemental shuffle: the six rods are separate items; the first found also\n"
                               "grants the wand itself."));
 
+    mSohMenu->AddWidget(path, "Crossover Items", WIDGET_SEPARATOR_TEXT);
+
+    mSohMenu->AddWidget(path, "Include Pikachu Pokeball", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_RANDOMIZER_SETTING("CrossoverPokeball"))
+        .RaceDisable(false)
+        .PostFunc([](WidgetInfo& info) { NeiRando_EnableCrossover(); })
+        .Options(CheckboxOptions().Tooltip(
+            "Adds the Pikachu Pokeball to the randomizer pool. It has no inventory cell — finding it\n"
+            "unlocks PIKACHU MODE on the equipment page's Crossover Items sub-page.\n\n"
+            "Seed-locked rando setting (also enables the in-game form selector)."));
+
+    mSohMenu->AddWidget(path, "Include Mario Mask", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_RANDOMIZER_SETTING("CrossoverMarioMask"))
+        .RaceDisable(false)
+        .PostFunc([](WidgetInfo& info) { NeiRando_EnableCrossover(); })
+        .Options(CheckboxOptions().Tooltip(
+            "Adds the Mario Mask to the randomizer pool. It has no inventory cell — finding it unlocks\n"
+            "MARIO MODE on the equipment page's Crossover Items sub-page (the same unlock the\n"
+            "Peach's Castle set piece grants).\n\n"
+            "Seed-locked rando setting (also enables the in-game form selector)."));
+
     // ===================== Tab: Controls =====================
     path.sidebarName = "Controls";
     path.column = SECTION_COLUMN_1;
@@ -1483,7 +1341,7 @@ void RegisterNEIMenu() {
     mSohMenu->AddWidget(path, "Pause Menu", WIDGET_SEPARATOR_TEXT);
 
     // This dropdown picks the button used to change page WITHIN a kaleido page
-    // (inventory sub-page, extended equipment, SW97 arrow mode, Broken Modes).
+    // (inventory sub-page, extended equipment, SW97 arrow mode, Crossover Items).
     // The OTHER shoulder button (+ R) changes BETWEEN kaleido pages.
     // Backed by NGCKaleidoSwitcher: 0 = in-page L (pages on Z), 1 = in-page Z (pages on L).
     // NOTE: each label MUST be >1 char or UIWidgets::Combobox hides it (it skips
@@ -1500,7 +1358,7 @@ void RegisterNEIMenu() {
                      .DefaultIndex(0)
                      .Tooltip("Which shoulder button changes page WITHIN the current kaleido page:\n"
                               "inventory sub-page (Items), extended equipment (Equipment), SW97 arrow mode\n"
-                              "(Quest), and Broken Modes (Map). The OTHER shoulder button, together with R,\n"
+                              "(Quest), and Crossover Items (Map). The OTHER shoulder button, together with R,\n"
                               "changes BETWEEN the kaleido pages.\n"
                               "L button (default): L changes within the page, Z + R change kaleido pages.\n"
                               "Z button: Z changes within the page, L + R change kaleido pages."));
@@ -1530,9 +1388,45 @@ void RegisterNEIMenu() {
             "Requires Free Camera to be enabled."));
 
     mSohMenu->AddWidget(path, "Transformation Controls", WIDGET_SEPARATOR_TEXT);
+
+    // Quick transform. The pad button is read straight from SDL (CrossoverHotkey_Tick in
+    // OTRGlobals.cpp) because Back/Select has no N64 button to map it onto.
+    static std::map<int32_t, const char*> quickTransformKeyMap = {
+        { SDL_SCANCODE_0, "0 (default)" }, { SDL_SCANCODE_1, "1" },          { SDL_SCANCODE_2, "2" },
+        { SDL_SCANCODE_3, "3" },           { SDL_SCANCODE_4, "4" },          { SDL_SCANCODE_5, "5" },
+        { SDL_SCANCODE_6, "6" },           { SDL_SCANCODE_7, "7" },          { SDL_SCANCODE_8, "8" },
+        { SDL_SCANCODE_9, "9" },           { SDL_SCANCODE_T, "T" },          { SDL_SCANCODE_G, "G" },
+        { SDL_SCANCODE_V, "V" },           { SDL_SCANCODE_BACKSLASH, "\\" },
+    };
+    static std::map<int32_t, const char*> quickTransformPadMap = {
+        { SDL_CONTROLLER_BUTTON_BACK, "Back / Select (default)" },
+        { SDL_CONTROLLER_BUTTON_GUIDE, "Guide / Home" },
+        { SDL_CONTROLLER_BUTTON_LEFTSTICK, "Left stick click" },
+        { SDL_CONTROLLER_BUTTON_RIGHTSTICK, "Right stick click" },
+    };
+
+    mSohMenu->AddWidget(path, "Quick Transform (Crossover Items)", WIDGET_CVAR_CHECKBOX)
+        .CVar("gCrossover.Hotkey.Enabled")
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "One key/button turns you into the form equipped on the Crossover Items sub-page and\n"
+            "back into Link, without opening the pause menu.\n"
+            "Ignored while the pause menu or this menu is open."));
+
+    mSohMenu->AddWidget(path, "Quick Transform Key", WIDGET_CVAR_COMBOBOX)
+        .CVar("gCrossover.Hotkey.Key")
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.options->disabled = !CVarGetInteger("gCrossover.Hotkey.Enabled", 1); })
+        .Options(ComboboxOptions().ComboMap(quickTransformKeyMap).DefaultIndex(SDL_SCANCODE_0));
+
+    mSohMenu->AddWidget(path, "Quick Transform Button", WIDGET_CVAR_COMBOBOX)
+        .CVar("gCrossover.Hotkey.Pad")
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.options->disabled = !CVarGetInteger("gCrossover.Hotkey.Enabled", 1); })
+        .Options(ComboboxOptions().ComboMap(quickTransformPadMap).DefaultIndex(SDL_CONTROLLER_BUTTON_BACK));
     // Pikachu Controls — opens a dedicated assignment window (pikachu_hud.cpp):
     // per-move N64 button binds (gPikaBind.*) + the mode UI style. Applies to
-    // the SECRET Broken-Modes Pikachu mode only; the pokeball transformation
+    // the SECRET Crossover-Items Pikachu mode only; the pokeball transformation
     // keeps items on C and the vanilla UI.
     mSohMenu->AddWidget(path, "Pikachu Controls", WIDGET_BUTTON)
         .RaceDisable(false)
@@ -1542,7 +1436,69 @@ void RegisterNEIMenu() {
                      .Tooltip("Open the Pikachu mode controls window: assign the N64 button for each move\n"
                               "(Jump / Quick Attack / Grass / Gigantamax / Iron Tail / Dark / Sleep) and pick\n"
                               "the mode UI style (icons over OOT buttons, or the corner HUD).\n"
-                              "Secret Broken-Modes Pikachu mode only — the pokeball transformation is untouched."));
+                              "Secret Crossover-Items Pikachu mode only — the pokeball transformation is untouched."));
+}
+
+// =============================================================================
+// Sheikah Sensor rune — the five wished-for items (Skijer's NEI)
+// =============================================================================
+
+// Every named randomizer item, alphabetical. Rebuilt until it comes back non-empty: the menu can
+// open before the randomizer's item table is filled in, and a cached empty list would stay empty.
+static const std::vector<std::pair<int32_t, std::string>>& SensorItemChoices() {
+    static std::vector<std::pair<int32_t, std::string>> choices;
+
+    if (choices.empty()) {
+        for (int32_t rg = RG_NONE + 1; rg < RG_MAX; rg++) {
+            const std::string& name =
+                Rando::StaticData::RetrieveItem(static_cast<RandomizerGet>(rg)).GetName().GetEnglish();
+            if (!name.empty()) {
+                choices.emplace_back(rg, name);
+            }
+        }
+        std::sort(choices.begin(), choices.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+    }
+    return choices;
+}
+
+static std::string SensorDesireName(int32_t rg) {
+    if (rg <= RG_NONE || rg >= RG_MAX) {
+        return "(empty)";
+    }
+    const std::string& name = Rando::StaticData::RetrieveItem(static_cast<RandomizerGet>(rg)).GetName().GetEnglish();
+    return name.empty() ? "(empty)" : name;
+}
+
+void DrawSensorDesirePicker() {
+    static char search[SENSOR_DESIRE_SLOTS][64] = {};
+
+    ImGui::TextWrapped("Casting the Sheikah Slate's Sensor rune answers for the FIRST of these still "
+                       "out there, so the order is the priority. Each answer costs a Heart Container.");
+
+    for (int32_t slot = 0; slot < SENSOR_DESIRE_SLOTS; slot++) {
+        std::string cvar = std::string(CVAR_SENSOR_DESIRE_PREFIX) + std::to_string(slot);
+        int32_t current = CVarGetInteger(cvar.c_str(), RG_NONE);
+        std::string label = "Desire " + std::to_string(slot + 1) + "##sensorDesire" + std::to_string(slot);
+
+        if (ImGui::BeginCombo(label.c_str(), SensorDesireName(current).c_str())) {
+            ImGui::InputTextWithHint("##sensorSearch", "Search", search[slot], sizeof(search[slot]));
+
+            if (ImGui::Selectable("(empty)", current <= RG_NONE)) {
+                CVarSetInteger(cvar.c_str(), RG_NONE);
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            }
+            for (const auto& [rg, name] : SensorItemChoices()) {
+                if (search[slot][0] != '\0' && name.find(search[slot]) == std::string::npos) {
+                    continue;
+                }
+                if (ImGui::Selectable(name.c_str(), rg == current)) {
+                    CVarSetInteger(cvar.c_str(), rg);
+                    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+                }
+            }
+            ImGui::EndCombo();
+        }
+    }
 }
 
 // Self-register the NEI menu via the same RegisterMenuInitFunc path every other

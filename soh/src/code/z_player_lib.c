@@ -21,6 +21,7 @@
 #include "mods/pak_loader/pak_loader.h"
 #include "mods/o2r_loader/o2r_loader.h"
 #include "mods/transformation_masks/custom_forms.h"
+#include "mods/transformation_masks/kafei_form.h"
 
 // Boss Remains (mods/boss_remains) — worn-remains state + limb-space draw hooks. Implemented
 // extern "C" in the boss_remains module; declared locally (no header include). Mirrors MM 2ship.
@@ -34,6 +35,12 @@ extern void BossRemains_DrawOdolwaShield(PlayState* play, Player* player);
 // BossRemains hooks above: it takes a Vec3s*, and extended_equipment.h is reached through
 // z64item.h by translation units that have not seen z64math.h. Skijer's NEI
 extern void KiteSurf_AdjustLimb(s32 limbIndex, Vec3s* rot);
+
+// The Sheikah Slate is pinned to the right fist and used to rebuild its pose from two bodyPartsPos
+// points, which give a direction and so cannot express the wrist twisting around it. Skijer's NEI
+extern void ItemEquip_CaptureHandMatrix(void);
+extern u8 ItemEquip_HoldsClosedFist(void);
+extern u8 ItemEquip_HoldsEmptyHand(void);
 
 #include <stdlib.h>
 
@@ -914,13 +921,13 @@ Player* Player_UnsetMask(PlayState* play) {
 s32 Player_HasMirrorShieldEquipped(PlayState* play) {
     Player* this = GET_PLAYER(play);
 
-    return (this->currentShield == PLAYER_SHIELD_MIRROR) || MmForm_RitoShieldIsUp();
+    return (this->currentShield == PLAYER_SHIELD_MIRROR) || MmForm_RitoShieldIsDrawn();
 }
 
 s32 Player_HasMirrorShieldSetToDraw(PlayState* play) {
     Player* this = GET_PLAYER(play);
 
-    if (MmForm_RitoShieldIsUp()) {
+    if (MmForm_RitoShieldIsDrawn()) {
         return true;
     }
     return (this->rightHandType == PLAYER_MODELTYPE_RH_SHIELD) && (this->currentShield == PLAYER_SHIELD_MIRROR);
@@ -1790,6 +1797,16 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
                     } else {
                         dLists += this->currentShield * 4;
                     }
+                } else if (ItemEquip_HoldsClosedFist()) {
+                    // Slate / Rod of Seasons in hand: gripped like the Hookshot. The shield keeps
+                    // precedence above so its row offset is never skipped. Skijer's NEI
+                    dLists = &sPlayerRightHandClosedDLs[gSaveContext.linkAge];
+                    sRightHandType = PLAYER_MODELTYPE_RH_CLOSED;
+                } else if (ItemEquip_HoldsEmptyHand()) {
+                    // Recall aim / Ultrahand carry: both take the HOOKSHOT group for its reaching
+                    // pose, and this is what keeps the hookshot itself out of the hand. Skijer's NEI
+                    dLists = &sPlayerRightHandOpenDLs[gSaveContext.linkAge];
+                    sRightHandType = PLAYER_MODELTYPE_RH_OPEN;
                 } else if ((this->rightHandType == PLAYER_MODELTYPE_RH_OPEN) && (this->actor.speedXZ > 2.0f) &&
                            !(this->stateFlags1 & PLAYER_STATE1_IN_WATER)) {
                     dLists = &sPlayerRightHandClosedDLs[gSaveContext.linkAge];
@@ -2045,7 +2062,9 @@ void Player_UpdateShieldCollider(PlayState* play, Player* this, ColliderQuad* co
         COLTYPE_METAL,
     };
 
-    if (this->stateFlags1 & PLAYER_STATE1_SHIELDING) {
+    // Kafei guards passively while standing still (SW97's standalone shield), so the
+    // quad has to go live without PLAYER_STATE1_SHIELDING ever being set.
+    if ((this->stateFlags1 & PLAYER_STATE1_SHIELDING) || KafeiForm_ShieldIsPassive(this)) {
         Vec3f quadDest[4];
 
         this->shieldQuad.base.colType = shieldColTypes[this->currentShield];
@@ -2511,6 +2530,23 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
                     Matrix_MultVec3f(&D_80126080, &this->meleeWeaponInfo[0].tip);
                 }
                 Matrix_Pop();
+            } else if (ExtEquip_ByrnaTrailBegin()) {
+                // Same reason as the Trident above: the cane is drawn far from the
+                // hidden sword, so the streak and the quads have to be measured in
+                // the cane's frame or they trail empty air. Skijer's NEI
+                Vec3f spE4_byrnaCane[3];
+                D_80126080.x = ExtEquip_ByrnaTrailLength();
+                if (this->meleeWeaponState != 0) {
+                    EffectBlure_ChangeType(Effect_GetByIndex(this->meleeWeaponEffectIndex),
+                                           sSwordTypes[Player_GetMeleeWeaponHeld(this)]);
+                    func_80090A28(this, spE4_byrnaCane);
+                    func_800906D4(play, this, spE4_byrnaCane);
+                } else {
+                    // func_80090A28 also bumps unk_845 (the combo counter), which is
+                    // only right mid-swing.
+                    Matrix_MultVec3f(&D_80126080, &this->meleeWeaponInfo[0].tip);
+                }
+                Matrix_Pop();
             } else if (this->meleeWeaponState != 0) {
                 Vec3f spE4_byrna[3];
                 D_80126080.x = sMeleeWeaponLengths[Player_GetMeleeWeaponHeld(this)];
@@ -2528,9 +2564,7 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
 
             // Draw Byrna cane model using current limb matrix
             Matrix_Push();
-            Matrix_Translate(2028.26f, 267.2f, -33.82f, MTXMODE_APPLY);
-            Matrix_RotateZYX(-0x8000, 0, 0x4000, MTXMODE_APPLY);
-            Matrix_Scale(5.0f, 5.0f, 5.0f, MTXMODE_APPLY);
+            ExtEquip_ApplySwordDLMatrix();
 
             Gfx_SetupDL_25Opa(play->state.gfxCtx);
             gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
@@ -2610,6 +2644,8 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
         }
     } else if (limbIndex == PLAYER_LIMB_R_HAND) {
         Actor* heldActor = this->heldActor;
+
+        ItemEquip_CaptureHandMatrix();
 
         if (this->rightHandType == PLAYER_MODELTYPE_RH_FF) {
             Matrix_Get(&this->shieldMf);

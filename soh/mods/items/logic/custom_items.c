@@ -55,7 +55,6 @@
 #include "item_mitts.c"
 #include "item_shovel.c"
 #include "item_switchhook.c"
-#include "item_desire_sensor.c"
 #include "item_whip.c"
 #include "item_ballchain.c"
 #include "item_bombarrows.c"
@@ -72,10 +71,11 @@
 // chain) opens the echo wheel through it, and BoxMenuEntry must be defined by then.
 #include "../helpers/box_menu.c" // Skijer's NEI: generic hold-button box selector (slate runes, echo wheel)
 #include "item_cane_of_somaria.c"
-#include "item_elemental_wand.c" // Skijer's NEI: six rods behind one item action (wandMode dispatch)
-#include "item_sheikah_slate.c"  // Skijer's NEI: four runes behind one page-2 cell (slateMode dispatch)
-#include "item_rod_of_seasons.c" // Skijer's NEI: four seasons behind one page-2 cell (season dispatch)
-#include "item_shadow_crystal.c" // Shadow Crystal -> Wolf Link full transformation
+#include "item_elemental_wand.c"    // Skijer's NEI: six rods behind one item action (wandMode dispatch)
+#include "item_sheikah_slate.c"     // Skijer's NEI: four runes behind one page-2 cell (slateMode dispatch)
+#include "item_phantom_hourglass.c" // Skijer's NEI: ToTK Recall on one actor, over rewind_helper
+#include "item_rod_of_seasons.c"    // Skijer's NEI: four seasons behind one page-2 cell (season dispatch)
+#include "item_shadow_crystal.c"    // Shadow Crystal -> Wolf Link full transformation
 #include "item_time_gate.c"
 #include "item_minish_cap.c"
 #include "../helpers/minish_kaleido.c"

@@ -341,12 +341,6 @@ typedef struct {
     s16 whipSwingSubCamId; // dedicated swing camera (Wind-Waker-style behind-follow), SUBCAM_FREE = none
     s16 whipSwingCamYaw;   // camera yaw, smoothly chases whipSwingYaw so it "semi-follows" the swing
 
-    // Desire Sensor
-    u8 desireSensorActive;
-    u8 desireSensorState;
-    s16 desireSensorTimer;
-    u8 desireSensorResult;
-
     // Switch Hook
     u8 switchHookActive;
     u8 switchHookState;
@@ -438,7 +432,6 @@ extern CustomItemState gCustomItemState;
 #define CI_FLAG_LANTERN (1 << 20)
 #define CI_FLAG_MINISH_CAP (1 << 21)
 #define CI_FLAG_POSTMAN_HAT (1 << 22)
-#define CI_FLAG_DESIRE_SENSOR (1 << 23)
 
 /**
  * Compact visual state for network sync.
@@ -571,10 +564,6 @@ typedef struct {
     u8 postmanHatArriving;
     s16 postmanHatTransitionTimer;
 
-    // Desire Sensor — visible meter glow.
-    u8 desireSensorState;
-    s16 desireSensorTimer;
-    u8 desireSensorResult;
 } CustomItemVisualSync;
 
 /**
@@ -608,6 +597,8 @@ void CustomItems_Update(Player* player, PlayState* play);
  * @return 1 if draw was overridden
  */
 s32 CustomItems_OverrideDraw(Player* player, PlayState* play);
+void CustomItems_DrawForClone(Player* clone, PlayState* play);
+u8 CustomItems_IsCloneDraw(void);
 
 /**
  * Check if custom item activation is blocked.
@@ -638,7 +629,6 @@ void Handle_HyliasGrace(Player* player, PlayState* play);
 void Handle_ZonaiPermafrost(Player* player, PlayState* play);
 void Handle_TimeGate(Player* player, PlayState* play);
 void Handle_Whip(Player* player, PlayState* play);
-void Handle_DesireSensor(Player* player, PlayState* play);
 void Handle_SwitchHook(Player* player, PlayState* play);
 void Handle_MinishCap(Player* player, PlayState* play);
 void Handle_Lantern(Player* player, PlayState* play);
@@ -718,7 +708,6 @@ void Player_InitHyliasGraceIA(PlayState* play, Player* player);
 void Player_InitZonaiPermafrostIA(PlayState* play, Player* player);
 void Player_InitTimeGateIA(PlayState* play, Player* player);
 void Player_InitWhipIA(PlayState* play, Player* player);
-void Player_InitDesireSensorIA(PlayState* play, Player* player);
 void Player_InitSwitchHookIA(PlayState* play, Player* player);
 void Player_InitMinishCapIA(PlayState* play, Player* player);
 

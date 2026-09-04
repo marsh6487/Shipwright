@@ -1,5 +1,5 @@
 // =============================================================================
-// PikachuHud — ImGui HUD for the Broken-Modes Pikachu mode.
+// PikachuHud — ImGui HUD for the Crossover-Items Pikachu mode.
 //
 // Visual target: the "Esquinas Compactas (minimal)" mockup — hand-drawn sticker
 // style (thick dark ink outlines #2c2825, cream fills #fffdf8, SOLID offset
@@ -193,7 +193,7 @@ class PikachuHudWindow final : public Ship::GuiWindow {
 };
 
 void PikachuHudWindow::Draw() {
-    // SYSTEM 2 only: the secret Broken-Modes Pikachu mode. A pokeball-item
+    // SYSTEM 2 only: the secret Crossover-Items Pikachu mode. A pokeball-item
     // transformation (system 1) keeps the vanilla OOT UI untouched.
     if (!CVarGetInteger("gPikachuMode", 0) || !MmForm_IsPikachuActive()) {
         return;
@@ -349,7 +349,7 @@ class PikachuControlsWindow final : public Ship::GuiWindow {
     void UpdateElement() override {
     }
     void DrawElement() override {
-        ImGui::TextWrapped("Controls for the SECRET Pikachu mode (Broken Modes). The classic "
+        ImGui::TextWrapped("Controls for the SECRET Pikachu mode (Crossover Items). The classic "
                            "pokeball transformation is untouched (items on C, vanilla UI).");
         ImGui::TextWrapped("Map physical X / Y / RB to C-Left / C-Right / C-Down in the input "
                            "editor so the right stick stays free for the camera.");

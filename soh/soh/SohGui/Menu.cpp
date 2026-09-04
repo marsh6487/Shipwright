@@ -673,6 +673,9 @@ static const char* FleetMenu_SwitchGameLabel() {
                                                : ICON_FA_EXCHANGE " Play MM##fscswitch";
 }
 static void FleetMenu_DrawSwitchGameButton(UIWidgets::Colors themeIndex) {
+#ifdef COMBO_BUILD
+    return; // comboui owns game switching; SetActiveGame is a no-op there, so the button would lie
+#endif
     const int32_t cur = FleetShipCombo_GetActiveGame();
     if (cur < 0) {
         return; // combo not running

@@ -102,6 +102,8 @@ ALL_ITEMS = [
     ("gRocsFeatherNameTex", "Roc's Feather"),
     ("gRocsCapeNameTex", "Roc's Cape"),
     ("gDesireSensorNameTex", "Desire Sensor HP3"),
+    # Stone of Agony level 2 — renames the quest cell it shares with the stone.
+    ("gQuartzOfMotionNameTex", "Quartz of Motion"),
     ("gHyliaGraceNameTex", "Hylia's Grace MP24"),
     ("gZonaiPermafrostNameTex", "Zonai Timer"),  # renamed (user 2026-08-06); symbol kept so no code changes
     # 2026-08-06 page-2 additions (regenerate to produce their name textures):

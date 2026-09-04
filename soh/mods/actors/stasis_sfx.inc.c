@@ -29,6 +29,23 @@ typedef struct {
 
 static StasisSfxState sSfx = { 0 };
 
+extern s32 CVarGetInteger(const char* name, s32 defaultValue);
+extern PlayState* gPlayState;
+
+// Settings → Audio. Read per buffer rather than cached, so a slider moved mid-cue is heard at once.
+static f32 StasisSfx_SettingsGain(void) {
+    f32 master = (f32)CVarGetInteger("gSettings.Volume.Master", 40) / 100.0f;
+    f32 sfx = (f32)CVarGetInteger("gSettings.Volume.SFX", 100) / 100.0f;
+
+    return master * sfx;
+}
+
+// True whenever Play_Update is frozen — the pause menu, and the rune wheel, which freezes it the
+// same way. The cursor is left untouched, so the cue resumes where it stopped.
+static u8 StasisSfx_IsGameFrozen(void) {
+    return (gPlayState == NULL) || (gPlayState->pauseCtx.state != 0) || (gPlayState->pauseCtx.debugState != 0);
+}
+
 // Start the cue. `rate` is a playback multiplier, so the enemy variant is literally 2.0f.
 void StasisSfx_Play(f32 rate, f32 volume) {
     sSfx.rate = rate;
@@ -76,12 +93,12 @@ void StasisSfx_MixInto(s16* outBuf, u32 numSamples) {
         sSfx.playing = 1;
         sSfx.pos = (p > 0.0f) ? p : 0.0f;
     }
-    if (!sSfx.playing || (outBuf == NULL)) {
+    if (!sSfx.playing || (outBuf == NULL) || StasisSfx_IsGameFrozen()) {
         return;
     }
 
     advance = (sSfx.rate * (f32)STASIS_SFX_RATE) / STASIS_SFX_OUT_RATE;
-    vol = sSfx.volume;
+    vol = sSfx.volume * StasisSfx_SettingsGain();
 
     for (i = 0; i < numSamples; i++) {
         s32 idx = (s32)sSfx.pos;

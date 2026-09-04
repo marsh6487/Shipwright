@@ -70,6 +70,7 @@ static ObjectExtension::Register<ScrubIdentity> RegisterScrubIdentity;
 
 extern SaveContext gSaveContext;
 extern PlayState* gPlayState;
+extern u8 gKeatonClimbActive; // keaton_form.cpp
 extern void func_8084DFAC(PlayState* play, Player* player);
 extern void func_80B8FE00(ObjBean*); // trigger planting
 extern void Player_SetupActionPreserveAnimMovement(PlayState* play, Player* player, PlayerActionFunc actionFunc,
@@ -1034,7 +1035,9 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
 
     switch (id) {
         case VB_CLIMB:
-            if (RAND_GET_OPTION(RSK_SHUFFLE_CLIMB) && !Flags_GetRandomizerInf(RAND_INF_CAN_CLIMB)) {
+            // Keaton climbs on his own shuffled Climb does not gate him.
+            if (RAND_GET_OPTION(RSK_SHUFFLE_CLIMB) && !Flags_GetRandomizerInf(RAND_INF_CAN_CLIMB) &&
+                !gKeatonClimbActive) {
                 s32* x = va_arg(args, s32*);
                 s32* y = va_arg(args, s32*);
 

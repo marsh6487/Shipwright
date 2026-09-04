@@ -116,9 +116,9 @@ void ExtEquip_Unequip(s16 equipType);
  * the player. Equip/Unequip/C-button/kaleido/age swap/FleetSync all end here.
  */
 void ExtEquip_SetSlot(s16 equipType, u8 index);
-void ExtEquip_RefreshPlayer(void);       // Player_SetEquipmentData on the live player, if any
-void ExtEquip_ResyncFromSave(void);      // Nei_Save()->extEquip* -> RAM copy (after a FleetSync apply)
-void ExtEquip_ValidateForAge(void);      // after Inventory_SwapAgeEquipment: drop age-restricted pieces
+void ExtEquip_RefreshPlayer(void);  // Player_SetEquipmentData on the live player, if any
+void ExtEquip_ResyncFromSave(void); // Nei_Save()->extEquip* -> RAM copy (after a FleetSync apply)
+void ExtEquip_ValidateForAge(void); // after Inventory_SwapAgeEquipment: drop age-restricted pieces
 u8 ExtEquip_TridentAllowsShield(u8 extIndex, u16 vanillaValue); // Divine or a Mirror only
 void ExtEquip_SagesFlashReset(void);
 
@@ -218,11 +218,6 @@ typedef enum {
 } DragonScaleState;
 
 typedef struct {
-    Vec3f offset; // relative offset from player world pos (set at spawn, Y = 0 keeps same ground height)
-    u8 alive;     // 1 = active, 0 = dead / not spawned
-} FourSwordClone;
-
-typedef struct {
     // Cane of Byrna (Ext Sword 1)
     u8 byrnaSavedSwordEquip;   // Original equips.equipment sword nibble
     u8 byrnaSavedButtonItem;   // Original equips.buttonItems[0]
@@ -251,12 +246,11 @@ typedef struct {
     u8 ikAxeDrawing; // 1 when hammer is out (hide vanilla sword DL), 0 in free mode
 
     // Four Sword (Ext Sword 2)
-    u8 fourSwordActive;                // pak loader is live
-    s16 fourSwordBHoldTimer;           // frames B has been held while shielding
-    u8 fourSwordCharging;              // 1 while charge is armed (B+shield >= threshold)
-    u8 fourSwordCloneCount;            // number of currently alive clones (0-3)
-    FourSwordClone fourSwordClones[3]; // per-clone data
-    u8 fourSwordColInit;               // bitmask: bit i = colliders for clone i are initialised
+    s16 fourSwordBHoldTimer; // frames B has been held while shielding
+    u8 fourSwordCharging;    // 1 while charge is armed (B+shield >= threshold)
+    // Bit i = clone i SHOULD exist. The actors themselves die with the scene, so this is the intent
+    // FourSwordClone_Reconcile rebuilds the summon from.
+    u8 fourSwordCloneMask;
 
     // Four Sword: rising-edge detection for Ivan-style item spawn
     u8 fourSwordPrevA73;       // previous player->unk_A73 (arrow/boomerang fire)
@@ -448,6 +442,26 @@ void ExtEquip_TogglePendantEffect(void);
  * For Byrna: draws blue Somaria cane.
  */
 void ExtEquip_DrawSwordDL(void* play);
+
+// Matrix for the sword DL above: the Cane of Byrna's own placement, or the
+// original one for everything else that draws there.
+void ExtEquip_ApplySwordDLMatrix(void);
+
+// Byrna swing trail, measured in the cane's frame. Begin pushes a matrix and
+// returns 1 when the cane is out; the caller pops it.
+u8 ExtEquip_ByrnaTrailBegin(void);
+f32 ExtEquip_ByrnaTrailLength(void);
+
+// True while the Cane of Byrna should wield two-handed (no shield), like the BGS.
+u8 ExtEquip_ByrnaIsTwoHanded(void* player);
+
+// Insect Glaive ground chain. Same arrangement as Trident_* / GerudoMhr_*: OOT
+// picks the swing row from the stick angle, which cannot express a fixed chain.
+s32 ByrnaIg_NextComboMwa(Player* player, s32 requested);
+u8 ByrnaIg_OwnsComboRow(Player* player);
+u8 ByrnaIg_MorphsRow(Player* player, s32 mwa);
+u8 ByrnaIg_IsAirborne(void);
+u8 ByrnaIg_AirSuperDamage(void);
 
 /**
  * Draw anklet decoration on foot limbs (torus + fairy wings with pendulum).

@@ -52,6 +52,7 @@ extern void Bottle_SetBottomlessOwned(unsigned char owned); // Nei_Save()->botto
 // which would re-enter the record hook below and double-count. This flag lets the hook skip recording
 // during that apply pass (see FleetSync.cpp ApplyFcRegistryToNatives).
 int FleetSync_IsApplyingFc(void);
+extern "C" void FleetShared_OnNativeObtained(int nativeId); // FleetShipCombo/FleetSharedItems.h
 extern PlayState* gPlayState;
 }
 
@@ -418,6 +419,50 @@ static const CustomItemMessageEntry customItemMessages[] = {
       "Stein.^Wähle sie mit %y\xA0%w auf der Zelle&im Pausenmenü.&Ihre Kraft %rschlummert%w noch.",
       "Votre %cTablette Sheikah%w apprend le&module %bGlaciera%w!&Une rune ancienne brille en bleu&glacé sur la "
       "tablette.^Sélectionnez-la avec %y\xA0%w sur sa&case du menu pause.&Son pouvoir est encore %rendormi%w." },
+
+    { RG_DESIRE_SENSOR, static_cast<ItemID>(EXT_ITEM_SHEIKAH_SLATE),
+      "Your %cSheikah Slate%w learned the&%pSensor%w rune!&An ancient rune glows violet on&the slate's face.^Cast it "
+      "to ask where one of your&%gdesired items%w hides. Each answer&costs a %rHeart Container%w, forever.",
+      "Dein %cSheikah-Stein%w hat das&%pSensor%w-Modul gelernt!&Eine uralte Rune leuchtet violett&auf dem "
+      "Stein.^Frage damit, wo eines deiner&%gWunsch-Items%w liegt. Jede Antwort&kostet ein %rHerzteil%w, f\xFCr immer.",
+      "Votre %cTablette Sheikah%w apprend le&module %pCapteur%w!&Une rune ancienne brille en violet&sur la "
+      "tablette.^Demandez o\xF9 se cache un de vos&%gobjets d\xE9sir\xE9s%w. Chaque r\xE9ponse&co\xFB"
+      "te un %rC\x9C"
+      "ur%w, pour toujours." },
+
+    // Rod of Seasons — one textbox per sibling pickup. The flame on the get-item model matches the
+    // colour named here, and hold %y\xA0%w on the rod's button opens the season wheel.
+    { RG_SEASON_SPRING, static_cast<ItemID>(EXT_ITEM_ROD_OF_SEASONS),
+      "Your %cRod of Seasons%w drew in&%pSpring%w!&Blossom drifts on the wind&wherever you carry it.^%rHold%w the "
+      "rod's %y\xA0%w button to&turn the world to another season.",
+      "Dein %cZepter der Jahreszeiten%w zog&den %pFrühling%w ein!&Blüten treiben im Wind,&wohin du es auch "
+      "trägst.^%rHalte%w die %y\xA0%w-Taste des Zepters,&um die Welt zu wandeln.",
+      "Votre %cSceptre des Saisons%w attire&le %pPrintemps%w!&Les pétales dérivent au vent&où que vous "
+      "alliez.^%rMaintenez%w la touche %y\xA0%w du sceptre&pour changer de saison." },
+
+    { RG_SEASON_SUMMER, static_cast<ItemID>(EXT_ITEM_ROD_OF_SEASONS),
+      "Your %cRod of Seasons%w drew in&%ySummer%w!&The sky stays clear and the sun&stands high.^%rHold%w the rod's "
+      "%y\xA0%w button to&turn the world to another season.",
+      "Dein %cZepter der Jahreszeiten%w zog&den %ySommer%w ein!&Der Himmel bleibt klar und die&Sonne steht "
+      "hoch.^%rHalte%w die %y\xA0%w-Taste des Zepters,&um die Welt zu wandeln.",
+      "Votre %cSceptre des Saisons%w attire&l'%yÉté%w!&Le ciel reste clair et le soleil&est au zénith.^%rMaintenez%w "
+      "la touche %y\xA0%w du sceptre&pour changer de saison." },
+
+    { RG_SEASON_AUTUMN, static_cast<ItemID>(EXT_ITEM_ROD_OF_SEASONS),
+      "Your %cRod of Seasons%w drew in&%rAutumn%w!&The sky greys over and the rain&never quite stops.^%rHold%w the "
+      "rod's %y\xA0%w button to&turn the world to another season.",
+      "Dein %cZepter der Jahreszeiten%w zog&den %rHerbst%w ein!&Der Himmel vergraut und der Regen&hört kaum "
+      "auf.^%rHalte%w die %y\xA0%w-Taste des Zepters,&um die Welt zu wandeln.",
+      "Votre %cSceptre des Saisons%w attire&l'%rAutomne%w!&Le ciel se voile et la pluie&ne cesse "
+      "jamais.^%rMaintenez%w la touche %y\xA0%w du sceptre&pour changer de saison." },
+
+    { RG_SEASON_WINTER, static_cast<ItemID>(EXT_ITEM_ROD_OF_SEASONS),
+      "Your %cRod of Seasons%w drew in&%bWinter%w!&Snow falls under every open sky&you walk beneath.^%rHold%w the "
+      "rod's %y\xA0%w button to&turn the world to another season.",
+      "Dein %cZepter der Jahreszeiten%w zog&den %bWinter%w ein!&Unter jedem freien Himmel&fällt nun Schnee.^%rHalte%w "
+      "die %y\xA0%w-Taste des Zepters,&um die Welt zu wandeln.",
+      "Votre %cSceptre des Saisons%w attire&l'%bHiver%w!&La neige tombe sous chaque ciel&ouvert.^%rMaintenez%w la "
+      "touche %y\xA0%w du sceptre&pour changer de saison." },
 };
 static constexpr size_t customItemMessageCount = sizeof(customItemMessages) / sizeof(customItemMessages[0]);
 
@@ -1619,6 +1664,7 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
             nei->comboObtainedFc[fc]++;
             nei->comboAppliedFc[fc]++;
         }
+        FleetShared_OnNativeObtained((int)item); // ComboShip: hand MM its half of a shared item
     }
 
     // Gameplay stats: Update the time the item was obtained
@@ -2138,6 +2184,10 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         case RG_SLATE_RUNE_CRYONIS:
             Slate_GrantRune(SLATE_RUNE_CRYONIS);
             break;
+        // The Desire Sensor's pool item, rehoused: it grants the Sensor rune, not an item of its own.
+        case RG_DESIRE_SENSOR:
+            Slate_GrantRune(SLATE_RUNE_SENSOR);
+            break;
         case RG_PHANTOM_HOURGLASS:
             ExtInv_GiveItem(SLOT_PHANTOM_HOURGLASS, EXT_ITEM_PHANTOM_HOURGLASS);
             break;
@@ -2145,14 +2195,30 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
             ExtInv_GiveItem(SLOT_SHADOW_CRYSTAL, EXT_ITEM_SHADOW_CRYSTAL);
             break;
         case RG_ROD_OF_SEASONS:
-            // Progressive, the slate idiom: each copy lights the next season in calendar order and
-            // hands over the cell on the first one. The rod is inert until it owns a season.
-            for (uint8_t season = 0; season < SEASON_COUNT; season++) {
-                if (!Seasons_SeasonOwned(season)) {
-                    Seasons_GrantSeason(season);
-                    break;
-                }
-            }
+            ExtInv_GiveItem(SLOT_ROD_OF_SEASONS, EXT_ITEM_ROD_OF_SEASONS);
+            break;
+        // Crossover Items. Both registry rows carry NEI_NO_SLOT, so the generic default arm
+        // below (ExtInv_SetItemById) silently drops them — the item would be consumed by the
+        // check and lost. Ownership is a flag read by BrokenItems_FormUnlocked.
+        case RG_POKEBALL:
+            Nei_Save()->pokeballOwned = 1;
+            break;
+        case RG_MARIO_MASK:
+            Flags_SetRandomizerInf(RAND_INF_OBTAINED_MARIO_MASK);
+            break;
+        // Rod of Seasons — sibling items over the rod's cell (slate idiom). Each lights its own
+        // season, and the first one obtained hands over the rod itself.
+        case RG_SEASON_SPRING:
+            Seasons_GrantSeason(SEASON_SPRING);
+            break;
+        case RG_SEASON_SUMMER:
+            Seasons_GrantSeason(SEASON_SUMMER);
+            break;
+        case RG_SEASON_AUTUMN:
+            Seasons_GrantSeason(SEASON_AUTUMN);
+            break;
+        case RG_SEASON_WINTER:
+            Seasons_GrantSeason(SEASON_WINTER);
             break;
         case RG_EXT_PENDANT_OF_MEMORIES:
             // ONE grant: the adult trade wheel. The old dual-grant also lit the ExtEquip BOOTS-2 bit

@@ -35,4 +35,9 @@ typedef struct EnMThunder {
     s16 coneYaw;  // her facing at release — the cone does not turn with her afterwards
 } EnMThunder;                         // size = 0x01D0
 
+// Vanilla inlined the charge glow because Link holds one sword. Gerudo's second blade and the Four
+// Sword clones each supply their own hand matrix.
+void EnMThunder_DrawChargeGlow(EnMThunder* thunder, PlayState* play, MtxF* handMtx);
+void FourSwordClone_DrawChargeGlowAll(EnMThunder* thunder, PlayState* play);
+
 #endif

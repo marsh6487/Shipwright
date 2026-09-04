@@ -303,8 +303,9 @@ bool Logic::HasItem(RandomizerGet itemName) {
             return HasBottle();
 
         // ───── Custom Items (RSK_SKIJER_CUSTOM_ITEMS) ─────
+        // Rehoused as the slate's Sensor rune, so ownership is the rune bit, not an inventory cell.
         case RG_DESIRE_SENSOR:
-            return ctx->GetOption(RSK_SKIJER_CUSTOM_ITEMS) && CheckInventory(ITEM_DESIRE_SENSOR, true);
+            return ctx->GetOption(RSK_SKIJER_CUSTOM_ITEMS) && Slate_RuneOwned(SLATE_RUNE_SENSOR);
         case RG_HYLIAS_GRACE:
             return ctx->GetOption(RSK_SKIJER_CUSTOM_ITEMS) && CheckInventory(ITEM_HYLIAS_GRACE, true);
         case RG_ZONAI_PERMAFROST:

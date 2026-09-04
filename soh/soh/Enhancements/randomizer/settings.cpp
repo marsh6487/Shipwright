@@ -1409,6 +1409,8 @@ void Settings::CreateOptions() {
     OPT_BOOL(RSK_MM_MASKS_TRANSFORM, "Add Transformation Masks to Rando", CVAR_RANDOMIZER_SETTING("MmMasksTransform"), mOptionDescriptions[RSK_MM_MASKS_TRANSFORM]);
     OPT_BOOL(RSK_EXT_EQUIPMENT, "Extended Equipment", CVAR_RANDOMIZER_SETTING("ExtEquipment"), mOptionDescriptions[RSK_EXT_EQUIPMENT]);
     OPT_BOOL(RSK_NEI_WEAPON_UPGRADES, "NEI Weapon Upgrades", CVAR_RANDOMIZER_SETTING("NeiWeaponUpgrades"), mOptionDescriptions[RSK_NEI_WEAPON_UPGRADES]);
+    OPT_BOOL(RSK_CROSSOVER_POKEBALL, "Include Pikachu Pokeball", CVAR_RANDOMIZER_SETTING("CrossoverPokeball"), mOptionDescriptions[RSK_CROSSOVER_POKEBALL]);
+    OPT_BOOL(RSK_CROSSOVER_MARIO_MASK, "Include Mario Mask", CVAR_RANDOMIZER_SETTING("CrossoverMarioMask"), mOptionDescriptions[RSK_CROSSOVER_MARIO_MASK]);
     // Bomb Arrows are no longer an inventory item — they are the 7th value of the bow's element
     // wheel. This decides how you come by them. "Bomb Bag" is what the old
     // gMods.BombArrows.AutoGrantOnBag checkbox did; that checkbox is gone, subsumed here.

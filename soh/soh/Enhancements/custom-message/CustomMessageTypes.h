@@ -244,13 +244,14 @@ typedef enum {
     TEXT_CONTINUE_OVERWORLD_MSG = 0x9214,
     TEXT_CONTINUE_DUNGEON_MSG = 0x9215,
     TEXT_TIME_GATE_PROMPT = 0x9216,
-    TEXT_DESIRE_SENSOR_HINT = 0x9300,
+    // Sheikah Sensor rune: the "costs a Heart Container" prompt and the hint it pays for.
+    TEXT_SENSOR_HINT = 0x9300,
+    TEXT_SENSOR_PROMPT = 0x9301,
 
     // Pause menu C-Up item descriptions (0x9400-0x94FF)
     // Custom items (0x9E-0xB7)
     TEXT_DESC_ROCS_FEATHER = 0x9400,
     TEXT_DESC_ROCS_CAPE,
-    TEXT_DESC_DESIRE_SENSOR,
     TEXT_DESC_HYLIAS_GRACE,
     TEXT_DESC_ZONAI_PERMAFROST,
     TEXT_DESC_DEMISE_DESTRUCTION,
@@ -346,6 +347,30 @@ typedef enum {
     TEXT_DESC_WAND_METEOR,
     TEXT_DESC_WAND_STORM,
     TEXT_DESC_WAND_SCEPTER,
+    // Page-2 items, bottle-row items, the remaining MM masks and the page-2 equipment cells that had
+    // no description yet (Skijer's NEI, 2026-09). Appended so nothing above renumbers.
+    TEXT_DESC_SHEIKAH_SLATE,
+    TEXT_DESC_PHANTOM_HOURGLASS,
+    TEXT_DESC_SHADOW_CRYSTAL,
+    TEXT_DESC_ROD_OF_SEASONS,
+    TEXT_DESC_NET,
+    TEXT_DESC_BOTTOMLESS_BOTTLE,
+    TEXT_DESC_MAGIC_MUSHROOM,
+    TEXT_DESC_POWER_KEG,
+    TEXT_DESC_MASK_BREMEN,
+    TEXT_DESC_MASK_CIRCUS_LEADER,
+    TEXT_DESC_MASK_GIANT,
+    TEXT_DESC_MASK_GIBDO,
+    TEXT_DESC_MASK_POSTMAN,
+    TEXT_DESC_MASK_SCENTS,
+    TEXT_DESC_MASK_TRUTH,
+    TEXT_DESC_MASK_GARO,
+    TEXT_DESC_MASK_KAFEI,
+    TEXT_DESC_MASK_KEATON,
+    TEXT_DESC_EXT_CLIMB_BOOTS,
+    TEXT_DESC_EXT_ROC_BOOTS,
+    TEXT_DESC_EXT_TRIDENT,
+    TEXT_DESC_EXT_SAGES_TUNIC,
 } TextIDs;
 
 #ifdef __cplusplus

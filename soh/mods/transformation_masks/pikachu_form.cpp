@@ -111,7 +111,7 @@ extern "C" uint8_t ResourceMgr_FileExists(const char* resName); // soh/ResourceM
 // System 1 — Pokeball ITEM (extended inventory): classic transform, C-buttons
 //            keep dispatching ITEMS, vanilla OOT UI, original gigantamax
 //            (8 MP + drain). Everything as it always was.
-// System 2 — Pikachu MODE (Broken Modes selector, gPikachuMode CVar, "secret"):
+// System 2 — Pikachu MODE (Crossover Items selector, gPikachuMode CVar, "secret"):
 //            the reworked bind moveset (C/D-pad moves), Pokemon-style UI mix,
 //            48-MP manual gigantamax, 3D swim, status chip.
 static inline u8 Pika_IsBrokenMode(void) {

@@ -86,6 +86,7 @@ void Bottle_WheelRecordActive(unsigned char wheel, unsigned short slotItem);
 // rod/rune bit and pick the active mode -- the same call the native pickup makes.
 void Wand_GrantMode(unsigned char mode);
 void Slate_GrantRune(unsigned char rune);
+void Seasons_GrantSeason(unsigned char season);
 }
 
 // Cross-game restart: the raw reset of THIS game (defined in debugconsole.cpp), called by the
@@ -396,13 +397,17 @@ void ApplyRegistryToNatives() {
 // for the Shovel/Dominion wheel. Runs on every extract and every apply. Slots are
 // extended_inventory.h SLOT_* (header not included in this TU).
 static void RepairFlagOwnedCells(NeiSaveData* nei) {
-    const uint8_t kSlotWand = 27, kSlotSlate = 39, kSlotShovel = 46;
+    const uint8_t kSlotWand = 27, kSlotSlate = 39, kSlotShovel = 46, kSlotRod = 47;
     const uint16_t kExtSheikahSlate = 0x0220; // EXT_ITEM_SHEIKAH_SLATE (same id in both games)
+    const uint16_t kExtRodOfSeasons = 0x0223; // EXT_ITEM_ROD_OF_SEASONS (same id in both games)
     if (nei->wandRodsOwned != 0 && Nei_GetOwnedItem(kSlotWand) != ITEM_ELEMENTAL_WAND) {
         Nei_SetOwnedItem(kSlotWand, ITEM_ELEMENTAL_WAND);
     }
     if (nei->slateRunesOwned != 0 && Nei_GetOwnedItem(kSlotSlate) != kExtSheikahSlate) {
         Nei_SetOwnedItem(kSlotSlate, kExtSheikahSlate);
+    }
+    if (nei->seasonsOwned != 0 && Nei_GetOwnedItem(kSlotRod) != kExtRodOfSeasons) {
+        Nei_SetOwnedItem(kSlotRod, kExtRodOfSeasons);
     }
     if (nei->shovelOwned || nei->dominionOwned) {
         const uint16_t cur = Nei_GetOwnedItem(kSlotShovel);
@@ -526,6 +531,7 @@ void ExtractShared(nlohmann::json& sh) {
     // natively, this just guarantees the bits arrive even if a grant is missed.
     sh["wandRodsOwned"] = (int)nei->wandRodsOwned;
     sh["slateRunesOwned"] = (int)nei->slateRunesOwned;
+    sh["seasonsOwned"] = (int)nei->seasonsOwned;
     RepairFlagOwnedCells(nei);
     // Shared NEI options/flags (FleetComboOptions.h). Table-driven so a future
     // option is one row there, not new code here. MAX rows never lose a value;
@@ -802,6 +808,16 @@ void ApplyShared(const nlohmann::json& sh) {
             }
         }
         nei->slateRunesOwned |= incoming;
+    }
+    if (sh.contains("seasonsOwned") && sh["seasonsOwned"].is_number_integer()) {
+        const uint8_t incoming = (uint8_t)sh["seasonsOwned"].get<int>();
+        const uint8_t gained = (uint8_t)(incoming & ~nei->seasonsOwned);
+        for (uint8_t s = 0; s < 4 && gained != 0; s++) {
+            if (gained & (1 << s)) {
+                Seasons_GrantSeason(s);
+            }
+        }
+        nei->seasonsOwned |= incoming;
     }
 
     RepairFlagOwnedCells(nei);
@@ -1643,6 +1659,12 @@ void ProcessSignals() {
 }
 
 void RegisterFleetSync() {
+#ifdef COMBO_BUILD
+    // Shared state travels through ComboShip's merged save container (Combo_ReadGameSave /
+    // WriteGameSave), and erasing a pair is its SetDeleteForeignSave seam. Installing the file-mirror
+    // pumps too would give the same state two owners — and the title-screen MM-save wipe is fatal here.
+    return;
+#endif
     // Both of these run every frame and touch JSON built from live save state, so both can throw on
     // data a fresh check introduced. Uncaught, that propagates out of the game loop — and it is the
     // same per-frame hook the warp pipeline uses, so one bad frame could swallow a warp step. Swallow
@@ -1872,3 +1894,25 @@ int FleetSync_IsApplyingFc(void) {
 } // extern "C"
 
 static RegisterShipInitFunc initFleetSync(RegisterFleetSync, {});
+
+#ifdef COMBO_BUILD
+// ComboShip: the file-mirror pumps above stay off, but the two games still reconcile at every
+// switch — the peer pulls this snapshot (FleetSharedItems::PullFromPeer) and applies it max-merge.
+// Save-only: valid while this game is dormant.
+extern "C" __declspec(dllexport) const char* SOH_ExtractSharedState(void) {
+    static std::string cached;
+    nlohmann::json sh;
+    ExtractShared(sh);
+    cached = sh.dump();
+    return cached.c_str();
+}
+
+extern "C" void FleetSync_ApplySharedState(const char* json) {
+    if (json == nullptr || json[0] == '\0') {
+        return;
+    }
+    try {
+        ApplyShared(nlohmann::json::parse(json));
+    } catch (const std::exception& e) { SPDLOG_ERROR("[FleetSync] ApplySharedState failed: {}", e.what()); }
+}
+#endif

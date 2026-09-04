@@ -54,26 +54,19 @@ static void GreatFairySword_RecoverOnHit(Player* player, PlayState* play) {
 // NOT coming back. What lives here now is the MHR Insect Glaive kit; see
 // nei_hd_models/gerudo_mhr_dualblades_lab/MHR_EXT_SWORD_PORT_SPEC.md §12.
 //
-// STAGED ON PURPOSE. This is phase 1-3 of that plan: the light orb / Kinsect
-// only. The glaive MOVESET (phase 4) will take over B and bring the forced
-// PLAYER_IA_SWORD_BIGGORON base with it — until then the player keeps whatever
-// sword they had, which is exactly what makes the orb testable on its own.
-// Consequence while phase 4 is pending: holding B still charges the vanilla spin
-// attack alongside the orb charge, and R still raises a real shield. Both stop
-// once the moveset owns those buttons.
+// STAGED ON PURPOSE. This is the Kinsect only; the glaive MOVESET comes later and
+// will take B through the melee-row swaps. R is free here because the cane already
+// wields two-handed (ExtEquip_ByrnaIsTwoHanded), so no shield competes for it.
 //
-//   B held  -> charge, then summon the orb (costs magic)
-//   R + B   -> send the orb at a target; it harvests an extract and returns
+//   R      -> throw the Kinsect, or recall it once it has banked a charge
+//   Z + R  -> a damageless seed that marks a target for it
 // ---------------------------------------------------------------------------
-#define BYRNA_CHARGE_FRAMES 15 // ~0.75 s at 20 Hz (R_UPDATE_RATE = 3)
-
-static s16 sByrnaChargeTimer = 0;
+// Not in functions.h; declared locally the same way cane_pacci.c does.
+extern int Player_IsZTargeting(Player* this);
 
 static void Byrna_Behavior(Player* player, PlayState* play) {
     Input* in;
-    u8 bHeld;
-    u8 bPress;
-    u8 rHeld;
+    u8 rPress;
 
     if (player == NULL || play == NULL) {
         return;
@@ -81,44 +74,39 @@ static void Byrna_Behavior(Player* player, PlayState* play) {
     // Never act while the player is not in control of himself.
     if (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
                                PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_GETTING_ITEM)) {
-        sByrnaChargeTimer = 0;
         return;
     }
 
     gExtEquipBehavior.byrnaActive = 1;
 
     in = &play->state.input[0];
-    bHeld = CHECK_BTN_ALL(in->cur.button, BTN_B) != 0;
-    bPress = CHECK_BTN_ALL(in->press.button, BTN_B) != 0;
-    rHeld = CHECK_BTN_ALL(in->cur.button, BTN_R) != 0;
+    rPress = CHECK_BTN_ALL(in->press.button, BTN_R) != 0;
 
-    // R+B sends the orb out. Checked before the charge so the two never fight
-    // over the same B press.
-    if (rHeld && bPress) {
-        ByrnaOrb_Launch(play);
-        sByrnaChargeTimer = 0;
+    // Z+R marks a target for the Kinsect; R alone throws or recalls it. Checked in
+    // that order so the seed never eats the plain-R press.
+    if (rPress && Player_IsZTargeting(player)) {
+        ByrnaOrb_ThrowSeed(play);
         return;
     }
-
-    // B held summons. The timer only fires once per hold (it stops climbing at
-    // the threshold), so keeping B down does not drain magic every frame.
-    if (bHeld && !rHeld) {
-        if (sByrnaChargeTimer < BYRNA_CHARGE_FRAMES) {
-            sByrnaChargeTimer++;
-            if (sByrnaChargeTimer == BYRNA_CHARGE_FRAMES) {
-                ByrnaOrb_Summon(play);
-            }
-        }
-    } else {
-        sByrnaChargeTimer = 0;
+    // A full Kinsect bar turns R from "throw the orb" into "launch LINK".
+    if (rPress && ByrnaOrb_IsCharged() && !ByrnaIg_IsAirborne() && (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
+        ByrnaIg_EnterAir(play, player);
+        return;
     }
+    if (rPress) {
+        ByrnaOrb_PressR(play);
+    }
+    // ByrnaOrb_OnLand() is deliberately NOT called here. Spending the bar on any
+    // touchdown would wipe it every frame Link stands still, and even a rising-edge
+    // landing would eat it after a step off a ledge. It belongs to the aerial
+    // launch's own landing, which does not exist yet.
 }
 
 static void Byrna_Cleanup(void) {
     // Runs every frame while the slot is NOT equipped, so it has to be cheap and
     // idempotent — both of these are.
     ByrnaOrb_Cleanup();
-    sByrnaChargeTimer = 0;
+    ByrnaIg_Cleanup();
     gExtEquipBehavior.byrnaActive = 0;
 }
 

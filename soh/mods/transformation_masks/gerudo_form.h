@@ -49,6 +49,13 @@ u8 GerudoForm_IsActive(void);
 // custom_forms.cpp::CustomForms_OverrideLimbDraw to tint the gerudo outfit.
 void GerudoForm_GetTunicColor(s32 tunic, Color_RGB8* out);
 
+// Native OOT VFX timeline for the demon-mode L+B attack (Urbosa's Fury).
+// `sourceFrame` is the current frame of gs_wirebug_attack04; `active` must be
+// supplied every Gerudo combat tick so an interrupted attack restores the
+// environment immediately. Visual/audio only: damage and collision stay in
+// gerudo_mhr_combat.inc.c.
+void GerudoForm_TickUrbosaFuryVfx(PlayState* play, Player* player, f32 sourceFrame, u8 active);
+
 // Retained no-op (always returns 0). The gerudo form now draws entirely
 // through Link's own Player_DrawImpl with a DL path-swap, so there is no
 // separate gerudo body pass to trigger here. Kept for ABI stability with any

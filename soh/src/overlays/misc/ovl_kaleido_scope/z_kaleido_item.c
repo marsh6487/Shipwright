@@ -1579,6 +1579,34 @@ static void Wand_HandleKaleidoSelector(PlayState* play) {
     KaleidoWheel_Run(play, onThisItem, Wand_ModeCount() > 1, &sWandSelectorActive, Wand_KaleidoCycle);
 }
 
+// All six rods share one staff icon, so the element has to come from somewhere else: the active
+// medallion at half alpha covering the cell, with the wand put back on top at 75% (GustJar idiom).
+static void Wand_DrawMedallionBackdrop(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+    void* medallionTex = ExtInv_GetItemIcon(Wand_ModeMedallion(Wand_GetMode()));
+    void* wandTex = ExtInv_GetItemIcon(ITEM_ELEMENTAL_WAND);
+
+    if ((medallionTex == NULL) || (wandTex == NULL)) {
+        return;
+    }
+
+    Vtx* cellVtx = &pauseCtx->itemVtx[pauseCtx->cursorSlot[PAUSE_ITEM] * 4];
+    Vtx* wandVtx = KaleidoScope_AllocRemappedQuad(play->state.gfxCtx, cellVtx, 32);
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha >> 1);
+    gSPVertex(POLY_OPA_DISP++, cellVtx, 4, 0);
+    KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, medallionTex, 24, 24, 0);
+
+    gDPPipeSync(POLY_OPA_DISP++);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
+    gSPVertex(POLY_OPA_DISP++, wandVtx, 4, 0);
+    KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, wandTex, 32, 32, 0);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 static void Wand_DrawKaleidoSelector(PlayState* play) {
     PauseContext* pauseCtx = &play->pauseCtx;
 
@@ -1586,6 +1614,11 @@ static void Wand_DrawKaleidoSelector(PlayState* play) {
         KaleidoCycle_DrawRocStyle(play, pauseCtx->cursorSlot[PAUSE_ITEM], 0, 0, 0, NULL, NULL, NULL, NULL, 0, 0);
         return;
     }
+
+    // Before the wheel gate: with a single rod owned there is nothing to cycle, but you still need
+    // to see WHICH rod it is.
+    Wand_DrawMedallionBackdrop(play);
+
     if (Wand_ModeCount() <= 1) {
         return;
     }

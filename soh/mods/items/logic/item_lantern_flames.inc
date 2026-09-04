@@ -66,8 +66,7 @@ static void Lantern_TintTorchesNear(PlayState* play, Vec3f* pos, f32 range, u8 f
     }
 
     while (actor != NULL) {
-        if ((actor->id == ACTOR_OBJ_SYOKUDAI) && (actor->update != NULL) &&
-            (((ObjSyokudai*)actor)->litTimer != 0)) {
+        if ((actor->id == ACTOR_OBJ_SYOKUDAI) && (actor->update != NULL) && (((ObjSyokudai*)actor)->litTimer != 0)) {
             f32 dx = actor->world.pos.x - pos->x;
             f32 dy = actor->world.pos.y - pos->y;
             f32 dz = actor->world.pos.z - pos->z;
@@ -107,12 +106,17 @@ u8 Lantern_GetTorchTint(Actor* torch, u8* prim, u8* env) {
 }
 
 static void Lantern_TrackFlame(Actor* flame, u8 fireType, PlayState* play) {
-    if (flame == NULL) return;
-    if (fireType >= LANTERN_FIRE_MAX) return;
+    if (flame == NULL)
+        return;
+    if (fireType >= LANTERN_FIRE_MAX)
+        return;
 
     s32 slot = -1;
     for (s32 i = 0; i < LANTERN_MAX_FLAMES; i++) {
-        if (sFlames[i].timer <= 0) { slot = i; break; }
+        if (sFlames[i].timer <= 0) {
+            slot = i;
+            break;
+        }
     }
     if (slot < 0) {
         slot = 0;
@@ -144,10 +148,12 @@ static void Lantern_TrackFlame(Actor* flame, u8 fireType, PlayState* play) {
 }
 
 void Lantern_UpdateFlames(PlayState* play) {
-    if (play == NULL) return;
+    if (play == NULL)
+        return;
 
     for (s32 i = 0; i < LANTERN_MAX_FLAMES; i++) {
-        if (sFlames[i].timer <= 0) continue;
+        if (sFlames[i].timer <= 0)
+            continue;
 
         if (sFlames[i].actor == NULL || sFlames[i].actor->update == NULL) {
             sFlames[i].timer = 0;

@@ -122,8 +122,6 @@ bool Randomizer_IsCheckShuffled(RandomizerCheck check);
 GetItemEntry GetItemMystery();
 ItemObtainability Randomizer_GetItemObtainabilityFromRandomizerCheck(RandomizerCheck randomizerCheck);
 uint8_t Randomizer_IsSeedGenerated();
-u8 Randomizer_SceneHasMajorItem(s16 sceneNum);
-u8 Randomizer_GetSceneHint(s16 sceneNum);
 uint8_t Randomizer_IsSpoilerLoaded();
 void Randomizer_SetSpoilerLoaded(bool spoilerLoaded);
 uint8_t Randomizer_GenerateRandomizer();
@@ -154,6 +152,12 @@ uint64_t GetUnixTimestamp();
 // lock — re-locking a std::mutex is undefined / self-deadlock).
 void OTRAudio_LockMutex(void);
 void OTRAudio_UnlockMutex(void);
+
+// Sheikah Sensor rune: the five wished-for items, consulted in slot order. Each CVar holds a
+// RandomizerGet outright, so the menu writes exactly what the rune reads.
+#define SENSOR_DESIRE_SLOTS 5
+#define CVAR_SENSOR_DESIRE_PREFIX "gNei.SensorDesire"
+uint8_t Randomizer_SensorBuildHint(void);
 #ifdef __cplusplus
 };
 #endif

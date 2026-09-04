@@ -49,11 +49,19 @@ typedef void (*BoxMenuConfirmFn)(s32 index);
 u8 BoxMenu_IsOpen(void);
 // Opens the menu (copies `entries`). Returns 0 if it cannot open right now (already paused,
 // mid-transition, game over) — the caller just tries again next frame if the hold continues.
+// holdButton == 0 opens LATCHED: the menu stays up until A confirms or B cancels.
 u8 BoxMenu_Open(PlayState* play, const BoxMenuEntry* entries, s32 count, s32 selected, u16 holdButton,
                 BoxMenuConfirmFn onConfirm);
 // The z_play.c custom-pause pair (Minish Kaleido idiom).
 void BoxMenu_Update(PlayState* play);
 void BoxMenu_Draw(PlayState* play);
+
+// Optional: on a SINGLE-ROW menu the vertical stick is otherwise dead, so it is offered to the
+// caller as a per-entry sub-choice (dir -1 up, +1 down). Pair it with BoxMenu_SetEntryIcon to show
+// the change. Registered per Open; a caller that never sets it is unaffected.
+typedef void (*BoxMenuSubStepFn)(s32 index, s32 dir);
+void BoxMenu_SetSubStep(BoxMenuSubStepFn onSubStep);
+void BoxMenu_SetEntryIcon(s32 index, const char* iconPath);
 
 // ── Layout (screen pixels, 320x240 virtual) ─────────────────────────────────
 // Uniform boxes, BotW-style: the icon FILLS its box and state is shown by colour, never by size.
@@ -75,9 +83,20 @@ static BoxMenuConfirmFn sBoxMOnConfirm = NULL;
 static u8 sBoxMStickHeld = 0;
 static u8 sBoxMHoldSeen = 0; // the hold button has been observed down at least once
 static s16 sBoxMPulse = 0;
+static BoxMenuSubStepFn sBoxMOnSubStep = NULL;
 
 u8 BoxMenu_IsOpen(void) {
     return sBoxMOpen;
+}
+
+void BoxMenu_SetSubStep(BoxMenuSubStepFn onSubStep) {
+    sBoxMOnSubStep = onSubStep;
+}
+
+void BoxMenu_SetEntryIcon(s32 index, const char* iconPath) {
+    if ((index >= 0) && (index < sBoxMCount) && (iconPath != NULL)) {
+        sBoxMEntries[index].iconPath = iconPath;
+    }
 }
 
 static void BoxMenu_PlaySfx(u16 sfx) {
@@ -178,6 +197,10 @@ u8 BoxMenu_Open(PlayState* play, const BoxMenuEntry* entries, s32 count, s32 sel
         return 0;
     }
 
+    // Cleared per open: a caller that wants it calls BoxMenu_SetSubStep right after, so the last
+    // client's callback can never leak into the next menu.
+    sBoxMOnSubStep = NULL;
+
     if (count > BOX_MENU_MAX_ENTRIES) {
         count = BOX_MENU_MAX_ENTRIES;
     }
@@ -227,10 +250,18 @@ void BoxMenu_Update(PlayState* play) {
 
     sBoxMPulse++;
 
-    // Release of the hold button confirms. The button is usually still down on the frame we open,
-    // but if the caller opened on a press that had already been consumed we must not close on the
-    // very first frame — wait until we have actually SEEN it down.
-    if (held & sBoxMHoldButton) {
+    // holdButton == 0 is the LATCHED mode: the menu stays up on its own and A confirms, for callers
+    // that open on a press rather than a hold (the Rod of Seasons' change-season prompt).
+    if (sBoxMHoldButton == 0) {
+        if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
+            BoxMenu_PlaySfx(NA_SE_SY_DECIDE);
+            BoxMenu_Close(play, 1);
+            return;
+        }
+    } else if (held & sBoxMHoldButton) {
+        // Release of the hold button confirms. The button is usually still down on the frame we
+        // open, but if the caller opened on a press that had already been consumed we must not
+        // close on the very first frame — wait until we have actually SEEN it down.
         sBoxMHoldSeen = 1;
     } else if (sBoxMHoldSeen) {
         BoxMenu_PlaySfx(NA_SE_SY_DECIDE);
@@ -254,15 +285,22 @@ void BoxMenu_Update(PlayState* play) {
         s32 wantX = (stickX > BOXM_STICK_DEAD) ? 1 : (stickX < -BOXM_STICK_DEAD) ? -1 : 0;
         s32 wantY = (stickY > BOXM_STICK_DEAD) ? -1 : (stickY < -BOXM_STICK_DEAD) ? 1 : 0; // up = previous row
 
-        if (BoxMenu_RowCount() <= 1) {
+        s32 singleRow = (BoxMenu_RowCount() <= 1);
+
+        if (singleRow && (sBoxMOnSubStep == NULL)) {
             wantY = 0;
         }
         if (wantX != 0 || wantY != 0) {
             if (!sBoxMStickHeld) {
-                s32 next;
+                s32 next = sBoxMCursor;
 
                 if ((wantY != 0) && (ABS(stickY) >= ABS(stickX))) {
-                    next = BoxMenu_StepRow(sBoxMCursor, wantY);
+                    if (singleRow) {
+                        sBoxMOnSubStep(sBoxMCursor, wantY);
+                        BoxMenu_PlaySfx(NA_SE_SY_CURSOR);
+                    } else {
+                        next = BoxMenu_StepRow(sBoxMCursor, wantY);
+                    }
                 } else {
                     next = BoxMenu_Step(sBoxMCursor, wantX >= 0 ? 1 : -1);
                 }

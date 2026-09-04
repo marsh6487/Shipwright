@@ -136,7 +136,7 @@ void KaleidoScope_DrawAButton(PlayState* play, Vtx* vtx, int16_t xTranslate, int
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Broken Modes: in Mario mode the equipment doll is a real libsm64 Mario, not Link.
+// Crossover Items: in Mario mode the equipment doll is a real libsm64 Mario, not Link.
 // Defined in expansions/sm64/sm64_mario.c; returns 1 when it drew Mario into the
 // pause framebuffer (then we skip the Link draw). All the work lives out of src/.
 u8 Sm64Kaleido_DrawForm(PlayState* play);
@@ -186,7 +186,7 @@ void KaleidoScope_DrawPlayerWork(PlayState* play) {
 }
 
 // =============================================================================
-// Transform page (B1): a 3rd equipment page that shows the Broken-Modes form
+// Transform page (B1): a 3rd equipment page that shows the Crossover-Items form
 // selector (Link / Mario / Pikachu) IN the equipment grid — the form icons sit
 // where the swords/shields go and the form's item NAME shows where the equipment
 // item name normally appears. Reuses broken_items.c for the form data + toggle.
@@ -279,7 +279,7 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
     s16 oldCursorPoint;
     u8 extEquipPage;
 
-    // #B1 Transform page: the equipment screen shows the Broken-Modes form selector
+    // #B1 Transform page: the equipment screen shows the Crossover-Items form selector
     // (Link / Mario / Pikachu) in the grid where the swords go, with the form's item
     // name in the usual name spot. Fully self-contained — its OWN OPEN/CLOSE_DISPS +
     // early return, so the normal equipment path below is completely untouched (and
@@ -294,11 +294,14 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
         // Form icons in the top grid row (slots 1..count = where the swords sit).
         Gfx_SetupDL_42Opa(play->state.gfxCtx);
         gDPSetCombineMode(POLY_OPA_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
-        gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
         gSPVertex(POLY_OPA_DISP++, &pauseCtx->equipVtx[0], 16, 0);
         for (i = 0; i < BrokenItems_FormCount(); i++) {
             void* formTex = BrokenItems_FormIconTex(i);
             if (formTex != NULL) {
+                u8 locked = !BrokenItems_FormUnlocked(i);
+                gDPPipeSync(POLY_OPA_DISP++);
+                gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, locked ? 90 : 255, locked ? 90 : 255, locked ? 90 : 255,
+                                locked ? (pauseCtx->alpha * 2 / 3) : pauseCtx->alpha);
                 KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, formTex, 32, 32, (i + 1) * 4);
             }
         }
@@ -367,7 +370,7 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
         bool ngcModeEq = CVarGetInteger(CVAR_ENHANCEMENT("NGCKaleidoSwitcher"), 0) != 0;
         s16 freedBtnEq = ngcModeEq ? BTN_Z : BTN_L;
         // Page cycle with the freed shoulder button: vanilla → ext (if ExtEquip on)
-        // → transform (if Broken Modes on) → vanilla. Works even when ExtEquip is
+        // → transform (if Crossover Items on) → vanilla. Works even when ExtEquip is
         // off (then it's just vanilla ↔ transform). Entering the transform page is
         // handled here; leaving it is handled in KaleidoEquip_TransformInput.
         if (CHECK_BTN_ALL(input->press.button, freedBtnEq) && ExtEquip_CanSwitch()) {

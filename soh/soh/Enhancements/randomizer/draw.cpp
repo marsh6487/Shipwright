@@ -1645,10 +1645,6 @@ void Randomizer_DrawTimeGate(PlayState* play, GetItemEntry* getItemEntry) {
     DrawCustomItemDiamond(play, (Gfx*)gNeiTimeGateDL, 0.5f);
 }
 
-void Randomizer_DrawDesireSensor(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawCustomItemDiamond(play, (Gfx*)gNeiDesireSensorDL, 0.5f);
-}
-
 void Randomizer_DrawBeetle(PlayState* play, GetItemEntry* getItemEntry) {
     DrawCustomItemDiamond(play, gRandoBeetleDL, 0.3f);
 }
@@ -2297,8 +2293,8 @@ static Gfx* BuildRecoloredGiDL(const char* dlName, uint32_t (*remap)(uint32_t), 
         return out.data();
     }
     auto isTwoWord = [](uint8_t op) {
-        return op == 0x20 || op == 0x24 || op == 0x25 || op == 0x27 || op == 0x31 || op == 0x32 ||
-               op == 0x33 || op == 0x35 || op == 0x36 || op == 0x42;
+        return op == 0x20 || op == 0x24 || op == 0x25 || op == 0x27 || op == 0x31 || op == 0x32 || op == 0x33 ||
+               op == 0x35 || op == 0x36 || op == 0x42;
     };
     Gfx* src = (Gfx*)ResourceMgr_LoadGfxByName((char*)dlName);
     if (src == NULL) {
@@ -2528,6 +2524,10 @@ void Randomizer_DrawSlateRuneCryonis(PlayState* play, GetItemEntry* getItemEntry
     DrawSlateRuneCommon(play, 150, 215, 255); // Cryonis — ice blue
 }
 
+void Randomizer_DrawSlateRuneSensor(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawSlateRuneCommon(play, 200, 130, 255); // Sheikah Sensor — the old Desire Sensor's violet
+}
+
 void Randomizer_DrawNeiPhantomHourglass(PlayState* play, GetItemEntry* getItemEntry) {
     static Gfx* c = NULL;
     static u8 t = 0;
@@ -2544,23 +2544,37 @@ void Randomizer_DrawNeiShadowCrystal(PlayState* play, GetItemEntry* getItemEntry
 void Randomizer_DrawNeiRodOfSeasons(PlayState* play, GetItemEntry* getItemEntry) {
     static Gfx* c = NULL;
     static u8 t = 0;
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-    // The rod is progressive, so the flame has to name the season this pickup is about to light —
-    // the first one still missing, which is exactly what the grant handler will hand over.
-    uint8_t season = SEASON_SPRING;
+    DrawCustomItemDiamondByPath(play, "__OTR__objects/object_nei_rod_of_seasons/gNeiRodOfSeasonsDL", &c, &t, 0.35f);
+}
 
-    for (uint8_t s = 0; s < SEASON_COUNT; s++) {
-        if (!Seasons_SeasonOwned(s)) {
-            season = s;
-            break;
-        }
-    }
+// Seasons: the same rod model wrapped in its season's flame — the flame colour IS the season's
+// identity, matching its wheel glyph.
+static void DrawSeasonCommon(PlayState* play, u8 season) {
+    static Gfx* c = NULL;
+    static u8 t = 0;
+    u8 r;
+    u8 g;
+    u8 b;
 
     Seasons_SeasonColor(season, &r, &g, &b);
     DrawWeaponFlameOverlay(play, r, g, b);
     DrawCustomItemDiamondByPath(play, "__OTR__objects/object_nei_rod_of_seasons/gNeiRodOfSeasonsDL", &c, &t, 0.35f);
+}
+
+void Randomizer_DrawSeasonSpring(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawSeasonCommon(play, SEASON_SPRING);
+}
+
+void Randomizer_DrawSeasonSummer(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawSeasonCommon(play, SEASON_SUMMER);
+}
+
+void Randomizer_DrawSeasonAutumn(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawSeasonCommon(play, SEASON_AUTUMN);
+}
+
+void Randomizer_DrawSeasonWinter(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawSeasonCommon(play, SEASON_WINTER);
 }
 
 void Randomizer_DrawExtPendantOfMemories(PlayState* play, GetItemEntry* getItemEntry) {

@@ -572,8 +572,8 @@ void Lantern_UpdateLens(PlayState* play) {
     // put the lantern in Link's fist, so the shadow lens is on exactly while you can SEE
     // the lantern being held. Press its button to take it out; it stays out until another
     // item takes the hand (drawing the sword) or the lantern leaves the buttons.
-    u8 wantLens = ((gCustomItemState.lanternFireType == LANTERN_FIRE_POE) && Lantern_IsInHand()) ||
-                  GaroForm_HasPassiveLens();
+    u8 wantLens =
+        ((gCustomItemState.lanternFireType == LANTERN_FIRE_POE) && Lantern_IsInHand()) || GaroForm_HasPassiveLens();
 
     // Vanilla drops the lens during real cutscenes; match that. Player_InCsMode is NOT used
     // as the test — it is also true for item cutscenes, textboxes and any state that sets

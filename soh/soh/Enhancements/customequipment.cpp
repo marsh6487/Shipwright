@@ -705,8 +705,11 @@ static void RegisterPlayerDrawForkNEI() {
         // FD wields the Deity sword two-handed no matter which sword is equipped, and
         // nothing at all when no sword is in hand — Player_IsFDHoldingSword is that gate
         // (swords only: a Deku Stick / Hammer in FD's hands keeps its own identity).
-        if (Player_IsFDHoldingSword(player) || player->heldItemAction == PLAYER_IA_ROD_FIRE ||
-            player->heldItemAction == PLAYER_IA_ROD_ICE || player->heldItemAction == PLAYER_IA_ROD_LIGHT) {
+        // The Cane of Byrna is the Insect Glaive: a pole weapon, so it wields
+        // two-handed and carries no shield, exactly like the Biggoron's Sword.
+        if (Player_IsFDHoldingSword(player) || ExtEquip_ByrnaIsTwoHanded(player) ||
+            player->heldItemAction == PLAYER_IA_ROD_FIRE || player->heldItemAction == PLAYER_IA_ROD_ICE ||
+            player->heldItemAction == PLAYER_IA_ROD_LIGHT) {
             *should = true;
         }
     });
@@ -1000,6 +1003,18 @@ static void RegisterPlayerAnimOverrideNEI() {
                 LinkAnimationHeader* gerudoLoop = GerudoMhr_GetGuardAnim(player, 1);
                 if (gerudoLoop != nullptr) {
                     *animOut = gerudoLoop;
+                }
+                break;
+            }
+            case VB_PLAYER_ANIM_SITE_MELEE_SWING: {
+                // Forms fight with their body, so their aerial slashes are kicks and fin swipes,
+                // not Link's sword clips.
+                if (TransformMasks_IsTransformed() && (siteArg >= PLAYER_MWA_FLIPSLASH_START) &&
+                    (siteArg <= PLAYER_MWA_JUMPSLASH_FINISH)) {
+                    LinkAnimationHeader* formAnim = MmForm_GetJumpSlashAnim(siteArg);
+                    if (formAnim != nullptr) {
+                        *animOut = formAnim;
+                    }
                 }
                 break;
             }

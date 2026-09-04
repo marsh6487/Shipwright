@@ -748,7 +748,11 @@ static const ALIGN_ASSET(2) char gItemIconPropHuntNextTex[]   = dgItemIconPropHu
 #define dgItemIconBombArrowsTex "__OTR__textures/icon_item_custom/gItemIconBombArrowsTex"
 static const ALIGN_ASSET(2) char gItemIconBombArrowsTex[] = dgItemIconBombArrowsTex;
 
-// Elemental Wand — one icon per rod; the page-2 cell shows whichever mode is active.
+// Elemental Wand — ONE icon everywhere; the active element shows as the medallion behind it
+// (Gust Jar idiom). The six per-rod icons below are unused, kept only as art.
+#define dgItemIconElementalWandTex "__OTR__textures/icon_item_custom/gItemIconElementalWandTex"
+static const ALIGN_ASSET(2) char gItemIconElementalWandTex[] = dgItemIconElementalWandTex;
+
 #define dgItemIconSandRodTex "__OTR__textures/icon_item_custom/gItemIconSandRodTex"
 static const ALIGN_ASSET(2) char gItemIconSandRodTex[] = dgItemIconSandRodTex;
 

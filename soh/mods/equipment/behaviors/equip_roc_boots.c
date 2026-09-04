@@ -37,17 +37,20 @@ void RocBoots_MoveWithGravity(Player* p, void (*integrate)(Actor*)) {
 
 static u8 sRocOnWater = 0;
 
-// Garo runs on water too (garo_form.cpp). The pinning is the same trick, so it
-// stays one gate here rather than a second copy of it in z_player.c — this
-// function is the single place that answers "is the player on the surface".
+// Garo runs on water too (garo_form.cpp), and the Rod of Seasons freezes it in Winter
+// (item_rod_of_seasons.c). The pinning is the same trick, so it stays one gate here rather than a
+// second copy of it in z_player.c — this function is the single place that answers "is the player
+// on the surface".
 u8 GaroForm_WalksOnWater(void);
+u8 Seasons_WalksOnWater(void);
 
 // 0 = not on water; 1 = pinned to the surface; 2 = pinned, first frame (the landing).
 u8 RocBoots_WalksOnWater(Player* p) {
     u8 wasOnWater = sRocOnWater;
 
-    sRocOnWater = (RocBoots_IsWorn() || GaroForm_WalksOnWater()) && !(p->stateFlags1 & PLAYER_STATE1_IN_WATER) &&
-                  (p->actor.yDistToWater >= 0.0f) && (p->actor.velocity.y <= 0.0f);
+    sRocOnWater = (RocBoots_IsWorn() || GaroForm_WalksOnWater() || Seasons_WalksOnWater()) &&
+                  !(p->stateFlags1 & PLAYER_STATE1_IN_WATER) && (p->actor.yDistToWater >= 0.0f) &&
+                  (p->actor.velocity.y <= 0.0f);
     if (!sRocOnWater) {
         return 0;
     }
@@ -56,6 +59,13 @@ u8 RocBoots_WalksOnWater(Player* p) {
 
 u8 RocBoots_OnWater(void) {
     return sRocOnWater;
+}
+
+// Winter's surface is frozen, so it must read as ice rather than as water: no ripples, no
+// shallow-water footsteps. Answered off the pin state rather than re-deriving it, because the two
+// places in z_player.c that ask run BEFORE the pin is recomputed for the frame.
+u8 RocBoots_OnFrozenWater(void) {
+    return sRocOnWater && Seasons_WalksOnWater();
 }
 
 // Per-frame behavior while the Roc Boots are the equipped ext boots (the effects are z_player gates).

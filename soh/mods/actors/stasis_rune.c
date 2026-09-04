@@ -34,6 +34,7 @@
 #include "soh/ActorDB.h" // instanceSize, to walk a frozen body's own struct for its colliders
 #include "../items/helpers/target_select_helper.h"
 #include "../items/helpers/combat_helper.h"
+#include "../items/helpers/rewind_helper.h" // a body we drive must be admitted to the recorder by hand
 
 // TargetSelect's filter takes no PlayState, and the teardown paths can run outside a frame, so both
 // lean on the global. Every mod in the tree reaches it the same way.
@@ -50,6 +51,12 @@ void Stasis_Update(PlayState* play, Player* player);
 void Stasis_Draw(PlayState* play);
 void Stasis_Forget(void);
 static u8 Stasis_KeepsItsPose(Actor* actor);
+// Defined next to the collider scan it shares code with, used by the classifier well above it.
+static f32 Stasis_MeasureHeight(PlayState* play, Actor* actor);
+// z_collision_check.c. Non-static, but the header only mentions it in a comment, so it is declared
+// here the same way the other engine entry points this file reaches for are.
+void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCtx, Collider* collider,
+                                ColliderInfo* info);
 void Stasis_UpdateOffer(PlayState* play, u8 allowed);
 u8 Stasis_IsClimbableBgId(s32 bgId);
 // Defined in stasis_sfx.inc.c (pulled in at the tail of this file). MixInto is called from the
@@ -61,11 +68,13 @@ void StasisSfx_MixInto(s16* outBuf, u32 numSamples);
 
 // ── Tuning ───────────────────────────────────────────────────────────────────
 // Actor updates run at 20 ticks/second in both engines (cane_pacci.h documents 100 as "roughly
-// five seconds"), so 200 is the requested 10 seconds. Enemies hold just as long; what changes for
-// them is the cue, which plays at double rate.
+// five seconds"), so 200 is the requested 10 seconds. An enemy hold is derived from the cue rate,
+// not written out again: the strained double-speed sound and the hold have to end together.
+#define STASIS_SFX_RATE_ENEMY 2.0f
 #define STASIS_FRAMES_OBJECT 200
-#define STASIS_FRAMES_ENEMY 200
+#define STASIS_FRAMES_ENEMY ((s16)(STASIS_FRAMES_OBJECT / STASIS_SFX_RATE_ENEMY))
 #define STASIS_CHAIN_FRAMES 20 // the chain burst: one second, at the start only
+#define STASIS_CHAIN_FRAMES_ENEMY ((s16)(STASIS_CHAIN_FRAMES / STASIS_SFX_RATE_ENEMY))
 #define STASIS_FLIGHT_FRAMES 90
 #define STASIS_RANGE TARGETSEL_DEFAULT_RANGE
 
@@ -85,6 +94,10 @@ void StasisSfx_MixInto(s16* outBuf, u32 numSamples);
 // A body has to be about Link's height before climbing it makes any sense. This is what "actor bg
 // GRANDE" means in code — a rule rather than a list, so new scenes need no table edit.
 #define STASIS_CLIMB_MIN_HALF_HEIGHT 24.0f
+// The floor for being worth freezing at all. Low on purpose — almost anything with a body qualifies
+// and what falls out is rupees, fairies, sparkles and projectiles. It is a real measurement or
+// nothing: see Stasis_MeasureHeight for why colChkInfo is not one of the sources.
+#define STASIS_MIN_HEIGHT 25.0f
 // EVERY frozen body gets a shell — that is what makes it solid, hittable and able to carry a rider,
 // and it is the same treatment for a pot as for a tree. This threshold only decides whether that
 // shell's walls are CLIMBABLE: below it the body is something you pick up, not something you scale,
@@ -132,6 +145,11 @@ typedef struct {
     s16 chainTimer; // chain-burst frames left
     s16 age;        // frames since the freeze started (drives the pulse)
     u16 accumDamage;
+    // The last blow's damage TYPE, so the single hit that lands on thaw is the one the player
+    // finished with — 20 of sword and an ice arrow last comes out as 22, frozen solid.
+    u32 lastDmgFlags;
+    u8 lastDmgEffect;
+    u8 lastDmgAmount;
     f32 force;    // accumulated launch speed — every blow adds, nothing ever subtracts
     Vec3f hitDir; // unit vector of the LAST blow, in full 3D. Direction is not accumulated:
                   // in BotW the newest hit re-aims the object and only the magnitude stacks.
@@ -862,6 +880,34 @@ static u8 Stasis_IsFreezableProp(Actor* actor) {
     return Stasis_IdInList(actor->id, sStasisPropIds, ARRAY_COUNT(sStasisPropIds));
 }
 
+// Is this a body, or is it the room?
+//
+// Ultrahand had to answer exactly this question and its answer is reasoned row by row — rotating
+// wall quadrants with Link standing on them, the water PLANE, twisted corridors, the Shadow Temple
+// ferry that carries you. Reading its table beats keeping a second one that drifts.
+static u8 Stasis_IsStructure(Actor* actor) {
+    return (Pacci_UhTraits(actor) & PACCI_UH_TRAIT_EXCLUDE) != 0;
+}
+
+// Freezing an NPC is a gag right up until it is a softlock.
+//
+// Player_Action_Talk only ever exits on TEXT_STATE_CLOSING (z_player.c), it has no timeout, and the
+// thing that walks a conversation from page to page is the NPC'S OWN UPDATE. Switch that off with a
+// textbox open and nobody ever closes it: Link is stuck talking to a statue, forever. So rather than
+// a blacklist of ids — which is never complete and says nothing about WHY — these are the states in
+// which no NPC may be taken.
+static u8 Stasis_NpcIsSafeToFreeze(PlayState* play, Actor* actor) {
+    Player* player = GET_PLAYER(play);
+
+    if ((player != NULL) && (player->talkActor == actor)) {
+        return 0;
+    }
+    if (Player_InCsMode(play) || (play->csCtx.state != CS_STATE_IDLE)) {
+        return 0;
+    }
+    return Message_GetState(&play->msgCtx) == TEXT_STATE_NONE;
+}
+
 // Returns the STASIS_KIND_* this actor would freeze as, or STASIS_KIND_NONE.
 static u8 Stasis_Classify(PlayState* play, Actor* actor, s32* bgIdOut) {
     CollisionHeader* hdr;
@@ -879,6 +925,22 @@ static u8 Stasis_Classify(PlayState* play, Actor* actor, s32* bgIdOut) {
     // Invisible triggers, spawn points and cutscene markers: freezing one moves something the
     // player cannot see, which always reads as a bug.
     if (actor->draw == NULL) {
+        return STASIS_KIND_NONE;
+    }
+    // Attached to something else, so its owner decides when it dies — and Actor_Kill overwrites
+    // `update`, which is precisely where our frozen update lives.
+    if ((actor->parent != NULL) || (actor->child != NULL)) {
+        return STASIS_KIND_NONE;
+    }
+    if (Stasis_IsStructure(actor)) {
+        return STASIS_KIND_NONE;
+    }
+    if ((actor->category == ACTORCAT_NPC) && !Stasis_NpcIsSafeToFreeze(play, actor)) {
+        return STASIS_KIND_NONE;
+    }
+    // Big enough to be worth the rune at all. Everything below this line has already earned a real
+    // measurement or is on a hand-written list, so the gate goes here and only here.
+    if (Stasis_MeasureHeight(play, actor) < STASIS_MIN_HEIGHT) {
         return STASIS_KIND_NONE;
     }
 
@@ -908,14 +970,26 @@ static u8 Stasis_Classify(PlayState* play, Actor* actor, s32* bgIdOut) {
         return (halfHeight >= STASIS_CLIMB_MIN_HALF_HEIGHT) ? STASIS_KIND_CLIMBABLE : STASIS_KIND_BLOCK;
     }
 
-    return STASIS_KIND_NONE;
+    // Everything else that got this far: it is visible, unattached, not architecture, not a boss,
+    // and big enough to have been measured. That is the whole rule — the lists above are now about
+    // HOW a body behaves, not about whether it may be taken.
+    return STASIS_KIND_PROP;
 }
 
 static s32 Stasis_TargetFilter(Actor* actor) {
     return Stasis_Classify(gPlayState, actor, NULL) != STASIS_KIND_NONE;
 }
 
-static const u8 sStasisCats[3] = { ACTORCAT_ENEMY, ACTORCAT_PROP, ACTORCAT_BG };
+// ACTORCAT_EXPLOSIVE is not decoration here: En_Bom and friends have been on the prop list for
+// several rounds and were UNREACHABLE the whole time, because this array is the outer gate and it
+// never named their category. Nothing in the list itself could have shown that.
+//
+// Deliberately absent: SWITCH (they are what the switch magnet aims AT — freezing a plate would
+// stop the very press we built), DOOR and CHEST (both own transitions that softlock if paused),
+// ITEMACTION (arrows, hookshot, effects: those are the attack, not the target), BOSS and PLAYER.
+static const u8 sStasisCats[6] = {
+    ACTORCAT_ENEMY, ACTORCAT_PROP, ACTORCAT_BG, ACTORCAT_NPC, ACTORCAT_EXPLOSIVE, ACTORCAT_MISC,
+};
 
 // ============================================================================
 // FREEZE / THAW
@@ -1024,15 +1098,18 @@ static void Stasis_DropCollision(void) {
 // scanning its instance for the back-pointer every Collider keeps to its owner (`Collider.actor`,
 // offset 0), which is what lets this work without knowing the private struct of each actor — and
 // the actor's real allocated size comes from the ActorDB entry, so the scan never runs off the end.
-static void Stasis_FindOwnColliders(Actor* actor) {
+// The scan itself, writing nowhere. The classifier runs over EVERY candidate in range before one is
+// chosen, so it cannot be the thing that fills in sStasis — it would leave the live state describing
+// a body we then decided not to freeze.
+static s32 Stasis_ScanOwnColliders(Actor* actor, ColliderCylinder** out, s32 max) {
     ActorDBEntry* dbEntry = ActorDB_Retrieve(actor->id);
     size_t size = (dbEntry != NULL) ? dbEntry->instanceSize : 0;
     u8* base = (u8*)actor;
     size_t off;
+    s32 count = 0;
 
-    sStasis.ownColliderCount = 0;
     if (size <= sizeof(Actor)) {
-        return;
+        return 0;
     }
 
     for (off = sizeof(Actor); (off + sizeof(ColliderCylinder)) <= size; off += 4) {
@@ -1046,10 +1123,59 @@ static void Stasis_FindOwnColliders(Actor* actor) {
         if ((cyl->dim.radius <= 0) || (cyl->dim.radius > 4000)) {
             continue;
         }
-        if (sStasis.ownColliderCount < STASIS_MAX_OWN_COLLIDERS) {
-            sStasis.ownCollider[sStasis.ownColliderCount++] = cyl;
+        if (count < max) {
+            out[count++] = cyl;
         }
     }
+    return count;
+}
+
+static void Stasis_FindOwnColliders(Actor* actor) {
+    sStasis.ownColliderCount = (u8)Stasis_ScanOwnColliders(actor, sStasis.ownCollider, STASIS_MAX_OWN_COLLIDERS);
+}
+
+// How tall this actor is, in world units, for the "is it big enough to bother with" gate.
+//
+// Only sources that are REALLY measured count. `colChkInfo.cylRadius/cylHeight` is deliberately not
+// among them: CollisionCheck_InitInfo leaves it at 10x10 for anyone who never calls SetInfo, and
+// where it IS filled in it is copy-paste — {0, 12, 60} is the same literal in a pot, a crate, a
+// bomb-rock, a rolling boulder and a pebble. It cannot tell large from small at all.
+static f32 Stasis_MeasureHeight(PlayState* play, Actor* actor) {
+    ColliderCylinder* cyls[STASIS_MAX_OWN_COLLIDERS];
+    CollisionHeader* hdr;
+    s32 count;
+    s32 i;
+    f32 tallest = 0.0f;
+
+    // A body we have a profile row for is measured geometry from the o2r, and every one of them is
+    // large. This tier exists for the trees above all: their collider is 18x60 and their model is
+    // 480 tall, so the cylinder tier below would badly undersell them.
+    for (i = 0; i < (s32)ARRAY_COUNT(sStasisBodies); i++) {
+        if (sStasisBodies[i].id != actor->id) {
+            continue;
+        }
+        if ((sStasisBodies[i].paramsMax >= 0) && ((actor->params & 0xFF) > sStasisBodies[i].paramsMax)) {
+            continue;
+        }
+        return (f32)(sStasisBodies[i].ring[sStasisBodies[i].ringCount - 1].y - sStasisBodies[i].ring[0].y) *
+               fabsf(actor->scale.y);
+    }
+
+    // Its own registered collision: exact, and the whole of ACTORCAT_BG has it.
+    hdr = Stasis_FindBg(play, actor, NULL);
+    if (hdr != NULL) {
+        return ((f32)hdr->maxBounds.y - (f32)hdr->minBounds.y) * fabsf(actor->scale.y);
+    }
+
+    // Its own cylinder. Already in WORLD units — Collider_SetCylinderDim copies verbatim and
+    // nothing scales it — so unlike the profile table this must NOT be multiplied by actor->scale.
+    count = Stasis_ScanOwnColliders(actor, cyls, STASIS_MAX_OWN_COLLIDERS);
+    for (i = 0; i < count; i++) {
+        if ((f32)cyls[i]->dim.height > tallest) {
+            tallest = (f32)cyls[i]->dim.height;
+        }
+    }
+    return tallest;
 }
 
 // Keep the body hittable while its update is off.
@@ -1136,6 +1262,9 @@ void Stasis_Forget(void) {
     sStasis.chainTimer = 0;
     sStasis.age = 0;
     sStasis.accumDamage = 0;
+    sStasis.lastDmgFlags = 0;
+    sStasis.lastDmgEffect = 0;
+    sStasis.lastDmgAmount = 0;
     sStasis.force = 0.0f;
     sStasis.hitDir.x = sStasis.hitDir.y = sStasis.hitDir.z = 0.0f;
     sStasis.hasHitDir = 0;
@@ -1287,6 +1416,72 @@ static void Stasis_FireTick(PlayState* play, Actor* actor) {
     }
 }
 
+// Everything the enemy took while it was held, delivered as ONE blow carrying the type of the LAST
+// one — 20 of sword finished with an ice arrow arrives as 22, and freezes it.
+//
+// The old version simply subtracted colChkInfo.health and played a thud. That is not a hit: the
+// enemy never notices, so it does not flinch, does not burn, does not freeze, does not die and
+// drops nothing — it just walks around hollow until something else grazes it. Enemies read exactly
+// one field to choose between fire, ice, stun and an ordinary blow (`colChkInfo.damageEffect`), and
+// that field is a nibble of the enemy's OWN damage table indexed by the attacker's dmgFlags. So we
+// do not compute it: we stage a real hit and let CollisionCheck_ApplyDamage read the table.
+//
+// The attacker we present is a static of our own. Nothing in the engine compares the address of an
+// acHitInfo or can walk from one back to an actor, so it is indistinguishable from a real one — and
+// unlike the arrow that actually landed the blow, it cannot have been freed in the meantime.
+static ColliderInfo sStasisFakeAtInfo;
+static Collider sStasisFakeAtCollider;
+
+static void Stasis_DeliverStoredHit(PlayState* play, Actor* actor) {
+    Player* player = GET_PLAYER(play);
+    ColliderCylinder* target;
+    s32 damage;
+
+    if ((actor == NULL) || (actor->update == NULL) || (sStasis.accumDamage == 0)) {
+        return;
+    }
+    // No damage type was ever captured, so there is no table entry to look up. Delivering with
+    // dmgFlags of 0 would walk the engine's bit search off the end of the table.
+    if (sStasis.lastDmgFlags == 0) {
+        return;
+    }
+    if (sStasis.ownColliderCount == 0) {
+        return; // nothing of its own to land on
+    }
+    target = sStasis.ownCollider[0];
+
+    sStasisFakeAtInfo.toucher.dmgFlags = sStasis.lastDmgFlags;
+    sStasisFakeAtInfo.toucher.effect = sStasis.lastDmgEffect;
+    sStasisFakeAtInfo.toucher.damage = sStasis.lastDmgAmount;
+    sStasisFakeAtInfo.toucherFlags = TOUCH_ON;
+    sStasisFakeAtCollider.actor = &player->actor;
+
+    // `ac` must be a LIVE actor: Poe, Floormaster, Wallmaster, Iron Knuckle and a dozen others
+    // dereference it with no NULL check. Link is the honest answer anyway — he did the damage.
+    target->base.acFlags |= AC_HIT;
+    target->base.acFlags &= ~AC_BOUNCED;
+    target->base.ac = &player->actor;
+    target->info.acHit = &sStasisFakeAtCollider;
+    target->info.acHitInfo = &sStasisFakeAtInfo;
+    target->info.bumperFlags |= BUMP_HIT;
+    target->info.bumper.hitPos.x = (s16)actor->world.pos.x;
+    target->info.bumper.hitPos.y = (s16)actor->world.pos.y;
+    target->info.bumper.hitPos.z = (s16)actor->world.pos.z;
+
+    actor->colChkInfo.damage = 0;
+    CollisionCheck_ApplyDamage(play, &play->colChkCtx, &target->base, &target->info);
+
+    // ApplyDamage has now filled in damageEffect from the enemy's own table for the last blow's
+    // type, which is the half we cannot compute. The damage it also wrote is that ONE blow's worth,
+    // so it gets replaced by the running total — the effect stays, the number becomes the bill.
+    damage = (s32)sStasis.accumDamage;
+    actor->colChkInfo.damage = (u8)((damage > 255) ? 255 : damage);
+
+    // Health is deliberately NOT touched. The enemy calls Actor_ApplyDamage itself and watches for
+    // the transition to zero; that observation is its universal "I just died" signal, and taking it
+    // away is what stopped anything from dying here.
+}
+
 static void Stasis_GrabRider(PlayState* play, Actor* actor) {
     Player* player = GET_PLAYER(play);
 
@@ -1378,15 +1573,10 @@ static void Stasis_End(PlayState* play) {
         // branch only runs when the enemy's OWN collider reports AC_HIT, and ours is a different
         // collider. An enemy whose death is written inside that branch will therefore fall on the
         // next real hit rather than the instant it thaws, with its health already at zero.
-        if (sStasis.accumDamage > 0) {
-            s32 health = actor->colChkInfo.health - (s32)sStasis.accumDamage;
-
-            actor->colChkInfo.health = (health > 0) ? (u8)health : 0;
-            Actor_SetColorFilter(actor, 0x4000, 255, 0, 16);
-            Audio_PlaySoundGeneral(NA_SE_IT_HAMMER_HIT, &actor->world.pos, 4, &gSfxDefaultFreqAndVolScale,
-                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-        }
+        // Restore FIRST, then hit it: the blow has to land on an actor that is itself again, with
+        // its own update back in place to react to it this very frame.
         Stasis_RestoreActor();
+        Stasis_DeliverStoredHit(play, actor);
         Stasis_Forget();
         return;
     }
@@ -1470,7 +1660,7 @@ static void Stasis_Begin(PlayState* play, Actor* target, u8 kind, s32 bgId) {
     sStasis.kind = kind;
     sStasis.phase = STASIS_PHASE_FROZEN;
     sStasis.timer = (kind == STASIS_KIND_ENEMY) ? STASIS_FRAMES_ENEMY : STASIS_FRAMES_OBJECT;
-    sStasis.chainTimer = STASIS_CHAIN_FRAMES;
+    sStasis.chainTimer = (kind == STASIS_KIND_ENEMY) ? STASIS_CHAIN_FRAMES_ENEMY : STASIS_CHAIN_FRAMES;
     sStasis.bgId = (kind == STASIS_KIND_CLIMBABLE) ? bgId : -1;
     sStasis.bgIsOurs = 0;
     sStasis.riderAttached = 0;
@@ -1579,9 +1769,14 @@ static void Stasis_Begin(PlayState* play, Actor* target, u8 kind, s32 bgId) {
     // it around under the normal mass rules. A thing held out of time does not budge.
     target->colChkInfo.mass = MASS_IMMOVABLE;
 
+    // From here the body's motion is OURS — the hold and then the launch — and the recorder's
+    // automatic admission only ever sees an actor that moved during its own update. Admitting it
+    // by hand is what lets the Phantom Hourglass recall a stasis throw afterwards.
+    Rewind_Track(target);
+
     // The rune's own cue. Enemies get it at double rate — the same sound, straining, which is what
     // sells a living thing fighting the field instead of a rock simply stopping.
-    StasisSfx_Play((kind == STASIS_KIND_ENEMY) ? 2.0f : 1.0f, 0.85f);
+    StasisSfx_Play((kind == STASIS_KIND_ENEMY) ? STASIS_SFX_RATE_ENEMY : 1.0f, 0.85f);
 }
 
 // ============================================================================
@@ -1776,6 +1971,21 @@ static void Stasis_CaptureHit(PlayState* play, Actor* actor) {
             sStasis.collider.base.acFlags &= ~AC_HIT;
         }
 
+        // The LAST blow's damage type, copied BY VALUE. Never the pointer: an arrow is freed
+        // between one and fifty frames after it lands (seed shots the same frame), so holding its
+        // ColliderInfo for a ten-second stasis is a dangling read. See Stasis_DeliverStoredHit.
+        if (hitCollider->info.acHitInfo != NULL) {
+            u32 flags = hitCollider->info.acHitInfo->toucher.dmgFlags;
+
+            // Zero would send the engine's bit search off the end of the 32-byte damage table, so a
+            // blow that carries no type is banked for its damage and leaves the type alone.
+            if (flags != 0) {
+                sStasis.lastDmgFlags = flags;
+                sStasis.lastDmgEffect = hitCollider->info.acHitInfo->toucher.effect;
+                sStasis.lastDmgAmount = hitCollider->info.acHitInfo->toucher.damage;
+            }
+        }
+
         sStasis.accumDamage += actor->colChkInfo.damage;
         sStasis.force += charge;
         // The LAST blow owns the direction outright. Damage only ever adds to the magnitude,
@@ -1821,6 +2031,11 @@ void Stasis_Update(PlayState* play, Player* player) {
         Stasis_Forget();
         return;
     }
+
+    // Re-claimed every frame, not once on the grab: the hold lasts exactly as long as the
+    // recorder's whole ring, so a one-shot claim would expire into "this has been still for its
+    // entire history, drop it" on the very frame the launch starts.
+    Rewind_Track(actor);
 
     sStasis.age++;
     if (sStasis.chainTimer > 0) {

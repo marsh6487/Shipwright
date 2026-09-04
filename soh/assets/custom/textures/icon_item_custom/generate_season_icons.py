@@ -1,134 +1,103 @@
-"""Generates the four Rod of Seasons wheel icons (Skijer's NEI).
+"""Builds the four Rod of Seasons wheel icons from the staff's own coin textures (Skijer's NEI).
 
-32x32 RGBA32, one glyph per season, tinted with the season's identity colour — the same palette
-sSeasonColor holds in mods/extended_inventory.c. Keep the two in sync by hand: this script is the
-art, that table is what the flame and the cell read.
+The model (magic_staff_3d) carries four removable coins — Clover, Sun, Buttons, Hex — one per
+season, each with a 32x32 texture. Those ARE the season emblems, so the wheel shows the very coin
+the rod is wearing. The only edit is cutting away the brown backing square, which exists to sit
+against the staff's wood and reads as a stray box in a menu.
 
-Run from this directory: python generate_season_icons.py
+Usage:  python generate_season_icons.py [path/to/magic_staff_3d/low_poly/textures]
 """
 
-import math
+import os
+import sys
+from collections import deque
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
-SIZE = 32
-SS = 8  # supersample factor; the glyphs are drawn big and boxed down so the edges stay soft
+DEFAULT_SRC = r"C:/Users/LENOVO/Documents/GitHub/magic_staff_3d/low_poly/textures"
 
-# Season identity colours — mirror of sSeasonColor in mods/extended_inventory.c.
-SEASONS = {
-    "Spring": (255, 183, 213),
-    "Summer": (255, 205, 70),
-    "Autumn": (230, 120, 50),
-    "Winter": (150, 215, 255),
+# Coin -> season. Oracle of Seasons' own reading: clover spring, red sun summer, gold autumn,
+# blue winter. Keep in sync with sSeasonColor in mods/extended_inventory.c.
+COINS = {
+    "Spring": "clover_32.png",
+    "Summer": "sun_32.png",
+    "Autumn": "buttons_32.png",
+    "Winter": "hex_32.png",
 }
 
-OUTLINE = (30, 24, 40, 255)
+
+def cut_backing(img):
+    """Clears the backing square: every pixel matching the corner colour that the border reaches.
+
+    Flood-filled rather than colour-matched, so the same brown used inside the coin face survives.
+    """
+    img = img.convert("RGBA")
+    w, h = img.size
+    px = img.load()
+    backing = px[0, 0][:3]
+
+    seen = [[False] * h for _ in range(w)]
+    queue = deque()
+    for x in range(w):
+        for y in (0, h - 1):
+            queue.append((x, y))
+    for y in range(h):
+        for x in (0, w - 1):
+            queue.append((x, y))
+
+    while queue:
+        x, y = queue.popleft()
+        if not (0 <= x < w and 0 <= y < h) or seen[x][y]:
+            continue
+        seen[x][y] = True
+        if px[x, y][:3] != backing:
+            continue
+        px[x, y] = (0, 0, 0, 0)
+        queue.extend(((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
+
+    return img
 
 
-def shade(color, factor):
-    return tuple(max(0, min(255, int(c * factor))) for c in color)
+def blank_coin(img):
+    """The 'off' coin: a real coin with its emblem wiped and the whole thing dimmed.
 
+    Built from a season coin rather than drawn fresh, so it keeps the exact silhouette and rim the
+    other four have and reads as the same object, switched off. The emblem is whatever is neither
+    the cream face nor the gold rim — flooding it with the face colour blanks the coin.
+    """
+    img = img.copy()
+    px = img.load()
+    w, h = img.size
 
-def draw_spring(d, c, r):
-    """Five-petal blossom."""
-    cx = cy = SIZE * SS / 2
-    petal = r * 0.46
-    for i in range(5):
-        a = math.radians(-90 + i * 72)
-        px = cx + math.cos(a) * r * 0.52
-        py = cy + math.sin(a) * r * 0.52
-        d.ellipse([px - petal, py - petal, px + petal, py + petal], fill=c + (255,), outline=OUTLINE, width=SS)
-    core = r * 0.24
-    d.ellipse([cx - core, cy - core, cx + core, cy + core], fill=shade(c, 0.65) + (255,), outline=OUTLINE, width=SS)
+    kept = [px[x, y][:3] for x in range(w) for y in range(h) if px[x, y][3] > 0]
+    face = max(set(kept), key=kept.count)
+    rim = max(set(c for c in kept if c != face), key=kept.count)
 
-
-def draw_summer(d, c, r):
-    """Sun with eight rays."""
-    cx = cy = SIZE * SS / 2
-    for i in range(8):
-        a = math.radians(i * 45)
-        x0 = cx + math.cos(a) * r * 0.62
-        y0 = cy + math.sin(a) * r * 0.62
-        x1 = cx + math.cos(a) * r * 1.02
-        y1 = cy + math.sin(a) * r * 1.02
-        d.line([x0, y0, x1, y1], fill=c + (255,), width=int(r * 0.2))
-    disc = r * 0.56
-    d.ellipse([cx - disc, cy - disc, cx + disc, cy + disc], fill=c + (255,), outline=OUTLINE, width=SS)
-
-
-def quad(p0, p1, p2, steps=24):
-    """Quadratic bezier, sampled — PIL has no curve primitive."""
-    pts = []
-    for i in range(steps + 1):
-        t = i / steps
-        u = 1 - t
-        pts.append(
-            (
-                u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0],
-                u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1],
-            )
-        )
-    return pts
-
-
-def draw_autumn(d, c, r):
-    """A falling leaf: two bezier flanks meeting at tip and stem, with a midrib."""
-    cx = cy = SIZE * SS / 2
-    tip = (cx, cy - r * 0.98)
-    base = (cx, cy + r * 0.52)
-    # Control points sit outside the silhouette, which is what gives the flanks their belly.
-    right = quad(tip, (cx + r * 1.16, cy - r * 0.30), base)
-    left = quad(base, (cx - r * 1.16, cy - r * 0.30), tip)
-    d.polygon(right + left, fill=c + (255,), outline=OUTLINE)
-
-    rib = shade(c, 0.5) + (255,)
-    d.line([tip, (base[0], base[1] + r * 0.42)], fill=rib, width=int(r * 0.12))
-    # Veins, angled the way they leave a real midrib.
-    for t, span in ((0.30, 0.42), (0.52, 0.50), (0.74, 0.38)):
-        y = tip[1] + (base[1] - tip[1]) * t
-        for side in (-1, 1):
-            d.line([cx, y, cx + side * r * span, y + r * 0.20], fill=rib, width=int(r * 0.07))
-
-
-def draw_winter(d, c, r):
-    """Six-spoke snowflake with branches."""
-    cx = cy = SIZE * SS / 2
-    arm = int(r * 0.16)
-    for i in range(6):
-        a = math.radians(i * 60)
-        ex = cx + math.cos(a) * r * 0.95
-        ey = cy + math.sin(a) * r * 0.95
-        d.line([cx, cy, ex, ey], fill=c + (255,), width=arm)
-        # two branches per spoke, at the classic 60 degrees off the arm
-        for side in (-1, 1):
-            bx = cx + math.cos(a) * r * 0.58
-            by = cy + math.sin(a) * r * 0.58
-            ba = a + side * math.radians(60)
-            d.line(
-                [bx, by, bx + math.cos(ba) * r * 0.3, by + math.sin(ba) * r * 0.3],
-                fill=c + (255,),
-                width=int(arm * 0.75),
-            )
-    hub = r * 0.16
-    d.ellipse([cx - hub, cy - hub, cx + hub, cy + hub], fill=c + (255,))
-
-
-GLYPHS = {
-    "Spring": draw_spring,
-    "Summer": draw_summer,
-    "Autumn": draw_autumn,
-    "Winter": draw_winter,
-}
+    for x in range(w):
+        for y in range(h):
+            r, g, b, a = px[x, y]
+            if a == 0:
+                continue
+            if (r, g, b) not in (face, rim):
+                r, g, b = face
+            px[x, y] = (r // 5, g // 5, b // 5 + 6, a)
+    return img
 
 
 def main():
-    for name, color in SEASONS.items():
-        img = Image.new("RGBA", (SIZE * SS, SIZE * SS), (0, 0, 0, 0))
-        GLYPHS[name](ImageDraw.Draw(img), color, SIZE * SS * 0.42)
-        img = img.resize((SIZE, SIZE), Image.LANCZOS)
-        out = f"gItemIconSeason{name}Tex.rgba32.png"
-        img.save(out)
-        print("wrote", out)
+    src = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_SRC
+    if not os.path.isdir(src):
+        sys.exit(f"coin textures not found: {src}")
+
+    for season, coin in COINS.items():
+        icon = cut_backing(Image.open(os.path.join(src, coin)))
+        out = f"gItemIconSeason{season}Tex.rgba32.png"
+        icon.save(out)
+        print(f"wrote {out}  <- {coin}")
+
+    off = blank_coin(cut_backing(Image.open(os.path.join(src, COINS["Spring"]))))
+    off.save("gItemIconSeasonOffTex.rgba32.png")
+    print("wrote gItemIconSeasonOffTex.rgba32.png  <- blanked + dimmed coin")
 
 
 if __name__ == "__main__":

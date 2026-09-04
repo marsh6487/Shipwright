@@ -624,12 +624,13 @@ void GenerateItemPool() {
         AddItemToPool(RG_SLATE_RUNE_CRYONIS, 2, 1, 1, 1);
         AddItemToPool(RG_PHANTOM_HOURGLASS, 2, 1, 1, 1);
         AddItemToPool(RG_SHADOW_CRYSTAL, 2, 1, 1, 1);
-        // One copy per season (4): the rod is progressive, so a single copy would leave three of its
-        // four seasons permanently locked. 3drando stays free of mods/ headers, hence the literal.
-        AddItemToPool(RG_ROD_OF_SEASONS, 4, 4, 4, 4);
+        // The rod itself is not shuffled, only its four seasons — the first one found hands it over.
+        AddItemToPool(RG_SEASON_SPRING, 2, 1, 1, 1);
+        AddItemToPool(RG_SEASON_SUMMER, 2, 1, 1, 1);
+        AddItemToPool(RG_SEASON_AUTUMN, 2, 1, 1, 1);
+        AddItemToPool(RG_SEASON_WINTER, 2, 1, 1, 1);
         AddItemToPool(RG_LANTERN, 2, 1, 1, 1);
         AddItemToPool(RG_MINISH_CAP, 2, 1, 1, 1);
-        AddItemToPool(RG_POKEBALL, 2, 1, 1, 1);
         // Dual Cane (Skijer's NEI): SIX copies, because the cane is six separate
         // skills sharing one slot and each copy unlocks the next one (see the
         // RG_CANE_OF_SOMARIA arm in randomizer.cpp). Scarce/minimal pools still
@@ -638,6 +639,16 @@ void GenerateItemPool() {
         AddItemToPool(RG_SHOVEL, 2, 1, 1, 1);
         AddItemToPool(RG_DOMINION_ROD, 2, 1, 1, 1);
         AddItemToPool(RG_DESIRE_SENSOR, 2, 1, 1, 1);
+    }
+
+    // Crossover Items. Both are pure ownership flags with no inventory cell, so they are
+    // gated on their own rather than on RSK_SKIJER_CUSTOM_ITEMS: a seed can shuffle the
+    // page-2 items without touching the form selector, and the other way round.
+    if (ctx->GetOption(RSK_CROSSOVER_POKEBALL)) {
+        AddItemToPool(RG_POKEBALL, 2, 1, 1, 1);
+    }
+    if (ctx->GetOption(RSK_CROSSOVER_MARIO_MASK)) {
+        AddItemToPool(RG_MARIO_MASK, 2, 1, 1, 1);
     }
 
     // Extended Equipment (equipment page 2) - 12 items
@@ -675,7 +686,7 @@ void GenerateItemPool() {
                      rg == RG_ICE_ROD || rg == RG_LIGHT_ROD || rg == RG_DEKU_LEAF ||
                      rg == RG_TIME_GATE || rg == RG_DEMISE_DESTRUCTION || rg == RG_ZONAI_PERMAFROST ||
                      rg == RG_HYLIAS_GRACE || rg == RG_DESIRE_SENSOR || rg == RG_PROGRESSIVE_ROCS ||
-                     rg == RG_MINISH_CAP || rg == RG_POKEBALL) customCount++;
+                     rg == RG_MINISH_CAP || rg == RG_POKEBALL || rg == RG_MARIO_MASK) customCount++;
             else if (rg >= RG_EXT_CANE_OF_BYRNA && rg <= RG_EXT_WATER_DRAGON_SCALE) extCount++;
         }
         SPDLOG_INFO("[NEI] After NEI blocks: itemPool.size()={} masks={} custom={} ext={}",

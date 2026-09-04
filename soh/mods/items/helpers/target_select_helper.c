@@ -26,8 +26,8 @@ s32 TargetSelect_IsCommonTarget(Actor* actor) {
             (actor->category == ACTORCAT_CHEST) || (actor->category == ACTORCAT_NPC));
 }
 
-Actor* TargetSelect_ScanCats(PlayState* play, const u8* cats, s32 numCats, TargetSelectFilter filter, f32 range,
-                             s16 cone) {
+Actor* TargetSelect_ScanCatsFromYaw(PlayState* play, const u8* cats, s32 numCats, TargetSelectFilter filter, f32 range,
+                                    f32 minDist, s16 cone, s16 yaw) {
     Player* player;
     Actor* best = NULL;
     s32 bestYawErr;
@@ -55,14 +55,14 @@ Actor* TargetSelect_ScanCats(PlayState* play, const u8* cats, s32 numCats, Targe
                 f32 dz = actor->world.pos.z - player->actor.world.pos.z;
                 f32 distXZ = sqrtf((dx * dx) + (dz * dz)); // Y ignored on purpose
 
-                if ((distXZ > TARGETSEL_MIN_DIST) && (distXZ <= range)) {
+                if ((distXZ > minDist) && (distXZ <= range)) {
                     // ARGUMENT ORDER IS NOT THE SAME IN BOTH GAMES. OoT declares
                     // Math_Atan2S(f32 x, f32 y) and MM declares Math_Atan2S(f32 y, f32 x) —
                     // literally reversed. To get a world yaw out of an (dx, dz) offset this
                     // must be (dz, dx) here and (dx, dz) in the MM copy of this file. Getting
                     // it backwards mirrors the cone 90 degrees off, which reads in-game as the
                     // selection working "sometimes yes, sometimes no".
-                    s32 yawErr = (s16)(Math_Atan2S(dz, dx) - player->actor.shape.rot.y);
+                    s32 yawErr = (s16)(Math_Atan2S(dz, dx) - yaw);
 
                     if (yawErr < 0) {
                         yawErr = -yawErr;
@@ -79,6 +79,17 @@ Actor* TargetSelect_ScanCats(PlayState* play, const u8* cats, s32 numCats, Targe
         }
     }
     return best;
+}
+
+Actor* TargetSelect_ScanCats(PlayState* play, const u8* cats, s32 numCats, TargetSelectFilter filter, f32 range,
+                             s16 cone) {
+    Player* player = (play != NULL) ? GET_PLAYER(play) : NULL;
+
+    if (player == NULL) {
+        return NULL;
+    }
+    return TargetSelect_ScanCatsFromYaw(play, cats, numCats, filter, range, TARGETSEL_MIN_DIST, cone,
+                                        player->actor.shape.rot.y);
 }
 
 Actor* TargetSelect_Scan(PlayState* play, TargetSelectFilter filter) {

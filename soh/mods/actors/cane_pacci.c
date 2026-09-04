@@ -18,6 +18,7 @@
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "objects/object_dy_obj/object_dy_obj.h"
 #include "../items/helpers/target_select_helper.h"
+#include "../items/helpers/rewind_helper.h" // the Phantom Hourglass drives an actor the same way we do
 #include <math.h>
 
 extern PlayState* gPlayState;
@@ -934,8 +935,7 @@ static const PacciUhTraitRow sPacciUhTraits[] = {
     // you left and came back. What the rock is actually listening for is an explosion - bumper
     // 0x00000008, DMG_EXPLOSIVE - and one of those brings down the whole thing: rubble, sound, and
     // the light ray it was hiding.
-    { ACTOR_BG_JYA_BOMBCHUIWA, PACCI_UH_TRAIT_STRIKES, 0, 0, NULL, 0, 0, 0, DMG_EXPLOSIVE,
-      PACCI_UH_CUT_DAMAGE },
+    { ACTOR_BG_JYA_BOMBCHUIWA, PACCI_UH_TRAIT_STRIKES, 0, 0, NULL, 0, 0, 0, DMG_EXPLOSIVE, PACCI_UH_CUT_DAMAGE },
     // Bg_Haka_Huta, the coffin lid. Its Init does `params &= 0xFF` and then uses what is left AS the
     // flag index, so unlike the others the surviving byte IS the flag - it is readable at runtime by
     // accident of that ordering rather than by design, and it works.
@@ -945,8 +945,8 @@ static const PacciUhTraitRow sPacciUhTraits[] = {
     // and the flag comes along for the room's sake - which is also why this one keeps CLEARS_FLAG
     // when its neighbours lost it: the jaw is OUR pose, so shutting it again is ours to do.
     { ACTOR_BG_DODOAGO,
-      PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_JAW | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0x3F,
-      NULL, 1 },
+      PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_JAW | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0x3F, NULL,
+      1 },
     // Stone Elevator (Fire Temple) re-derives its Y from a cosine of its own timer every frame, so
     // this row only works because the carry freezes the actor's update. If that ever changes, this
     // one has to become an EXCLUDE rather than quietly fighting the player.
@@ -994,12 +994,10 @@ static const PacciUhTraitRow sPacciUhTraits[] = {
     { ACTOR_BG_MIZU_MOVEBG, PACCI_UH_TRAIT_EXCLUDE, 0, 0, Pacci_UhCondMovebgDragonRoom },
     // Types 4/5/6 are a real switch toggle: home Y, or home Y + 115.2 when params & 0x3F is set,
     // stepped 1.0 a frame and re-read every frame. That one goes both ways.
-    { ACTOR_BG_MIZU_MOVEBG,
-      PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0x3F,
+    { ACTOR_BG_MIZU_MOVEBG, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0x3F,
       Pacci_UhCondMovebgSwitched, 1 },
     // Type 7 is the hookshot platform, and it really does ride a scene path.
-    { ACTOR_BG_MIZU_MOVEBG, PACCI_UH_TRAIT_PATH | PACCI_UH_TRAIT_NO_TURN, 8, 0xF,
-      Pacci_UhCondMovebgHookshot },
+    { ACTOR_BG_MIZU_MOVEBG, PACCI_UH_TRAIT_PATH | PACCI_UH_TRAIT_NO_TURN, 8, 0xF, Pacci_UhCondMovebgHookshot },
     { ACTOR_OBJ_BEAN, PACCI_UH_TRAIT_PATH | PACCI_UH_TRAIT_NO_TURN, 8, 0x1F, NULL },
 
     // -- fire: carrying one is carrying an open flame --------------------------------------------
@@ -1070,8 +1068,7 @@ static const PacciUhTraitRow sPacciUhTraits[] = {
     // already walks shape.rot.x toward destAngle at 80 a frame, drags both chain segments along at
     // 0.4x that rate, and plays NA_SE_EV_BRIDGE_OPEN / _CLOSE with their stop variants. The cane
     // writes destAngle and points the actor at that function; the bridge does the rest.
-    { ACTOR_BG_SPOT00_HANEBASI, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_HINGE, 0, 0,
-      Pacci_UhCondDrawbridge },
+    { ACTOR_BG_SPOT00_HANEBASI, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_HINGE, 0, 0, Pacci_UhCondDrawbridge },
 
     // -- hauled, not carried -----------------------------------------------------------------------
     // Big enough that floating them at arm's length would look ridiculous. Bg_Haka_Zou is the
@@ -1200,6 +1197,11 @@ u8 Pacci_BehaviourFor(Actor* actor) {
 // category gate below is skipped for it - see the note on the gate.
 u8 Pacci_IsLiftableEx(Actor* actor, u8 isDyna) {
     if ((actor == NULL) || (actor->update == NULL)) {
+        return 0;
+    }
+    // Two hands on one body: the Hourglass writes its transform every frame from the recorded
+    // path while we would write ours from the carry, and whichever ran second would win.
+    if (Rewind_IsScrubbing(actor)) {
         return 0;
     }
     if ((actor->id == ACTOR_PLAYER) || (actor->category == ACTORCAT_BOSS)) {
@@ -1925,6 +1927,10 @@ static void Pacci_UhTintAdd(Actor* actor) {
     actor->draw = Pacci_UhTintedDraw;
 }
 
+// Ultrahand borrows PLAYER_MODELGROUP_HOOKSHOT for its extended-arm pose, and that group also
+// carries the hookshot itself, drawn in a hand that is supposed to be empty. Hiding it is NOT done
+// from here: the right hand's DL table and its type are chosen together in the draw, and writing
+// the type alone leaves them out of step — see ItemEquip_HoldsEmptyHand.
 static void Pacci_RefreshPlayerPose(Player* player) {
     if (player != NULL) {
         Player_SetModels(player, Player_ActionToModelGroup(player, player->itemAction));
@@ -2192,10 +2198,13 @@ static u8 Pacci_UhBombDetonate(PlayState* play);
 // Pacci_BackRiderDrop needs no forward declaration - it is public and cane_pacci.h is already in.
 static void Pacci_BackRiderTake(PlayState* play, Player* player, Actor* rider);
 
-
-
 u8 Pacci_IsHoldingUltrahand(void) {
     return (sUltrahand.held != NULL) && !sUltrahand.dropping;
+}
+
+/** What Ultrahand has in hand, for the items that must not touch the same body. */
+Actor* Pacci_GetUltrahandHeld(void) {
+    return sUltrahand.held;
 }
 
 static void Pacci_UltrahandLetGo(void) {
@@ -2922,6 +2931,10 @@ static void Pacci_UltrahandTake(Player* player, Actor* target) {
     sUltrahand.distance = CLAMP(sUltrahand.distance, PACCI_UH_DIST_MIN, PACCI_UH_DIST_MAX);
     target->room = -1; // held objects should survive a room change
 
+    // The carry runs from LINK's update, and the engine syncs an actor's prevPos to world.pos right
+    // before that actor's own update — so a carried body always reads as still to the recorder's
+    // automatic admission test. Without this, nothing moved by Ultrahand could ever be recalled.
+    Rewind_Track(target);
     Audio_PlayActorSound2(target, NA_SE_SY_GET_ITEM);
     Pacci_RefreshPlayerPose(player); // empty-handed -> hookshot hold
 }
@@ -3115,6 +3128,10 @@ void Pacci_UpdateUltrahand(PlayState* play, Player* player) {
         sUltrahand.dropping = 0;
         return;
     }
+
+    // Re-claimed every frame the body is ours. Held perfectly still it would otherwise age out of
+    // the recorder as "nothing ever happened here" and lose the carry that came before.
+    Rewind_Track(actor);
 
     if (!sUltrahand.dropping) {
         s16 playerFacingYaw;
@@ -5090,8 +5107,8 @@ static void Pacci_UhHingeInput(Actor* actor, u8 edge) {
     BgSpot00Hanebasi* chain;
     s16 want;
 
-    if ((actor == NULL) || !(sUltrahand.traits & PACCI_UH_TRAIT_HINGE) ||
-        (actor->id != ACTOR_BG_SPOT00_HANEBASI) || (actor->child == NULL)) {
+    if ((actor == NULL) || !(sUltrahand.traits & PACCI_UH_TRAIT_HINGE) || (actor->id != ACTOR_BG_SPOT00_HANEBASI) ||
+        (actor->child == NULL)) {
         return;
     }
     if (edge & 1) {

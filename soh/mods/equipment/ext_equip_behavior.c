@@ -13,6 +13,8 @@
 // ---------------------------------------------------------------------------
 // Include behavior implementations
 // ---------------------------------------------------------------------------
+// Before equip_byrna.c: the Byrna's R press hands off to the glaive's aerial entry.
+#include "behaviors/byrna_ig_combat.inc.c"
 #include "behaviors/equip_byrna.c"
 #include "behaviors/equip_ikaxe.c"
 #include "behaviors/equip_pegasus.c"
@@ -24,6 +26,8 @@
 #include "behaviors/equip_divine_shield.c"
 #include "behaviors/equip_champion.c"
 #include "behaviors/equip_sages_tunic.c"
+// Before equip_foursword.c: it calls straight into the clone actor's API, which ships no header.
+#include "actors/four_sword_clone.c"
 #include "behaviors/equip_foursword.c"
 // Skijer 2026-07-29 kaleido re-layout: the four slots that changed hands.
 #include "behaviors/equip_trident.c"     // sword 3 (was the Iron Knuckle's Axe, now the Hammer upgrade)
@@ -36,6 +40,7 @@
 // ---------------------------------------------------------------------------
 static void ExtEquip_Behavior_Sword1(Player* player, PlayState* play) {
     Byrna_Behavior(player, play);
+    ByrnaIg_Behavior(player, play);
 }
 
 static void ExtEquip_Behavior_Sword2(Player* player, PlayState* play) {
@@ -217,12 +222,13 @@ static void ExtEquip_DrawDispatch(Player* player, PlayState* play) {
         Pegasus_Draw(player, play);
     }
     // Zora Tunic and Magic Cape visuals are dispatched cheat-independently.
-    // Four Sword: ghost clone Links
-    if (gExtEquipState.currentExtSword == 2) {
-        FourSword_Draw(player, play);
-    }
+    // The Four Sword clones are real actors now — they draw themselves.
     // Trident: Ganondorf's light ball growing on the lance tip while the charge runs
     if (gExtEquipState.currentExtSword == 3) {
         Trident_Draw(player, play);
+    }
+    // Byrna: the spiral trail that marks a full Kinsect charge
+    if (gExtEquipState.currentExtSword == 1) {
+        ByrnaOrb_Draw(play);
     }
 }

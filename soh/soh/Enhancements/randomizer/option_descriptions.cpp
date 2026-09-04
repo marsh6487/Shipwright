@@ -895,6 +895,13 @@ void Settings::CreateOptionDescriptions() {
     mOptionDescriptions[RSK_EXT_EQUIPMENT] =
         "Adds 12 extended equipment pieces (3 swords, 3 shields, 3 tunics, 3 boots) to the item pool.\n"
         "Press L on the equipment page to toggle between vanilla and extended equipment.";
+    mOptionDescriptions[RSK_CROSSOVER_POKEBALL] =
+        "Adds the Pikachu Pokeball to the item pool.\n"
+        "Finding it unlocks PIKACHU MODE on the equipment page's Crossover Items sub-page.";
+    mOptionDescriptions[RSK_CROSSOVER_MARIO_MASK] =
+        "Adds the Mario Mask to the item pool.\n"
+        "Finding it unlocks MARIO MODE on the equipment page's Crossover Items sub-page\n"
+        "(the same unlock the Peach's Castle set piece grants).";
     mOptionDescriptions[RSK_NEI_WEAPON_UPGRADES] =
         "Adds NEI weapon upgrades to the item pool. Each upgrade requires the base weapon to be owned:\n"
         "  - Hammer Upgrade (Iron Knuckle's Axe): double damage/reach + tomahawk throw\n"

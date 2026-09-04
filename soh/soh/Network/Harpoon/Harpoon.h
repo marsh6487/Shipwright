@@ -246,11 +246,6 @@ typedef struct {
     u8 ciPostmanHatDashing;
     u8 ciPostmanHatArriving;
     s16 ciPostmanHatTransitionTimer;
-    // Desire Sensor
-    u8 ciDesireSensorActive;
-    u8 ciDesireSensorState;
-    s16 ciDesireSensorTimer;
-    u8 ciDesireSensorResult;
 
     // Prop Hunt state (from Scooter)
     std::string role; // "seeker" or "hider" (empty = no game)

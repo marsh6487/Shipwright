@@ -1,5 +1,5 @@
 /**
- * broken_items.c - "Broken Modes" pause subscreen. See broken_items.h.
+ * broken_items.c - "Crossover Items" pause subscreen. See broken_items.h.
  *
  * Renders INSIDE the Map pause page: the Map page's own stone/parchment frame
  * (KaleidoScope_DrawPageSections + sMapTexs) is kept, the dungeon/world map
@@ -22,6 +22,11 @@
 // This MODE coexists with the Pokeball ITEM (extended inventory page 2), which
 // keeps its classic transform flow + cutscene untouched.
 #define CVAR_PIKACHU_MODE "gPikachuMode"
+
+// The form the equipment page has EQUIPPED, which is not the same as the form currently worn:
+// once you turn back into Link the mode CVars are both 0 and there is nothing left to toggle
+// back into. The quick-transform hotkey needs that memory.
+#define CVAR_EQUIPPED_FORM "gCrossover.EquippedForm"
 
 // ---------------------------------------------------------------------------
 // Mode + control-map data (English on purpose). Keep action strings short.
@@ -128,8 +133,38 @@ static void BrokenItems_Equip(PlayState* play, s32 mode) {
     }
     CVarSetInteger(CVAR_SM64_MARIO, (mode == BROKEN_MODE_MARIO) ? 1 : 0);
     CVarSetInteger(CVAR_PIKACHU_MODE, (mode == BROKEN_MODE_PIKACHU) ? 1 : 0);
+    if (mode != BROKEN_MODE_LINK) {
+        CVarSetInteger(CVAR_EQUIPPED_FORM, mode);
+    }
     CVarSave();
     BrokenItems_PlaySfx(NA_SE_SY_DECIDE);
+}
+
+s32 BrokenItems_GetEquippedForm(void) {
+    s32 form = CVarGetInteger(CVAR_EQUIPPED_FORM, BROKEN_MODE_LINK);
+    if (form <= BROKEN_MODE_LINK || form >= BROKEN_MODE_COUNT) {
+        return BROKEN_MODE_LINK;
+    }
+    return BrokenItems_FormUnlocked(form) ? form : BROKEN_MODE_LINK;
+}
+
+// The quick-transform hotkey: worn form -> Link, Link -> the equipped form. With nothing
+// equipped (or the form no longer earned) it beeps rather than silently doing nothing.
+void BrokenItems_ToggleEquippedForm(void) {
+    if (!BrokenItems_Enabled()) {
+        return;
+    }
+    if (BrokenItems_CurrentEquipped() != BROKEN_MODE_LINK) {
+        BrokenItems_Equip(NULL, BROKEN_MODE_LINK);
+        return;
+    }
+
+    s32 form = BrokenItems_GetEquippedForm();
+    if (form == BROKEN_MODE_LINK) {
+        BrokenItems_PlaySfx(NA_SE_SY_ERROR);
+        return;
+    }
+    BrokenItems_Equip(NULL, form);
 }
 
 // Forward decl — the icon resolver is defined in the Drawing section below, but

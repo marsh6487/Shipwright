@@ -45,14 +45,15 @@ extern "C" {
 #define WAND_RANDO_SINGLE 1     // 1 pool item; obtaining it lights all six modes
 #define WAND_RANDO_ELEMENTAL 2  // 6 pool items; each lights its own mode
 
-// Sheikah Slate runes (Skijer's NEI) — four runes in ONE page-2 cell, wand idiom: sibling
+// Sheikah Slate runes (Skijer's NEI) — five runes in ONE page-2 cell, wand idiom: sibling
 // obtainable items over one slot (each with its own textbox), gettable in any order, no levels.
 // Index order IS the wheel order.
 #define SLATE_RUNE_BOMB 0 // Remote Bomb
 #define SLATE_RUNE_STASIS 1
 #define SLATE_RUNE_CRYONIS 2
 #define SLATE_RUNE_MASTER_CYCLE 3 // Master Cycle Zero
-#define SLATE_RUNE_COUNT 4
+#define SLATE_RUNE_SENSOR 4       // Sheikah Sensor — the old Desire Sensor, rehoused as a rune
+#define SLATE_RUNE_COUNT 5
 // Future runes with art already staged in icon_item_custom: Magnesis, Camera
 // (gItemIconSlateRuneMagnesisTex / gItemIconSlateRuneCameraTex).
 
@@ -63,7 +64,12 @@ extern "C" {
 #define SEASON_SUMMER 1
 #define SEASON_AUTUMN 2
 #define SEASON_WINTER 3
-#define SEASON_COUNT 4
+#define SEASON_COUNT 4 // real seasons: the seasonsOwned bit width, the palette, the coin art
+// The blank coin: the rod stops driving the weather and the scene keeps its own. Never granted and
+// never stored as owned — it is free, so it sits OUTSIDE the bitmask and past SEASON_COUNT, which
+// is what keeps "do I own the rod at all" answerable by counting bits.
+#define SEASON_OFF 4
+#define SEASON_SLOTS 5 // wheel entries: the four seasons plus the blank coin
 
 // Randomizer treatment of Bomb Arrows.
 #define BOMB_ARROWS_RANDO_OFF 0      // never granted on their own (Twilight Upgrade still works)

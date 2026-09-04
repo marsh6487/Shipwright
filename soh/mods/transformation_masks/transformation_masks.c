@@ -114,39 +114,13 @@ void MmForm_OotNoopAction(Player* thisx, PlayState* play) {
     // Empty: OOT actions disabled while MM form is active.
 }
 
-// =============================================================================
-// OOT Stick Magnitude Accessor
-// sControlStickMagnitude is static to z_player.c; this file is #included there.
-// This forward declaration is valid: multiple static declarations at file scope
-// in the same TU refer to the same object (C11 6.9.2). The real definition with
-// initializer is at z_player.c line 570, compiled later in the same TU.
-// =============================================================================
-
-static f32 sControlStickMagnitude;
-
 f32 TransformMasks_GetStickMagnitude(void) {
-    return sControlStickMagnitude;
+    return Player_GetControlStickMagnitude();
 }
-
-// =============================================================================
-// OOT Floor Type Accessor
-// sFloorType is static to z_player.c; same forward-declaration pattern as above.
-// Real definition at z_player.c line 574, compiled later in the same TU.
-// =============================================================================
-
-static s32 sFloorType;
 
 s32 TransformMasks_GetFloorType(void) {
-    return sFloorType;
+    return Player_GetFloorType();
 }
-
-// =============================================================================
-// OOT sControlInput accessor (for mask button scanning while transformed).
-// Same forward-declaration pattern as sFloorType above.
-// Real definition at z_player.c line 439, set at line 12137.
-// =============================================================================
-
-static Input* sControlInput;
 
 // =============================================================================
 // Routing to mm_player_form.cpp
@@ -191,6 +165,9 @@ u8 TransformMasks_TryPlayMmVoice(u16 ootVoiceSfxId, Vec3f* pos) {
             mmOffset = 0xA0;
             break;
         case MM_PLAYER_FORM_DEKU:
+        // Keaton borrows the Deku bank. Routing him through MM's engine is also what
+        // drops the reverb: it renders SFX dry, OOT's applies the scene send.
+        case MM_PLAYER_FORM_KEATON:
             mmOffset = 0x80;
             break;
         case MM_PLAYER_FORM_FIERCE_DEITY:
@@ -470,10 +447,12 @@ void TransformMasks_Update(PlayState* play, Player* player) {
     // (AudioOcarina_SetInstrument, z_message.c:4719).
     u8 msgActive = play->msgCtx.msgMode != MSGMODE_NONE;
 
-    if ((isTransformed || isInWater) && sControlInput != NULL && !msgActive) {
+    Input* input = Player_GetControlInput();
+
+    if ((isTransformed || isInWater) && input != NULL && !msgActive) {
         static const u16 sBtns[] = { BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT };
         for (s32 i = 0; i < 3; i++) {
-            if (CHECK_BTN_ALL(sControlInput->press.button, sBtns[i])) {
+            if (CHECK_BTN_ALL(input->press.button, sBtns[i])) {
                 s32 item = C_BTN_ITEM(i);
                 if (item != ITEM_NONE && MmForm_GetMaskType(item) != TRANSFORM_MASK_NONE) {
                     // Not transformed + in water: only Zora mask allowed.
@@ -496,7 +475,7 @@ void TransformMasks_Update(PlayState* play, Player* player) {
                 if (ItemInput_ButtonIsClaimed(sDpad[i])) {
                     continue;
                 }
-                if (CHECK_BTN_ALL(sControlInput->press.button, sDpad[i])) {
+                if (CHECK_BTN_ALL(input->press.button, sDpad[i])) {
                     s32 item = DPAD_ITEM(i);
                     if (item != ITEM_NONE && MmForm_GetMaskType(item) != TRANSFORM_MASK_NONE) {
                         if (!isTransformed && MmForm_GetMaskType(item) != TRANSFORM_MASK_ZORA)
@@ -774,6 +753,14 @@ u8 BossSuperDamage_IsActive(PlayState* play) {
     // or simply standing next to a boss with the barrier up would paralyze it
     // every frame. Skijer's NEI
     if (ByrnaOrb_IsActive()) {
+        return 1;
+    }
+    // Insect Glaive aerial attacks, and only at a full Kinsect bar. Unlike the orb
+    // this claim DOES hang off Link's state, so it is scoped to the three airborne
+    // states that actually swing — a ground slash can never reach it. Declared here
+    // because extended_equipment.h is not in this TU. Skijer's NEI
+    extern u8 ByrnaIg_AirSuperDamage(void);
+    if (ByrnaIg_AirSuperDamage()) {
         return 1;
     }
     // AND the gPika* mirror with the authoritative form-state check so a latched

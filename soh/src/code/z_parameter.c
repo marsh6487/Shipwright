@@ -25,6 +25,7 @@
 #include "soh/ObjectExtension/ActorMaximumHealth.h"
 #include "mods/extended_inventory.h"
 #include "mods/transformation_masks/transformation_masks.h"
+#include "mods/transformation_masks/kafei_form.h"
 #include "mods/transformation_masks/gerudo_form.h" // GerudoForm_IsActive (rage meter)
 #include "mods/ext_buttons/ext_buttons.h"
 #include "mods/items/custom_bottles.h" // Bottomless Bottle counter (Skijer's NEI)
@@ -5052,6 +5053,32 @@ void Interface_DrawItemIconTexture(PlayState* play, void* texture, s16 button) {
         }
     }
 
+    // Elemental Wand: the same corner badge, for the same reason. All six rods share one staff
+    // icon, so without the medallion the HUD cannot say which one is on the button. Skijer's NEI
+    if (btnItem == ITEM_ELEMENTAL_WAND && button >= 1 && button <= 7) {
+        extern uint16_t Wand_ModeMedallion(uint8_t mode);
+        extern uint8_t Wand_GetMode(void);
+        extern void* ExtInv_GetItemIcon(uint16_t itemId);
+        void* medTex = ExtInv_GetItemIcon(Wand_ModeMedallion(Wand_GetMode()));
+
+        if (medTex != NULL) {
+            s16 iconW = gItemIconWidth[button];
+            s16 overlayW = 12;
+            s32 x0 = ItemIconPos[button][0] + (iconW - overlayW);
+            s32 y0 = ItemIconPos[button][1];
+            s32 ddOverlay = 24 * 1024 / overlayW; // medallion icons are 24x24
+
+            gDPPipeSync(OVERLAY_DISP++);
+            gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, 255);
+            gDPLoadTextureBlock(OVERLAY_DISP++, medTex, G_IM_FMT_RGBA, G_IM_SIZ_32b, 24, 24, 0,
+                                G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK,
+                                G_TX_NOLOD, G_TX_NOLOD);
+            gSPWideTextureRectangle(OVERLAY_DISP++, x0 << 2, y0 << 2, (x0 + overlayW) << 2, (y0 + overlayW) << 2,
+                                    G_TX_RENDERTILE, 0, 0, ddOverlay, ddOverlay);
+        }
+    }
+
     // Skijer's NEI — Ultrashot: Light-medallion marker on the equipped button's TOP-RIGHT corner
     // (the Ultrashot keeps the Longshot ICON; the medallion is what tells it apart). 24x24 quest
     // icon drawn at 12x12 over the icon's corner, at the button's own alpha. Suppressed while the
@@ -7398,6 +7425,10 @@ void Interface_Update(PlayState* play) {
         ExtEquip_SpiritHasMoney()) {
         sEnvHazard = PLAYER_ENV_HAZARD_NONE;
     }
+
+    // Rod of Seasons: Winter puts out every hot room, and the Haunted Wasteland charges a tunic for
+    // the crossing instead. Last word, so it also overrides the resistances above. Skijer's NEI
+    sEnvHazard = Seasons_EnvHazard(play, sEnvHazard);
 
     HealthMeter_Update(play);
 

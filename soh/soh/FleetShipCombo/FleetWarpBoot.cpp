@@ -592,6 +592,10 @@ void FleetHoleSpawnTick() {
     static s16 sSceneWithHole = -1;
     static u32 sLastFrameCount = 0;
 
+#ifdef COMBO_BUILD
+    // ComboShip has no fade/flip pipeline behind this hole: Link would sink into it and void out.
+    return;
+#endif
     if (FleetShipCombo_GetActiveGame() < 0 || gPlayState == NULL) {
         sHole = nullptr;
         sSceneWithHole = -1;
@@ -678,6 +682,11 @@ template <typename Fn> void GuardedTick(const char* what, Fn&& fn) {
 }
 
 void RegisterFleetWarpBoot() {
+#ifdef COMBO_BUILD
+    // ComboShip owns arrivals and departures (scene seams + resume); the limbo scene and the
+    // two-process warp pipeline must not be installed on top of it.
+    return;
+#endif
     LimboInstallScene(); // patch the scene table before anything can boot a scene
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>(
         []() { GuardedTick("FleetWarpBoot_Tick", FleetWarpBoot_Tick); });
@@ -725,6 +734,9 @@ int FleetLimbo_InFlight(void) {
 }
 
 int FleetShipCombo_IsGameSuspended(void) {
+#ifdef COMBO_BUILD
+    return 0; // ComboShip parks the dormant game by not running its loop at all; nothing to freeze here
+#else
     if (FleetShipCombo_IsThisGameActive()) {
         return 0;
     }
@@ -732,6 +744,7 @@ int FleetShipCombo_IsGameSuspended(void) {
         return 0; // still walking into the room: the transition must be allowed to finish
     }
     return LimboInRoom() ? 0 : 1; // parked = keep running; not parked = the old freeze (fallback)
+#endif
 }
 
 int FleetShipCombo_IsParkedInLimbo(void) {

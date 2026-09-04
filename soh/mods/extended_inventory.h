@@ -148,6 +148,7 @@ void Sw97_MigrateLayout(struct PlayState* play); // one-shot, gated by NeiSaveDa
 uint8_t Wand_RandoMode(void);
 uint8_t Wand_ModeOwned(uint8_t mode);
 void Wand_GrantMode(uint8_t mode);
+void Wand_SetModeOwned(uint8_t mode, uint8_t owned); // writes whatever the active treatment reads
 uint8_t Wand_ModeCount(void);
 uint8_t Wand_ModeAt(uint8_t index);
 uint8_t Wand_GetMode(void);
@@ -180,6 +181,13 @@ void* Seasons_SeasonIcon(uint8_t season); // 32x32 season glyph (wheel / cell / 
 // A season's identity colour — the get-item flame, the icon, the rod's own gem. NOT the colour its
 // weather draws with: Winter's snow stays the vanilla grey (see item_rod_of_seasons.c).
 void Seasons_SeasonColor(uint8_t season, uint8_t* r, uint8_t* g, uint8_t* b);
+// Winter freezes every water surface. OR'd into RocBoots_WalksOnWater, which is the one gate for
+// that ability, and read again in z_player.c to make the frozen surface behave as ice rather than
+// as water — slippery, and with no ripples.
+uint8_t Seasons_WalksOnWater(void);
+uint8_t Seasons_IsDrawn(void); // the rod is in Link's hand
+// Which tunic the season asks for: Winter forgives every hot room, the desert charges for one.
+int16_t Seasons_EnvHazard(struct PlayState* play, int16_t hazard);
 
 typedef struct {
     int currentPage;         // 0 = vanilla, 1 = custom items, 2 = MM masks

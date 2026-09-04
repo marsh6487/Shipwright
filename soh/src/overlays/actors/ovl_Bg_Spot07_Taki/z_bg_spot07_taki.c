@@ -6,6 +6,7 @@
 
 #include "z_bg_spot07_taki.h"
 #include "objects/object_spot07_object/object_spot07_object.h"
+#include "mods/extended_inventory.h" // Skijer's NEI: Seasons_* — Winter freezes it, Summer thaws it
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED)
 
@@ -42,7 +43,22 @@ typedef enum {
 // Overrides the LINK_IS_ADULT check that decides between the ice block (adult)
 // and the running waterfall (child). Only read on Init/Draw, so toggling it
 // mid-scene needs a room/scene reload to update the collision.
+//
+// The Rod of Seasons outranks the CVar: this one switch already carries both the ice collision and
+// the ice model, so a season only has to answer it rather than dress the waterfall up itself.
+// Skijer's NEI
 static s32 BgSpot07Taki_IsFrozen(void) {
+    if (Seasons_SeasonCount() != 0) {
+        uint8_t season = Seasons_GetSeason();
+
+        if (season == SEASON_WINTER) {
+            return true;
+        }
+        if (season == SEASON_SUMMER) {
+            return false;
+        }
+    }
+
     switch (CVarGetInteger(CVAR_ENHANCEMENT("ZorasDomainIce"), ZD_ICE_VANILLA)) {
         case ZD_ICE_ALWAYS:
             return true;

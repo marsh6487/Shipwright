@@ -27,10 +27,13 @@
 #include "functions.h"
 #include "variables.h"
 #include "mods/transformation_masks/transformation_masks.h"
+#include "mods/transformation_masks/gerudo_form.h"
 #include "mods/transformation_masks/assets/mm_asset_loader.h"
 #include "mods/transformation_masks/custom_forms.h" // CustomForms_ActiveSkin (extern "C")
 #include "mods/transformation_masks/wolf_link_form.h"
 #include "mods/transformation_masks/keaton_tails.h"
+#include "mods/transformation_masks/keaton_form.h"
+#include "mods/transformation_masks/keaton_reflector.h"
 #include "mods/extended_inventory.h"
 #include "mods/extended_equipment.h"
 #include "mods/anim_translator/mm_anim_loader.h"
@@ -38,16 +41,17 @@
 #include "mods/mm_sources/objects/object_link_goron.h"
 #include "mods/mm_sources/objects/object_link_zora.h"
 #include "mods/mm_sources/objects/object_link_nuts.h"
+#include "mods/actors/deku_flower.h" // Summer bean spots: Majora's gold launch flower (Skijer's NEI)
 #include "overlays/actors/ovl_En_Boom/z_en_boom.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "mods/items/helpers/camera_helper.h"
 #include "soh/cvar_prefixes.h" // CVAR_SETTING — the Rito bow honours the aim options
 #include "soh/Network/Harpoon/HarpoonBridge.h"
 #include "mods/items/helpers/equip_helper.h"
-#include "mods/items/objects/object_tornado.h" // the Rito updraft rides the shared wind cone
-#include "overlays/actors/ovl_En_Light/z_en_light.h" // the Rito updraft neuters its flames' lights
+#include "mods/items/objects/object_tornado.h"           // the Rito updraft rides the shared wind cone
+#include "overlays/actors/ovl_En_Light/z_en_light.h"     // the Rito updraft neuters its flames' lights
 #include "overlays/actors/ovl_Obj_Switch/z_obj_switch.h" // the Rito volley picks its targets by switch type
-#include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"      // ...and spawns ARROW_NORMAL itself
+#include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"     // ...and spawns ARROW_NORMAL itself
 #include "mods/items/custom_items.h"
 #include "mods/actors/deku_flower_assets.h"
 // C++ header (no extern "C"): OnOcarinaNote hook registration for the gakki note driver.
@@ -66,8 +70,6 @@ void PikachuForm_Update(Player* player, PlayState* play);
 void PikachuForm_Draw(PlayState* play, Player* player);
 void PikachuForm_Cleanup(void);
 u8 PikachuForm_IsEnabled(void);
-// z_player.c: handles z-target A actions for transforms (jump slash, sidehop, backflip)
-void Player_TransformZTargetAction(Player* player, PlayState* play, s32 controlStickDirection);
 // mm_player_form.cpp: launch jump kick (called from z_player.c Handler_10)
 s32 MmForm_LaunchJumpKick(Player* player, PlayState* play);
 // mm_player_form.cpp: get Zora boomerang animation (called from z_player.c upper actions)
@@ -116,6 +118,9 @@ extern "C" {
 static u8 MmForm_GerudoMhrUpdate(Player* player, PlayState* play);
 static u8 MmForm_RitoFlightUpdate(Player* player, PlayState* play); // rito_flight.inc.c
 static u8 MmForm_RitoBowUpdate(Player* player, PlayState* play);    // rito_bow.inc.c
+static void MmForm_RitoRelease(Player* player, u8 land);            // rito_flight.inc.c
+static void MmForm_RitoBowEnd(Player* player);                      // rito_bow.inc.c
+void FormJingle_Update(void);                                       // form_song_jingle.inc.c
 static void MmForm_GerudoMhrReset(void);                            // abort the running clip (yield / detransform)
 static void MmForm_GerudoFormExit(void); // full reset incl. the rage meter (detransform only)
 }
@@ -224,6 +229,8 @@ extern "C" void MmForm_RitoWindDraw(PlayState* play);
 extern "C" LinkAnimationHeader* MmForm_RitoFlyAnim(void);
 extern "C" u8 MmForm_RitoBowIsOut(void);
 static Gfx* MmForm_RitoBowDL(void); // defined next to the Rito shield's loader, used before it
+static Gfx* MmForm_RitoBowStringDL(void);
+static Gfx* MmForm_RitoHarpDL(void);
 extern "C" void MmForm_RitoBowReset(void);
 
 extern "C" void O2rLoader_ForceModel(const char* name);
@@ -1250,7 +1257,6 @@ static MmFormState gFormState;
 // start from its numbers and are dialled through the Item Editor. Skijer's NEI
 extern "C" Gfx gIKAxeInlineDL[];
 typedef struct {
-    const char* cvarPrefix;
     f32 offX, offY, offZ;
     s16 rotX, rotY, rotZ;
     f32 scale;
@@ -1258,32 +1264,11 @@ typedef struct {
 
 // Order must match GMhrAxeFamily (gs, hm, ig).
 static const GerudoAxePlacement sGerudoAxePlacements[] = {
-    // 82.8 / 180 / -75.6 deg. 180 is -32768 because 0x8000 does not fit an s16 positive.
-    { "gItemEditor.GerudoAxe.Gs", 465.5f, -34.5f, -310.3f, 15073, -32768, -13763, 0.801f },
-    // 102.1 / 180 / 89.5 deg. The hammer grips it a long way from where the great sword
-    // does — nearly a metre up the arm and rolled the other way — which is the whole
-    // reason this table is per family.
-    { "gItemEditor.GerudoAxe.Hm", -513.2f, 577.5f, -160.4f, 18587, -32768, 16293, 0.801f },
-    // 143.4 / 87.6 / 105.9 deg. The glaive is the only one that does not point the axe
-    // down the arm at all, hence the yaw that is nowhere near the other two.
-    { "gItemEditor.GerudoAxe.Ig", -288.8f, 465.2f, 208.6f, 26105, 15947, 19279, 0.801f },
+    // Rotations in degrees alongside; 180 is -32768 because 0x8000 is not a positive s16.
+    { 465.5f, -34.5f, -310.3f, 15073, -32768, -13763, 0.801f }, // gs:  82.8 / 180.0 / -75.6
+    { -513.2f, 577.5f, -160.4f, 18587, -32768, 16293, 0.801f }, // hm: 102.1 / 180.0 /  89.5
+    { -288.8f, 465.2f, 208.6f, 26105, 15947, 19279, 0.801f },   // ig: 143.4 /  87.6 / 105.9
 };
-
-// Live tuning is OFF unless the Item Editor asks for it. That is deliberate: if the draw
-// always read the CVars, a stale saved value would silently override a baked number and
-// the constants above would be decoration.
-static f32 MmForm_GerudoAxeTune(const char* prefix, const char* field, f32 baked) {
-    char cvar[96];
-    if (!CVarGetInteger("gItemEditor.GerudoAxe.Tune", 0))
-        return baked;
-    snprintf(cvar, sizeof(cvar), "%s.%s", prefix, field);
-    return CVarGetFloat(cvar, baked);
-}
-
-static s16 MmForm_GerudoAxeTuneAngle(const char* prefix, const char* field, s16 baked) {
-    f32 deg = MmForm_GerudoAxeTune(prefix, field, baked * (360.0f / 65536.0f));
-    return (s16)(deg * (65536.0f / 360.0f));
-}
 
 // Gerudo's RIGHT hand matrix, captured in MmForm_PostLimbDraw. Vanilla only ever keeps
 // ONE hand — player->mf_9E0, written at PLAYER_LIMB_L_HAND because Link holds his sword
@@ -2332,6 +2317,8 @@ extern "C" void GaroForm_DrawProjectiles(PlayState* play);
 // directly, bypassing gFormState entirely. The MmForm_Draw branch below
 // was dead code for Garo; removed to fix the unresolved-symbol link error.
 
+extern "C" void KafeiForm_Reset(void);
+
 static u8 MmForm_LoadFormSkeleton(PlayState* play, MmPlayerTransformation form) {
     // Pikachu and Wolf Link share the internal custom-skeleton slot.  Their
     // renderers/assets remain separate and the trigger item selects the owner.
@@ -2364,6 +2351,10 @@ static u8 MmForm_LoadFormSkeleton(PlayState* play, MmPlayerTransformation form) 
         O2rLoader_ForceModel("kafei");
         gFormState.skeletonLoaded = 0; // nothing for MmForm_Draw to use, and nothing should try
         gFormState.currentForm = MM_PLAYER_FORM_KAFEI;
+        // Stamina starts full every transformation. Its tick only runs WHILE he is Kafei,
+        // so resetting there cannot catch the moment the mask comes off - take it off
+        // winded and you would come back winded.
+        KafeiForm_Reset();
         MMFORM_LOG("[MmForm] Kafei form: model forced, vanilla draw path retained");
         return 1;
     }
@@ -2376,6 +2367,8 @@ static u8 MmForm_LoadFormSkeleton(PlayState* play, MmPlayerTransformation form) 
             // Springs are per-transformation: carrying the previous wearing's swing
             // over makes the tails snap on the first frame of the new one.
             KeatonTails_Reset();
+            KeatonForm_Reset(play);
+            KeatonReflector_Reset();
         }
         const char* skelPath = (form == MM_PLAYER_FORM_KEATON) ? "objects/forms/keaton/object_link_boy/gLinkAdultSkel"
                                                                : "objects/forms/rito/object_link_boy/gLinkAdultSkel";
@@ -2427,8 +2420,7 @@ static u8 MmForm_LoadFormSkeleton(PlayState* play, MmPlayerTransformation form) 
             MMFORM_LOG("[MmForm] FAIL: gGaroSkel not found in soh.o2r (objects/forms/garo) — regenerate soh.o2r?");
             return 0;
         }
-    } else if (form == MM_PLAYER_FORM_GERUDO || form == MM_PLAYER_FORM_RITO ||
-               form == MM_PLAYER_FORM_KEATON) {
+    } else if (form == MM_PLAYER_FORM_GERUDO || form == MM_PLAYER_FORM_RITO || form == MM_PLAYER_FORM_KEATON) {
         // skelHeader already loaded from soh.o2r above; no mm.o2r fetch needed.
     } else if (props->skelPath == NULL) {
         MMFORM_LOG("[MmForm] No skeleton for form %d", form);
@@ -3192,11 +3184,17 @@ static void MmForm_ApplyFormProperties(Player* player, MmPlayerTransformation fo
 
         memcpy(&gFormState.formAgeProperties, player->ageProperties, sizeof(PlayerAgeProperties));
 
-        gFormState.formAgeProperties.ceilingCheckHeight = mmProps->ceilingCheckHeight;
-        gFormState.formAgeProperties.unk_04 = mmProps->unk_04;
-        gFormState.formAgeProperties.unk_08 = mmProps->unk_08;
-        gFormState.formAgeProperties.unk_0C = mmProps->unk_0C;
-        gFormState.formAgeProperties.unk_10 = mmProps->unk_10;
+        // Kafei keeps OOT's sizes verbatim: the memcpy above is the whole job for him.
+        // His rig IS Link's, and the MM numbers shift ceiling, wall and step-up heights
+        // just enough to break the automatic vault onto ledges you get by running at
+        // them. Both places that install formAgeProperties then hand him OOT values.
+        if (form != MM_PLAYER_FORM_KAFEI) {
+            gFormState.formAgeProperties.ceilingCheckHeight = mmProps->ceilingCheckHeight;
+            gFormState.formAgeProperties.unk_04 = mmProps->unk_04;
+            gFormState.formAgeProperties.unk_08 = mmProps->unk_08;
+            gFormState.formAgeProperties.unk_0C = mmProps->unk_0C;
+            gFormState.formAgeProperties.unk_10 = mmProps->unk_10;
+        }
         // Keep OOT Adult's unk_14/18/1C (ledge grab + step-up heights) by default.
         // MM form heights are shorter and cause ladder-top overshoot on OOT geometry.
         // EXCEPTION for Zora: extend unk_14 (water ledge grab max) so Zora can grab ledges
@@ -3298,8 +3296,8 @@ static void MmForm_RestoreOotState(Player* player) {
     // form goes INACTIVE.
     {
         const char* cur = O2rLoader_GetForcedName();
-        if (cur != nullptr && (strcmp(cur, "gerudo") == 0 || strcmp(cur, "rito") == 0 ||
-                               strcmp(cur, "keaton") == 0 || strcmp(cur, "kafei") == 0)) {
+        if (cur != nullptr && (strcmp(cur, "gerudo") == 0 || strcmp(cur, "rito") == 0 || strcmp(cur, "keaton") == 0 ||
+                               strcmp(cur, "kafei") == 0)) {
             O2rLoader_ClearForcedModel();
         }
     }
@@ -3309,7 +3307,7 @@ static void MmForm_RestoreOotState(Player* player) {
     // Link keeps landing on the rito's animation. Reset alone never covered it —
     // taking the mask off does not go through Reset.
     MmForm_RitoRestoreLanding();
-    MmForm_RitoResetFlight();   // and the updraft ribbons, which no state exit reaches here
+    MmForm_RitoResetFlight(); // and the updraft ribbons, which no state exit reaches here
     MmForm_RitoBowReset();
     // ...and clear the draw offset. It is re-applied per frame while the form is
     // active, so on exit the last rito value would otherwise stick to the actor
@@ -3752,6 +3750,7 @@ static void MmForm_PlaySfx(Player* player, u16 mmSfxId, u16 ootSfxId);
 static void MmForm_DekuWaterHop(Player* player, PlayState* play);
 static void MmForm_PlayAttackVoice(Player* player);
 static void MmForm_StartDekuFlower(Player* player, PlayState* play);
+static u8 MmForm_DekuFlowerBurrowPressed(Player* player, PlayState* play);
 static void MmForm_StartDekuFlightMidair(Player* player, PlayState* play);
 static void MmForm_Action_DekuFlower(Player* player, PlayState* play);
 static void MmForm_Action_DekuFly(Player* player, PlayState* play);
@@ -4084,19 +4083,21 @@ static void MmForm_GoronAction_Idle(Player* player, PlayState* play) {
     // didn't have a per-use cost either (the burrow was usable as long as a
     // valid floor existed). Air entry was already free.
     if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.dekuFlightLaunch != NULL) {
-        if (ItemHeld_IsButtonPressed(ITEM_DEKU_LEAF, player, play)) {
-            if (MMFORM_ON_GROUND(player)) {
+        u8 leafPressed = ItemHeld_IsButtonPressed(ITEM_DEKU_LEAF, player, play);
+
+        if (MMFORM_ON_GROUND(player)) {
+            if (leafPressed || MmForm_DekuFlowerBurrowPressed(player, play)) {
                 // Ground: burrow into golden flower → launch sequence
                 // (Player_Action_93). Free.
                 MmForm_StartDekuFlower(player, play);
                 return;
-            } else if (gFormState.goronAction != MMFORM_ACT_DEKU_FLY &&
-                       gFormState.goronAction != MMFORM_ACT_DEKU_FLOWER &&
-                       gFormState.goronAction != MMFORM_ACT_DEKU_FALL_LOCKED) {
-                // Air: enter flight directly (Player_Action_94). Free.
-                MmForm_StartDekuFlightMidair(player, play);
-                return;
             }
+        } else if (leafPressed && gFormState.goronAction != MMFORM_ACT_DEKU_FLY &&
+                   gFormState.goronAction != MMFORM_ACT_DEKU_FLOWER &&
+                   gFormState.goronAction != MMFORM_ACT_DEKU_FALL_LOCKED) {
+            // Air: enter flight directly (Player_Action_94). Free.
+            MmForm_StartDekuFlightMidair(player, play);
+            return;
         }
     }
 
@@ -4258,15 +4259,16 @@ static void MmForm_GoronAction_Walk(Player* player, PlayState* play) {
     }
 
     // Deku Leaf C-button → flower burrow (ground) or flight (air)
-    if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.dekuFlightLaunch != NULL) {
-        if (ItemHeld_IsButtonPressed(ITEM_DEKU_LEAF, player, play)) {
-            if (MMFORM_ON_GROUND(player)) {
-                if (gSaveContext.magic >= 10) {
-                    gSaveContext.magic -= 10;
-                    MmForm_StartDekuFlower(player, play);
-                    return;
-                }
-            }
+    if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.dekuFlightLaunch != NULL &&
+        MMFORM_ON_GROUND(player)) {
+        if (MmForm_DekuFlowerBurrowPressed(player, play)) {
+            MmForm_StartDekuFlower(player, play);
+            return;
+        }
+        if (ItemHeld_IsButtonPressed(ITEM_DEKU_LEAF, player, play) && (gSaveContext.magic >= 10)) {
+            gSaveContext.magic -= 10;
+            MmForm_StartDekuFlower(player, play);
+            return;
         }
     }
 
@@ -4413,15 +4415,16 @@ static void MmForm_GoronAction_Run(Player* player, PlayState* play) {
     }
 
     // Deku Leaf C-button → flower burrow (ground) or flight (air)
-    if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.dekuFlightLaunch != NULL) {
-        if (ItemHeld_IsButtonPressed(ITEM_DEKU_LEAF, player, play)) {
-            if (MMFORM_ON_GROUND(player)) {
-                if (gSaveContext.magic >= 10) {
-                    gSaveContext.magic -= 10;
-                    MmForm_StartDekuFlower(player, play);
-                    return;
-                }
-            }
+    if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.dekuFlightLaunch != NULL &&
+        MMFORM_ON_GROUND(player)) {
+        if (MmForm_DekuFlowerBurrowPressed(player, play)) {
+            MmForm_StartDekuFlower(player, play);
+            return;
+        }
+        if (ItemHeld_IsButtonPressed(ITEM_DEKU_LEAF, player, play) && (gSaveContext.magic >= 10)) {
+            gSaveContext.magic -= 10;
+            MmForm_StartDekuFlower(player, play);
+            return;
         }
     }
 
@@ -5912,6 +5915,7 @@ static void MmForm_PlayAttackVoice(Player* player) {
             voiceSfx = strong ? MM_NA_SE_VO_ZORA_SWORD_L : MM_NA_SE_VO_ZORA_SWORD_N;
             break;
         case MM_PLAYER_FORM_DEKU:
+        case MM_PLAYER_FORM_KEATON:
             voiceSfx = strong ? MM_NA_SE_VO_DEKU_SWORD_L : MM_NA_SE_VO_DEKU_SWORD_N;
             break;
         case MM_PLAYER_FORM_FIERCE_DEITY:
@@ -6067,9 +6071,13 @@ static void MmForm_GerudoSpawnSlashTrails(PlayState* play) {
         TRAIL_TYPE_SWORDS,      // trailType
     };
     Effect_Add(play, &gFormState.punchTrailEffectIndex, EFFECT_BLURE2, 0, 0, &blure);
-    Effect_Add(play, &gFormState.punchTrailEffectIndexR, EFFECT_BLURE2, 0, 0, &blure);
     gFormState.punchTrailActive = 1;
-    gFormState.punchTrailActiveR = 1;
+    // Demon mode carries ONE weapon: a second trail there is a ribbon hanging in empty
+    // air, fed by a hand that holds nothing.
+    if (!GerudoMhr_RageActive()) {
+        Effect_Add(play, &gFormState.punchTrailEffectIndexR, EFFECT_BLURE2, 0, 0, &blure);
+        gFormState.punchTrailActiveR = 1;
+    }
 }
 
 // Push the slash anim onto BOTH animation tracks. formSkelAnime drives the
@@ -9076,6 +9084,12 @@ static void MmForm_DekuChargeYawUpdate(Player* player, PlayState* play) {
     Math_ScaledStepToS(&player->yaw, yawTarget, 0x258);
 }
 
+// A Deku Flower underfoot is MM's own way in: A burrows, no leaf needed.
+static u8 MmForm_DekuFlowerBurrowPressed(Player* player, PlayState* play) {
+    return (DekuFlower_Underfoot(play, &player->actor) != NULL) &&
+           CHECK_BTN_ALL(play->state.input[0].press.button, BTN_A);
+}
+
 // ---------------------------------------------------------------------------
 // MmForm_StartDekuFlower - Enter flower burrow from ground
 // From 2Ship func_80836DC0 (z_player.c:6979-6994)
@@ -9205,15 +9219,25 @@ static void MmForm_Action_DekuFlower(Player* player, PlayState* play) {
             player->actor.scale.z = player->actor.scale.x = 0.01f - (gFormState.dekuFlowerVelocity * -0.000015f);
             // Rotate during compression (from 2Ship line 18934)
             player->actor.shape.rot.y += (s16)(gFormState.dekuFlowerVelocity * 130.0f);
+
+            // Slide onto the centre of whatever dynapoly he is sinking into (2Ship line 18939)
+            DynaPolyActor* floorDyna = (player->actor.floorBgId == BGCHECK_SCENE)
+                                           ? NULL
+                                           : DynaPoly_GetActor(&play->colCtx, player->actor.floorBgId);
+            if (floorDyna != NULL) {
+                Math_StepToF(&player->actor.world.pos.x, floorDyna->actor.world.pos.x, 1.0f);
+                Math_StepToF(&player->actor.world.pos.z, floorDyna->actor.world.pos.z, 1.0f);
+            }
         }
         MmForm_DekuUndergroundEffect(play, player);
 
     } else if (gFormState.dekuFlowerPhase == 2) {
-        // Phase 2: Hold Deku Leaf C-button underground, release to launch
-        // Velocity scales with hold time: 10 (instant release) to 40 (2 seconds)
-        // 40 frames = 2 seconds at 20fps → velocity.y = 10 + min(charge,40) * 0.75
+        // Phase 2: hold underground, release to launch. A counts as well as the leaf's C button:
+        // a flower burrow starts on A, and the leaf may not even be on a button.
+        u8 holding = ItemHeld_IsButtonHeld(ITEM_DEKU_LEAF, player, play) ||
+                     CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_A);
 
-        if (!ItemHeld_IsButtonHeld(ITEM_DEKU_LEAF, player, play)) {
+        if (!holding) {
             // Released → check ceiling then launch
             CollisionPoly* poly;
             s32 bgId;
@@ -9228,9 +9252,9 @@ static void MmForm_Action_DekuFlower(Player* player, PlayState* play) {
                 // Ceiling blocked → stay underground, reset charge
                 gFormState.dekuFlowerCharge = 0;
             } else {
-                // Launch! Velocity.y = 10..40 based on hold time (model-space: /0.01 → 1000..4000)
+                // Full charge (2 s) is MM's tallest launch: gold flower 2700 x 1.74 = 4698 model units.
                 s32 clampedCharge = (gFormState.dekuFlowerCharge > 40) ? 40 : gFormState.dekuFlowerCharge;
-                gFormState.dekuFlowerVelocity = 1000.0f + (clampedCharge * 75.0f);
+                gFormState.dekuFlowerVelocity = 1000.0f + (clampedCharge * 92.5f);
                 gFormState.dekuFlowerPhase = 3;
                 // Treat as "golden" if held >= 20 frames (1 second) for extra flight range
                 if (clampedCharge >= 20) {
@@ -9264,6 +9288,16 @@ static void MmForm_Action_DekuFlower(Player* player, PlayState* play) {
             // Emerged → transition to flight
             f32 speed = gFormState.dekuFlowerVelocity * player->actor.scale.y;
             s32 isGolden = (gFormState.dekuFlowerCharge >= 10);
+            DynaPolyActor* flower = DekuFlower_Underfoot(play, &player->actor);
+
+            // A gold scene flower throws him 1.74x as high (2Ship line 18970: aux = 0xAE / 100).
+            if (flower != NULL) {
+                if (DekuFlower_IsGold(flower)) {
+                    speed *= 1.74f;
+                    isGolden = 1;
+                }
+                DekuFlower_OnLaunch(flower);
+            }
 
             Math_Vec3f_Copy(&gFormState.dekuLaunchPos, &player->actor.world.pos);
             gFormState.dekuFlowerDepth = 0.0f;
@@ -9334,6 +9368,17 @@ static void MmForm_Action_DekuFlower(Player* player, PlayState* play) {
     player->actor.gravity = 0.0f;
     player->actor.velocity.y = 0.0f;
     player->linearVelocity = 0.0f;
+}
+
+// The two player states MM's Deku Flower reads off stateFlags3, answered for deku_flower.c.
+extern "C" u8 MmForm_DekuBurrowStarting(void) {
+    return gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.goronAction == MMFORM_ACT_DEKU_FLOWER &&
+           gFormState.dekuFlowerDepth < 0.0f && !(gFormState.dekuFlightFlags & DEKU_FLIGHT_UNDERGROUND);
+}
+
+extern "C" u8 MmForm_DekuGoldenFlight(void) {
+    return gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.goronAction == MMFORM_ACT_DEKU_FLY &&
+           (gFormState.dekuFlightFlags & DEKU_FLIGHT_GOLDEN) != 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -11604,13 +11649,15 @@ static void MmForm_GakkiPlayNoteAnim(void) {
 // Kafei's whistle, shared across three places that cannot see each other's locals:
 // the note hook (fires from inside AudioOcarina), the pose code (runs after the
 // action func) and the limb draw hook (runs at draw time).
-static u8 sKafeiWhistling = 0;   // instrument is out and the pose owns the arms
-static u8 sKafeiNotePulse = 0;   // a new note was struck; play the gesture once
+static u8 sKafeiWhistling = 0; // instrument is out and the pose owns the arms
+static u8 sKafeiNotePulse = 0; // a new note was struck; play the gesture once
 
 // Defined further down with the rest of the form predicates; needed here because the
 // hand hook sits above it in this translation unit. extern "C" to match the
 // definition, which sits inside one of this file's extern "C" blocks.
 extern "C" u8 MmForm_IsKafeiFormActive(void);
+extern "C" void KafeiForm_Tick(Player* player, PlayState* play);
+extern "C" void KafeiForm_Reset(void);
 
 // Kafei whistles with his mouth, so the ocarina must not be drawn - but OoT bakes it
 // INTO the hand DL (modelgroup OCARINA = LH_OPEN + RH_OCARINA), so there is no
@@ -11707,31 +11754,30 @@ static void MmForm_RegisterOcarinaNoteHook(void) {
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnOcarinaPlaybackNote>(
         [](uint8_t pitch, float bendFreq) { MmForm_GakkiDriveNote(pitch, bendFreq); });
 
-    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnOcarinaNote>(
-        [](uint8_t pitch, float bendFreq, int8_t instrumentId) {
-            // Probe: this hook fires from inside AudioOcarina with the instrument the engine
-            // ACTUALLY used for the note (code_800EC960.c:2087 passes sOcarinaInstrumentId).
-            // It is the only way to see, rather than assume, whether a SetInstrument call
-            // survived to the moment a note was played. Skin forms have no gakkiActive, so
-            // this sits above that check.
-            if (pitch != 0xFF /* OCARINA_PITCH_NONE */) {
-                const char* skin = CustomForms_ActiveSkin();
-                if (skin != NULL) {
-                    MMFORM_LOG("[MmForm] note: skin=%s pitch=%d engineInstrument=%d", skin, (s32)pitch,
-                               (s32)instrumentId);
-                }
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnOcarinaNote>([](uint8_t pitch, float bendFreq,
+                                                                                 int8_t instrumentId) {
+        // Probe: this hook fires from inside AudioOcarina with the instrument the engine
+        // ACTUALLY used for the note (code_800EC960.c:2087 passes sOcarinaInstrumentId).
+        // It is the only way to see, rather than assume, whether a SetInstrument call
+        // survived to the moment a note was played. Skin forms have no gakkiActive, so
+        // this sits above that check.
+        if (pitch != 0xFF /* OCARINA_PITCH_NONE */) {
+            const char* skin = CustomForms_ActiveSkin();
+            if (skin != NULL) {
+                MMFORM_LOG("[MmForm] note: skin=%s pitch=%d engineInstrument=%d", skin, (s32)pitch, (s32)instrumentId);
             }
+        }
 
-            // Skins never set gakkiActive, so the return below would drop them. Kafei's
-            // whistle gesture is driven from here: hold the raised pose, and play the
-            // clip once per note press, which is what MM does for every instrument
-            // (func_80852290 fires the animation on a note, not on a timer).
-            if (sKafeiWhistling && pitch != 0xFF /* OCARINA_PITCH_NONE */) {
-                sKafeiNotePulse = 1;
-            }
+        // Skins never set gakkiActive, so the return below would drop them. Kafei's
+        // whistle gesture is driven from here: hold the raised pose, and play the
+        // clip once per note press, which is what MM does for every instrument
+        // (func_80852290 fires the animation on a note, not on a timer).
+        if (sKafeiWhistling && pitch != 0xFF /* OCARINA_PITCH_NONE */) {
+            sKafeiNotePulse = 1;
+        }
 
-            MmForm_GakkiDriveNote(pitch, bendFreq);
-        });
+        MmForm_GakkiDriveNote(pitch, bendFreq);
+    });
 }
 
 // Enter gakki mode: play gakkistart animation on formSkelAnime.
@@ -11804,8 +11850,7 @@ static void MmForm_UpdateSkinOcarinaVoice(Player* player, PlayState* play) {
         // actionVar2 flips to 1 exactly when the intro finished and free play started, so it
         // is the correct "hands off until then" gate. Once the action func has handed over
         // to the message system it is no longer the action func at all, and posing is safe.
-        u8 introStillPlaying =
-            (player->actionFunc == Player_Action_8084E3C4) && (player->av2.actionVar2 == 0);
+        u8 introStillPlaying = (player->actionFunc == Player_Action_8084E3C4) && (player->av2.actionVar2 == 0);
 
         // ── Pose: Impa's whistling animation, on LINK's own skeleton ────────────────────
         // A skin form has no formSkelAnime to pose (that is MmForm_Draw's, and a skin draws
@@ -11834,8 +11879,7 @@ static void MmForm_UpdateSkinOcarinaVoice(Player* player, PlayState* play) {
                 sWhistleAnimLogged = 1;
                 // Decisive one-liner: NULL here means the clip is not in the mounted
                 // archives and everything below is moot, whatever the pose looks like.
-                MMFORM_LOG("[MmForm] Kafei whistle start=%p loop=%p", (void*)sWhistleStart,
-                           (void*)sWhistleLoop);
+                MMFORM_LOG("[MmForm] Kafei whistle start=%p loop=%p", (void*)sWhistleStart, (void*)sWhistleLoop);
             }
         }
         // raise once, then sit on frame 0 of the play clip; each note resumes it.
@@ -11858,8 +11902,7 @@ static void MmForm_UpdateSkinOcarinaVoice(Player* player, PlayState* play) {
                 sWhistlePhase = 1;
             } else if (sWhistlePhase == 1) {
                 u8 raiseDone = (current != (void*)sWhistleStart) ||
-                               (player->skelAnime.curFrame >=
-                                Animation_GetLastFrame(sWhistleStart) - 0.5f);
+                               (player->skelAnime.curFrame >= Animation_GetLastFrame(sWhistleStart) - 0.5f);
                 if (raiseDone) {
                     LinkAnimation_Change(play, &player->skelAnime, sWhistleLoop, 1.0f, 0.0f,
                                          Animation_GetLastFrame(sWhistleLoop), ANIMMODE_ONCE, -4.0f);
@@ -11877,8 +11920,8 @@ static void MmForm_UpdateSkinOcarinaVoice(Player* player, PlayState* play) {
                 f32 last = Animation_GetLastFrame(sWhistleLoop);
                 if (sKafeiNotePulse) {
                     if (player->skelAnime.curFrame >= last - 0.5f) {
-                        LinkAnimation_Change(play, &player->skelAnime, sWhistleLoop, 1.0f, 0.0f, last,
-                                             ANIMMODE_ONCE, -4.0f);
+                        LinkAnimation_Change(play, &player->skelAnime, sWhistleLoop, 1.0f, 0.0f, last, ANIMMODE_ONCE,
+                                             -4.0f);
                     }
                     player->skelAnime.playSpeed = 1.0f; // resume from wherever it stopped
                 } else if (player->skelAnime.curFrame >= last - 0.5f) {
@@ -11951,8 +11994,8 @@ static void MmForm_UpdateSkinOcarinaVoice(Player* player, PlayState* play) {
             LinkAnimationHeader* lower = (LinkAnimationHeader*)ResourceMgr_LoadPlayerAnimAsHeader(
                 "__OTR__misc/link_animetion/gPlayerAnim_mhr_sw97_reed_whistle_end");
             if (lower != NULL) {
-                LinkAnimation_Change(play, &player->skelAnime, lower, 1.0f, 0.0f,
-                                     Animation_GetLastFrame(lower), ANIMMODE_ONCE, -6.0f);
+                LinkAnimation_Change(play, &player->skelAnime, lower, 1.0f, 0.0f, Animation_GetLastFrame(lower),
+                                     ANIMMODE_ONCE, -6.0f);
             }
             sWhistlePhase = 0;
         }
@@ -12215,6 +12258,12 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // aim-entry points refused to fire again because they require == 0.
     MmForm_TrackBoomerangsInFlight(player, play);
 
+    // Same reason, same place: Keaton's climb owns the wall-climb permission, its magic
+    // drain and its clips, and all of it is dead the moment the yield below returns.
+    if (gFormState.currentForm == MM_PLAYER_FORM_KEATON) {
+        KeatonForm_TickClimb(player, play);
+    }
+
     // Boomerang hold counter — once per frame, before any early return, so it accumulates
     // while the punch plays instead of only inside whichever handler happens to be active.
     MmForm_TickZoraBoomerangHold(play);
@@ -12279,7 +12328,14 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // "fighter" is precisely modelAnimType landing on the weapon-drawn column. This
     // line was forcing her back to column 0 every frame — which is why the fighter
     // idle/walk/run never showed and R came up as Link's free-hand shield.
-    if (gFormState.currentForm != MM_PLAYER_FORM_FIERCE_DEITY && gFormState.currentForm != MM_PLAYER_FORM_GERUDO) {
+    // The Rito is the third exception, and only while its guard is up: column 0 is
+    // link_normal_defense_free, the braced no-shield pose, so forcing it here is what put
+    // the rito behind an invisible shield instead of the one it actually carries.
+    u8 ritoGuardIsUp =
+        (gFormState.currentForm == MM_PLAYER_FORM_RITO) && (player->stateFlags1 & PLAYER_STATE1_SHIELDING);
+
+    if (gFormState.currentForm != MM_PLAYER_FORM_FIERCE_DEITY && gFormState.currentForm != MM_PLAYER_FORM_GERUDO &&
+        !ritoGuardIsUp) {
         player->modelAnimType = PLAYER_ANIMTYPE_0;
     }
 
@@ -13578,6 +13634,24 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
         }
     }
 
+    // Damage interrupt for the two forms that live permanently in MMFORM_ACT_OOT_ACTION.
+    // MmForm_CheckDamage — the only code that releases the pause flag on a hit — bails on
+    // its first guard for that action, and OOT runs knockback inside the very actionFunc
+    // that PLAYER_STATE3_PAUSE_ACTION_FUNC blocks. A controller still holding the flag when
+    // damage lands therefore leaves PLAYER_STATE1_DAMAGED set forever.
+    if (player->stateFlags1 & PLAYER_STATE1_DAMAGED) {
+        if (gFormState.currentForm == MM_PLAYER_FORM_RITO) {
+            MmForm_RitoRelease(player, 0);
+            MmForm_RitoBowEnd(player);
+            player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
+        } else if (gFormState.currentForm == MM_PLAYER_FORM_KEATON) {
+            KeatonForm_Reset(play);
+            KeatonReflector_Reset();
+            player->meleeWeaponState = 0;
+            player->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
+        }
+    }
+
     // =========================================================================
     // Gerudo MHR Dual Blades combat controller — owns all Gerudo combat (combo,
     // charge, wirebug, air, demon). Returns 1 when driving a move this frame →
@@ -13600,6 +13674,14 @@ static void MmForm_UpdateActive(Player* player, PlayState* play) {
     // early: they are cosmetic and must never stall because the body is busy.
     if (gFormState.currentForm == MM_PLAYER_FORM_KEATON) {
         KeatonTails_Update(player);
+        // The reflector is asked first: R has to win the frame outright, and holding it
+        // must be able to cut a move short rather than queue behind it.
+        if (KeatonReflector_Update(player, play)) {
+            return;
+        }
+        if (KeatonForm_Update(player, play)) {
+            return;
+        }
     }
 
     // The bow is asked FIRST: a press in mid-air has to take the frame off the glide
@@ -14492,7 +14574,10 @@ static u8 MmForm_UsesOotAnim(void) {
     // "copy OOT joints" — painting Link's ocarina pose over the form's gakkiplay animation.
     // That is the "entran en pose de ocarina" bug: the instrument animation was being
     // overwritten by Link's, one frame after the ocarina opened.
-    if (gFormState.gakkiActive) {
+    // Only a form with its OWN instrument clip owns the pose. Keaton and Kafei declare
+    // none and ride Link's ocarina animation, so blocking the copy here left them on a
+    // stale pose and made the draw→play hand-off snap.
+    if (gFormState.gakkiActive && (gFormState.gakkiStartAnim != NULL || gFormState.gakkiPlayAnim != NULL)) {
         return 0;
     }
 
@@ -14575,6 +14660,14 @@ static u8 MmForm_UsesOotAnim(void) {
 
 static s32 MmForm_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, void* thisx) {
     Player* player = (Player*)thisx;
+
+    // Sheik's harp is held in bare wings: both hands go, and with the right one goes OoT's
+    // ocarina, which is modelled INTO that hand's list rather than beside it. This is why
+    // the gakki row leaves instrumentDL NULL — the hiding is owned here.
+    if ((gFormState.gakkiActive != 0) && (gFormState.currentForm == MM_PLAYER_FORM_RITO) &&
+        ((limbIndex == PLAYER_LIMB_L_HAND) || (limbIndex == PLAYER_LIMB_R_HAND))) {
+        *dList = NULL;
+    }
 
     // Gerudo upper body: Player_OverrideLimbDrawGameplay never runs for a form, so
     // OOT's own upperLimbRot (the shield aim, the crouch-stab twist) has to be applied
@@ -14758,12 +14851,10 @@ static s32 MmForm_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, 
                 // object_link_child, and forms ship both. Hardcoding the adult
                 // pair put a grown Link hand on the child Gerudo's arm.
                 const bool right = (limbIndex == PLAYER_LIMB_R_HAND);
-                const char* emptyHand =
-                    LINK_IS_ADULT
-                        ? (right ? "objects/object_link_boy/gLinkAdultRightHandNearDL"
-                                 : "objects/object_link_boy/gLinkAdultLeftHandNearDL")
-                        : (right ? "objects/object_link_child/gLinkChildRightHandNearDL"
-                                 : "objects/object_link_child/gLinkChildLeftHandNearDL");
+                const char* emptyHand = LINK_IS_ADULT ? (right ? "objects/object_link_boy/gLinkAdultRightHandNearDL"
+                                                               : "objects/object_link_boy/gLinkAdultLeftHandNearDL")
+                                                      : (right ? "objects/object_link_child/gLinkChildRightHandNearDL"
+                                                               : "objects/object_link_child/gLinkChildLeftHandNearDL");
                 // Ask the active form first: a custom form ships its own copy of
                 // this hand under objects/forms/<model>/, and reaching straight
                 // for Link's would put HIS hand on the Gerudo's arm.
@@ -14861,8 +14952,9 @@ static s32 MmForm_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, 
     return 0;
 }
 
-// object_gi_bow sits on a pedestal in vanilla, so its placement in a limb is tuned, not
-// measured. RITO_BOW_STRING_REACH is the hand separation the string is authored at.
+// The bow DL is OOT's own with the fist cut off the end (apps/build_rito_bow.py), so it
+// is already authored in hand-limb space: no scale, no offset. Only the rotation is open,
+// because vanilla authored it for the RIGHT hand and the rito carries it in the left.
 #define RITO_BOW_MODEL_SCALE 1.0f
 #define RITO_BOW_MODEL_X 0.0f
 #define RITO_BOW_MODEL_Y 0.0f
@@ -14870,7 +14962,17 @@ static s32 MmForm_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, 
 #define RITO_BOW_MODEL_PITCH 0
 #define RITO_BOW_MODEL_YAW 0
 #define RITO_BOW_MODEL_ROLL 0
-#define RITO_BOW_STRING_REACH 20.0f
+// sBowStringData's own anchor for the adult bow (z_player_lib.c:2406).
+#define RITO_BOW_STRING_Y -360.4f
+
+// Where the harp sits in the wing, found in game on the sliders that used to live here.
+#define SHEIK_HARP_SCALE 0.83f
+#define SHEIK_HARP_X -47.62f
+#define SHEIK_HARP_Y 107.14f
+#define SHEIK_HARP_Z 0.0f
+#define SHEIK_HARP_PITCH -26527
+#define SHEIK_HARP_YAW -25356
+#define SHEIK_HARP_ROLL -18205
 
 // From z_player_lib.c - global (not static) used by Player_DrawGetItem to position
 // the get-item model at the correct hand position during skeleton draw.
@@ -14919,15 +15021,32 @@ extern "C" void MmForm_KillTrail(PlayState* play, s32* effectIndex, u8* active) 
     }
 }
 
-// The get-item bow, not the held one: every gLinkAdultRightHandHoldingBow*DL has Link's
-// own fist modelled into it, and the rito is meant to show the bow alone.
+// OOT's held bow with the fist truncated off the end by apps/build_rito_bow.py. Every
+// gLinkAdultRightHandHoldingBow*DL models Link's own hand into the same display list, and
+// the cut is clean: the bow runs under one texture, the fist under five that follow it.
 static Gfx* MmForm_RitoBowDL(void) {
     static Gfx* sCached = NULL;
     static u8 sTried = 0;
 
     if (!sTried) {
         sTried = 1;
-        const char* otr = "__OTR__objects/object_gi_bow/gGiBowDL";
+        const char* otr = "__OTR__objects/object_nei_rito_bow/gRitoBowDL";
+        if (ResourceMgr_FileExists(otr)) {
+            sCached = ResourceMgr_LoadGfxByName(otr);
+        }
+    }
+    return sCached;
+}
+
+// Sheik's harp, alone: no hand comes with it, which is why it is drawn on top of the limb
+// rather than swapped for it the way Skull Kid's hand-and-flute list is.
+static Gfx* MmForm_RitoHarpDL(void) {
+    static Gfx* sCached = NULL;
+    static u8 sTried = 0;
+
+    if (!sTried) {
+        sTried = 1;
+        const char* otr = "__OTR__objects/object_xc/gSheikHarpDL";
         if (ResourceMgr_FileExists(otr)) {
             sCached = ResourceMgr_LoadGfxByName(otr);
         }
@@ -14970,14 +15089,10 @@ static Gfx* MmForm_RitoShieldDL(void) {
 
 // 1 while the Rito is holding its shield up: this is what gives it the Mirror
 // Shield's reflections (z_player_lib.c's two predicates defer to it).
-extern "C" u8 MmForm_RitoShieldIsUp(void) {
-    Player* player;
-
-    if ((gFormState.currentForm != MM_PLAYER_FORM_RITO) || (gPlayState == NULL) || MmForm_RitoBowIsOut()) {
-        return 0;
-    }
-    player = GET_PLAYER(gPlayState);
-    return (player != NULL) && ((player->stateFlags1 & PLAYER_STATE1_SHIELDING) != 0);
+// Drawn, not raised: the plate reflects from the rito's back exactly as it does from its
+// arm, so the mirror predicates ask whether it is on screen at all.
+extern "C" u8 MmForm_RitoShieldIsDrawn(void) {
+    return (gFormState.currentForm == MM_PLAYER_FORM_RITO) && (gPlayState != NULL) && !MmForm_RitoBowIsOut();
 }
 
 static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, void* thisx) {
@@ -15000,23 +15115,20 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
     // because this is the one moment the waist's frame is the current matrix.
     if (limbIndex == PLAYER_LIMB_WAIST && gFormState.currentForm == MM_PLAYER_FORM_KEATON) {
         KeatonTails_Draw(play, player);
+        KeatonReflector_Draw(play, player);
     }
 
-    // The flute rides its own matrix so the NEI sliders can place it: nothing about
-    // Skull Kid's hand space matches Keaton's, and the row's DL only clears OoT's ocarina.
+    // The flute rides its own matrix: nothing about Skull Kid's hand space matches
+    // Keaton's. Placement tuned in-game on the NEI sliders, then baked.
     if (limbIndex == PLAYER_LIMB_R_HAND && gFormState.currentForm == MM_PLAYER_FORM_KEATON &&
         gFormState.gakkiActive != 0) {
         Gfx* flute = ResourceMgr_LoadGfxByName("__OTR__objects/forms/keaton/object_link_boy/gKeatonFluteDL");
         if (flute != NULL) {
             OPEN_DISPS(play->state.gfxCtx);
             Matrix_Push();
-            Matrix_Translate(CVarGetFloat("gMods.KeatonFlute.X", 0.0f), CVarGetFloat("gMods.KeatonFlute.Y", 0.0f),
-                             CVarGetFloat("gMods.KeatonFlute.Z", 0.0f), MTXMODE_APPLY);
-            Matrix_RotateZYX((s16)CVarGetInteger("gMods.KeatonFlute.RotX", 0),
-                             (s16)CVarGetInteger("gMods.KeatonFlute.RotY", 0),
-                             (s16)CVarGetInteger("gMods.KeatonFlute.RotZ", 0), MTXMODE_APPLY);
-            f32 fscale = CVarGetFloat("gMods.KeatonFlute.Scale", 1.0f);
-            Matrix_Scale(fscale, fscale, fscale, MTXMODE_APPLY);
+            Matrix_Translate(-600.0f, 164.29f, -102.38f, MTXMODE_APPLY);
+            Matrix_RotateZYX(30556, 28606, 3120, MTXMODE_APPLY);
+            Matrix_Scale(0.73f, 0.73f, 0.73f, MTXMODE_APPLY);
             gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
                       G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
             gSPDisplayList(POLY_OPA_DISP++, flute);
@@ -15045,17 +15157,11 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
                 axeFam = 0;
             }
             const GerudoAxePlacement* axe = &sGerudoAxePlacements[axeFam];
-            f32 axeScale = MmForm_GerudoAxeTune(axe->cvarPrefix, "Scale", axe->scale);
-            Matrix_Translate(MmForm_GerudoAxeTune(axe->cvarPrefix, "OffX", axe->offX),
-                             MmForm_GerudoAxeTune(axe->cvarPrefix, "OffY", axe->offY),
-                             MmForm_GerudoAxeTune(axe->cvarPrefix, "OffZ", axe->offZ), MTXMODE_APPLY);
-            Matrix_RotateZYX(MmForm_GerudoAxeTuneAngle(axe->cvarPrefix, "RotX", axe->rotX),
-                             MmForm_GerudoAxeTuneAngle(axe->cvarPrefix, "RotY", axe->rotY),
-                             MmForm_GerudoAxeTuneAngle(axe->cvarPrefix, "RotZ", axe->rotZ), MTXMODE_APPLY);
-            Matrix_Scale(axeScale, axeScale, axeScale, MTXMODE_APPLY);
+            Matrix_Translate(axe->offX, axe->offY, axe->offZ, MTXMODE_APPLY);
+            Matrix_RotateZYX(axe->rotX, axe->rotY, axe->rotZ, MTXMODE_APPLY);
+            Matrix_Scale(axe->scale, axe->scale, axe->scale, MTXMODE_APPLY);
             Gfx_SetupDL_25Opa(play->state.gfxCtx);
-            gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx),
-                      G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+            gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
             gSPDisplayList(POLY_OPA_DISP++, gIKAxeInlineDL);
             Matrix_Pop();
             CLOSE_DISPS(play->state.gfxCtx);
@@ -15337,11 +15443,9 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
                 } else {
                     Matrix_Translate(608.0f, 10.0f, -142.5f, MTXMODE_APPLY);
                 }
-                // Mir_Ray and Twinrova read the reflection direction off this matrix.
-                // Capturing it here is what makes the mirror behaviour aim correctly.
-                if (inHand) {
-                    Matrix_Get(&player->shieldMf);
-                }
+                // Mir_Ray and Twinrova read the reflection direction off this matrix, so it
+                // is captured from whichever limb is carrying the plate this frame.
+                Matrix_Get(&player->shieldMf);
                 gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
                           G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
                 gSPDisplayList(POLY_XLU_DISP++, dl);
@@ -15350,17 +15454,33 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
             }
         }
 
-        // The bow, in the left hand the limb above just emptied. object_gi_bow is authored
-        // for the get-item pedestal, not for a limb, so these five are knobs and nothing
-        // more — they are the only numbers here that were not measured.
+        // The harp goes in the hand Sheik's clips hold it in. The ocarina is already gone:
+        // the gakki row blanks R_HAND, which is where OoT bakes it into the hand list.
+        if ((gFormState.gakkiActive != 0) && (limbIndex == PLAYER_LIMB_L_HAND)) {
+            Gfx* harp = MmForm_RitoHarpDL();
+
+            if (harp != NULL) {
+                OPEN_DISPS(play->state.gfxCtx);
+                Matrix_Push();
+                Matrix_Translate(SHEIK_HARP_X, SHEIK_HARP_Y, SHEIK_HARP_Z, MTXMODE_APPLY);
+                Matrix_RotateZYX(SHEIK_HARP_PITCH, SHEIK_HARP_YAW, SHEIK_HARP_ROLL, MTXMODE_APPLY);
+                Matrix_Scale(SHEIK_HARP_SCALE, SHEIK_HARP_SCALE, SHEIK_HARP_SCALE, MTXMODE_APPLY);
+                gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                          G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+                gSPDisplayList(POLY_OPA_DISP++, harp);
+                Matrix_Pop();
+                CLOSE_DISPS(play->state.gfxCtx);
+            }
+        }
+
+        // The bow, in the left hand the limb above just emptied. It draws in the limb's own
+        // matrix because that is the space it was authored in, and needs no object bound
+        // behind it: the vertices and textures it calls for are object_link_boy's own.
         if (MmForm_RitoBowIsOut() && (limbIndex == PLAYER_LIMB_L_HAND)) {
             Gfx* bow = MmForm_RitoBowDL();
             Gfx* string = MmForm_RitoBowStringDL();
 
             if (bow != NULL) {
-                f32 reach = Math_Vec3f_DistXYZ(&player->bodyPartsPos[PLAYER_BODYPART_L_HAND],
-                                               &player->bodyPartsPos[PLAYER_BODYPART_R_HAND]);
-
                 OPEN_DISPS(play->state.gfxCtx);
                 Matrix_Push();
                 Matrix_Translate(RITO_BOW_MODEL_X, RITO_BOW_MODEL_Y, RITO_BOW_MODEL_Z, MTXMODE_APPLY);
@@ -15369,13 +15489,13 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
                 gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
                           G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
                 gSPDisplayList(POLY_OPA_DISP++, bow);
-                // The rito's far hand is a hidden limb: the string is stretched to wherever
-                // it happens to be, so the draw follows the arms instead of a fixed pose.
+                // Authored spanning the full draw, so at scale 1 it already reaches the nock
+                // the far hand holds. Vanilla only shrinks it to show a bow being pulled.
                 if (string != NULL) {
-                    Matrix_Scale(1.0f, 1.0f, reach / RITO_BOW_STRING_REACH, MTXMODE_APPLY);
-                    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                    Matrix_Translate(0.0f, RITO_BOW_STRING_Y, 0.0f, MTXMODE_APPLY);
+                    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
                               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-                    gSPDisplayList(POLY_OPA_DISP++, string);
+                    gSPDisplayList(POLY_XLU_DISP++, string);
                 }
                 Matrix_Pop();
                 CLOSE_DISPS(play->state.gfxCtx);
@@ -15680,6 +15800,35 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
                     player->meleeWeaponQuads[1].base.atFlags &= ~AT_ON;
                 }
             }
+        }
+    }
+
+    // Keaton's fists. Empty-handed, so z_player_lib's quad placement (which hangs off a
+    // held weapon) never runs for him: the quads have to be driven from the hand
+    // matrices here, exactly like the Gerudo's blades but at fist reach.
+    if (gFormState.currentForm == MM_PLAYER_FORM_KEATON &&
+        (limbIndex == PLAYER_LIMB_L_HAND || limbIndex == PLAYER_LIMB_R_HAND)) {
+        u32 keatonFlags = 0;
+        f32 keatonReach = 0.0f;
+        s32 quadIndex = (limbIndex == PLAYER_LIMB_L_HAND) ? 0 : 1;
+
+        if (KeatonForm_GetQuadGate(&keatonFlags, &keatonReach) && (player->meleeWeaponState != 0)) {
+            Vec3f fistTips[3];
+            Vec3f fistBases[3];
+
+            D_80126080.x = keatonReach;
+            func_80090A28(player, fistTips);
+            Matrix_MultVec3f(&D_801260A4[0], &fistBases[0]);
+            Matrix_MultVec3f(&D_801260A4[1], &fistBases[1]);
+            Matrix_MultVec3f(&D_801260A4[2], &fistBases[2]);
+
+            player->meleeWeaponQuads[quadIndex].info.toucher.dmgFlags = keatonFlags;
+            player->meleeWeaponQuads[quadIndex].info.toucherFlags = TOUCH_ON | TOUCH_NEAREST;
+            player->meleeWeaponQuads[quadIndex].base.atFlags |= AT_ON;
+            func_80090480(play, &player->meleeWeaponQuads[quadIndex], &player->meleeWeaponInfo[quadIndex + 1],
+                          &fistTips[quadIndex + 1], &fistBases[quadIndex + 1]);
+        } else {
+            player->meleeWeaponQuads[quadIndex].base.atFlags &= ~AT_ON;
         }
     }
 
@@ -16230,6 +16379,23 @@ u8 MmForm_GetShieldMode(void) {
                : MMFORM_SHIELD_BLOCK;
 }
 
+// MM's Zora launches flatter and further than Link. Applied in func_8083BA90 so every entry into
+// the jump slash gets it, whichever vanilla base that route starts from.
+#define MMFORM_ZORA_JS_XZ_MUL 1.1f
+#define MMFORM_ZORA_JS_Y_MUL 0.9f
+
+void MmForm_AdjustJumpSlash(Player* player, s32 mwa) {
+    if ((player == NULL) || !MmForm_IsTransformed() || gFormState.currentForm != MM_PLAYER_FORM_ZORA) {
+        return;
+    }
+    if ((mwa != PLAYER_MWA_JUMPSLASH_START) && (mwa != PLAYER_MWA_FLIPSLASH_START)) {
+        return;
+    }
+
+    player->linearVelocity *= MMFORM_ZORA_JS_XZ_MUL;
+    player->actor.velocity.y *= MMFORM_ZORA_JS_Y_MUL;
+}
+
 u8 MmForm_GetWaterMode(void) {
     // Items grant this with the player still un-transformed, so it outranks the form checks.
     if (gFormState.zoraSwimEnabled) {
@@ -16434,11 +16600,11 @@ u8 MmForm_GetOcarinaPlaybackInstrument(void) {
 #define MMFORM_FANFARE_INSTRUMENT_DEFAULT 0x35 // MM's value for Human / Fierce Deity
 
 u8 MmForm_GetSongFanfareInstrument(void) {
-    s32 index = MmGakki_GetFontInstrumentIndex(gFormState.currentForm);
-    if (index < 0) {
+    s32 instrument = MmGakki_GetSongInstrument(gFormState.currentForm);
+    if (instrument <= 0) {
         return MMFORM_FANFARE_INSTRUMENT_DEFAULT;
     }
-    return (u8)index;
+    return (u8)instrument;
 }
 
 // Fleet Ship Combo: the form we should ADVERTISE to the peer. While a peer-requested form change is
@@ -17534,6 +17700,10 @@ void MmForm_Update(PlayState* play, Player* player) {
     if (!gFormState.initialized)
         return;
 
+    // Outlives the ocarina: the jingle keeps going after the textbox closes, exactly as the
+    // fanfare it replaces would, so it cannot hang off the gakki update.
+    FormJingle_Update();
+
     // === Fleet Ship Combo: forced form after a cross-game arrival ===
     // Steers the soft-reload pending vars (right below) so the requested form applies through the
     // same seamless path a scene transition uses. Human cancels any pending re-transform.
@@ -17581,7 +17751,7 @@ void MmForm_Update(PlayState* play, Player* player) {
         }
     }
 
-    // === Pikachu Mode (Broken Modes selector) ===
+    // === Pikachu Mode (Crossover Items selector) ===
     // Persistent CVar like Mario's gSm64Mario: while gPikachuMode is on, the
     // Pikachu form is held active through the INSTANT 5-frame flash path (the
     // same one Garo/Gerudo use — no mm.o2r transformation-cutscene anims), and
@@ -17652,6 +17822,7 @@ void MmForm_Update(PlayState* play, Player* player) {
                 // moving him to a form is what stopped it running, since it used to be
                 // reached only from the INACTIVE case.
                 MmForm_UpdateSkinOcarinaVoice(player, play);
+                KafeiForm_Tick(player, play);
                 break;
             }
             // Run action state machine (idle/walk/run + future punch/roll/damage)
@@ -17739,7 +17910,9 @@ void MmForm_Draw(PlayState* play, Player* player) {
     // (burrow → charge → launch). Drawn here BEFORE the form skeleton so
     // Link squishing into the ground covers the flower base on his way down,
     // and re-emerges above it on the way up.
-    if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.goronAction == MMFORM_ACT_DEKU_FLOWER) {
+    // A real scene flower draws itself.
+    if (gFormState.currentForm == MM_PLAYER_FORM_DEKU && gFormState.goronAction == MMFORM_ACT_DEKU_FLOWER &&
+        DekuFlower_Underfoot(play, &player->actor) == NULL) {
         static u32 sLastLogFrame = 0;
         if (play->gameplayFrames - sLastLogFrame >= 30) { // once per ~half-second to avoid spam
             SPDLOG_INFO("[MmForm] DekuFlower draw site reached: cached={}, count={}, phase={}",
@@ -18170,10 +18343,8 @@ void MmForm_Draw(PlayState* play, Player* player) {
                 // (Goron/Zora/Deku). One that plays on Link's animations declares none, and
                 // blocking it there froze the form on stale joints instead of posing.
                 !isCutterAnim &&
-                !(gFormState.gakkiActive &&
-                  (gFormState.gakkiStartAnim != NULL || gFormState.gakkiPlayAnim != NULL)) &&
-                player->skelAnime.jointTable != NULL &&
-                gFormState.formSkelAnime.jointTable != NULL;
+                !(gFormState.gakkiActive && (gFormState.gakkiStartAnim != NULL || gFormState.gakkiPlayAnim != NULL)) &&
+                player->skelAnime.jointTable != NULL && gFormState.formSkelAnime.jointTable != NULL;
 
             // DEBUG: track joint-copy decisions for DEKU_FLY so we can tell if OOT
             // joints are stomping the flutter pose.
@@ -18702,5 +18873,6 @@ u8 GerudoForm_GetCurrentDamage(void) {
 #include "mods/transformation_masks/gerudo_mhr_combat.inc.c"
 #include "mods/transformation_masks/rito_flight.inc.c"
 #include "mods/transformation_masks/rito_bow.inc.c"
+#include "mods/transformation_masks/form_song_jingle.inc.c"
 
 } // extern "C"

@@ -211,7 +211,7 @@ typedef struct {
     s16 yaw;
     s16 pitch;
     s16 timer;
-    u8 element;  // GARO_ELEM_*
+    u8 element; // GARO_ELEM_*
     u8 damage;
     u32 dmgFlag; // OR'd with DMG_SLASH_MASTER at AC time, for restrictive enemies
     u8 bursts;   // the level-3 ball: breaks into seekers instead of vanishing
@@ -910,11 +910,10 @@ static void GaroAttack_SpawnOne(GaroOrb src, Player* player) {
 // across the room first — and the burst reads better close enough to see.
 #define GARO_ROD_BURST_LIFETIME (GARO_ROD_ORB_LIFETIME / 2)
 
-static void GaroAttack_SpawnRodOrb(Player* player, u8 element, u8 damage, u32 dmgFlag, s16 yaw, s16 pitch,
-                                   u8 bursts) {
+static void GaroAttack_SpawnRodOrb(Player* player, u8 element, u8 damage, u32 dmgFlag, s16 yaw, s16 pitch, u8 bursts) {
     GaroOrb tmp = {};
     tmp.pos = GaroAttack_HandOrigin(player);
-    tmp.yaw = yaw;        // v10.6 first-person aim yaw (focus.rot.y)
+    tmp.yaw = yaw;     // v10.6 first-person aim yaw (focus.rot.y)
     tmp.pitch = pitch; // v10.6 first-person aim pitch (focus.rot.x)
     tmp.element = element;
     tmp.damage = damage;
@@ -923,12 +922,10 @@ static void GaroAttack_SpawnRodOrb(Player* player, u8 element, u8 damage, u32 dm
     tmp.bursts = bursts;
     // Leave at the size it was charged to. Floors guard against a release on
     // the very first frames, before the eased scales have grown into anything.
-    tmp.ballCircle = (sGaroAttack.rodBallCircle > GARO_ROD_BALL_CIRCLE_MAX * 0.35f)
-                         ? sGaroAttack.rodBallCircle
-                         : GARO_ROD_BALL_CIRCLE_MAX * 0.35f;
-    tmp.ballScale = (sGaroAttack.rodBallScale > GARO_ROD_BALL_SCALE_MAX * 0.35f)
-                        ? sGaroAttack.rodBallScale
-                        : GARO_ROD_BALL_SCALE_MAX * 0.35f;
+    tmp.ballCircle = (sGaroAttack.rodBallCircle > GARO_ROD_BALL_CIRCLE_MAX * 0.35f) ? sGaroAttack.rodBallCircle
+                                                                                    : GARO_ROD_BALL_CIRCLE_MAX * 0.35f;
+    tmp.ballScale = (sGaroAttack.rodBallScale > GARO_ROD_BALL_SCALE_MAX * 0.35f) ? sGaroAttack.rodBallScale
+                                                                                 : GARO_ROD_BALL_SCALE_MAX * 0.35f;
     GaroAttack_SpawnOne(tmp, player);
 }
 
@@ -1116,8 +1113,8 @@ static void GaroAttack_BurstRodOrb(PlayState* play, GaroOrb* src) {
         EffectSsFhgFlash_SpawnLightBall(play, &pos, &vel, &zero, (s16)(Rand_ZeroOne() * 60.0f) + 110,
                                         sBurstBallColor[e]);
     }
-    Audio_PlaySoundGeneral(NA_SE_IT_MAGIC_ARROW_SHOT, &pos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySoundGeneral(NA_SE_IT_MAGIC_ARROW_SHOT, &pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+                           &gSfxDefaultReverb);
 
     Actor* taken[GARO_ORB_SEEKERS];
     s32 nTaken = 0;
@@ -1556,12 +1553,12 @@ static const u8 sRodOrbEnv[GARO_ROD_ELEMENT_COUNT][3] = {
 // same trick the banish shadow ball uses. Not from SW97: the arrows have no
 // core layer, so these are the saturated, dark reading of each element's env.
 static const u8 sRodOrbCore[GARO_ROD_ELEMENT_COUNT][3] = {
-    { 150, 25, 0 },   // fire  — deep ember
-    { 0, 70, 150 },   // ice   — deep glacier
+    { 150, 25, 0 },    // fire  — deep ember
+    { 0, 70, 150 },    // ice   — deep glacier
     { 200, 200, 200 }, // light — near-white, the only element with a bright core
-    { 10, 0, 20 },    // dark  — void
-    { 165, 150, 0 },  // soul  — deep amber
-    { 0, 120, 40 },   // wind  — deep green
+    { 10, 0, 20 },     // dark  — void
+    { 165, 150, 0 },   // soul  — deep amber
+    { 0, 120, 40 },    // wind  — deep green
 };
 
 // Draw one billboarded, element-tinted light orb at `pos` with `scale`.
@@ -1659,16 +1656,16 @@ static void GaroForm_DrawShadowBall(PlayState* play, Vec3f pos, f32 scale) {
 // DLs index those segments for their scroll matrices, and drawing them out of
 // order or without the segments leaves the tiles pointing at whatever was there
 // before.
-#define GARO_BM_MAT_DL    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightBallMaterialDL"
-#define GARO_BM_BALL_DL   "__OTR__overlays/ovl_Boss_Ganon/gGanondorfSquareDL"
+#define GARO_BM_MAT_DL "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightBallMaterialDL"
+#define GARO_BM_BALL_DL "__OTR__overlays/ovl_Boss_Ganon/gGanondorfSquareDL"
 #define GARO_BM_FLECKS_DL "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightFlecksDL"
 #define GARO_BM_CIRCLE_DL "__OTR__overlays/ovl_Boss_Ganon/gGanondorfBigMagicBGCircleDL"
-#define GARO_BM_DOT_DL    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfDotDL"
-#define GARO_BM_RAY_DL    "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightRayTriDL"
-#define GARO_BM_RAYS_MAX  6
+#define GARO_BM_DOT_DL "__OTR__overlays/ovl_Boss_Ganon/gGanondorfDotDL"
+#define GARO_BM_RAY_DL "__OTR__overlays/ovl_Boss_Ganon/gGanondorfLightRayTriDL"
+#define GARO_BM_RAYS_MAX 6
 
-static void GaroForm_DrawRodBall(PlayState* play, Vec3f pos, f32 circleScale, f32 ballScale,
-                                 s32 rays, f32 spinRad, u8 element) {
+static void GaroForm_DrawRodBall(PlayState* play, Vec3f pos, f32 circleScale, f32 ballScale, s32 rays, f32 spinRad,
+                                 u8 element) {
     if (circleScale <= 0.001f) {
         return;
     }
@@ -1689,8 +1686,8 @@ static void GaroForm_DrawRodBall(PlayState* play, Vec3f pos, f32 circleScale, f3
     // address and C++ will not convert the Gfx* implicitly the way the C
     // sources this is lifted from do.
     gSPSegment(POLY_XLU_DISP++, 0x08,
-               (uintptr_t)Gfx_TwoTexScrollEx(gfxCtx, 0, frame * -2, 0, 0x40, 0x40, 1, 0, frame * 0xA, 0x40, 0x40, -2,
-                                             0, 0, 0xA));
+               (uintptr_t)Gfx_TwoTexScrollEx(gfxCtx, 0, frame * -2, 0, 0x40, 0x40, 1, 0, frame * 0xA, 0x40, 0x40, -2, 0,
+                                             0, 0xA));
     Matrix_Translate(pos.x, pos.y, pos.z, MTXMODE_NEW);
     Matrix_ReplaceRotation(&play->billboardMtxF);
     Matrix_Scale(circleScale, circleScale, circleScale, MTXMODE_APPLY);
@@ -1706,8 +1703,8 @@ static void GaroForm_DrawRodBall(PlayState* play, Vec3f pos, f32 circleScale, f3
     // Swirling dot.
     gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, env[0], env[1], env[2], 255);
     gSPSegment(POLY_XLU_DISP++, 0x0A,
-               (uintptr_t)Gfx_TwoTexScrollEx(gfxCtx, 0, 0, 0, 0x20, 0x20, 1, frame * 2, frame * -0x14, 0x40, 0x40, 0,
-                                             0, 2, -0x14));
+               (uintptr_t)Gfx_TwoTexScrollEx(gfxCtx, 0, 0, 0, 0x20, 0x20, 1, frame * 2, frame * -0x14, 0x40, 0x40, 0, 0,
+                                             2, -0x14));
     gSPDisplayList(POLY_XLU_DISP++, (Gfx*)GARO_BM_DOT_DL);
 
     // The light ball itself, spinning on its own axis.
@@ -1856,9 +1853,8 @@ extern "C" void GaroForm_DrawProjectiles(PlayState* play) {
         // GARO_ROD_AIM handler) and gets a gentle breath on top; the spin is
         // driven off the frame counter like the Trident's.
         f32 pulse = 1.0f + 0.06f * Math_SinS(play->gameplayFrames * 0x1000);
-        GaroForm_DrawRodBall(play, ballPos, sGaroAttack.rodBallCircle * pulse,
-                             sGaroAttack.rodBallScale * pulse, sGaroAttack.rodBallRays,
-                             (f32)play->gameplayFrames * 0.14f, sGaroAttack.rodElement);
+        GaroForm_DrawRodBall(play, ballPos, sGaroAttack.rodBallCircle * pulse, sGaroAttack.rodBallScale * pulse,
+                             sGaroAttack.rodBallRays, (f32)play->gameplayFrames * 0.14f, sGaroAttack.rodElement);
 
         // Aiming reticle. OOT draws no crosshair for the slingshot pipeline we
         // borrow — it expects you to aim off the on-screen arm and weapon, and
@@ -1969,8 +1965,7 @@ static s16 GaroForm_StickAngle(PlayState* play) {
 // Player_UpdateCommon copies into world.rot.y, so leaving it stale would turn
 // him again on the first frame after the move.
 static void GaroForm_SettleSpinFacing(Player* player) {
-    player->actor.shape.rot.y =
-        (player->linearVelocity > 0.5f) ? player->actor.world.rot.y : sGaroAttack.spinEntryYaw;
+    player->actor.shape.rot.y = (player->linearVelocity > 0.5f) ? player->actor.world.rot.y : sGaroAttack.spinEntryYaw;
     player->yaw = player->actor.shape.rot.y;
 }
 
@@ -2430,7 +2425,6 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             break;
         }
 
-
         // GARO_SPIN — B tap: free dual-sword spin, Garo's only melee. The
         // radial spin quad (EnableSpinQuad, DMG_FIXED_DAMAGE) sweeps around
         // Garo at sword height for the whole move, and the player keeps full
@@ -2480,8 +2474,7 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             //     it can move him. Both are set so the direction also holds
             //     for anything reading world.rot.y this frame.
             sGaroAttack.stateTimer++;
-            player->actor.shape.rot.y =
-                (s16)(sGaroAttack.spinEntryYaw + sGaroAttack.stateTimer * GARO_SPIN_YAW_RATE);
+            player->actor.shape.rot.y = (s16)(sGaroAttack.spinEntryYaw + sGaroAttack.stateTimer * GARO_SPIN_YAW_RATE);
 
             f32 stickMag = GaroForm_StickMag(play);
             if (stickMag > 0.1f) {
@@ -2570,8 +2563,7 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
                 // Level 1 is deliberately small and ray-less: it is the "not
                 // ready yet" state, and releasing there fires nothing.
                 static const f32 sRodBallLevelScale[GARO_ROD_LEVEL_MAX] = { 0.35f, 0.7f, 1.0f };
-                static const s16 sRodBallLevelRays[GARO_ROD_LEVEL_MAX] = { 0, GARO_BM_RAYS_MAX / 2,
-                                                                           GARO_BM_RAYS_MAX };
+                static const s16 sRodBallLevelRays[GARO_ROD_LEVEL_MAX] = { 0, GARO_BM_RAYS_MAX / 2, GARO_BM_RAYS_MAX };
                 u8 level = GaroAttack_GetRodLevel(sGaroAttack.rodChargeTimer);
                 f32 f = sRodBallLevelScale[(level - 1) % GARO_ROD_LEVEL_MAX];
                 Math_ApproachF(&sGaroAttack.rodBallCircle, GARO_ROD_BALL_CIRCLE_MAX * f, 0.3f, 0.01f);
@@ -2664,9 +2656,8 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
             if (GaroAttack_TryReflectIncoming(play, player)) {
                 LinkAnimationHeader* guard = GaroForm_LoadAnim(GARO_GUARD_PATH);
                 if (guard != NULL) {
-                    GaroAttack_StartFormAnim(play, guard,
-                                             Animation_GetLastFrame(guard) * GARO_GUARD_HOLD_FRACTION, 0.0f,
-                                             -GARO_GUARD_RETURN_SPEED);
+                    GaroAttack_StartFormAnim(play, guard, Animation_GetLastFrame(guard) * GARO_GUARD_HOLD_FRACTION,
+                                             0.0f, -GARO_GUARD_RETURN_SPEED);
                     sGaroAttack.state = GARO_GUARD_RETURN;
                     sGaroAttack.stateTimer = 0;
                 } else {
@@ -2711,9 +2702,8 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
                     }
                     LinkAnimationHeader* guard = GaroForm_LoadAnim(GARO_GUARD_PATH);
                     if (guard != NULL) {
-                        GaroAttack_StartFormAnim(play, guard,
-                                                 Animation_GetLastFrame(guard) * GARO_GUARD_HOLD_FRACTION, 0.0f,
-                                                 -GARO_GUARD_RETURN_SPEED);
+                        GaroAttack_StartFormAnim(play, guard, Animation_GetLastFrame(guard) * GARO_GUARD_HOLD_FRACTION,
+                                                 0.0f, -GARO_GUARD_RETURN_SPEED);
                         sGaroAttack.state = GARO_GUARD_RETURN;
                         sGaroAttack.stateTimer = 0;
                     } else {
@@ -2777,9 +2767,8 @@ extern "C" void GaroForm_Update(PlayState* play, Player* player) {
                 LinkAnimationHeader* guard = GaroForm_LoadAnim(GARO_GUARD_PATH);
                 if (guard != NULL) {
                     // Back down from the hold frame, not from the anim's end.
-                    GaroAttack_StartFormAnim(play, guard,
-                                             Animation_GetLastFrame(guard) * GARO_GUARD_HOLD_FRACTION, 0.0f,
-                                             -GARO_GUARD_RETURN_SPEED);
+                    GaroAttack_StartFormAnim(play, guard, Animation_GetLastFrame(guard) * GARO_GUARD_HOLD_FRACTION,
+                                             0.0f, -GARO_GUARD_RETURN_SPEED);
                     sGaroAttack.state = GARO_GUARD_RETURN;
                     sGaroAttack.stateTimer = 0;
                 } else {

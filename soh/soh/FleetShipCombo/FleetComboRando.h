@@ -57,6 +57,10 @@ bool FleetCombo_PrePlacementHook();
 // generation is running, so the native song stages behave exactly as they always did.
 int FleetCombo_SharedSongsMode();
 
+// The progressive chain a concrete tier belongs to (RG_LONGSHOT -> RG_PROGRESSIVE_HOOKSHOT), or 0.
+// Pure table lookup: valid whether or not a combo generation is running.
+int FleetCombo_ChainAliasFor(int randomizerGet);
+
 // True when the shared Dungeon Rewards option is on "Reward Spots" during a combo generation: the
 // combo deals OoT's 6 medallions + 3 stones and MM's 4 remains across the 13 boss spots of BOTH
 // games, so OoT's own reward stages must stand down and leave those locations empty.

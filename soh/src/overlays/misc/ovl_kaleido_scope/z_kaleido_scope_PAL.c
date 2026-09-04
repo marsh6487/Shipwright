@@ -2241,44 +2241,25 @@ void KaleidoScope_UpdateNamePanel(PlayState* play) {
                 memcpy(pauseCtx->nameSegment, textureName, strlen(textureName) + 1);
             } else {
 
-                const char* textureName;
-
                 // Save original item ID before any modulo/offset operations
                 u16 originalItemId = sp2A;
-                extern unsigned char TradeAdult_IsMmTradeUseItem(int item); // Skijer's NEI
 
-                // Custom items: use OTR name textures like vanilla.
-                // ITEM_RITO_MASK sits outside the page-2 block (it took a free id in
-                // the 0xD1-0xD5 gap because it lives in the Farore's Wind cell, not on
-                // page 2), so it is named explicitly. Skijer's NEI
-                if ((originalItemId >= ITEM_ROCS_FEATHER_SKIJER && originalItemId <= ITEM_POKEBALL) ||
-                    originalItemId == ITEM_RITO_MASK) {
-                    textureName = (const char*)ExtInv_GetCustomItemNameTex(originalItemId, gSaveContext.language);
-                    if (textureName == NULL) {
-                        textureName = iconNameTextures[0];
-                    }
-                } else if (originalItemId >= 0x9C && originalItemId <= 0x9C) {
-                    // 0x9C placeholder
-                    textureName = iconNameTextures[0];
-                } else if (originalItemId >= ITEM_MM_MASK_POSTMAN && originalItemId <= ITEM_MM_MASK_FIERCE_DEITY) {
-                    textureName = (const char*)ExtInv_GetCustomItemNameTex(originalItemId, gSaveContext.language);
-                    if (textureName == NULL) {
-                        textureName = iconNameTextures[0];
-                    }
-                    // isCustomItem stays false: OTR path string handled like vanilla via strlen copy
-                } else if (originalItemId >= 0xE0 && originalItemId <= 0xEB) {
-                    // Extended equipment items: use name texture from ext_equip_names.c
+                // ExtInv_GetCustomItemNameTex is the single dispatch point for every custom name:
+                // page-2 items, EXT (u16) ids, MM masks, MM bottle contents and MM trade items. The
+                // hand-written id RANGES it replaces kept falling behind the item table — the Net and
+                // the whole EXT block sat outside them and drew a vanilla name off `sp2A % 123`.
+                const char* textureName =
+                    (const char*)ExtInv_GetCustomItemNameTex(originalItemId, gSaveContext.language);
+
+                if ((textureName == NULL) && (originalItemId >= ITEM_EXT_SWORD_1) &&
+                    (originalItemId <= ITEM_EXT_BOOTS_3)) {
                     textureName = (const char*)ExtEquip_GetNameTex(originalItemId, gSaveContext.language);
-                    if (textureName == NULL) {
-                        textureName = iconNameTextures[0];
-                    }
-                } else if (TradeAdult_IsMmTradeUseItem(originalItemId)) {
-                    // MM adult trade-quest items (Skijer's NEI) — name from mm.o2r item_name_static.
-                    textureName = (const char*)ExtInv_GetCustomItemNameTex(originalItemId, gSaveContext.language);
-                    if (textureName == NULL) {
-                        textureName = iconNameTextures[0];
-                    }
-                } else {
+                }
+                // No vanilla item reaches this id, so the modulo below would wrap into an unrelated row.
+                if ((textureName == NULL) && (originalItemId >= ITEM_MM_REMAINS_GYORG)) {
+                    textureName = iconNameTextures[0];
+                }
+                if (textureName == NULL) {
                     // Vanilla items: modulo 123 and add language offset
                     sp2A %= 123;
 
@@ -3670,7 +3651,7 @@ void KaleidoScope_Update(PlayState* play) {
             pauseCtx->stickRelX = input->rel.stick_x;
             pauseCtx->stickRelY = input->rel.stick_y;
             KaleidoScope_UpdateCursorSize(&play->pauseCtx);
-            // Broken Modes / transform selection now lives on the Equipment page's
+            // Crossover Items / transform selection now lives on the Equipment page's
             // 3rd page (z_kaleido_equipment.c), so the Map page just does the normal
             // page rotation again.
             KaleidoScope_HandlePageToggles(pauseCtx, input);

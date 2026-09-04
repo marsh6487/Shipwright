@@ -1,5 +1,5 @@
 /**
- * broken_items.h - "Broken Modes" transform selector (More Than Enough Items).
+ * broken_items.h - "Crossover Items" transform selector (More Than Enough Items).
  *
  * The form selector (LINK / MARIO / PIKACHU) is the 3rd page of the Equipment
  * subscreen — the form icons sit in the grid where the swords/shields go and the
@@ -40,6 +40,13 @@ void BrokenItems_EquipForm(PlayState* play, s32 i); // equip form i (sets the CV
 // equip path already refuses locked forms; the kaleido page can use this to grey
 // the icon out. Skijer's NEI
 s32 BrokenItems_FormUnlocked(s32 i);
+
+// --- Quick transform (the hotkey polled by the host input layer) ---
+// The form the equipment page equipped, BROKEN_MODE_LINK when none is equipped or the
+// equipped one is no longer earned.
+s32 BrokenItems_GetEquippedForm(void);
+// Worn form -> Link, Link -> the equipped form.
+void BrokenItems_ToggleEquippedForm(void);
 
 #ifdef __cplusplus
 }

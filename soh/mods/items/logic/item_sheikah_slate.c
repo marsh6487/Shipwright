@@ -1,7 +1,7 @@
 /**
  * item_sheikah_slate.c — Sheikah Slate (Skijer's NEI)
  *
- * Four runes share ONE page-2 cell (SLOT_SHEIKAH_SLATE) behind ONE ext item id
+ * Five runes share ONE page-2 cell (SLOT_SHEIKAH_SLATE) behind ONE ext item id
  * (EXT_ITEM_SHEIKAH_SLATE). Which rune is live is NeiSaveData.slateMode, cycled by the kaleido
  * wheel; ownership is the NeiSaveData.slateRunesOwned bitmask, one sibling pickup per rune
  * (RG_SLATE_RUNE_* — the wand idiom: gettable in any order, no levels). This file is where the
@@ -15,6 +15,9 @@
  *   HOLD L                           : the world pauses and the rune row opens — stick left/right
  *                                      picks, releasing L confirms, B cancels
  *
+ * Cryonis is the one rune whose cast does not resolve on the press: it opens an aiming mode that
+ * owns the pad until A places the pillar or B backs out (see cryonis_rune.c).
+ *
  * The slate has no PlayerItemAction: it lives in the u16 EXT item space, so it rides a C button
  * through the ext-button marker (ITEM_EXT_BUTTON + the parallel u16 store) rather than through
  * equips.buttonItems, and the press is read here in a per-frame tick — the Spiritual Stones idiom —
@@ -22,10 +25,9 @@
  *
  * STATUS
  * ------
- * The four rune behaviors are deliberately unimplemented — each is its own task with its own spec.
- * What IS live: the slate owns its cell, lights runes one sibling pickup at a time, shows the
- * active rune's badge on the cell/HUD icon, cycles runes in the kaleido AND in the hold-L wheel,
- * and each rune pickup has its own textbox + flame-tinted get-item model.
+ * All four runes have real behavior. The shared plumbing — cell ownership, one sibling pickup per
+ * rune, the badge on the cell/HUD icon, cycling in the kaleido AND in the hold-L wheel — is live
+ * for all of them.
  */
 
 #include "global.h"
@@ -34,10 +36,13 @@
 // box_menu.c is unity-included just before this file in custom_items.c, so its BoxMenu_*
 // declarations are already in scope — it has no header (see the note at its top).
 
-// Stasis: the first rune with real behaviour. Included here (not globbed) so it shares this
-// translation unit — and so it needs no header, which would drag 2ship into a CMake regeneration.
+// The runes with real behaviour. Included here (not globbed) so they share this translation unit —
+// and so they need no header, which would drag 2ship into a CMake regeneration.
+#include "../../actors/remote_bomb.c"
 #include "../../actors/stasis_rune.c"
-#include "../../actors/master_cycle.c" // the fourth rune: the rideable bike
+#include "../../actors/master_cycle.c"
+#include "../../actors/cryonis_rune.c"
+#include "../../actors/sensor_rune.c"
 
 extern s32 func_8083485C(Player* this, PlayState* play); // generic "held item" upper action
 // Ext-button store: which u16 item a button really holds when it shows ITEM_EXT_BUTTON.
@@ -45,26 +50,33 @@ extern u16 ExtButton_GetItem(s32 btn);
 
 /**
  * Per-rune cast. `rune` is a SLATE_RUNE_*; returns 1 if the rune actually fired (so the caller can
- * play cast/error feedback). All four are stubs awaiting their specs.
+ * play cast/error feedback).
  */
 s32 Slate_CastRune(Player* player, PlayState* play, u8 rune) {
     switch (rune) {
         case SLATE_RUNE_BOMB:
-            // TODO(rune): Remote Bomb — place a round rune bomb, second press detonates.
-            break;
+            return RemoteBomb_Cast(play, player);
         case SLATE_RUNE_STASIS:
             return Stasis_Cast(play, player);
         case SLATE_RUNE_CRYONIS:
-            // TODO(rune): Cryonis — raise a standable ice pillar from water surfaces.
-            break;
+            return Cryonis_Cast(play, player);
         case SLATE_RUNE_MASTER_CYCLE:
             return MasterCycle_Cast(play, player);
+        case SLATE_RUNE_SENSOR:
+            return Sensor_Cast(play, player);
         default:
             break;
     }
-    (void)player;
-    (void)play;
     return 0;
+}
+
+/**
+ * The one climbable-surface question the engine asks (func_80041DB8 in z_bgcheck.c). Two runes make
+ * a body climbable and neither may touch the collision headers they borrow, which are shared and
+ * cached — both answer by bgId instead, and this is where the two answers meet.
+ */
+u8 Slate_IsClimbableBgId(s32 bgId) {
+    return Stasis_IsClimbableBgId(bgId) || Cryonis_IsClimbableBgId(bgId);
 }
 
 /**
@@ -77,6 +89,7 @@ s32 Player_UpperAction_SheikahSlate(Player* player, PlayState* play) {
         case SLATE_RUNE_STASIS:
         case SLATE_RUNE_CRYONIS:
         case SLATE_RUNE_MASTER_CYCLE:
+        case SLATE_RUNE_SENSOR:
             // Per-rune held/aim behavior goes here once the casts above exist.
             break;
         default:
@@ -109,7 +122,6 @@ static s16 sSlateHoldTimer = 0;
 static u8 sSlateDrawn = 0;      // the tablet is out, in Link's hand
 static s16 sSlateCastTimer = 0; // frames left of the cast pose
 static s8 sSlatePrevInvinc = 0;
-static u8 sSlatePrevRightHand = 0; // hand type to put back when the tablet is stowed
 
 // How long the arm stays extended on a cast. The hookshot's own shot pose is short and snappy;
 // this only has to cover the moment the rune fires.
@@ -127,9 +139,6 @@ static void Slate_Stow(PlayState* play, Player* player) {
     }
     sSlateDrawn = 0;
     sSlateCastTimer = 0;
-    // The engine only recomputes the hand type when the item action changes, so the forced fist
-    // would otherwise stay on long after the tablet is gone.
-    player->rightHandType = sSlatePrevRightHand;
     ItemEquip_PlayUnequipSFX(play, player);
 }
 
@@ -141,7 +150,8 @@ static void Slate_CastPose(PlayState* play, Player* player) {
 }
 
 // Every C button currently holding the slate. C items live in the flat button array at 1..3.
-static u16 Slate_EquippedButtonMask(void) {
+// Not static: the Remote Bomb's throw-suppression hook needs it from its own translation unit.
+u16 Slate_EquippedButtonMask(void) {
     u16 mask = 0;
 
     if (ExtButton_GetItem(1) == EXT_ITEM_SHEIKAH_SLATE) {
@@ -156,20 +166,33 @@ static u16 Slate_EquippedButtonMask(void) {
     return mask;
 }
 
-// The box-menu confirm: the highlighted rune becomes the active one.
 static void Slate_OnWheelConfirm(s32 index) {
-    Slate_SetRune((u8)index); // no-op if that rune is not owned
+    Slate_SetRune(Slate_RuneAt((u8)index));
 }
 
-// Fills the row with ALL runes — locked ones included, drawn grayed and unselectable, so the wheel
-// doubles as a reminder of what is still missing (the wand wheel's medallion previews do the same).
+// Owned runes only, in the order the kaleido wheel cycles them, so every entry is selectable.
 static s32 Slate_BuildWheel(BoxMenuEntry* out) {
-    for (s32 r = 0; r < SLATE_RUNE_COUNT; r++) {
-        out[r].iconPath = (const char*)Slate_RuneMiniIcon((u8)r);
-        out[r].iconSize = 32;
-        out[r].enabled = Slate_RuneOwned((u8)r);
+    s32 count = Slate_RuneCount();
+
+    for (s32 i = 0; i < count; i++) {
+        out[i].iconPath = (const char*)Slate_RuneMiniIcon(Slate_RuneAt((u8)i));
+        out[i].iconSize = 32;
+        out[i].enabled = 1;
     }
-    return SLATE_RUNE_COUNT;
+    return count;
+}
+
+// A SLATE_RUNE_* value stops matching its row position as soon as one rune is missing.
+static s32 Slate_ActiveWheelIndex(void) {
+    u8 active = Slate_GetRune();
+    s32 count = Slate_RuneCount();
+
+    for (s32 i = 0; i < count; i++) {
+        if (Slate_RuneAt((u8)i) == active) {
+            return i;
+        }
+    }
+    return 0;
 }
 
 /**
@@ -187,6 +210,10 @@ void Slate_TickInput(PlayState* play, Player* player) {
     // The bike keeps its own scene-change and transition guards; runs every frame for the same
     // reason Stasis does — it owns another actor.
     MasterCycle_Tick(play, player);
+    // Same reason again: the remote bomb's fuse has to be held down every frame it exists.
+    RemoteBomb_Tick(play);
+    // Cryonis owns a real actor too — this is where it learns the scene took it away.
+    Cryonis_Tick(play);
 
     // Paint what a cast would grab, but only while the tablet is actually out on the Stasis rune —
     // otherwise every actor Link walks past would shimmer. Called every frame either way so the
@@ -198,22 +225,22 @@ void Slate_TickInput(PlayState* play, Player* player) {
     }
     if (Nei_Save()->slateRunesOwned == 0) {
         sSlateHoldTimer = 0;
-        if (sSlateDrawn) {
-            sSlateDrawn = 0;
-            player->rightHandType = sSlatePrevRightHand;
-        }
+        sSlateDrawn = 0;
         return; // no runes -> no slate powers at all
     }
 
     btnMask = Slate_EquippedButtonMask();
     held = play->state.input[0].cur.button;
 
-    // Closed fist while the tablet is out, the way the Hookshot is gripped. The engine only
-    // recomputes the hand type when the item action changes, and the slate has no item action, so
-    // it is forced here every frame and put back by Slate_Stow. Applied before any early return so
-    // the grip survives the frames the rune wheel owns.
-    if (sSlateDrawn) {
-        player->rightHandType = PLAYER_MODELTYPE_RH_CLOSED;
+    // Cryonis's aiming mode sits ABOVE the wheel and the blocking checks below, both of which can
+    // stow the tablet: with it further down, the A that commits a pillar had already been through
+    // the unequip and there was nothing left in Link's hand to cast with.
+    if (Cryonis_ModeUpdate(play, player)) {
+        return;
+    }
+    // Same reason: the Sensor's prompt and hint own the frame until the player closes them.
+    if (Sensor_Tick(play, player)) {
+        return;
     }
 
     // ---- HOLD L: open the rune row ---------------------------------------
@@ -229,7 +256,7 @@ void Slate_TickInput(PlayState* play, Player* player) {
         if (sSlateHoldTimer == SLATE_WHEEL_HOLD_FRAMES) {
             s32 count = Slate_BuildWheel(entries);
 
-            BoxMenu_Open(play, entries, count, Slate_GetRune(), BTN_L, Slate_OnWheelConfirm);
+            BoxMenu_Open(play, entries, count, Slate_ActiveWheelIndex(), BTN_L, Slate_OnWheelConfirm);
         }
         return; // L is ours while it is down
     }
@@ -263,15 +290,18 @@ void Slate_TickInput(PlayState* play, Player* player) {
         if (!sSlateDrawn) {
             // Equip only — the press that draws the slate never also casts, same as the cane.
             sSlateDrawn = 1;
-            sSlatePrevRightHand = player->rightHandType;
             ItemEquip_PlayEquipSFX(play, player);
             return;
         }
-        Slate_CastPose(play, player);
         if (!Slate_CastRune(player, play, Slate_GetRune())) {
-            // Every rune is still a stub, so this is the normal path today.
             Audio_PlaySoundGeneral(NA_SE_SY_ERROR, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            return;
+        }
+        // The carry animation owns the upper body when the rune put something in Link's hands, and
+        // the cast pose would tear the held actor off them.
+        if (!(player->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR)) {
+            Slate_CastPose(play, player);
         }
     }
 }

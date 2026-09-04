@@ -92,11 +92,12 @@ u8 MasterCycle_IsActor(Actor* actor);
 #define MC_BODY_TOP 63.0f
 
 // Where Link sits. Player_Action_8084CC98 places him at riderPos - 27 in Y, so the seat value
-// here is the seat's height plus 27. Live-tunable from the Item Editor; these are the defaults.
+// here is the seat's height plus 27. Dialled against ADULT Link and baked — child rides at the same
+// world-space seat, which is the one thing to re-check if the bike is ever handed to him.
 #define MC_SEAT_X 0.0f
 #define MC_SEAT_Y 50.0f
 #define MC_SEAT_Z -6.0f
-#define MC_MODEL_SCALE 1.06f // the size dialled in through the Item Editor, now the bike's own
+#define MC_MODEL_SCALE 1.06f // dialled against adult Link, now the bike's own size
 // The model is DRAWN this much lower than its origin. Only the drawing: the origin stays where the
 // suspension and the collision want it, so nothing about how the bike behaves changes — it just
 // sits down on the road the way it should.
@@ -450,10 +451,6 @@ static void MasterCycle_LoadDLs(void) {
     }
 }
 
-static f32 MasterCycle_Cvar(const char* name, f32 def) {
-    return CVarGetFloat(name, def);
-}
-
 u8 MasterCycle_IsActor(Actor* actor) {
     return (actor != NULL) && (actor == sMc.actor);
 }
@@ -650,9 +647,7 @@ static void MasterCycle_BodyPoint(Actor* actor, f32 lx, f32 ly, f32 lz, Vec3f* o
 }
 
 static void MasterCycle_SeatPos(Actor* actor, Vec3f* out) {
-    MasterCycle_BodyPoint(actor, MasterCycle_Cvar("gItemEditor.Cycle.SeatX", MC_SEAT_X),
-                          MasterCycle_Cvar("gItemEditor.Cycle.SeatY", MC_SEAT_Y),
-                          MasterCycle_Cvar("gItemEditor.Cycle.SeatZ", MC_SEAT_Z), out);
+    MasterCycle_BodyPoint(actor, MC_SEAT_X, MC_SEAT_Y, MC_SEAT_Z, out);
 }
 
 /**
@@ -1929,7 +1924,7 @@ static void MasterCycle_DrawChargeFlames(PlayState* play, Actor* actor) {
 // ── Draw ─────────────────────────────────────────────────────────────────────
 
 static void MasterCycle_Draw(Actor* thisx, PlayState* play) {
-    f32 sc = thisx->scale.x * MasterCycle_Cvar("gItemEditor.Cycle.Scale", 1.0f) * MC_MODEL_SCALE;
+    f32 sc = thisx->scale.x * MC_MODEL_SCALE;
     f32 steer = BINANG_TO_RAD(sMc.steer);
 
     MasterCycle_LoadDLs();

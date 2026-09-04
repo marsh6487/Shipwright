@@ -278,13 +278,16 @@ static void Stasis_DrawChains(PlayState* play) {
     f32 reach;
     u8 alpha;
     s32 i;
+    // The burst runs at the same rate as the cue, so its span is per-kind and normalising by the
+    // object one would start an enemy burst already half faded.
+    f32 span = (f32)((sStasis.kind == STASIS_KIND_ENEMY) ? STASIS_CHAIN_FRAMES_ENEMY : STASIS_CHAIN_FRAMES);
 
     // Grows out over the first half of the burst, fades over the second.
-    grow = 1.0f - ((f32)sStasis.chainTimer / (f32)STASIS_CHAIN_FRAMES);
+    grow = 1.0f - ((f32)sStasis.chainTimer / span);
     if (grow > 1.0f) {
         grow = 1.0f;
     }
-    alpha = (u8)(255.0f * ((f32)sStasis.chainTimer / (f32)STASIS_CHAIN_FRAMES));
+    alpha = (u8)(255.0f * ((f32)sStasis.chainTimer / span));
     reach = 45.0f + (55.0f * grow);
 
     center = actor->world.pos;

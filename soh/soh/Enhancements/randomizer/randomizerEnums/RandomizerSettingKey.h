@@ -318,6 +318,10 @@ RANDO_ENUM_ITEM(RSK_ELEMENTAL_WAND_SHUFFLE)
 // 2026-08-06 symmetric cross-game categories: MM songs in a solo-OoT pool (the masks/items/equipment
 // categories already exist above as RSK_MM_MASKS_* / RSK_SKIJER_CUSTOM_ITEMS / RSK_EXT_EQUIPMENT).
 RANDO_ENUM_ITEM(RSK_MM_SONGS)
+// Crossover Items: the Pokeball and the Mario Mask are pure ownership flags (no inventory
+// cell), so each needs its own pool gate rather than riding RSK_SKIJER_CUSTOM_ITEMS.
+RANDO_ENUM_ITEM(RSK_CROSSOVER_POKEBALL)
+RANDO_ENUM_ITEM(RSK_CROSSOVER_MARIO_MASK)
 RANDO_ENUM_ITEM(RSK_MAX)
 RANDO_ENUM_END(RandomizerSettingKey)
 

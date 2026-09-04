@@ -10,7 +10,10 @@
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/ShipInit.hpp"
 
+#include <cstring>
+#include <string>
 #include <unordered_map>
+#include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
 namespace {
@@ -112,3 +115,21 @@ static void RegisterFcComboItems() {
 }
 
 static RegisterShipInitFunc initFcComboItems(RegisterFcComboItems, {});
+
+// ComboShip: the shared-item pairs for the launcher's cross-world fill, as
+// [{"oot": <soh itemTable English name>, "mm": <2ship spoiler name>, "chain": <n>}]. Only rows with
+// an item on BOTH sides are pairs; the names are exactly what each game's static-data dump emits.
+extern "C" __declspec(dllexport) const char* SOH_DumpSharedItemPairs(void) {
+    static std::string cached;
+    nlohmann::json pairs = nlohmann::json::array();
+    for (int fcId = 0; fcId < FCI_MAX; fcId++) {
+        const char* ootName = gFcComboItems[fcId].ootName;
+        const char* mmName = sFcPeerName[fcId];
+        if (ootName == nullptr || ootName[0] == '\0' || std::strcmp(mmName, "FCI_NO_ITEM") == 0) {
+            continue;
+        }
+        pairs.push_back({ { "oot", ootName }, { "mm", mmName }, { "chain", gFcComboItems[fcId].chainLen } });
+    }
+    cached = pairs.dump();
+    return cached.c_str();
+}

@@ -117,6 +117,36 @@ void ItemInput_RequestItemChange(Player* player, PlayState* play);
  */
 u8 ItemInput_CanInterrupt(Player* player);
 
+// Is a handheld NEI item (slate, rod, wand) out, so Link's right hand draws as a closed fist?
+u8 ItemEquip_HoldsClosedFist(void);
+
+// Is something reaching out empty-handed (Recall aim, Ultrahand carry), so the hookshot model that
+// rides along with that arm pose must not be drawn?
+u8 ItemEquip_HoldsEmptyHand(void);
+
+// A model posed off the right hand BONE. Baked per item: these were dialled with live sliders and
+// the sliders are gone, so the numbers in each object_*.c ARE the calibration.
+typedef struct {
+    f32 offsetX;
+    f32 offsetY;
+    f32 offsetZ;
+    f32 rotX;
+    f32 rotY;
+    f32 rotZ;
+    f32 scale;
+} ItemHandPose;
+
+void ItemEquip_CaptureHandMatrix(void); // z_player_lib.c, at PLAYER_LIMB_R_HAND
+void ItemEquip_ReleaseHandMatrix(void); // once per draw pass, AFTER every in-hand drawer
+
+/**
+ * Draw one handheld model in Link's right fist. `xluPath` may be NULL for a fully opaque model.
+ * Returns 0 when there is no hand this frame or the archive has no such model — never a crash,
+ * just nothing drawn.
+ */
+u8 ItemEquip_DrawHeldModel(Player* player, PlayState* play, const char* opaPath, const char* xluPath,
+                           const ItemHandPose* pose);
+
 /**
  * Update equip state and call callbacks.
  * @param state Equip state

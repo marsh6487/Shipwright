@@ -189,11 +189,6 @@ CustomItemState gCustomItemState = { .timer1 = 0,
                                      .whipExtendYaw = 0,
                                      .whipExtendPitch = 0,
                                      .whipFirstPersonActive = 0,
-                                     // Desire Sensor
-                                     .desireSensorActive = 0,
-                                     .desireSensorState = 0,
-                                     .desireSensorTimer = 0,
-                                     .desireSensorResult = 0,
                                      // Switch Hook
                                      .switchHookActive = 0,
                                      .switchHookState = 0,
@@ -277,8 +272,6 @@ static void CustomItems_CleanupUnequipped(Player* p, PlayState* play) {
         Handle_MogmaMitts(p, play);
     if (gCustomItemState.whipActive && !IsItemEquipped(ITEM_WHIP))
         Handle_Whip(p, play);
-    if (gCustomItemState.desireSensorActive && !IsItemEquipped(ITEM_DESIRE_SENSOR))
-        Handle_DesireSensor(p, play);
     if (gCustomItemState.switchHookActive && !IsItemEquipped(ITEM_SWITCH_HOOK))
         Handle_SwitchHook(p, play);
 }
@@ -439,6 +432,9 @@ void FleetWarp_NotifyArrived(void) {
 // overlays + explicit destination overrides + fresh Play_Init). This tick owns only the SENDING
 // side: Lost Woods door trigger, fleet-hole fall, and the manual fade-out ramp.
 static void FleetWarp_Tick(Player* p, PlayState* play) {
+#ifdef COMBO_BUILD
+    return; // ComboShip switches games at its scene seams; the manual fade/flip pipeline must stay off
+#endif
     if (FleetShipCombo_GetActiveGame() < 0) {
         return; // combo not running -> no-op (standalone OoT unaffected)
     }
@@ -761,12 +757,6 @@ void CustomItems_Update(Player* p, PlayState* play) {
         return;
     }
 
-    // Desire Sensor blocks all other custom items during sensing/result
-    if (gCustomItemState.desireSensorActive) {
-        Handle_DesireSensor(p, play);
-        return;
-    }
-
     // Beetle flying blocks all other custom items
     if (gCustomItemState.beetleActive && (gCustomItemState.beetleState == 2 || gCustomItemState.beetleState == 3)) {
         Handle_Beetle(p, play);
@@ -918,9 +908,6 @@ void CustomItems_Update(Player* p, PlayState* play) {
             case ITEM_WHIP:
                 Handle_Whip(p, play);
                 break;
-            case ITEM_DESIRE_SENSOR:
-                Handle_DesireSensor(p, play);
-                break;
             case ITEM_SWITCH_HOOK:
                 Handle_SwitchHook(p, play);
                 break;
@@ -980,11 +967,29 @@ void CustomItems_Update(Player* p, PlayState* play) {
     }
 }
 
+static u8 sCloneDraw;
+
+u8 CustomItems_IsCloneDraw(void) {
+    return sCloneDraw;
+}
+
+// A Four Sword clone mirrors only what Link HOLDS. World- and screen-space objects (the beetle, a
+// thrown ball, offer arrows) are single things and stay on him.
+void CustomItems_DrawForClone(Player* clone, PlayState* play) {
+    sCloneDraw = 1;
+    CustomItems_OverrideDraw(clone, play);
+    sCloneDraw = 0;
+}
+
 s32 CustomItems_OverrideDraw(Player* p, PlayState* play) {
+    u8 heldOnly = sCloneDraw;
+
     // Point the game's NATIVE offer arrow at the beetle's candidate (screen-space, correctly sized —
     // like MM's arrowHoverActor). The lock reticle is driven separately by player->focusActor, set
     // inline in Beetle_StateFlying. No custom world-space DL. Skijer's NEI
-    Beetle_DrawOffer(p, play);
+    if (!heldOnly) {
+        Beetle_DrawOffer(p, play);
+    }
     CustomItems_DrawDekuLeaf(p, play);
     CustomItems_DrawSpinner(p, play);
     CustomItems_DrawFireRod(p, play);  // Call unconditionally like spinner
@@ -996,13 +1001,13 @@ s32 CustomItems_OverrideDraw(Player* p, PlayState* play) {
     if (gCustomItemState.gustJarMode > 0 || p->heldItemAction == ITEM_GUST_JAR) {
         CustomItems_DrawGustJar(p, play);
     }
-    if (gCustomItemState.ballAndChainThrown) {
+    if (gCustomItemState.ballAndChainThrown && !heldOnly) {
         CustomItems_DrawBallChain(p, play);
     }
     if (gCustomItemState.shovelActive || gCustomItemState.shovelAnimating) {
         CustomItems_DrawShovel(p, play);
     }
-    if (gCustomItemState.beetleActive) {
+    if (gCustomItemState.beetleActive && !heldOnly) {
         CustomItems_DrawBeetle(p, play);
     }
     if (gCustomItemState.dominionRodActive) {
@@ -1011,14 +1016,25 @@ s32 CustomItems_OverrideDraw(Player* p, PlayState* play) {
     if (gCustomItemState.somariaActive) {
         CustomItems_DrawCaneOfSomaria(p, play);
     }
-    // Sheikah Slate: its own equip flag lives in the item TU (EXT item, no gCustomItemState entry),
-    // so the draw gates itself on Slate_IsDrawn(). Skijer's NEI
+    // Slate, Rod of Seasons and Elemental Wand: their equip flags live in their own item TUs (no
+    // gCustomItemState entry), so each draw gates itself. Skijer's NEI
     {
         extern void CustomItems_DrawSheikahSlate(Player * player, PlayState * play);
+        extern void CustomItems_DrawRodOfSeasons(Player * player, PlayState * play);
+        extern void CustomItems_DrawElementalWand(Player * player, PlayState * play);
+        extern void ItemEquip_ReleaseHandMatrix(void);
         extern void Stasis_Draw(PlayState * play);
+        extern void Hourglass_Draw(PlayState * play);
 
         CustomItems_DrawSheikahSlate(p, play);
-        Stasis_Draw(play); // chains + launch arrow on whatever the Stasis rune is holding
+        CustomItems_DrawRodOfSeasons(p, play);
+        CustomItems_DrawElementalWand(p, play);
+        // After every handheld, never inside one: the hand matrix is shared, and a drawer that
+        // declined this frame must not eat it from the one that did not.
+        ItemEquip_ReleaseHandMatrix();
+
+        Stasis_Draw(play);    // chains + launch arrow on whatever the Stasis rune is holding
+        Hourglass_Draw(play); // the path the recall target is about to retrace
     }
     if (gCustomItemState.mogmaMittsActive) {
         CustomItems_DrawMogmaMitts(p, play);
@@ -1447,10 +1463,7 @@ void ClawshotBT_Update(Player* player, PlayState* play) {
     F(minishCapGrowing)             \
     F(postmanHatDashing)            \
     F(postmanHatArriving)           \
-    F(postmanHatTransitionTimer)    \
-    F(desireSensorState)            \
-    F(desireSensorTimer)            \
-    F(desireSensorResult)
+    F(postmanHatTransitionTimer)
 
 #define CI_VISUAL_ARRAYS(F)         \
     F(fireRodProjTrail)             \
@@ -1486,8 +1499,7 @@ void ClawshotBT_Update(Player* player, PlayState* play) {
     F(CI_FLAG_LANTERN,            s->lanternEquipped || s->lanternSwinging,  0, 0)                           \
     F(CI_FLAG_MINISH_CAP,         s->minishCapShrinking || s->minishCapGrowing || s->minishCapWarpMode ||    \
                                   s->minishTinyActive || s->minishTinyAnim,  0, 0)                           \
-    F(CI_FLAG_POSTMAN_HAT,        s->postmanHatDashing || s->postmanHatArriving, 0, 0)                       \
-    F(CI_FLAG_DESIRE_SENSOR,      s->desireSensorActive,                     0, s->desireSensorActive = present;)
+    F(CI_FLAG_POSTMAN_HAT,        s->postmanHatDashing || s->postmanHatArriving, 0, 0)
 // clang-format on
 
 void CustomItems_BuildVisualSync(CustomItemVisualSync* out) {

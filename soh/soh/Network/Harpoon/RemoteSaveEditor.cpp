@@ -683,7 +683,7 @@ void DrawInventoryTab(HarpoonTemplates::Template* t) {
             for (int i = 0; i < 24; i++) {
                 if (i == 0)
                     t->items[24 + i] = ITEM_ROCS_CAPE;
-                else
+                else if (gPage2Items[i] != ITEM_NONE)
                     t->items[24 + i] = gPage2Items[i];
             }
         }

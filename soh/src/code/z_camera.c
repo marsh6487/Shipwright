@@ -1766,8 +1766,12 @@ s32 Camera_Normal1(Camera* camera) {
 
     OLib_Vec3fDiffToVecSphGeo(&eyeAdjustment, at, eyeNext);
 
+    // Skijer's NEI: a stack of four Links needs more room than one.
+    extern f32 FourSword_CameraDistanceScale(void);
+    f32 distScale = FourSword_CameraDistanceScale();
+
     camera->dist = eyeAdjustment.r =
-        Camera_ClampDist(camera, eyeAdjustment.r, norm1->distMin, norm1->distMax, anim->unk_28);
+        Camera_ClampDist(camera, eyeAdjustment.r, norm1->distMin * distScale, norm1->distMax * distScale, anim->unk_28);
 
     if (anim->startSwingTimer <= 0) {
         // idle camera re-center

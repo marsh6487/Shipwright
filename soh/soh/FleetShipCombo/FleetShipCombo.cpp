@@ -593,6 +593,9 @@ bool FleetShipCombo_GuestExtractRunning(void) {
 }
 
 void FleetShipCombo_HostBootstrap(int argc, char** argv) {
+#ifdef COMBO_BUILD
+    return; // ComboShip loads mm.dll in-process; spawning a 2ship.exe child here would run a second MM
+#endif
     // For picture-in-picture BOTH games run whenever the combo is enabled; isPlayerIn2Ship
     // only decides which one is ACTIVE (unfrozen). Bring up 2ship when:
     //  - the combo is enabled (master toggle), OR
@@ -688,6 +691,20 @@ int FleetCombo_BeatBothBosses(void) {
     return CVarGetInteger("isFleetShipCombo.Enabled", 0) != 0 && CVarGetInteger("gFleetCombo.GoalMode", 0) == 0;
 }
 
+#ifdef COMBO_BUILD
+// ComboShip: one process, and comboui knows which game is in front. The shared-memory region belongs
+// to the two-process layout and is never created here, so answering -1 ("standalone") would make
+// every caller drop its combo gating.
+bool Combo_OotIsForeground(void);
+
+int FleetShipCombo_GetActiveGame(void) {
+    return Combo_OotIsForeground() ? 0 : 1;
+}
+
+void FleetShipCombo_SetActiveGame(int game) {
+    (void)game; // the launcher switches games at scene seams; there is nothing to write
+}
+#else
 int FleetShipCombo_GetActiveGame(void) {
     FscShared* s = LazyOpen();
     return s ? s->activeGame : -1;
@@ -699,6 +716,7 @@ void FleetShipCombo_SetActiveGame(int game) {
         s->activeGame = game;
     }
 }
+#endif
 
 // Per-process seq of the last warp we issued/consumed, so the REQUESTER never re-consumes its own.
 static int sLastWarpSeq = 0;
@@ -885,6 +903,11 @@ int FleetShipCombo_PopPacket(char* out, int cap) {
     return 1;
 }
 
+#ifdef COMBO_BUILD
+bool FleetShipCombo_IsThisGameActive(void) {
+    return Combo_OotIsForeground();
+}
+#else
 bool FleetShipCombo_IsThisGameActive(void) {
     FscShared* s = LazyOpen();
     if (!s) {
@@ -892,6 +915,7 @@ bool FleetShipCombo_IsThisGameActive(void) {
     }
     return s->activeGame == kThisGame;
 }
+#endif
 
 int FleetShipCombo_GetSharedTexture(unsigned long long* handle, unsigned int* width, unsigned int* height,
                                     unsigned int* dxgiFormat, unsigned int* frameIndex) {

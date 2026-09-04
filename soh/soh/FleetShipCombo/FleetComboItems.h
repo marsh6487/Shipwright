@@ -840,7 +840,16 @@
     X(FCI_SLATE_RUNE_STASIS, 1, FCI_F_NONE, RG_SLATE_RUNE_STASIS, RI_OOT_NEI_SLATE_RUNE_STASIS, "Rune: Stasis",        \
       "Rune: Stasis", "Rune: Stasis")                                                                                  \
     X(FCI_SLATE_RUNE_CRYONIS, 1, FCI_F_NONE, RG_SLATE_RUNE_CRYONIS, RI_OOT_NEI_SLATE_RUNE_CRYONIS, "Rune: Cryonis",    \
-      "Rune: Cryonis", "Rune: Cryonis")
+      "Rune: Cryonis", "Rune: Cryonis")                                                                                \
+    X(FCI_MARIO_MASK, 1, FCI_F_NONE, RG_MARIO_MASK, RI_OOT_NEI_MARIO_MASK, "Mario Mask", "Mario Mask", "Mario Mask")   \
+    X(FCI_SEASON_SPRING, 1, FCI_F_NONE, RG_SEASON_SPRING, RI_OOT_NEI_SEASON_SPRING, "Season: Spring",                  \
+      "Season: Spring", "Season: Spring")                                                                              \
+    X(FCI_SEASON_SUMMER, 1, FCI_F_NONE, RG_SEASON_SUMMER, RI_OOT_NEI_SEASON_SUMMER, "Season: Summer",                  \
+      "Season: Summer", "Season: Summer")                                                                              \
+    X(FCI_SEASON_AUTUMN, 1, FCI_F_NONE, RG_SEASON_AUTUMN, RI_OOT_NEI_SEASON_AUTUMN, "Season: Autumn",                  \
+      "Season: Autumn", "Season: Autumn")                                                                              \
+    X(FCI_SEASON_WINTER, 1, FCI_F_NONE, RG_SEASON_WINTER, RI_OOT_NEI_SEASON_WINTER, "Season: Winter",                  \
+      "Season: Winter", "Season: Winter")
 
 // -----------------------------------------------------------------------------
 // Enum estable de items combo (generado por la lista; APPEND-ONLY)

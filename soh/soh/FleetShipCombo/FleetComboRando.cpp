@@ -3006,9 +3006,31 @@ const struct {
     { RG_TYCOON_WALLET, RG_PROGRESSIVE_WALLET },
     { RG_MAGIC_SINGLE, RG_PROGRESSIVE_MAGIC_METER },
     { RG_MAGIC_DOUBLE, RG_PROGRESSIVE_MAGIC_METER },
+    // NEI chains: the give choke sees the resolved tier, so every tier folds onto its FC chain row.
+    { RG_RAZOR_SWORD, RG_PROGRESSIVE_KOKIRI_SWORD },
+    { RG_GILDED_SWORD, RG_PROGRESSIVE_KOKIRI_SWORD },
+    { RG_TRUE_MASTER_SWORD, RG_PROGRESSIVE_MASTER_SWORD },
+    { RG_GREAT_FAIRY_SWORD, RG_PROGRESSIVE_BGS },
+    { RG_IRON_KNUCKLE_AXE, RG_PROGRESSIVE_HAMMER },
+    { RG_ULTRASHOT, RG_PROGRESSIVE_HOOKSHOT },
+    { RG_QUARTZ_OF_MOTION, RG_STONE_OF_AGONY },
+    { RG_ROCS_CAPE, RG_PROGRESSIVE_ROCS },
+    { RG_DEKU_STICK_CAPACITY_20, RG_PROGRESSIVE_STICK_UPGRADE },
+    { RG_DEKU_STICK_CAPACITY_30, RG_PROGRESSIVE_STICK_UPGRADE },
+    { RG_DEKU_NUT_CAPACITY_30, RG_PROGRESSIVE_NUT_UPGRADE },
+    { RG_DEKU_NUT_CAPACITY_40, RG_PROGRESSIVE_NUT_UPGRADE },
     // No tunics or boots here: OoT ships them as individual items (RG_GORON_TUNIC, RG_IRON_BOOTS...),
     // not as a chain, so a hint naming one already resolves through the ordinary rg match.
 };
+
+int FleetCombo_ChainAliasFor(int randomizerGet) {
+    for (auto& alias : kFcChainAliases) {
+        if (alias.concrete == randomizerGet) {
+            return alias.chain;
+        }
+    }
+    return 0;
+}
 
 int FleetCombo_ChainForItem(int randomizerGet) {
     if (sComboFc.empty()) {

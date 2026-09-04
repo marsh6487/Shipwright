@@ -61,7 +61,6 @@ void Randomizer_DrawMagnesis(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawStasis(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawLantern(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawCryonis(PlayState* play, GetItemEntry* getItemEntry);
-void Randomizer_DrawDesireSensor(PlayState* play, GetItemEntry* getItemEntry);
 
 // Custom items - Pokeball & Minish Cap
 void Randomizer_DrawPokeball(PlayState* play, GetItemEntry* getItemEntry);
@@ -108,6 +107,11 @@ void Randomizer_DrawSlateRuneBomb(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawSlateRuneMasterCycle(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawSlateRuneStasis(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawSlateRuneCryonis(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawSlateRuneSensor(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawSeasonSpring(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawSeasonSummer(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawSeasonAutumn(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawSeasonWinter(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawNeiPhantomHourglass(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawNeiShadowCrystal(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawNeiRodOfSeasons(PlayState* play, GetItemEntry* getItemEntry);

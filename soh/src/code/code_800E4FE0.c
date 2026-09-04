@@ -51,6 +51,9 @@ extern void GerudoVoice_MixInto(s16* outBuf, u32 numSamples);
 extern void Sm64Audio_MixInto(int16_t* outBuf, uint32_t numSamples);
 // Sheikah Slate Stasis rune cue (mods/actors/stasis_sfx.inc.c). One voice, no-op when idle.
 extern void StasisSfx_MixInto(s16* outBuf, u32 numSamples);
+// Phantom Hourglass Recall cues (mods/items/logic/hourglass_sfx.inc.c). Two voices: one-shots plus
+// the looping rewind bed. Silent unless the item's own tick is refreshing it.
+extern void HourglassSfx_MixInto(s16* outBuf, u32 numSamples);
 
 void AudioMgr_CreateNextAudioBuffer(s16* samples, u32 num_samples) {
     OSMesg sp4C;
@@ -95,6 +98,8 @@ void AudioMgr_CreateNextAudioBuffer(s16* samples, u32 num_samples) {
     Sm64Audio_MixInto(samples, num_samples);
     // Mix the Stasis rune cue
     StasisSfx_MixInto(samples, num_samples);
+    // Mix the Phantom Hourglass Recall cues
+    HourglassSfx_MixInto(samples, num_samples);
 
     gAudioContext.audioRandom = (gAudioContext.audioRandom + gAudioContext.totalTaskCnt) * osGetCount();
 }

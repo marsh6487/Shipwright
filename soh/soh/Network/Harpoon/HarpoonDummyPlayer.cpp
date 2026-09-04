@@ -862,9 +862,6 @@ void HarpoonDummyPlayer_Draw(Actor* actor, PlayState* play) {
         remoteCustomItems.postmanHatDashing = client.ciPostmanHatDashing;
         remoteCustomItems.postmanHatArriving = client.ciPostmanHatArriving;
         remoteCustomItems.postmanHatTransitionTimer = client.ciPostmanHatTransitionTimer;
-        remoteCustomItems.desireSensorState = client.ciDesireSensorState;
-        remoteCustomItems.desireSensorTimer = client.ciDesireSensorTimer;
-        remoteCustomItems.desireSensorResult = client.ciDesireSensorResult;
 
         CustomItems_ApplyVisualSync(&remoteCustomItems);
     }

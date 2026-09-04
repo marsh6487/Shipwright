@@ -171,6 +171,13 @@ void GerudoForm_OnPlayerUpdate() {
     }
     sPrevWantGerudo = want;
 
+    // Combat normally supplies an inactive Fury-VFX tick after the clip ends. Form exit
+    // can bypass that controller entirely, so this is the final safety net that restores
+    // the environment after a detransform or UI mask removal.
+    if (!GerudoForm_IsActive()) {
+        GerudoForm_TickUrbosaFuryVfx(gPlayState, GET_PLAYER(gPlayState), 0.0f, 0);
+    }
+
     // Sandstorm OFF in Haunted Wasteland (per-frame, so toggling the mask
     // mid-scene clears the sandstorm without re-entering the area), plus the
     // "cross the desert" offer.
@@ -231,6 +238,207 @@ extern "C" u8 GerudoForm_IsActive(void) {
     }
     const char* cur = O2rLoader_GetForcedName();
     return (cur != nullptr && std::strcmp(cur, "gerudo") == 0) ? 1 : 0;
+}
+
+// ============================================================================
+// Urbosa's Fury — native OOT VFX timeline
+//
+// This deliberately creates no new texture, model, actor, or collision. Every visible
+// piece is an OOT gameplay_keep effect already supplied by oot.o2r: Lightning for the
+// branching arcs, KiraKira for hot particles and Blast for the expanding ground rings.
+// The environment's own lightning flash/bolt system provides the sky strike.
+// ============================================================================
+namespace {
+
+constexpr f32 kFuryDarkStart = 28.0f;
+constexpr f32 kFuryDarkFull = 68.0f;
+constexpr f32 kFuryStrike = 80.0f;
+constexpr f32 kFuryFlashEnd = 84.0f;
+constexpr f32 kFuryFadeEnd = 116.0f;
+
+struct UrbosaFuryVfxState {
+    bool active = false;
+    f32 prevFrame = -1.0f;
+};
+
+UrbosaFuryVfxState sUrbosaFuryVfx;
+
+Color_RGBA8 sFuryGold = { 255, 210, 45, 255 };
+Color_RGBA8 sFuryOrange = { 255, 90, 0, 180 };
+Color_RGBA8 sFuryBlue = { 85, 150, 255, 255 };
+Color_RGBA8 sFuryDeepBlue = { 25, 45, 190, 190 };
+Color_RGBA8 sFuryWhite = { 255, 255, 220, 255 };
+Color_RGBA8 sFuryPaleBlue = { 180, 220, 255, 210 };
+
+bool FuryCrossed(f32 prev, f32 cur, f32 mark) {
+    return prev < mark && cur >= mark;
+}
+
+Vec3f FuryGroundPos(Player* player) {
+    Vec3f pos = player->actor.world.pos;
+    // Fury is a planted ground attack, but floorHeight can briefly be invalid during a
+    // transition. Keeping world.y in that case prevents effects appearing below the map.
+    if (player->actor.floorHeight > BGCHECK_Y_MIN + 1.0f) {
+        pos.y = player->actor.floorHeight;
+    }
+    return pos;
+}
+
+void FurySpawnChargeBurst(PlayState* play, Player* player, s32 burst) {
+    f32 progress = burst / 5.0f;
+    f32 radius = 28.0f + progress * 48.0f;
+    Vec3f center = player->actor.world.pos;
+
+    for (s32 i = 0; i < 3; i++) {
+        s16 yaw = (s16)(burst * 0x1D00 + i * 0x5555 + play->gameplayFrames * 0x300);
+        f32 sinYaw = Math_SinS(yaw);
+        f32 cosYaw = Math_CosS(yaw);
+        Vec3f pos = { center.x + sinYaw * radius, center.y + 12.0f + i * 22.0f, center.z + cosYaw * radius };
+        Color_RGBA8* prim = ((burst + i) % 3 == 0) ? &sFuryGold : &sFuryBlue;
+        Color_RGBA8* env = ((burst + i) % 3 == 0) ? &sFuryOrange : &sFuryDeepBlue;
+        EffectSsLightning_Spawn(play, &pos, prim, env, (s16)(75 + burst * 10), yaw, 10, 2);
+
+        Vec3f velocity = { -sinYaw * 1.4f, 1.2f + progress, -cosYaw * 1.4f };
+        Vec3f accel = { 0.0f, -0.08f, 0.0f };
+        EffectSsKiraKira_SpawnFocused(play, &pos, &velocity, &accel, prim, &sFuryWhite, (s16)(260 + burst * 24), 14);
+    }
+}
+
+void FurySpawnCloudConvergence(PlayState* play, Player* player, s32 stage) {
+    Vec3f center = player->actor.world.pos;
+    f32 radius = 82.0f - stage * 18.0f;
+    for (s32 i = 0; i < 4; i++) {
+        s16 yaw = (s16)(i * 0x4000 + stage * 0x1100);
+        Vec3f pos = { center.x + Math_SinS(yaw) * radius, center.y + 85.0f + stage * 45.0f,
+                      center.z + Math_CosS(yaw) * radius };
+        Color_RGBA8* prim = (i & 1) ? &sFuryGold : &sFuryBlue;
+        EffectSsLightning_Spawn(play, &pos, prim, &sFuryPaleBlue, (s16)(125 + stage * 28), yaw, 12, 3);
+    }
+}
+
+void FurySpawnImpact(PlayState* play, Player* player) {
+    static Vec3f zero = { 0.0f, 0.0f, 0.0f };
+    Vec3f ground = FuryGroundPos(player);
+
+    // OOT's global storm layer supplies the distant sky forks and blue-white flash. LAST
+    // makes a dry scene turn itself back off; an existing storm keeps its own mode.
+    if (gLightningStrike.state == LIGHTNING_STRIKE_WAIT) {
+        Environment_AddLightningBolts(play, 3);
+        gLightningStrike.flashRed = 210;
+        gLightningStrike.flashGreen = 220;
+        gLightningStrike.flashBlue = 255;
+        gLightningStrike.flashAlphaTarget = 200;
+        gLightningStrike.state = LIGHTNING_STRIKE_START;
+        if (play->envCtx.lightningMode == LIGHTNING_MODE_OFF) {
+            play->envCtx.lightningMode = LIGHTNING_MODE_LAST;
+        }
+    }
+
+    // A stacked core reads as one bolt descending through several gameplay_keep sprites.
+    for (s32 i = 0; i < 7; i++) {
+        Vec3f column = ground;
+        column.y += 18.0f + i * 48.0f;
+        Color_RGBA8* prim = (i & 1) ? &sFuryWhite : &sFuryBlue;
+        EffectSsLightning_Spawn(play, &column, prim, &sFuryGold, (s16)(250 - i * 12), (s16)(i * 0x1555), 13, 4);
+    }
+
+    // Two independently coloured rings reproduce the preview's fast gold edge and the
+    // wider blue wake. These are the stock gEffShockwaveDL with custom scale curves.
+    EffectSsBlast_Spawn(play, &ground, &zero, &zero, &sFuryWhite, &sFuryOrange, 80, 660, 42, 15);
+    EffectSsBlast_Spawn(play, &ground, &zero, &zero, &sFuryPaleBlue, &sFuryDeepBlue, 110, 500, 24, 21);
+
+    // Broken ground crawlers: Lightning sprites distributed radially rather than a new
+    // procedural mesh, keeping the runtime asset contract strictly OOT-only.
+    for (s32 i = 0; i < 12; i++) {
+        s16 yaw = (s16)(i * 0x1555 + (i % 3) * 0x500);
+        Vec3f arc = ground;
+        arc.x += Math_SinS(yaw) * (24.0f + (i % 4) * 12.0f);
+        arc.z += Math_CosS(yaw) * (24.0f + (i % 4) * 12.0f);
+        arc.y += 4.0f;
+        Color_RGBA8* prim = (i % 4 == 0) ? &sFuryBlue : &sFuryGold;
+        EffectSsLightning_Spawn(play, &arc, prim, &sFuryOrange, 105, yaw, 11, 2);
+
+        Vec3f velocity = { Math_SinS(yaw) * (2.0f + (i % 3) * 0.35f), 2.2f, Math_CosS(yaw) * (2.0f + (i % 3) * 0.35f) };
+        Vec3f accel = { 0.0f, -0.16f, 0.0f };
+        EffectSsKiraKira_SpawnFocused(play, &arc, &velocity, &accel, prim, &sFuryWhite, 420, 18);
+    }
+
+    Actor_RequestQuake(play, 7, 22);
+    Rumble_Request(0.0f, 255, 20, 150);
+    Player_PlaySfx(&player->actor, NA_SE_EV_LIGHTNING);
+    Player_PlaySfx(&player->actor, NA_SE_IT_HAMMER_HIT);
+}
+
+void FurySpawnResidualRing(PlayState* play, Player* player, s32 stage) {
+    Vec3f ground = FuryGroundPos(player);
+    f32 radius = 58.0f + stage * 43.0f;
+    for (s32 i = 0; i < 6; i++) {
+        s16 yaw = (s16)(i * 0x2AAA + stage * 0x900 + play->gameplayFrames * 0x100);
+        Vec3f pos = { ground.x + Math_SinS(yaw) * radius, ground.y + 5.0f, ground.z + Math_CosS(yaw) * radius };
+        Color_RGBA8* prim = ((i + stage) & 1) ? &sFuryGold : &sFuryBlue;
+        EffectSsLightning_Spawn(play, &pos, prim, &sFuryDeepBlue, (s16)(100 - stage * 10), yaw, 9, 2);
+    }
+}
+
+} // namespace
+
+extern "C" void GerudoForm_TickUrbosaFuryVfx(PlayState* play, Player* player, f32 sourceFrame, u8 active) {
+    if (play == nullptr || player == nullptr || !active) {
+        if (play != nullptr && sUrbosaFuryVfx.active) {
+            // arg4 must stay non-zero even with intensity 0: that is the branch that
+            // writes adjAmbientColor/adjLight1Color back to zero after an interruption.
+            Environment_AdjustLights(play, 0.0f, 850.0f, 0.2f, 0.9f);
+        }
+        sUrbosaFuryVfx = {};
+        return;
+    }
+
+    if (!sUrbosaFuryVfx.active || sourceFrame < sUrbosaFuryVfx.prevFrame) {
+        sUrbosaFuryVfx.active = true;
+        sUrbosaFuryVfx.prevFrame = sourceFrame;
+    }
+
+    f32 prev = sUrbosaFuryVfx.prevFrame;
+
+    // Fade the room to storm-dark, cut the adjustment at the strike for an instantaneous
+    // flash, then let a shallow blue darkness drain away behind the expanding rings.
+    f32 darkness = 0.0f;
+    if (sourceFrame >= kFuryDarkStart && sourceFrame < kFuryDarkFull) {
+        darkness = ((sourceFrame - kFuryDarkStart) / (kFuryDarkFull - kFuryDarkStart)) * 0.84f;
+    } else if (sourceFrame < kFuryStrike) {
+        darkness = (sourceFrame >= kFuryDarkFull) ? 0.84f : 0.0f;
+    } else if (sourceFrame >= kFuryFlashEnd && sourceFrame < kFuryFadeEnd) {
+        darkness = 0.52f * (1.0f - ((sourceFrame - kFuryFlashEnd) / (kFuryFadeEnd - kFuryFlashEnd)));
+    }
+    Environment_AdjustLights(play, darkness, 850.0f, 0.2f, 0.9f);
+
+    if (sourceFrame >= 34.0f && sourceFrame < kFuryStrike) {
+        Actor_PlaySfx_Flagged(&player->actor, NA_SE_EN_BIRI_SPARK - SFX_FLAG);
+    }
+
+    for (s32 burst = 0; burst < 6; burst++) {
+        f32 mark = 36.0f + burst * 7.0f;
+        if (FuryCrossed(prev, sourceFrame, mark)) {
+            FurySpawnChargeBurst(play, player, burst);
+        }
+    }
+    constexpr f32 convergeMarks[] = { 57.0f, 67.0f, 75.0f };
+    for (s32 stage = 0; stage < 3; stage++) {
+        if (FuryCrossed(prev, sourceFrame, convergeMarks[stage])) {
+            FurySpawnCloudConvergence(play, player, stage);
+        }
+    }
+    if (FuryCrossed(prev, sourceFrame, kFuryStrike)) {
+        FurySpawnImpact(play, player);
+    }
+    constexpr f32 residualMarks[] = { 88.0f, 98.0f, 108.0f };
+    for (s32 stage = 0; stage < 3; stage++) {
+        if (FuryCrossed(prev, sourceFrame, residualMarks[stage])) {
+            FurySpawnResidualRing(play, player, stage);
+        }
+    }
+
+    sUrbosaFuryVfx.prevFrame = sourceFrame;
 }
 
 // No-op now — an earlier architecture rendered the gerudo body through a

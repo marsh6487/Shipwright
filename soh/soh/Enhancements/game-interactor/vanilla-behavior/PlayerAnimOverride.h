@@ -12,6 +12,7 @@ typedef enum {
     VB_PLAYER_ANIM_SITE_SHIELD_LOOP,          // Player_Action_80843188: shield hold loop
     VB_PLAYER_ANIM_SITE_JUMPSLASH_RECOVERY,   // jump-slash recovery
     VB_PLAYER_ANIM_SITE_FALL_WAIT,            // free fall: gPlayerAnim_link_normal_landing_wait
+    VB_PLAYER_ANIM_SITE_MELEE_SWING,          // func_80837948: any swing; siteArg = PLAYER_MWA_*
 } VBPlayerAnimOverrideSite;
 
 #endif // PLAYER_ANIM_OVERRIDE_H

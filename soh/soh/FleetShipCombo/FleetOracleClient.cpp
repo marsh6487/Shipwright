@@ -418,6 +418,9 @@ void ProcessOracleTest() {
 }
 
 void RegisterFleetOracleClient() {
+#ifdef COMBO_BUILD
+    return; // the MM oracle is a direct call under ComboShip (Combo_MM_Rando_*); no file transport
+#endif
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>(ProcessOracleTest);
 }
 

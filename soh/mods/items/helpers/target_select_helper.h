@@ -45,6 +45,14 @@ s32 TargetSelect_IsCommonTarget(struct Actor* actor);
 struct Actor* TargetSelect_ScanCats(PlayState* play, const u8* cats, s32 numCats, TargetSelectFilter filter, f32 range,
                                     s16 cone);
 
+/**
+ * TargetSelect_ScanCats with the cone centred on `yaw` instead of Link's facing (first-person aim),
+ * and its own near limit. Pass TARGETSEL_MIN_DIST for the default; something smaller when the item
+ * must be able to pick what is right at Link's feet, like a block he has just set down.
+ */
+struct Actor* TargetSelect_ScanCatsFromYaw(PlayState* play, const u8* cats, s32 numCats, TargetSelectFilter filter,
+                                           f32 range, f32 minDist, s16 cone, s16 yaw);
+
 /** Convenience wrapper over TargetSelect_ScanCats with the default categories/range/cone. */
 struct Actor* TargetSelect_Scan(PlayState* play, TargetSelectFilter filter);
 

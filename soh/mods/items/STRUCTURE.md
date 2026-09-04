@@ -117,7 +117,7 @@ Custom items use IDs starting at `0x9D`, defined in `custom_items.h`:
 |----|----------|------|
 | 0x9D | `ITEM_ROCS_FEATHER_SKIJER` | Roc's Feather |
 | 0x9E | `ITEM_ROCS_CAPE` | Roc's Cape |
-| 0x9F | `ITEM_DESIRE_SENSOR` | Desire Sensor |
+| 0x9F | `ITEM_DESIRE_SENSOR` | Desire Sensor (retired — now the Slate's Sensor rune) |
 | 0xA0 | `ITEM_HYLIAS_GRACE` | Hylia's Grace |
 | 0xA1 | `ITEM_ZONAI_PERMAFROST` | Zonai Permafrost |
 | 0xA2 | `ITEM_DEMISE_DESTRUCTION` | Demise Destruction |
@@ -162,7 +162,7 @@ The 2-page inventory system maps custom items to slots 24-47:
 | 36 | Cane of Somaria |
 | 37 | Beetle |
 | 38 | Time Gate |
-| 39 | Desire Sensor |
+| 39 | Sheikah Slate |
 | 40 | Hylia's Grace |
 | 41 | Zonai Permafrost |
 | 42 | Mogma Mitts |
@@ -377,7 +377,6 @@ void CustomItems_Update(Player* p, PlayState* play) {
     Handle_DominionRod(p, play);
     Handle_TimeGate(p, play);
     Handle_BombArrows(p, play);
-    Handle_DesireSensor(p, play);
     Handle_ZonaiPermafrost(p, play);
     Handle_MogmaMitts(p, play);
 }

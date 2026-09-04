@@ -2928,7 +2928,21 @@ void Actor_Draw(PlayState* play, Actor* actor) {
         }
     }
 
-    actor->draw(actor, play);
+    {
+        // Phantom Hourglass: the recall drains everything but Link and its target to grey. Skijer's NEI
+        extern u8 Hourglass_ShouldDrawGray(Actor * actor);
+        extern void Hourglass_PushGray(PlayState * play);
+        extern void Hourglass_PopGray(PlayState * play);
+        u8 recallGray = Hourglass_ShouldDrawGray(actor);
+
+        if (recallGray) {
+            Hourglass_PushGray(play);
+        }
+        actor->draw(actor, play);
+        if (recallGray) {
+            Hourglass_PopGray(play);
+        }
+    }
 
     if (actor->colorFilterTimer != 0) {
         if (actor->colorFilterParams & 0x2000) {

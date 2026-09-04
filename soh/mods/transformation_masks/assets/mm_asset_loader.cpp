@@ -3958,7 +3958,18 @@ typedef struct {
     // retargeted gSkullKidPlayFluteAnim animates.
     const char* instrumentDL;
     u8 instrumentLimb; // PLAYER_LIMB_* to attach it to (0 = left hand default)
+    // Soundfont_0 instrument the form's SONG is sung with — MM's
+    // sOcarinaSongFanfareIoData[CUR_FORM]. Read by both the MM fanfare (through seq player
+    // io port 7) and the OoT jingle (synthesised note by note), so the two can never
+    // disagree about what a form sounds like.
+    //
+    // A NATIVE row still needs one: its ocarina voice is an OoT instrument the engine
+    // selects, but a song we synthesise ourselves can only come out of MM's soundfont.
+    // GAKKI_SONG_VOICE_NONE leaves the song to vanilla.
+    u8 songInst;
 } MmGakkiInstrument;
+
+#define GAKKI_SONG_VOICE_NONE 0
 
 #define GAKKI_ANIM(name) "__OTR__misc/link_animetion/gPlayerAnim_mhr_npc_" name
 
@@ -3972,15 +3983,15 @@ typedef struct {
 // is declared in mm_asset_loader.h alongside MmGakki_GetInstrumentDL.
 
 static const MmGakkiInstrument sFormGakkiInstruments[] = {
-    /* 0 FIERCE_DEITY */ { GAKKI_VOICE_NONE, 0, 0, 0, NULL, NULL, NULL, 0 },
+    /* 0 FIERCE_DEITY */ { GAKKI_VOICE_NONE, 0, 0, 0, NULL, NULL, NULL, 0, GAKKI_SONG_VOICE_NONE },
     // Every MM_FONT index below comes from ARRAY_B1CE (see the GARO row), not from
     // arithmetic on the enum. The old SF38 inst[0] the Goron used was an unrelated sample,
     // which is why it read as wrong and far too high-pitched.
-    /* 1 GORON        */ { GAKKI_VOICE_MM_FONT, 0, 0, 92, NULL, NULL, NULL, 0 }, // SF0[92] drums
-    /* 2 ZORA         */ { GAKKI_VOICE_MM_FONT, 0, 0, 93, NULL, NULL, NULL, 0 }, // SF0[93] guitar
-    /* 3 DEKU         */ { GAKKI_VOICE_MM_FONT, 0, 0, 94, NULL, NULL, NULL, 0 }, // SF0[94] pipes
-    /* 4 HUMAN        */ { GAKKI_VOICE_NONE, 0, 0, 0, NULL, NULL, NULL, 0 },
-    /* 5 PIKACHU      */ { GAKKI_VOICE_NONE, 0, 0, 0, NULL, NULL, NULL, 0 },
+    /* 1 GORON        */ { GAKKI_VOICE_MM_FONT, 0, 0, 92, NULL, NULL, NULL, 0, 92 }, // drums
+    /* 2 ZORA         */ { GAKKI_VOICE_MM_FONT, 0, 0, 93, NULL, NULL, NULL, 0, 93 }, // guitar
+    /* 3 DEKU         */ { GAKKI_VOICE_MM_FONT, 0, 0, 94, NULL, NULL, NULL, 0, 94 }, // pipes
+    /* 4 HUMAN        */ { GAKKI_VOICE_NONE, 0, 0, 0, NULL, NULL, NULL, 0, GAKKI_SONG_VOICE_NONE },
+    /* 5 PIKACHU      */ { GAKKI_VOICE_NONE, 0, 0, 0, NULL, NULL, NULL, 0, GAKKI_SONG_VOICE_NONE },
     // GARO: Igos du Ikana's sung voice, the one MM picks for DEMONSTRATE_ELEGY.
     //
     // MM resolves OcarinaInstrumentId through a lookup table inside the sequence, never by
@@ -3992,7 +4003,7 @@ static const MmGakkiInstrument sFormGakkiInstruments[] = {
     // Its sample is rooted at C2, two octaves BELOW the note played: the C4 the ocarina
     // channel writes comes out at 65 Hz. That is the chant, not a bug — do not "correct"
     // the octave, and do not expect it to read as a speaking voice.
-    /* 6 GARO         */ { GAKKI_VOICE_MM_FONT, 0, 0, 120, NULL, NULL, NULL, 0 },
+    /* 6 GARO         */ { GAKKI_VOICE_MM_FONT, 0, 0, 120, NULL, NULL, NULL, 0, 120 },
     // Gerudo: Malon, complete — her MALON instrument for the voice AND her own
     // gMalonAdultSingAnim (object_ma2, 58 frames) retargeted onto Link for the pose, baked
     // by tools/bake_oot_npc_link_anims.py. She sings with empty hands, so the model is
@@ -4012,12 +4023,29 @@ static const MmGakkiInstrument sFormGakkiInstruments[] = {
       // R_HAND, not L_HAND: OoT's OCARINA modelgroup is LH_OPEN + RH_OCARINA
       // (z_player_lib.c), so the ocarina is in the RIGHT hand. Hiding the left
       // one erased an already-empty hand and left the ocarina on screen.
-      PLAYER_LIMB_R_HAND },
-    /* 8 RITO         */ { GAKKI_VOICE_NONE, 0, 0, 0, NULL, NULL, NULL, 0 },
+      PLAYER_LIMB_R_HAND,
+      // Malon sings the song too. MM's soundfont carries the very sample OoT's MALON
+      // instrument uses, so the synthesised jingle is the same singer as her ocarina.
+      85 },
+    // Rito: Sheik's harp, complete. OCARINA_INSTRUMENT_HARP is one of OoT's own seq-0
+    // ocarina instruments, so the engine voices every note itself — no MM soundfont, no
+    // synth. The pose is her gSheikPullingOutHarpAnim / gSheikPlayingHarpAnim retargeted
+    // onto Link by tools/bake_oot_npc_link_anims.py (object_xc is the same 16-limb
+    // humanoid Impa is, so it reuses her limb map).
+    /* 8 RITO         */
+    { GAKKI_VOICE_NATIVE, 4 /* OCARINA_INSTRUMENT_HARP */, 0, 0, GAKKI_ANIM("sheik_pulling_out_harp"),
+      GAKKI_ANIM("sheik_playing_harp"),
+      // NULL: the rito plays with bare wings, so MmForm_OverrideLimbDraw drops BOTH hand
+      // limbs itself, and OoT's ocarina goes with the right one it is modelled into. The
+      // harp is then drawn additively on the left in MmForm_PostLimbDraw.
+      NULL, 0,
+      // ARRAY_B1CE[instrumentId - 1], the same table that gives Malon 85 and the Goron 92.
+      89 },
     // Skull Kid's flute, model and voice: FLUTE is the instrument the game itself
     // switches to when he plays in the memory game (z_message_PAL.c:160).
     /* 9 KEATON       */
-    { GAKKI_VOICE_NATIVE, 6 /* OCARINA_INSTRUMENT_FLUTE */, 0, 0, NULL, NULL, KEATON_FLUTE_DL, PLAYER_LIMB_R_HAND },
+    { GAKKI_VOICE_NATIVE, 6 /* OCARINA_INSTRUMENT_FLUTE */, 0, 0, NULL, NULL, KEATON_FLUTE_DL, PLAYER_LIMB_R_HAND,
+      119 },
     // KAFEI — deliberately VOICE_NONE, even though he whistles.
     //
     // The gakki system poses gFormState.formSkelAnime and hides the instrument from
@@ -4026,7 +4054,9 @@ static const MmGakkiInstrument sFormGakkiInstruments[] = {
     // pose silently went nowhere. His whistle — voice, pose and hiding the ocarina —
     // is owned end to end by MmForm_UpdateSkinOcarinaVoice, which writes straight to
     // player->skelAnime, plus MmForm_KafeiWhistleHandDL for the hand.
-    /* 10 KAFEI      */ { GAKKI_VOICE_NONE, 0, 0, 0, NULL, NULL, NULL, 0 },
+    // He still gets a song voice: the whistle is his, and the jingle is synthesised by us
+    // rather than posed through the gakki system, so nothing above blocks it.
+    /* 10 KAFEI      */ { GAKKI_VOICE_NONE, 0, 0, 0, NULL, NULL, NULL, 0, 82 }, // SF0[82] PersonWhistling
 };
 static const s32 sFormGakkiInstrumentsSize = sizeof(sFormGakkiInstruments) / sizeof(sFormGakkiInstruments[0]);
 
@@ -4066,15 +4096,12 @@ extern "C" s32 MmGakki_GetNativeInstrument(s32 form) {
     return (entry && entry->voiceType == GAKKI_VOICE_NATIVE) ? entry->nativeId : 0;
 }
 
-// The row's Soundfont_0 instrument index, for callers that hand a raw index to MM's own
-// audio rather than going through our synth — the song fanfare reads one off seq player
-// IO port 7. -1 when the form names no MM instrument.
-extern "C" s32 MmGakki_GetFontInstrumentIndex(s32 form) {
+// The Soundfont_0 instrument this form's SONG is sung with, for both song paths: the MM
+// fanfare hands it to the sequence on io port 7, the OoT jingle synthesises the melody
+// with it. 0 (GAKKI_SONG_VOICE_NONE) means the form has no song voice of its own.
+extern "C" s32 MmGakki_GetSongInstrument(s32 form) {
     const MmGakkiInstrument* entry = MmGakki_GetFormEntry(form);
-    if (entry == NULL || entry->voiceType != GAKKI_VOICE_MM_FONT || entry->fontId != 0) {
-        return -1;
-    }
-    return entry->instIdx;
+    return entry ? entry->songInst : GAKKI_SONG_VOICE_NONE;
 }
 
 extern "C" s32 MmGakki_FormHasOwnInstrument(s32 form) {
@@ -4192,17 +4219,8 @@ void MmGakki_PlayNote(s32 form, u8 buttonIndex, Vec3f* pos) {
 // carries the Z/R sharp/flat modifiers the old buttonIndex→fixed-note map dropped.
 // `bendFreq` is sCurOcarinaBendFreq — the control-stick pitch bend the engine applies to
 // the native ocarina; passing it through keeps our synth bending in lockstep.
-void MmGakki_PlayPitch(s32 form, u8 pitch, f32 bendFreq, Vec3f* pos) {
-    MmAudioScopedLock audioLock;
-
-    MmDirectAudio_StopById(MM_GAKKI_SFXID);
-
-    u8 instIdx = 0;
-    SoundFont* font = MmGakki_LoadFormFont(form, &instIdx);
-    if (!font) {
-        return;
-    }
-
+// Shared body: the caller has already resolved which soundfont instrument sings.
+static void MmGakki_PlayResolvedPitch(SoundFont* font, u8 instIdx, u8 pitch, f32 bendFreq, Vec3f* pos) {
     s32 midiNote = 60 + (s32)pitch; // OCARINA_PITCH_C4 == 0
     if (midiNote > 127) {
         midiNote = 127;
@@ -4215,7 +4233,7 @@ void MmGakki_PlayPitch(s32 form, u8 pitch, f32 bendFreq, Vec3f* pos) {
     // 0.500, a 4-octave drop.
     SoundFontSound* sound = MmDirectAudio_GetInstrumentSoundDirect(font, instIdx, MM_GAKKI_SAMPLE_NOTE);
     if (!sound || !sound->sample) {
-        MMSFX_LOG("[MmGakki] PlayPitch: no sound for form=%d midi=%d", form, midiNote);
+        MMSFX_LOG("[MmGakki] PlayPitch: no sound for inst[%d] midi=%d", instIdx, midiNote);
         return;
     }
 
@@ -4227,8 +4245,6 @@ void MmGakki_PlayPitch(s32 form, u8 pitch, f32 bendFreq, Vec3f* pos) {
     f32 vol, pan;
     MmDirectAudio_ComputeSpatial(pos, &vol, &pan);
 
-    MMSFX_LOG("[MmGakki] PlayPitch: form=%d inst[%d] pitch=%d midi=%d bend=%.3f vol=%.2f", form, instIdx, pitch,
-              midiNote, bendFreq, vol);
     if (!MmDirectAudio_PlaySingle(sound, pitchScale, 1.0f, MM_GAKKI_SFXID, vol, pan, 0.0f, 0.0f)) {
         return;
     }
@@ -4240,6 +4256,102 @@ void MmGakki_PlayPitch(s32 form, u8 pitch, f32 bendFreq, Vec3f* pos) {
     for (s32 i = 0; i < MM_DIRECT_MAX_SOUNDS; i++) {
         if (sPlayingSounds[i].active && sPlayingSounds[i].mmSfxId == MM_GAKKI_SFXID) {
             MmDirectAudio_ApplyInstrumentEnvelope(&sPlayingSounds[i], inst);
+        }
+    }
+}
+
+void MmGakki_PlayPitch(s32 form, u8 pitch, f32 bendFreq, Vec3f* pos) {
+    MmAudioScopedLock audioLock;
+    MmDirectAudio_StopById(MM_GAKKI_SFXID);
+
+    u8 instIdx = 0;
+    SoundFont* font = MmGakki_LoadFormFont(form, &instIdx);
+    if (font != NULL) {
+        MmGakki_PlayResolvedPitch(font, instIdx, pitch, bendFreq, pos);
+    }
+}
+
+// Sing a note with a named Soundfont_0 instrument rather than the one the form's own
+// gakki row picks. The song jingle needs this: a form whose ocarina voice is one of OoT's
+// (the Gerudo's Malon, Keaton's flute) still has to be SUNG from MM's soundfont here,
+// because the jingle is synthesised by us and never reaches OoT's sequence player.
+void MmGakki_PlayInstrumentPitch(u8 instIdx, u8 pitch, f32 bendFreq, Vec3f* pos) {
+    MmAudioScopedLock audioLock;
+    MmDirectAudio_StopById(MM_GAKKI_SFXID);
+
+    SoundFont* font = MmSfx_LoadFont(0);
+    if (font == NULL || font->instruments == NULL || instIdx >= font->numInstruments ||
+        font->instruments[instIdx] == NULL) {
+        return;
+    }
+    MmGakki_PlayResolvedPitch(font, instIdx, pitch, bendFreq, pos);
+}
+
+// Splice points for a held note are put on RISING zero crossings, so the wrap is
+// continuous in both value and sign of slope. Cutting at an arbitrary sample is what makes
+// a synthesised loop buzz.
+#define MM_GAKKI_SUSTAIN_FROM_PCT 55
+#define MM_GAKKI_ZERO_SEARCH 512
+#define MM_GAKKI_MIN_SUSTAINABLE 2000
+
+static u32 MmGakki_RisingZeroForward(const s16* pcm, u32 length, u32 at) {
+    for (u32 i = 0; i < MM_GAKKI_ZERO_SEARCH && (at + i + 1) < length; i++) {
+        if (pcm[at + i] <= 0 && pcm[at + i + 1] > 0) {
+            return at + i;
+        }
+    }
+    return at;
+}
+
+static u32 MmGakki_RisingZeroBackward(const s16* pcm, u32 from) {
+    for (u32 i = 0; i < MM_GAKKI_ZERO_SEARCH && from > (i + 1); i++) {
+        u32 at = from - i;
+        if (pcm[at - 1] <= 0 && pcm[at] > 0) {
+            return at;
+        }
+    }
+    return from;
+}
+
+// Apply the settings a sequence carries per note to the gakki note just started. The
+// ocarina itself needs none of this — every button press is the same strength, centred and
+// one-shot — but a song jingle has velocity, pan, reverb and notes longer than the sample.
+void MmGakki_ShapeActiveNote(const MmGakkiNoteShape* shape) {
+    MmAudioScopedLock audioLock;
+    for (s32 i = 0; i < MM_DIRECT_MAX_SOUNDS; i++) {
+        MmPlayingSound* snd = &sPlayingSounds[i];
+        if (!snd->active || snd->mmSfxId != MM_GAKKI_SFXID) {
+            continue;
+        }
+
+        snd->volume *= shape->volumeScale;
+        snd->pan = shape->pan / 127.0f;
+        snd->reverb = shape->reverb;
+
+        // A sample with no loop of its own runs out mid-note: Igos' voice lasts 0.84 s at
+        // A4 against the 1.13 s Zelda's Lullaby holds that note for. Loop its tail so the
+        // note lasts as written; the caller releases it at the sequence's gate point.
+        if (shape->sustain && snd->loopEnd == 0 && snd->pcmLength > MM_GAKKI_MIN_SUSTAINABLE) {
+            u32 from = (snd->pcmLength * MM_GAKKI_SUSTAIN_FROM_PCT) / 100;
+            snd->loopStart = MmGakki_RisingZeroForward(snd->pcmData, snd->pcmLength, from);
+            snd->loopEnd = MmGakki_RisingZeroBackward(snd->pcmData, snd->pcmLength - 2);
+            if (snd->loopEnd <= snd->loopStart) {
+                snd->loopStart = from;
+                snd->loopEnd = snd->pcmLength - 2;
+            }
+        }
+    }
+}
+
+// Note-off that lets the instrument's own release run, instead of cutting the sound dead.
+// This is the sequence player's Audio_SeqLayerNoteDecay: a jingle releases every note at
+// its gate point, and a hard stop there would click on each one.
+void MmGakki_ReleaseNote(void) {
+    MmAudioScopedLock audioLock;
+    for (s32 i = 0; i < MM_DIRECT_MAX_SOUNDS; i++) {
+        MmPlayingSound* snd = &sPlayingSounds[i];
+        if (snd->active && snd->mmSfxId == MM_GAKKI_SFXID && snd->envPhase < ADSR_PHASE_RELEASE) {
+            snd->envPhase = ADSR_PHASE_RELEASE;
         }
     }
 }

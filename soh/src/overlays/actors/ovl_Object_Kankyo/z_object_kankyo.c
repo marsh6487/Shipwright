@@ -61,7 +61,12 @@ const ActorInit Object_Kankyo_InitVars = {
     (ActorResetFunc)ObjectKankyo_Reset,
 };
 
+// Bit per params type that already owns an instance. It used to be one flag shared by every type,
+// which meant a scene holding fairies could never also hold snow — and the Rod of Seasons needs
+// exactly that in Kokiri Forest. Skijer's NEI
 static u8 sIsSpawned = false;
+#define KANKYO_SPAWNED_BIT(params) (1 << (params))
+
 static s16 sTrailingFairies = 0;
 
 #define OBJECT_KANKYO_SHIP_SAVESTATE_FIELDS(F) \
@@ -86,18 +91,18 @@ void ObjectKankyo_Init(Actor* thisx, PlayState* play) {
     this->actor.room = -1;
     switch (this->actor.params) {
         case 0:
-            if (!sIsSpawned) {
+            if (!(sIsSpawned & KANKYO_SPAWNED_BIT(0))) {
                 ObjectKankyo_SetupAction(this, ObjectKankyo_Fairies);
-                sIsSpawned = true;
+                sIsSpawned |= KANKYO_SPAWNED_BIT(0);
             } else {
                 Actor_Kill(&this->actor);
             }
             break;
 
         case 3:
-            if (!sIsSpawned) {
+            if (!(sIsSpawned & KANKYO_SPAWNED_BIT(3))) {
                 ObjectKankyo_SetupAction(this, ObjectKankyo_Snow);
-                sIsSpawned = true;
+                sIsSpawned |= KANKYO_SPAWNED_BIT(3);
             } else {
                 Actor_Kill(&this->actor);
             }

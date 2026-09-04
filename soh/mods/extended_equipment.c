@@ -126,8 +126,9 @@ static const Gfx sTridentEmptyDL[] = {
 // equip_trident.c calls TridentChargeBall_Spawn(). Skijer's NEI
 #include "actors/trident_charge_ball.h"
 #include "actors/trident_charge_ball.c"
-// equip_byrna.c calls ByrnaOrb_Summon/Launch(). Included BEFORE ext_equip_behavior.c
+// equip_byrna.c calls ByrnaOrb_PressR/ThrowSeed(). Included BEFORE ext_equip_behavior.c
 // so the accessors are declared by the time the behavior file uses them. Skijer's NEI
+#include "items/objects/object_tornado.h" // byrna_orb.c: full-charge wind column
 #include "actors/byrna_orb.h"
 #include "actors/byrna_orb.c"
 #include "equipment/ext_equip_behavior.c"
@@ -386,7 +387,8 @@ static void ExtEquip_ReloadBIcon(void) {
 // The best vanilla shield the player OWNS for an ext shield to ride on — an unowned base gets
 // stripped by the age-swap revalidation, leaving a drawn shield that can't be raised.
 static u16 ExtEquip_OwnedShieldBase(u16 preferred) {
-    static const u16 sByPreference[] = { EQUIP_VALUE_SHIELD_MIRROR, EQUIP_VALUE_SHIELD_HYLIAN, EQUIP_VALUE_SHIELD_DEKU };
+    static const u16 sByPreference[] = { EQUIP_VALUE_SHIELD_MIRROR, EQUIP_VALUE_SHIELD_HYLIAN,
+                                         EQUIP_VALUE_SHIELD_DEKU };
     s32 i;
 
     for (i = 0; i < 3; i++) {
@@ -407,14 +409,16 @@ static u16 ExtEquip_OwnedShieldBase(u16 preferred) {
 static void ExtEquip_ApplyVanillaBase(s16 equipType, u8 oldIndex, u8 index) {
     switch (equipType) {
         case EQUIP_TYPE_SWORD:
-            // Four Sword / Trident ride the B button as THEMSELVES (ExtPlayer_GetItemAction aliases
-            // their ids to the one-hand sword action): the equipment nibble and the save never see a
-            // Kokiri Sword the player may not own. Byrna is an add-on to whatever sword is held.
-            if (index == 2 || index == 3) {
+            // All three ride the B button as THEMSELVES (ExtPlayer_GetItemAction aliases their ids
+            // to the one-hand sword action): the equipment nibble and the save never see a Kokiri
+            // Sword the player may not own. Byrna joined them when it stopped being a cane drawn
+            // over the real sword and became the Insect Glaive — without a branch here, switching
+            // Trident -> Byrna left the Trident's id on B and the cane behaved like the lance.
+            if (index >= 1 && index <= 3) {
                 gSaveContext.equips.buttonItems[0] = ExtEquip_GetItemId(EQUIP_TYPE_SWORD, index);
                 Flags_UnsetInfTable(INFTABLE_SWORDLESS);
                 ExtEquip_ReloadBIcon();
-            } else if (index == 0 && (oldIndex == 2 || oldIndex == 3)) {
+            } else if (index == 0 && (oldIndex >= 1 && oldIndex <= 3)) {
                 Inventory_ChangeEquipment(EQUIP_TYPE_SWORD, EQUIP_VALUE_SWORD_NONE);
                 gSaveContext.equips.buttonItems[0] = ITEM_NONE;
                 Flags_SetInfTable(INFTABLE_SWORDLESS);
@@ -426,8 +430,9 @@ static void ExtEquip_ApplyVanillaBase(s16 equipType, u8 oldIndex, u8 index) {
             if (index == 0) {
                 Inventory_ChangeEquipment(EQUIP_TYPE_SHIELD, EQUIP_VALUE_SHIELD_NONE);
             } else {
-                Inventory_ChangeEquipment(EQUIP_TYPE_SHIELD, ExtEquip_OwnedShieldBase(index == 3 ? EQUIP_VALUE_SHIELD_MIRROR
-                                                                                                : EQUIP_VALUE_SHIELD_HYLIAN));
+                Inventory_ChangeEquipment(
+                    EQUIP_TYPE_SHIELD,
+                    ExtEquip_OwnedShieldBase(index == 3 ? EQUIP_VALUE_SHIELD_MIRROR : EQUIP_VALUE_SHIELD_HYLIAN));
             }
             break;
         case EQUIP_TYPE_TUNIC:
@@ -1142,6 +1147,79 @@ u8 ExtEquip_TridentThunderTransform(void) {
 // D_80126080.x while ExtEquip_TridentTrailBegin's frame is current.
 f32 ExtEquip_TridentTrailLength(void) {
     return TRIDENT_TRAIL_TIP - TRIDENT_TRAIL_BASE;
+}
+
+// Cane of Byrna in the sword hand, dialled in-game 2026-08-29 and baked. The
+// Item Editor sliders that produced these are gone, same as the Trident's and the
+// Slate's — retuning means editing here.
+#define BYRNA_CANE_POS_X (-887.74f)
+#define BYRNA_CANE_POS_Y 988.20f
+#define BYRNA_CANE_POS_Z 54.18f
+#define BYRNA_CANE_ROT_X 1.0f
+#define BYRNA_CANE_ROT_Y 0.0f
+#define BYRNA_CANE_ROT_Z 49.7f
+#define BYRNA_CANE_SCALE_X 7.76f
+#define BYRNA_CANE_SCALE_Y 10.45f
+#define BYRNA_CANE_SCALE_Z 7.71f
+
+// MEASURED from v_somaria_cane_vtx_0/_1 (262 verts): the cane's long axis is Y,
+// spanning -416..+223. X spans 181 and Z only 47, so Y is unambiguous.
+#define BYRNA_CANE_AXIS_MIN (-416.0f)
+#define BYRNA_CANE_AXIS_MAX 223.0f
+// The streak's own thickness. 1.0 leaves it at whatever the cane frame's scale
+// already gives it.
+#define BYRNA_TRAIL_WIDTH 1.0f
+
+// Assumes the limb matrix is already on the stack (called from PostLimbDraw).
+// Only the Byrna branch moved: the Iron Knuckle's Axe draws through this same
+// matrix and must keep the placement it always had.
+void ExtEquip_ApplySwordDLMatrix(void) {
+    if (gExtEquipState.currentExtSword == 1) {
+        Matrix_Translate(BYRNA_CANE_POS_X, BYRNA_CANE_POS_Y, BYRNA_CANE_POS_Z, MTXMODE_APPLY);
+        Matrix_RotateZYX((s16)(BYRNA_CANE_ROT_X * 182.04f), (s16)(BYRNA_CANE_ROT_Y * 182.04f),
+                         (s16)(BYRNA_CANE_ROT_Z * 182.04f), MTXMODE_APPLY);
+        Matrix_Scale(BYRNA_CANE_SCALE_X, BYRNA_CANE_SCALE_Y, BYRNA_CANE_SCALE_Z, MTXMODE_APPLY);
+        return;
+    }
+
+    Matrix_Translate(2028.26f, 267.2f, -33.82f, MTXMODE_APPLY);
+    Matrix_RotateZYX(-0x8000, 0, 0x4000, MTXMODE_APPLY);
+    Matrix_Scale(5.0f, 5.0f, 5.0f, MTXMODE_APPLY);
+}
+
+// Swing trail + melee quads in the CANE's frame instead of the hidden sword's,
+// which is why the streak used to hang off in empty space. Mirrors
+// ExtEquip_TridentTrailBegin; the caller pops the matrix.
+u8 ExtEquip_ByrnaTrailBegin(void) {
+    Player* player = (gPlayState != NULL) ? GET_PLAYER(gPlayState) : NULL;
+
+    if (!ExtEquip_IsEnabled() || (gExtEquipState.currentExtSword != 1) || (player == NULL) ||
+        (Player_GetMeleeWeaponHeld(player) == 0)) {
+        return 0;
+    }
+
+    Matrix_Push();
+    ExtEquip_ApplySwordDLMatrix();
+    // The trail machinery lays the streak along +X; the cane's length is +Y.
+    Matrix_RotateZ(-M_PI / 2.0f, MTXMODE_APPLY);
+    Matrix_Translate(BYRNA_CANE_AXIS_MIN, 0.0f, 0.0f, MTXMODE_APPLY);
+    Matrix_Scale(1.0f, BYRNA_TRAIL_WIDTH, BYRNA_TRAIL_WIDTH, MTXMODE_APPLY);
+    return 1;
+}
+
+f32 ExtEquip_ByrnaTrailLength(void) {
+    return BYRNA_CANE_AXIS_MAX - BYRNA_CANE_AXIS_MIN;
+}
+
+// Two-handed like the Biggoron's Sword, which is what takes the shield away. Fed
+// to VB_PLAYER_HOLDS_TWO_HANDED_WEAPON rather than forcing heldItemAction: the old
+// sword-slot hijack is exactly what was removed from this slot.
+// Not gated on the weapon being drawn: the glaive is a pole weapon, so the shield
+// stays on Link's back the whole time the slot is equipped, sheathed or not.
+u8 ExtEquip_ByrnaIsTwoHanded(void* playerVoid) {
+    Player* player = (Player*)playerVoid;
+
+    return ExtEquip_IsEnabled() && (gExtEquipState.currentExtSword == 1) && (player != NULL);
 }
 
 void ExtEquip_DrawSwordDL(void* playVoid) {

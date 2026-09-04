@@ -623,7 +623,11 @@ static WalkSpec WalkSpecOfRg(RandomizerGet rg) {
              "RG_BOTTLE_WITH_MAGIC_MUSHROOM",
              "RG_PHANTOM_HOURGLASS",
              "RG_SHADOW_CRYSTAL",
-             "RG_ROD_OF_SEASONS" })) {
+             "RG_ROD_OF_SEASONS",
+             "RG_SEASON_SPRING",
+             "RG_SEASON_SUMMER",
+             "RG_SEASON_AUTUMN",
+             "RG_SEASON_WINTER" })) {
         return { "nei_items", 1 };
     }
 

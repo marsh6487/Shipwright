@@ -59,7 +59,7 @@ typedef enum TransformMaskId {
     TRANSFORM_MASK_PIKACHU, // Pokeball-triggered (the Keaton Mask now belongs to the Keaton SKIN form)
     TRANSFORM_MASK_GARO,
     TRANSFORM_MASK_GERUDO,
-    TRANSFORM_MASK_RITO,       // ITEM_RITO_MASK (shares the Farore's Wind cell)
+    TRANSFORM_MASK_RITO,        // ITEM_RITO_MASK (shares the Farore's Wind cell)
     TRANSFORM_MASK_KEATON_FORM, // Keaton Mask (OoT or MM copy)
     TRANSFORM_MASK_KAFEI        // Kafei Mask (MM copy)
 } TransformMaskId;
@@ -241,6 +241,11 @@ u8 MmForm_GetOcarinaPlaybackInstrument(void);
 // sOcarinaSongFanfareIoData[CUR_FORM]. Only an MM fanfare sequence reads it.
 u8 MmForm_GetSongFanfareInstrument(void);
 
+// Play OoT's song jingle with the active form's voice instead of the ocarina sequence.
+// Returns 1 when it took the song over, so the caller skips Audio_PlayFanfare.
+s32 FormJingle_Start(s32 songId);
+void FormJingle_Stop(void);
+
 // Dragon Scale: Zora swim for non-Zora forms (Adult Link only)
 u8 TransformMasks_IsZoraSwimEnabled(void);
 void TransformMasks_SetZoraSwimEnabled(u8 enabled);
@@ -286,6 +291,13 @@ u8 TransformMasks_GetShieldMode(void);
 
 u8 MmForm_GetWaterMode(void);
 u8 TransformMasks_GetWaterMode(void);
+
+// Scales the launch a form's jump slash was given, alongside the Gerudo and Trident adjusters.
+void MmForm_AdjustJumpSlash(Player* player, s32 mwa);
+
+// Momentum moves that must carry the player off an edge instead of letting vanilla react.
+u8 MmForm_IsGoronRolling(void);
+u8 MmForm_IsDekuSpinning(void);
 
 // ---------------------------------------------------------------------------
 // Form animation tables (defined in z_player.c, next to the tables themselves).
@@ -365,8 +377,8 @@ s32 GerudoMhr_DamageTier(Player* player, s32 tier);
 f32 GerudoMhr_RunSpeedMul(void);
 // Walk/run cycle frame-advance multiplier (func_8084029C): the sprint keeps cadence.
 f32 GerudoMhr_RunAnimRateMul(void);
-// 1 when R must not raise the guard (L held: L+R is rage).
-u8 GerudoMhr_BlockShieldRaise(Player* player);
+// 1 while her roll is running: it commits, so B must not cut it (Player_Action_Roll).
+u8 GerudoMhr_RollCommits(Player* player);
 // R = the blade guard, no shield item needed; the raise plays from frame 0.
 u8 GerudoMhr_UsesBladeGuard(Player* player);
 // The installed frame of the charge-release swing that throws the thunder wedge
@@ -390,7 +402,8 @@ u8 GerudoMhr_UsesConeBurst(Player* player);
 extern MtxF gGerudoRightHandMtx;
 // ...and what that cone feeds back: it has its own collider, so its hits never reach
 // GerudoMhr_ScanBladeHits. Worth GMHR_RAGE_CHARGE_MUL times a blade hit.
-void GerudoMhr_AddChargeRage(void);
+// Pass the actor the cone landed on: only enemies pay into the meter.
+void GerudoMhr_AddChargeRage(Actor* victim);
 // Draw-time upper-body offset while guarding (MmForm_OverrideLimbDraw applies it).
 u8 GerudoMhr_GetShieldUpperRot(Player* player, Vec3s* out);
 // Same, per shoulder (PLAYER_LIMB_L_SHOULDER / PLAYER_LIMB_R_SHOULDER). 0 = nothing to do.
@@ -425,6 +438,7 @@ void GerudoMhr_AdjustJumpSlash(Player* player, s32 mwa);
 // Called from Player_UpdateCommon BEFORE the melee quads' AT reset: the only place
 // this frame's blade hits are still readable for the form (rage meter).
 void GerudoMhr_ScanBladeHits(Player* player);
+void KeatonForm_ScanBlock(Player* player);
 // Draw-callback gate: trail on?, per-blade mask, and whether the form writes the
 // quads' damage flags itself (controller clip) or keeps OOT's (OOT swing).
 u8 GerudoMhr_GetBladeGate(u8* mask, u8* ownFlags, u32* dmgFlags, u8* damage);
@@ -442,6 +456,7 @@ u8 GerudoMhr_LOwnsB(void);
 // The Rito's bow state, read by the draw path (reticle, and the shield hides).
 u8 MmForm_RitoBowIsOut(void);
 void MmForm_RitoBowReset(void);
+
 // EnArrow asks this before re-deriving its yaw from the camera: a 1 means the arrow
 // belongs to the Rito's volley and has just been given the aim, pitch included.
 u8 MmForm_RitoBowClaimArrow(PlayState* play, Actor* arrow);
@@ -451,7 +466,7 @@ u8 MmForm_RitoBowClaimArrow(PlayState* play, Actor* arrow);
 u8 MmForm_RitoAirRocsAllowed(Player* player);
 // 1 while the Rito is guarding with its own shield. The Mirror Shield predicates in
 // z_player_lib.c defer to it, so every reflection site inherits the behaviour.
-u8 MmForm_RitoShieldIsUp(void);
+u8 MmForm_RitoShieldIsDrawn(void);
 // The rage meter HUD (drawn under the magic bar). Call from Interface_Draw.
 void GerudoMhr_DrawRageMeter(PlayState* play);
 

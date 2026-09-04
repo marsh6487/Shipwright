@@ -505,8 +505,8 @@ s32 MmGakki_GetInstrumentLimb(s32 form);
 /** @return OCARINA_INSTRUMENT_* for GAKKI_VOICE_NATIVE forms, 0 otherwise. */
 s32 MmGakki_GetNativeInstrument(s32 form);
 
-/** @return the form's Soundfont_0 instrument index, or -1 when it names none. */
-s32 MmGakki_GetFontInstrumentIndex(s32 form);
+/** @return the Soundfont_0 instrument the form's SONG is sung with, 0 when it has none. */
+s32 MmGakki_GetSongInstrument(s32 form);
 
 /** @return 1 when the form's voice type is not GAKKI_VOICE_NONE. */
 s32 MmGakki_FormHasOwnInstrument(s32 form);
@@ -525,6 +525,23 @@ void MmGakki_RefreshNote(void);
 
 /** Note-off: release the current gakki note. */
 void MmGakki_StopNote(void);
+
+// Per-note settings a sequence carries and the plain ocarina does not.
+typedef struct {
+    f32 volumeScale; // the note's velocity, 0..1
+    f32 reverb;      // the channel's reverb send, 0..1
+    u8 pan;          // the channel's pan, 0..127 (64 = centre)
+    u8 sustain;      // hold a loopless sample instead of letting it run out mid-note
+} MmGakkiNoteShape;
+
+/** Apply a sequence's note settings to the gakki note just started. */
+void MmGakki_ShapeActiveNote(const MmGakkiNoteShape* shape);
+
+/** Note-off through the instrument's own release, instead of cutting the sound dead. */
+void MmGakki_ReleaseNote(void);
+
+/** Sing a note with a named Soundfont_0 instrument rather than the form's gakki row. */
+void MmGakki_PlayInstrumentPitch(u8 instIdx, u8 pitch, f32 bendFreq, Vec3f* pos);
 
 #ifdef __cplusplus
 }

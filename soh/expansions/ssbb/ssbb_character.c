@@ -1,4 +1,5 @@
 #include "expansions/ssbb/ssbb_character.h"
+#include "expansions/ssbb/ssbb_anim.h"
 #include "expansions/ssbb/ssbb_skin.h"
 #include "z64.h"
 

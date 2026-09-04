@@ -879,11 +879,6 @@ void Harpoon::SendPacket_PlayerUpdate() {
             payload["ciPostmanHatArriving"] = ci->postmanHatArriving;
             payload["ciPostmanHatTransitionTimer"] = ci->postmanHatTransitionTimer;
         }
-        if (ciFlags & CI_FLAG_DESIRE_SENSOR) {
-            payload["ciDesireSensorState"] = ci->desireSensorState;
-            payload["ciDesireSensorTimer"] = ci->desireSensorTimer;
-            payload["ciDesireSensorResult"] = ci->desireSensorResult;
-        }
     }
 
     // Somaria cubes
@@ -1226,7 +1221,6 @@ void Harpoon::HandlePacket_PlayerUpdate(nlohmann::json payload) {
     client.ciDemiseDestructionActive = (ciFlags & CI_FLAG_DEMISE_DESTRUCTION) ? 1 : 0;
     client.ciHyliasGraceActive = (ciFlags & CI_FLAG_HYLIAS_GRACE) ? 1 : 0;
     client.ciZonaiPermafrostActive = (ciFlags & CI_FLAG_ZONAI_PERMAFROST) ? 1 : 0;
-    client.ciDesireSensorActive = (ciFlags & CI_FLAG_DESIRE_SENSOR) ? 1 : 0;
     if (ciFlags & CI_FLAG_ROCS_FEATHER) {
         client.ciRocsJumpCount = payload.value("ciRocsJumpCount", (u8)0);
         client.ciRocsMmAnimTimer = payload.value("ciRocsMmAnimTimer", (s16)0);
@@ -1260,11 +1254,6 @@ void Harpoon::HandlePacket_PlayerUpdate(nlohmann::json payload) {
         client.ciPostmanHatDashing = payload.value("ciPostmanHatDashing", (u8)0);
         client.ciPostmanHatArriving = payload.value("ciPostmanHatArriving", (u8)0);
         client.ciPostmanHatTransitionTimer = payload.value("ciPostmanHatTransitionTimer", (s16)0);
-    }
-    if (ciFlags & CI_FLAG_DESIRE_SENSOR) {
-        client.ciDesireSensorState = payload.value("ciDesireSensorState", (u8)0);
-        client.ciDesireSensorTimer = payload.value("ciDesireSensorTimer", (s16)0);
-        client.ciDesireSensorResult = payload.value("ciDesireSensorResult", (u8)0);
     }
 
     // Somaria cubes

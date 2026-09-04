@@ -36,6 +36,7 @@
 #include "Enhancements/randomizer/randomizer.h"
 #include "Enhancements/randomizer/randomizer_entrance_tracker.h"
 #include "Enhancements/randomizer/randomizer_check_tracker.h"
+#include "Enhancements/randomizer/randomizer_check_objects.h"
 #include "Enhancements/randomizer/static_data.h"
 #include "soh/Enhancements/randomizer/settings.h"
 #include "soh/Enhancements/savestates.h"
@@ -63,8 +64,12 @@
 
 #ifdef __APPLE__
 #include <SDL_scancode.h>
+#include <SDL_keyboard.h>
+#include <SDL_gamecontroller.h>
 #else
 #include <SDL2/SDL_scancode.h>
+#include <SDL2/SDL_keyboard.h>
+#include <SDL2/SDL_gamecontroller.h>
 #endif
 
 #ifdef __SWITCH__
@@ -89,6 +94,7 @@
 #include "soh/Network/Harpoon/HarpoonSkinSync.h"
 #include "Enhancements/game-interactor/GameInteractor.h"
 #include "Enhancements/randomizer/draw.h"
+#include "mods/broken_items/broken_items.h"
 #include <libultraship/controller/controldeck/ControlDeck.h>
 #include <fast/resource/ResourceType.h>
 
@@ -1909,9 +1915,46 @@ extern "C" uint64_t GetUnixTimestamp() {
     return (uint64_t)millis.count();
 }
 
+// Crossover Items quick transform. The Back/Select button is not an N64 button, so the pad is
+// read straight from SDL — through the handle LUS already opened for that joystick, never a
+// second one of our own. Skijer's NEI
+static void CrossoverHotkey_Tick() {
+    static bool sHeld = false;
+
+    if (!CVarGetInteger("gCrossover.Hotkey.Enabled", 1) || !BrokenItems_Enabled()) {
+        sHeld = false;
+        return;
+    }
+
+    const Uint8* keys = SDL_GetKeyboardState(NULL);
+    int32_t key = CVarGetInteger("gCrossover.Hotkey.Key", SDL_SCANCODE_0);
+    bool pressed = (keys != NULL) && (key > SDL_SCANCODE_UNKNOWN) && (key < SDL_NUM_SCANCODES) && keys[key];
+
+    int32_t padBtn = CVarGetInteger("gCrossover.Hotkey.Pad", SDL_CONTROLLER_BUTTON_BACK);
+    for (int i = 0; !pressed && (i < SDL_NumJoysticks()); i++) {
+        SDL_GameController* pad = SDL_GameControllerFromInstanceID(SDL_JoystickGetDeviceInstanceID(i));
+        if (pad != NULL) {
+            pressed = SDL_GameControllerGetButton(pad, (SDL_GameControllerButton)padBtn) != 0;
+        }
+    }
+
+    if (pressed && !sHeld) {
+        auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
+        auto menu = gui ? gui->GetMenu() : nullptr;
+        bool menuOpen = (menu != nullptr) && menu->IsVisible();
+        // Pausing already has its own selector, and a transform mid-menu would fight the CVar edit.
+        if (!menuOpen && (gPlayState != NULL) && (gPlayState->pauseCtx.state == 0)) {
+            BrokenItems_ToggleEquippedForm();
+        }
+    }
+    sHeld = pressed;
+}
+
 extern "C" void Graph_StartFrame() {
 #ifndef __WIIU__
     using Ship::KbScancode;
+
+    CrossoverHotkey_Tick();
     int32_t dwScancode = OTRGlobals::Instance->context->GetWindow()->GetLastScancode();
     OTRGlobals::Instance->context->GetWindow()->SetLastScancode(-1);
 
@@ -2698,176 +2741,17 @@ extern "C" void Randomizer_ShowRandomizerMenu() {
     SohGui::ShowRandomizerSettingsMenu();
 }
 
-extern "C" u8 Randomizer_SceneHasMajorItem(s16 sceneNum) {
-    auto ctx = Rando::Context::GetInstance();
-    if (!ctx) {
-        return 0;
-    }
-
-    auto& locationTable = Rando::StaticData::GetLocationTable();
-    for (size_t i = 0; i < RC_MAX; i++) {
-        RandomizerCheck rc = static_cast<RandomizerCheck>(i);
-        Rando::Location& loc = locationTable[rc];
-        if (loc.GetRandomizerCheck() == RC_UNKNOWN_CHECK) {
-            continue;
-        }
-        if (loc.GetScene() != static_cast<SceneID>(sceneNum)) {
-            continue;
-        }
-
-        Rando::ItemLocation* itemLoc = ctx->GetItemLocation(rc);
-        if (itemLoc == nullptr) {
-            continue;
-        }
-
-        RandomizerCheckStatus status = itemLoc->GetCheckStatus();
-        if (status == RCSHOW_COLLECTED || status == RCSHOW_SAVED) {
-            continue;
-        }
-
-        if (itemLoc->GetPlacedItem().IsMajorItem()) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
 // =============================================================================
-// Desire Sensor: vague hint system
+// Sheikah Sensor rune: hints for the player's desired items
 // =============================================================================
 
-#define TEXT_DESIRE_SENSOR_HINT 0x9300
+#define TEXT_SENSOR_HINT 0x9300
+#define TEXT_SENSOR_PROMPT 0x9301
 
 static std::string sCachedHintText;
 
-static const char* GetVagueItemDesc(RandomizerGet rg) {
-    switch (rg) {
-        case RG_KOKIRI_SWORD:
-        case RG_MASTER_SWORD:
-        case RG_GIANTS_KNIFE:
-        case RG_BIGGORON_SWORD:
-        case RG_PROGRESSIVE_GORONSWORD:
-            return "a sharp blade";
-        case RG_FAIRY_BOW:
-        case RG_PROGRESSIVE_BOW:
-            return "a hunter's tool";
-        case RG_FAIRY_SLINGSHOT:
-        case RG_PROGRESSIVE_SLINGSHOT:
-            return "a child's weapon";
-        case RG_HOOKSHOT:
-        case RG_LONGSHOT:
-        case RG_PROGRESSIVE_HOOKSHOT:
-            return "a grappling device";
-        case RG_MEGATON_HAMMER:
-            return "a crushing weight";
-        case RG_BOOMERANG:
-            return "a returning wind";
-        case RG_PROGRESSIVE_BOMB_BAG:
-            return "explosive power";
-        case RG_PROGRESSIVE_BOMBCHU_BAG:
-            return "scurrying explosives";
-        case RG_IRON_BOOTS:
-            return "heavy footwear";
-        case RG_HOVER_BOOTS:
-            return "enchanted footwear";
-        case RG_GORON_TUNIC:
-            return "flame-resistant garb";
-        case RG_ZORA_TUNIC:
-            return "aquatic garb";
-        case RG_MIRROR_SHIELD:
-            return "a reflecting surface";
-        case RG_DINS_FIRE:
-            return "a fiery spell";
-        case RG_FARORES_WIND:
-            return "a wind spell";
-        case RG_NAYRUS_LOVE:
-            return "a protective spell";
-        case RG_FIRE_ARROWS:
-            return "arrows of flame";
-        case RG_ICE_ARROWS:
-            return "arrows of ice";
-        case RG_LIGHT_ARROWS:
-            return "arrows of light";
-        case RG_LENS_OF_TRUTH:
-            return "an eye of truth";
-        case RG_STONE_OF_AGONY:
-            return "a rumbling stone";
-        case RG_GERUDO_MEMBERSHIP_CARD:
-            return "a desert pass";
-        case RG_DOUBLE_DEFENSE:
-            return "inner fortitude";
-        case RG_PROGRESSIVE_STRENGTH:
-            return "great strength";
-        case RG_PROGRESSIVE_SCALE:
-            return "diving prowess";
-        case RG_PROGRESSIVE_WALLET:
-            return "capacity for riches";
-        case RG_PROGRESSIVE_MAGIC_METER:
-            return "magical energy";
-        case RG_PROGRESSIVE_OCARINA:
-            return "a sacred instrument";
-        case RG_PROGRESSIVE_NUT_UPGRADE:
-        case RG_PROGRESSIVE_STICK_UPGRADE:
-            return "improved supplies";
-        case RG_EMPTY_BOTTLE:
-        case RG_BOTTLE_WITH_MILK:
-        case RG_BOTTLE_WITH_RED_POTION:
-        case RG_BOTTLE_WITH_GREEN_POTION:
-        case RG_BOTTLE_WITH_BLUE_POTION:
-        case RG_BOTTLE_WITH_FAIRY:
-        case RG_BOTTLE_WITH_FISH:
-        case RG_BOTTLE_WITH_BLUE_FIRE:
-        case RG_BOTTLE_WITH_BUGS:
-        case RG_BOTTLE_WITH_POE:
-        case RG_RUTOS_LETTER:
-        case RG_BOTTLE_WITH_BIG_POE:
-            return "a glass vessel";
-        case RG_ZELDAS_LULLABY:
-        case RG_EPONAS_SONG:
-        case RG_SARIAS_SONG:
-        case RG_SUNS_SONG:
-        case RG_SONG_OF_TIME:
-        case RG_SONG_OF_STORMS:
-        case RG_MINUET_OF_FOREST:
-        case RG_BOLERO_OF_FIRE:
-        case RG_SERENADE_OF_WATER:
-        case RG_REQUIEM_OF_SPIRIT:
-        case RG_NOCTURNE_OF_SHADOW:
-        case RG_PRELUDE_OF_LIGHT:
-            return "a sacred melody";
-        case RG_KOKIRI_EMERALD:
-        case RG_GORON_RUBY:
-        case RG_ZORA_SAPPHIRE:
-            return "a spiritual gem";
-        case RG_FOREST_MEDALLION:
-        case RG_FIRE_MEDALLION:
-        case RG_WATER_MEDALLION:
-        case RG_SPIRIT_MEDALLION:
-        case RG_SHADOW_MEDALLION:
-        case RG_LIGHT_MEDALLION:
-            return "a sage's proof";
-        case RG_FOREST_TEMPLE_SMALL_KEY:
-        case RG_FIRE_TEMPLE_SMALL_KEY:
-        case RG_WATER_TEMPLE_SMALL_KEY:
-        case RG_SPIRIT_TEMPLE_SMALL_KEY:
-        case RG_SHADOW_TEMPLE_SMALL_KEY:
-        case RG_BOTTOM_OF_THE_WELL_SMALL_KEY:
-        case RG_GERUDO_TRAINING_GROUND_SMALL_KEY:
-        case RG_GERUDO_FORTRESS_SMALL_KEY:
-        case RG_GANONS_CASTLE_SMALL_KEY:
-            return "a small key";
-        case RG_FOREST_TEMPLE_BOSS_KEY:
-        case RG_FIRE_TEMPLE_BOSS_KEY:
-        case RG_WATER_TEMPLE_BOSS_KEY:
-        case RG_SPIRIT_TEMPLE_BOSS_KEY:
-        case RG_SHADOW_TEMPLE_BOSS_KEY:
-        case RG_GANONS_CASTLE_BOSS_KEY:
-            return "a boss key";
-        case RG_GOLD_SKULLTULA_TOKEN:
-            return "a golden token";
-        default:
-            return "something of importance";
-    }
+static std::string SensorDesireCVar(s32 slot) {
+    return std::string(CVAR_SENSOR_DESIRE_PREFIX) + std::to_string(slot);
 }
 
 static const char* GetVagueLocationDesc(RandomizerCheckType rcType) {
@@ -2911,78 +2795,104 @@ static const char* GetVagueLocationDesc(RandomizerCheckType rcType) {
     }
 }
 
-extern "C" u8 Randomizer_GetSceneHint(s16 sceneNum) {
-    sCachedHintText.clear();
+// One wish slot. The value stored IS the RandomizerGet, so the menu can write it without a
+// translation table and an unset slot is RG_NONE.
+static RandomizerGet SensorGetDesire(s32 slot) {
+    if (slot < 0 || slot >= SENSOR_DESIRE_SLOTS) {
+        return RG_NONE;
+    }
+    int32_t rg = CVarGetInteger(SensorDesireCVar(slot).c_str(), RG_NONE);
+    if (rg <= RG_NONE || rg >= RG_MAX) {
+        return RG_NONE;
+    }
+    return static_cast<RandomizerGet>(rg);
+}
 
+// Where a wished-for item is still waiting. RC_UNKNOWN_CHECK means "already collected, or the seed
+// never placed it" — either way the rune moves on to the next wish.
+static RandomizerCheck FindOutstandingCheckFor(RandomizerGet rg) {
     auto ctx = Rando::Context::GetInstance();
-    if (!ctx) {
-        return 0;
+    if (ctx == nullptr) {
+        return RC_UNKNOWN_CHECK;
     }
 
     auto& locationTable = Rando::StaticData::GetLocationTable();
-
-    struct HintEntry {
-        const char* itemDesc;
-        const char* locDesc;
-    };
-    std::vector<HintEntry> hints;
-
     for (size_t i = 0; i < RC_MAX; i++) {
         RandomizerCheck rc = static_cast<RandomizerCheck>(i);
-        Rando::Location& loc = locationTable[rc];
-        if (loc.GetRandomizerCheck() == RC_UNKNOWN_CHECK)
+        if (locationTable[rc].GetRandomizerCheck() == RC_UNKNOWN_CHECK) {
             continue;
-        if (loc.GetScene() != static_cast<SceneID>(sceneNum))
-            continue;
+        }
 
         Rando::ItemLocation* itemLoc = ctx->GetItemLocation(rc);
-        if (!itemLoc)
+        if (itemLoc == nullptr || itemLoc->GetPlacedRandomizerGet() != rg) {
             continue;
+        }
 
         RandomizerCheckStatus status = itemLoc->GetCheckStatus();
-        if (status == RCSHOW_COLLECTED || status == RCSHOW_SAVED)
+        if (status == RCSHOW_COLLECTED || status == RCSHOW_SAVED) {
             continue;
-
-        if (itemLoc->GetPlacedItem().IsMajorItem()) {
-            hints.push_back(
-                { GetVagueItemDesc(itemLoc->GetPlacedRandomizerGet()), GetVagueLocationDesc(loc.GetRCType()) });
-            if (hints.size() >= 3)
-                break;
         }
+        return rc;
     }
-
-    if (hints.empty())
-        return 0;
-
-    // Build hint text: %g = green (item name), %w = white (reset), & = newline
-    sCachedHintText = "I sense ";
-    if (hints.size() == 1) {
-        sCachedHintText += "%g" + std::string(hints[0].itemDesc) + "%w " + hints[0].locDesc + "...";
-    } else {
-        sCachedHintText += "%g" + std::string(hints[0].itemDesc) + "%w " + hints[0].locDesc + "...";
-        sCachedHintText += "&and %g" + std::string(hints[1].itemDesc) + "%w " + hints[1].locDesc + "...";
-        if (hints.size() > 2) {
-            sCachedHintText += "&...and perhaps more.";
-        }
-    }
-
-    return (u8)hints.size();
+    return RC_UNKNOWN_CHECK;
 }
 
-static void BuildDesireSensorHintMessage(uint16_t* textId, bool* loadFromMessageTable) {
-    if (sCachedHintText.empty())
+/**
+ * Consult the wish list in slot order and cache the hint for the first wish still out there.
+ * Returns 0 when no wish is answerable — the rune refuses BEFORE charging for it.
+ */
+extern "C" u8 Randomizer_SensorBuildHint(void) {
+    sCachedHintText.clear();
+
+    for (s32 slot = 0; slot < SENSOR_DESIRE_SLOTS; slot++) {
+        RandomizerGet rg = SensorGetDesire(slot);
+        if (rg == RG_NONE) {
+            continue;
+        }
+
+        RandomizerCheck rc = FindOutstandingCheckFor(rg);
+        if (rc == RC_UNKNOWN_CHECK) {
+            continue;
+        }
+
+        Rando::Location* loc = Rando::StaticData::GetLocation(rc);
+        // %g = green (the item), %y = yellow (the area), %w = white, & = newline.
+        sCachedHintText = "The slate senses %g" + Rando::StaticData::RetrieveItem(rg).GetName().GetEnglish() +
+                          "%w&in %y" + RandomizerCheckObjects::GetRCAreaName(loc->GetArea()) + "%w,&" +
+                          GetVagueLocationDesc(loc->GetRCType()) + "...";
+        return 1;
+    }
+    return 0;
+}
+
+static void BuildSensorHintMessage(uint16_t* textId, bool* loadFromMessageTable) {
+    if (sCachedHintText.empty()) {
         return;
+    }
     CustomMessage msg(sCachedHintText, TEXTBOX_TYPE_BLUE, TEXTBOX_POS_BOTTOM);
     msg.AutoFormat();
     msg.LoadIntoFont();
     *loadFromMessageTable = false;
 }
 
-void RegisterDesireSensorHints() {
-    COND_ID_HOOK(OnOpenText, TEXT_DESIRE_SENSOR_HINT, IS_RANDO, BuildDesireSensorHintMessage);
+// \x1B is the two-choice marker; the options follow it as "&&Yes&No".
+static void BuildSensorPromptMessage(uint16_t* textId, bool* loadFromMessageTable) {
+    CustomMessage msg("Asking costs one %rHeart Container%w,&forever. Ask the slate?\x1B%g&&Yes&No%w",
+                      "Die Frage kostet ein %rHerzteil%w,&f\xFCr immer. Den Stein fragen?\x1B%g&&Ja&Nein%w",
+                      "Demander co\xFB"
+                      "te un %rC\x9C"
+                      "ur%w,&pour toujours. Interroger?\x1B%g&&Oui&Non%w");
+    msg.Format();
+    msg.LoadIntoFont();
+    *loadFromMessageTable = false;
 }
 
-static RegisterShipInitFunc dsHintInitFunc(RegisterDesireSensorHints, { "IS_RANDO" });
+void RegisterSensorMessages() {
+    COND_ID_HOOK(OnOpenText, TEXT_SENSOR_HINT, IS_RANDO, BuildSensorHintMessage);
+    COND_ID_HOOK(OnOpenText, TEXT_SENSOR_PROMPT, IS_RANDO, BuildSensorPromptMessage);
+}
+
+static RegisterShipInitFunc sensorHintInitFunc(RegisterSensorMessages, { "IS_RANDO" });
 
 extern "C" void EntranceTracker_SetCurrentGrottoID(s16 entranceIndex) {
     EntranceTracker::SetCurrentGrottoIDForTracker(entranceIndex);

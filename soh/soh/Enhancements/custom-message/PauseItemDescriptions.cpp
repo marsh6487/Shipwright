@@ -34,7 +34,6 @@ struct ItemDescEntry {
 static const ItemDescEntry sCustomItemDescs[] = {
     { ITEM_ROCS_FEATHER_SKIJER, TEXT_DESC_ROCS_FEATHER, "Jump in ground and small jump from water." },
     { ITEM_ROCS_CAPE, TEXT_DESC_ROCS_CAPE, "Jump from ground or water. Press again&in the air for a double jump." },
-    { ITEM_DESIRE_SENSOR, TEXT_DESC_DESIRE_SENSOR, "Sense major items in this area.&Costs 3 hearts. Randomizer only." },
     { ITEM_HYLIAS_GRACE, TEXT_DESC_HYLIAS_GRACE,
       "Fairy flight for 10s. Ignores walls.&A=up, B=down, L=sprint. 24 MP." },
     { ITEM_ZONAI_PERMAFROST, TEXT_DESC_ZONAI_PERMAFROST,
@@ -50,7 +49,7 @@ static const ItemDescEntry sCustomItemDescs[] = {
     { ITEM_WHIP, TEXT_DESC_WHIP, "Grapple from any bar surface. Swing&with joystick. Release for momentum&launch." },
     { ITEM_SPINNER, TEXT_DESC_SPINNER, "Toggle to ride. A for homing dash&attack. Breaks rocks." },
     { ITEM_CANE_OF_SOMARIA, TEXT_DESC_CANE_OF_SOMARIA,
-      "Create statues (max 3) that press&any switch. Hookable and throwable." },
+      "Four canes on one cell. Summon&blocks, flip enemies, build with&Ultrahand. A cycles the cane." },
     { ITEM_DOMINION_ROD, TEXT_DESC_DOMINION_ROD,
       "Fire orb to possess Beamos, Armos&or Anubis. Control them with analog+C." },
     { ITEM_TIME_GATE, TEXT_DESC_TIME_GATE, "Travel through time. Swap between&child and adult. Costs 48 magic." },
@@ -71,6 +70,25 @@ static const ItemDescEntry sCustomItemDescs[] = {
       "dmg." },
     { ITEM_CHATEAU_ROMANI, TEXT_DESC_CHATEAU_ROMANI, "Drink for infinite magic.&One-time consumable." },
     { ITEM_POKEBALL, TEXT_DESC_POKEBALL, "Transform into Pikachu.&Press again to revert." },
+    // Page-2 cells (2026-08-06 re-layout)
+    { EXT_ITEM_SHEIKAH_SLATE, TEXT_DESC_SHEIKAH_SLATE,
+      "Draw the slate to cast a rune.&A cycles Remote Bomb, Stasis,&Cryonis and Master Cycle." },
+    { EXT_ITEM_PHANTOM_HOURGLASS, TEXT_DESC_PHANTOM_HOURGLASS,
+      "Aim at a moving object to rewind it&along its own path while the world&holds still." },
+    { EXT_ITEM_SHADOW_CRYSTAL, TEXT_DESC_SHADOW_CRYSTAL,
+      "Turn into Wolf Link. Bite combo&and a running dash. Press again&to turn back." },
+    { EXT_ITEM_ROD_OF_SEASONS, TEXT_DESC_ROD_OF_SEASONS,
+      "Pick a season from the prompt and&the world reloads under it." },
+    // Bottle row
+    { ITEM_NET, TEXT_DESC_NET, "Swing it like a sword to scoop bugs,&fish and fairies into a bottle." },
+    { ITEM_BOTTOMLESS_BOTTLE, TEXT_DESC_BOTTOMLESS_BOTTLE, "Refills itself for a set number of&uses per fill." },
+    { ITEM_MAGIC_MUSHROOM, TEXT_DESC_MAGIC_MUSHROOM,
+      "Sniffed out with the Mask of Scents.&Bottle it before it spoils." },
+    // Bomb-cell wheel
+    { ITEM_POWER_KEG, TEXT_DESC_POWER_KEG, "Goron blasting keg. Clears boulders&and heavy blocks." },
+    // Trade wheel: the same id is the Climb Boots on the page-2 equipment grid (sExtEquipDescs).
+    { ITEM_EXT_BOOTS_2, TEXT_DESC_EXT_PENDANT_MEMORIES,
+      "Three extra B moves: Mortal Draw,&Ground Pound and Parry Leap." },
 };
 
 static const ItemDescEntry sMaskDescs[] = {
@@ -91,6 +109,20 @@ static const ItemDescEntry sMaskDescs[] = {
       "Spawns Stalchildren (child) or Stalfos&(adult) at night in Hyrule Field." },
     { ITEM_MM_MASK_FIERCE_DEITY, TEXT_DESC_MASK_FIERCE_DEITY,
       "Transform into Fierce Deity form.&Full moveset from Majora's Mask." },
+    { ITEM_MM_MASK_BREMEN, TEXT_DESC_MASK_BREMEN,
+      "Hold B to march to Bremen music.&Keep marching and a cucco appears." },
+    { ITEM_MM_MASK_CIRCUS_LEADER, TEXT_DESC_MASK_CIRCUS_LEADER,
+      "Minigame owners mistake you for&the king's tax man and pay up." },
+    { ITEM_MM_MASK_GIANT, TEXT_DESC_MASK_GIANT, "Grow enormous until your&magic runs out." },
+    { ITEM_MM_MASK_GIBDO, TEXT_DESC_MASK_GIBDO, "ReDeads and Gibdos dance&instead of grabbing you." },
+    { ITEM_MM_MASK_POSTMAN, TEXT_DESC_MASK_POSTMAN,
+      "Warp between the Hyrule mailboxes&you have walked up to at least once." },
+    { ITEM_MM_MASK_SCENTS, TEXT_DESC_MASK_SCENTS,
+      "Sniff out five hidden mushrooms in&the Lost Woods and bottle them." },
+    { ITEM_MM_MASK_TRUTH, TEXT_DESC_MASK_TRUTH, "Does nothing yet." },
+    { ITEM_MM_MASK_GARO, TEXT_DESC_MASK_GARO, "Transform into Garo form." },
+    { ITEM_MM_MASK_KAFEI, TEXT_DESC_MASK_KAFEI, "Transform into Kafei form." },
+    { ITEM_MM_MASK_KEATON, TEXT_DESC_MASK_KEATON, "Transform into Keaton form." },
 };
 
 // Keyed by SW97_ELEM_*, NOT by item id — the elemental shot has no item id any more, it is a flag on
@@ -121,10 +153,10 @@ static const ItemDescEntry sWandModeDescs[] = {
 //   Memories (described here), while the page-2 GRID cell with the same id is the Climb Boots.
 static const ItemDescEntry sExtEquipDescs[] = {
     { ITEM_EXT_SWORD_1, TEXT_DESC_EXT_BYRNA,
-      "Reserved. Its old reach and HP+MP&recovery belong to the Great Fairy's&Sword now." },
+      "Two-handed glaive. Its Kinsect orb&guards, marks foes and launches you." },
     { ITEM_EXT_SWORD_2, TEXT_DESC_EXT_FOUR_SWORD,
       "R+B to charge. Spawns 3 clones&(36 MP). Clones mirror your attacks." },
-    { ITEM_EXT_SWORD_3, TEXT_DESC_EXT_IK_AXE, "Trident. (behavior coming soon)" },
+    { ITEM_EXT_SWORD_3, TEXT_DESC_EXT_TRIDENT, "Gunlance moveset. Guard dash,&charged blast and flight." },
     { ITEM_EXT_SHIELD_1, TEXT_DESC_EXT_DIVINE_SHIELD,
       "Fire immune. Block within 10 frames&to stun all nearby enemies." },
     { ITEM_EXT_SHIELD_2, TEXT_DESC_EXT_GERUDO_SCIMITAR,
@@ -135,12 +167,11 @@ static const ItemDescEntry sExtEquipDescs[] = {
       "Flurry Rush on dodge. Bullet Time&when aiming in air. 15% world speed." },
     { ITEM_EXT_TUNIC_2, TEXT_DESC_EXT_BREASTPLATE,
       "Damage immunity. Costs rupees per&hit. No rupees = slow movement." },
-    { ITEM_EXT_TUNIC_3, TEXT_DESC_EXT_MAGIC_CAPE, "Immune to ice, freezing and&ice traps." },
-    { ITEM_EXT_BOOTS_1, TEXT_DESC_EXT_PEGASUS_ANKLET,
-      "Hold B to dash with sword. Wind&barrier drains 1 MP/15 frames." },
-    { ITEM_EXT_BOOTS_2, TEXT_DESC_EXT_PENDANT_MEMORIES,
-      "Mortal Draw near enemies. Ground&Pound in air. Parry Leap after 3&side hops." },
-    { ITEM_EXT_BOOTS_3, TEXT_DESC_EXT_WATER_DRAGON_SCALE, "Roc Boots. (behavior coming soon)" },
+    { ITEM_EXT_TUNIC_3, TEXT_DESC_EXT_SAGES_TUNIC, "Each medallion you own adds a&passive resistance while worn." },
+    { ITEM_EXT_BOOTS_1, TEXT_DESC_EXT_PEGASUS_ANKLET, "Keep holding B after a swing to&charge forward, sword first." },
+    { ITEM_EXT_BOOTS_2, TEXT_DESC_EXT_CLIMB_BOOTS,
+      "Full traction. Ice stops being&slippery and steep slopes stop&sliding you." },
+    { ITEM_EXT_BOOTS_3, TEXT_DESC_EXT_ROC_BOOTS, "Water and lava become solid&ground. You fall at half speed." },
 };
 
 static const ItemDescEntry sMedallionDescs[] = {

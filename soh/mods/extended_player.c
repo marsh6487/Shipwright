@@ -148,19 +148,11 @@ static const NeiItem sNeiItems[] = {
       "effectuer&un %gdouble saut%w en l'air.&Appuyez sur %y\xA1%w en sautant&pour aller plus haut!",
       "Du hast %rRocs Umhang%w erhalten!&Dieser magische Umhang&verbessert deine Sprungkraft.^Du kannst nun "
       "einen&%gDoppelsprung%w in der Luft&ausführen. Drücke %y\xA1%w&erneut während du springst!" },
-    { ITEM_DESIRE_SENSOR, PLAYER_IA_DESIRE_SENSOR, PLAYER_MODELGROUP_DEFAULT, SLOT_DESIRE_SENSOR, AGE_REQ_NONE,
-      (void*)gItemIconDesireSensorTex, func_8083485C, Player_InitDefaultIA, Randomizer_DrawDesireSensor,
-      RG_DESIRE_SENSOR,
-      "You got the %pDesire Sensor%w!&A cursed artifact that reveals&hidden treasures... at a cost.^Press %y\xA1%w to "
-      "activate.&%rCosts 3 hearts%w per use!^%g(Randomizer only)%w:&%yGolden sparkles%w = Major items&remain in this "
-      "area.&%rGanondorf laugh%w = Nothing left.",
-      "Vous obtenez le %pDétecteur de Désir%w!&Un artefact maudit qui révèle&les trésors cachés... à un prix.^Appuyez "
-      "sur %y\xA1%w pour activer.&%rCoûte 3 cœurs%w par utilisation!^%g(Randomizer uniquement)%w:&%yÉtincelles "
-      "dorées%w "
-      "= Objets majeurs&restent dans cette zone.&%rRire de Ganondorf%w = Plus rien.",
-      "Du hast den %pWunschdetektor%w!&Ein verfluchtes Artefakt das&verborgene Schätze enthüllt...&für einen "
-      "Preis.^Drücke %y\xA1%w zum Aktivieren.&%rKostet 3 Herzen%w pro Nutzung!^%g(Nur im Randomizer)%w:&%yGoldene "
-      "Funken%w = Wichtige Items&sind noch in diesem Gebiet.&%rGanondorfs Lachen%w = Nichts mehr da." },
+    // RETIRED: the Desire Sensor became the Sheikah Slate's Sensor rune, so RG_DESIRE_SENSOR now
+    // grants a rune and its model/textbox live with the other runes. Row kept for icon lookups on
+    // old saves; NEI_NO_SLOT = unreachable, NEI_NO_RG = off the give/draw/name path.
+    { ITEM_DESIRE_SENSOR, PLAYER_IA_DESIRE_SENSOR, PLAYER_MODELGROUP_DEFAULT, NEI_NO_SLOT, AGE_REQ_NONE,
+      (void*)gItemIconDesireSensorTex, func_8083485C, Player_InitDefaultIA, NULL, NEI_NO_RG, NULL, NULL, NULL },
     // RETIRED 2026-08-06: no inventory cell (41 belongs to the Phantom Hourglass); noclip moves
     // to the Soul spell (TODO). Row kept for icon/textbox lookups; NEI_NO_SLOT = unreachable.
     { ITEM_HYLIAS_GRACE, PLAYER_IA_HYLIAS_GRACE, PLAYER_MODELGROUP_DEFAULT, NEI_NO_SLOT, AGE_REQ_NONE,
@@ -349,7 +341,7 @@ static const NeiItem sNeiItems[] = {
     // IA: the active rod is NeiSaveData.wandMode. Per-rod behavior is a separate task, so the update
     // func is the generic aim handler and the init is a stub. Skijer's NEI
     { ITEM_ELEMENTAL_WAND, PLAYER_IA_ELEMENTAL_WAND, PLAYER_MODELGROUP_DEFAULT, SLOT_ELEMENTAL_WAND, AGE_REQ_NONE,
-      (void*)gItemIconSandRodTex, Nei_SharedIA_UpperAction, Nei_SharedIA_Init, Randomizer_DrawElementalWand,
+      (void*)gItemIconElementalWandTex, Nei_SharedIA_UpperAction, Nei_SharedIA_Init, Randomizer_DrawElementalWand,
       RG_ELEMENTAL_WAND,
       "You got the %cElemental Wand%w!&Six rods in one.^Press %y\xA1%w on it in the pause&menu to switch between the "
       "rods&you have unlocked.",
@@ -435,7 +427,7 @@ static const NeiItem sNeiItems[] = {
       "You got the %yLantern%w!&Catch fire from torches and&use it to light your way!",
       "Vous obtenez la %yLanterne%w!&Capturez le feu des torches et&utilisez-le pour éclairer votre chemin!",
       "Du hast die %yLaterne%w erhalten!&Fang Feuer von Fackeln und&nutze es um deinen Weg zu erleuchten!" },
-    // 2026-08-06: the Pokeball left page 2 (cell 44 = Shadow Crystal) for the Broken Items page
+    // 2026-08-06: the Pokeball left page 2 (cell 44 = Shadow Crystal) for the Crossover Items page
     // (Pikachu form). NEI_NO_SLOT keeps the row for icon/textbox lookups only.
     { ITEM_POKEBALL, PLAYER_IA_POKEBALL, PLAYER_MODELGROUP_DEFAULT, NEI_NO_SLOT, AGE_REQ_NONE,
       (void*)gItemIconPokeballTex, func_8083485C, Player_InitPokeballIA, Randomizer_DrawPokeball, RG_POKEBALL,
@@ -451,7 +443,7 @@ static const NeiItem sNeiItems[] = {
     // Mario Mask — claims the formerly-reserved PLAYER_IA_UNUSED_5B row. Slotless
     // on purpose: page 2 is full (24/24), and this item is not C-button usable.
     // Receiving it sets RAND_INF_OBTAINED_MARIO_MASK, which is what unlocks
-    // MARIO MODE in the Broken Items form selector. Skijer's NEI
+    // MARIO MODE in the Crossover Items form selector. Skijer's NEI
     // Shares PLAYER_IA_UNUSED_5B with the Elemental Wand (SoH has no free action left), so it uses
     // the same trampolines — they branch on the held ITEM, which is what keeps the two apart.
     { ITEM_MARIO_MASK, PLAYER_IA_UNUSED_5B, PLAYER_MODELGROUP_DEFAULT, NEI_NO_SLOT, AGE_REQ_NONE,

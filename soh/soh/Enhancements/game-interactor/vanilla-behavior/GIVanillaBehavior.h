@@ -3760,6 +3760,91 @@ typedef enum {
     // - `*s32`       item, to overwrite
     // - `*PlayState` (play)
     VB_GET_ITEM_ON_BUTTON,
+
+    // Skijer's NEI: OOT's own two-step combo, where a third swing in a row bumps to the combo
+    // variant. A moveset that sequences its own row must refuse, or the bump walks off the end of
+    // that row into another clip.
+    // #### `result`
+    // ```c
+    // this->unk_845 >= 3
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_ADVANCE_COMBO,
+
+    // Skijer's NEI: the jump slash has just been given vanilla's launch for whichever route started
+    // it. Subscribers scale linearVelocity / velocity.y from there. Mutation only, result unused.
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    // - `s32`     PLAYER_MWA_* being started
+    VB_PLAYER_JUMP_SLASH_LAUNCH,
+
+    // Skijer's NEI: should Link's own voice answer for this grunt? A form, a voice pack or a mask
+    // that plays its own sound returns false.
+    // #### `result`
+    // ```c
+    // true   // play Link's voice
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    // - `u16`     sfxId, before the age offset
+    VB_PLAYER_VOICE_SFX,
+
+    // Skijer's NEI: can the player take hold of a ledge — the vault and the jump-grab both ask.
+    // #### `result`
+    // ```c
+    // true   // grabbing is allowed
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_GRAB_LEDGE,
+
+    // Skijer's NEI: vanilla's reaction to reaching an edge — the auto-hop down and the slip. A
+    // momentum move already carrying the player off must refuse, or vanilla steals the exit.
+    // #### `result`
+    // ```c
+    // true   // vanilla reacts
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_EDGE_REACTION,
+
+    // Skijer's NEI: something other than the Hover Boots is holding the player up, so the boots'
+    // physics, footstep sfx and ring effect all apply. Asked through `Player_IsHovering`.
+    // #### `result`
+    // ```c
+    // IvanCoopModeEnabled || gIvanPossessActive
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_HOVERS_WITHOUT_BOOTS,
+
+    // Skijer's NEI: a guard that is an animation rather than a raised shield ate the hit. The
+    // shieldQuad never bounces for those, so VB_PLAYER_SHIELD_BLOCKED never fires for them either.
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `*Player`    (this)
+    // - `*PlayState` (play)
+    VB_PLAYER_PARRY_HIT,
+
+    // Skijer's NEI: the shieldQuad just bounced an attack. Fired while AC_BOUNCED is still live —
+    // Player_UpdateShape clears it before any per-frame mod dispatch runs, so a subscriber that
+    // waits until then can no longer read the attacker. Mutation only, result unused.
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player`    (this)
+    // - `*PlayState` (play)
+    VB_PLAYER_SHIELD_BLOCKED,
 } GIVanillaBehavior;
 
 #endif

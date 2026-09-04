@@ -727,7 +727,7 @@ void ApplyPageStrategies(const nlohmann::json& role) {
         for (int i = 0; i < 24; i++) { // Skijer's NEI
             if (i == 0)
                 Nei_SetOwnedItem((u8)(24 + i), ITEM_ROCS_CAPE);
-            else
+            else if (gPage2Items[i] != ITEM_NONE)
                 Nei_SetOwnedItem((u8)(24 + i), gPage2Items[i]);
         }
     }

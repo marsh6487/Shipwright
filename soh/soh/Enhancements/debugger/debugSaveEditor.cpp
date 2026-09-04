@@ -1136,6 +1136,79 @@ void DrawInventoryTab() {
         ImGui::TextDisabled("Hold L for the echo wheel; R steps; C summons at the ghost.");
     }
 
+    // Elemental Wand: six rods over ONE slot, like the cane above. Which save field decides
+    // ownership depends on the unlock rule, so every box here goes through Wand_SetModeOwned —
+    // writing wandRodsOwned directly changes nothing under the default Medallions rule.
+    if (ImGui::CollapsingHeader("Elemental Wand (six rods)")) {
+        static const struct {
+            const char* name;
+            const char* unlock;
+        } kRods[WAND_MODE_COUNT] = {
+            { "Sand Rod", "Spirit Medallion" }, { "Tornado Rod", "Forest Medallion" },
+            { "Water Rod", "Water Medallion" }, { "Meteor Rod", "Fire Medallion" },
+            { "Storm Rod", "Light Medallion" }, { "Shadow Scepter", "Shadow Medallion" },
+        };
+        static const char* kRuleNames[] = { "Medallions", "Single item", "Elemental shuffle" };
+
+        int rule = Wand_RandoMode();
+        if (ImGui::Combo("Unlock rule", &rule, kRuleNames, IM_ARRAYSIZE(kRuleNames))) {
+            CVarSetInteger(CVAR_RANDOMIZER_SETTING("ElementalWandShuffle"), rule);
+        }
+        ImGui::TextDisabled("Medallions: a rod IS its quest medallion — ticking grants it, unticking takes it.");
+
+        if (ImGui::Button("Give All 6 Rods")) {
+            for (uint8_t m = 0; m < WAND_MODE_COUNT; m++) {
+                Wand_SetModeOwned(m, 1);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear Wand")) {
+            for (uint8_t m = 0; m < WAND_MODE_COUNT; m++) {
+                Wand_SetModeOwned(m, 0);
+            }
+        }
+
+        ImGui::Spacing();
+
+        for (uint8_t m = 0; m < WAND_MODE_COUNT; m++) {
+            char label[64];
+            bool owned = Wand_ModeOwned(m) != 0;
+
+            snprintf(label, sizeof(label), "%s (%s)", kRods[m].name, kRods[m].unlock);
+            if (ImGui::Checkbox(label, &owned)) {
+                Wand_SetModeOwned(m, owned ? 1 : 0);
+            }
+        }
+
+        ImGui::Spacing();
+
+        int ownedRods = Wand_ModeCount();
+        if (ownedRods > 0) {
+            int active = Wand_GetMode();
+            int shown = 0;
+
+            ImGui::Text("Active rod:");
+            for (uint8_t m = 0; m < WAND_MODE_COUNT; m++) {
+                if (!Wand_ModeOwned(m)) {
+                    continue;
+                }
+                if ((shown % 3) != 0) {
+                    ImGui::SameLine();
+                }
+                if (ImGui::RadioButton(kRods[m].name, &active, m)) {
+                    Wand_SetMode(m);
+                }
+                shown++;
+            }
+        }
+
+        // One owned rod looks exactly like a broken wheel: the selector refuses to draw its arrows
+        // below two, so the count is the first thing to check when "the rods are not selectable".
+        ImGui::TextDisabled("%d/%d rods owned. A on the wand cell (pause) opens the wheel, stick picks;"
+                            " it stays hidden below 2.",
+                            ownedRods, WAND_MODE_COUNT);
+    }
+
     if (ImGui::CollapsingHeader("Custom Items Inventory (Page 2)", ImGuiTreeNodeFlags_DefaultOpen)) {
         // Quick action buttons
         if (ImGui::Button("Give All Custom Items (Max)")) {
@@ -1144,7 +1217,9 @@ void DrawInventoryTab() {
                 if (i == 0) {
                     // Slot 24: Give Roc's Cape (max upgrade) instead of Roc's Feather
                     Nei_SetOwnedItem((uint8_t)(24 + i), ITEM_ROCS_CAPE); // Skijer's NEI
-                } else {
+                } else if (gPage2Items[i] != ITEM_NONE) {
+                    // A hole here is a cell owned by an EXT (u16) item this u8 table cannot hold —
+                    // writing it would CLEAR that cell instead of filling it. Skijer's NEI
                     Nei_SetOwnedItem((uint8_t)(24 + i), gPage2Items[i]); // Skijer's NEI
                 }
             }

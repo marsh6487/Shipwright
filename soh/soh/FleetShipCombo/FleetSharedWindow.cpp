@@ -546,6 +546,9 @@ void AddSharedAudioVolumes(WidgetPath& path) {
 }
 
 void RegisterFleetSharedMenu() {
+#ifdef COMBO_BUILD
+    return; // comboui is the shared menu under ComboShip
+#endif
     if (!CVarGetInteger("isFleetShipCombo.Enabled", 0)) {
         return; // solo en combo: sin combo el menú queda exactamente como siempre
     }
@@ -610,6 +613,9 @@ namespace {
 
 // pump del push compartido, por frame (independiente de qué sección esté visible)
 void RegisterFleetSharedPump() {
+#ifdef COMBO_BUILD
+    return; // comboui is the shared menu under ComboShip; there is no second process to push CVars to
+#endif
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>(PumpSharedPush);
 }
 static RegisterShipInitFunc fleetSharedPumpInit(RegisterFleetSharedPump, {});

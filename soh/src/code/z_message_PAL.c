@@ -3775,7 +3775,12 @@ void Message_DrawMain(PlayState* play, Gfx** p) {
                 // fanfare sequence from mm.o2r via MmBgm (silent no-op if the sequence is missing);
                 // customs rely on the ocarina melody replay above (mod window pending, like 2ship).
                 if (msgCtx->lastPlayedSong < ARRAY_COUNT(sOcarinaSongFanfares)) {
-                    Audio_PlayFanfare(sOcarinaSongFanfares[msgCtx->lastPlayedSong]);
+                    // A form with its own MM voice sings the jingle itself: OoT's sequence
+                    // hard-codes the ocarina instrument and is bound to a soundfont that does
+                    // not contain the form voices, so it cannot be re-voiced in place.
+                    if (!FormJingle_Start(msgCtx->lastPlayedSong)) {
+                        Audio_PlayFanfare(sOcarinaSongFanfares[msgCtx->lastPlayedSong]);
+                    }
                     Audio_SetSfxBanksMute(0x20);
                 } else if ((msgCtx->lastPlayedSong >= OCARINA_SONG_MM_FIRST) &&
                            (msgCtx->lastPlayedSong <= OCARINA_SONG_MM_LAST)) {

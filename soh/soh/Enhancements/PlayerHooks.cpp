@@ -13,13 +13,20 @@ extern "C" {
 #include "mods/boss_remains/boss_remains.h"
 #include "mods/extended_equipment.h"
 #include "mods/transformation_masks/mm_mask_wear.h"
+#include "mods/transformation_masks/gerudo_voice.h"
+#include "mods/items/logic/item_minish_cap.h"
+#include "expansions/sm64/sm64_mario.h"
 
+void Sw97_CuccoOnShieldBlock(Player* player, PlayState* play);
 MmPlayerTransformation MmForm_GetCurrentForm(void);
+u8 MmForm_IsKafeiFormActive(void);
 u8 Pacci_UltrahandModeActive(void);
 u8 MasterCycle_IsRiding(void);
+u8 Cryonis_ModeActive(void);
 void MmForm_StartDekuSpinFromOot(Player* player, PlayState* play);
 void MmForm_StartGoronCurlFromOot(Player* player, PlayState* play);
 u8 GerudoForm_IsActive(void);
+u8 KafeiForm_SuppressRoll(Player* player);
 }
 
 static bool RollIsOverridden(Player* player, PlayState* play) {
@@ -32,6 +39,11 @@ static bool RollIsOverridden(Player* player, PlayState* play) {
     // press is swallowed while the tap/hold detector decides, and the controller calls
     // Player_SetupRoll back itself on a short release.
     if (GerudoMhr_SuppressRoll(player)) {
+        return true;
+    }
+
+    // Kafei: A is the stamina sprint, so the roll never gets the press.
+    if (KafeiForm_SuppressRoll(player)) {
         return true;
     }
 
@@ -95,7 +107,7 @@ static bool StatusIsResisted(s32 hitResponse) {
 // An empty B slot is how you tell OOT to leave the button alone — it is what keeps the sword in its
 // scabbard while a form, a mask or a mount owns the press.
 static s32 ResolveItemOnButton(PlayState* play, s32 index, s32 item) {
-    if ((index >= 4) && (Pacci_UltrahandModeActive() || MasterCycle_IsRiding())) {
+    if ((index >= 4) && (Pacci_UltrahandModeActive() || MasterCycle_IsRiding() || Cryonis_ModeActive())) {
         return ITEM_NONE;
     }
     if (index != 0) {
@@ -113,6 +125,37 @@ static s32 ResolveItemOnButton(PlayState* play, s32 index, s32 item) {
         return ITEM_SLINGSHOT;
     }
     return item;
+}
+
+// 1 when something other than Link answered for this grunt.
+static bool VoiceIsOverridden(Player* player, u16 sfxId) {
+    // Gerudo has no MM samples in soh.o2r and indexing a missing SFX block crashed the audio
+    // thread; Kafei is a man, not a monster, so Link's own voice is the right one for him.
+    if (TransformMasks_IsTransformedAny() && !GerudoForm_IsActive() && !MmForm_IsKafeiFormActive()) {
+        TransformMasks_PlayMmVoice(sfxId, &player->actor.projectedPos);
+        return true;
+    }
+
+    if (player->actor.category != ACTORCAT_PLAYER) {
+        return false;
+    }
+
+    u16 agedSfxId = (u16)(sfxId + player->ageProperties->unk_92);
+
+    // Falls through to Link's voice when this slot has no gerudo sample.
+    if (GerudoForm_IsActive() && GerudoVoice_PlayIfMatch(agedSfxId, &player->actor.projectedPos)) {
+        return true;
+    }
+
+    // Giant's Mask is a worn buff, not a form: same voice slot, dropped into the giant register.
+    if (MmMaskWear_IsGiantMaskActive()) {
+        static f32 giantVoiceFreq = 0.6f;
+        Audio_PlaySoundGeneral(agedSfxId, &player->actor.projectedPos, 4, &giantVoiceFreq, &gSfxDefaultFreqAndVolScale,
+                               &gSfxDefaultReverb);
+        return true;
+    }
+
+    return false;
 }
 
 static void RegisterPlayerHooks() {
@@ -139,6 +182,68 @@ static void RegisterPlayerHooks() {
 
     REGISTER_VB_SHOULD(VB_BURN_SHIELD, {
         if (ShieldSurvivesFire()) {
+            *should = false;
+        }
+    });
+
+    REGISTER_VB_SHOULD(VB_PLAYER_GRAB_LEDGE, {
+        // Goron has no ledge climb at all, and Minish's vault offsets assume normal scale — they
+        // teleport him into a jump state he cannot leave.
+        if (TransformMasks_BlocksLedgeGrab() || MinishTiny_IsActive() || GameInteractor_GetDisableLedgeGrabsActive()) {
+            *should = false;
+        }
+    });
+
+    REGISTER_VB_SHOULD(VB_PLAYER_PARRY_HIT, {
+        Player* player = va_arg(args, Player*);
+        PlayState* play = va_arg(args, PlayState*);
+        if (GerudoMhr_TryParry(play, player) || ExtEquip_TryParry(play, player)) {
+            *should = true;
+        }
+    });
+
+    REGISTER_VB_SHOULD(VB_PLAYER_SHIELD_BLOCKED, {
+        Player* player = va_arg(args, Player*);
+        PlayState* play = va_arg(args, PlayState*);
+        DivineShield_OnShieldBlock(player, play);
+        Ikana_OnShieldBlock(player, play);
+        // The cucco's shield reflects but does not negate: this applies the hit the vanilla block
+        // branch is about to skip.
+        Sw97_CuccoOnShieldBlock(player, play);
+    });
+
+    REGISTER_VB_SHOULD(VB_PLAYER_HOVERS_WITHOUT_BOOTS, {
+        if (Sm64Mario_IsReady()) {
+            *should = true;
+        }
+    });
+
+    REGISTER_VB_SHOULD(VB_PLAYER_EDGE_REACTION, {
+        if (MmForm_IsGoronRolling() || MmForm_IsDekuSpinning()) {
+            *should = false;
+        }
+    });
+
+    REGISTER_VB_SHOULD(VB_PLAYER_VOICE_SFX, {
+        Player* player = va_arg(args, Player*);
+        u16 sfxId = (u16)va_arg(args, s32);
+        if (VoiceIsOverridden(player, sfxId)) {
+            *should = false;
+        }
+    });
+
+    REGISTER_VB_SHOULD(VB_PLAYER_JUMP_SLASH_LAUNCH, {
+        Player* player = va_arg(args, Player*);
+        s32 mwa = va_arg(args, s32);
+        // Mutually exclusive: Gerudo and Zora are forms, the Trident is equipment on human Link.
+        GerudoMhr_AdjustJumpSlash(player, mwa);
+        Trident_AdjustJumpSlash(player, mwa);
+        MmForm_AdjustJumpSlash(player, mwa);
+    });
+
+    REGISTER_VB_SHOULD(VB_PLAYER_ADVANCE_COMBO, {
+        Player* player = va_arg(args, Player*);
+        if (GerudoMhr_OwnsComboRow(player) || Trident_OwnsComboRow(player) || ByrnaIg_OwnsComboRow(player)) {
             *should = false;
         }
     });
