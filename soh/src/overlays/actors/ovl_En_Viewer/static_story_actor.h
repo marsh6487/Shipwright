@@ -4,25 +4,118 @@
 #include <stdint.h>
 
 #define STATIC_STORY_ACTOR_PARAM_PREFIX 0x7F00
+#define STATIC_STORY_ACTOR_POSE_COUNT 16
 
 typedef enum {
+    STATIC_STORY_ACTOR_NONE = 0,
     STATIC_STORY_ACTOR_IMPA = 1,
-    STATIC_STORY_ACTOR_CHILD_MALON = 2,
-    STATIC_STORY_ACTOR_SARIA = 3,
-    STATIC_STORY_ACTOR_MAX
+    STATIC_STORY_ACTOR_CHILD_MALON,
+    STATIC_STORY_ACTOR_SARIA,
+    STATIC_STORY_ACTOR_ADULT_ZELDA,
+    STATIC_STORY_ACTOR_SHEIK,
+    STATIC_STORY_ACTOR_ADULT_RUTO,
+    STATIC_STORY_ACTOR_CHILD_RUTO,
+    STATIC_STORY_ACTOR_KOKIRI_GIRL,
+    STATIC_STORY_ACTOR_FADO,
+    STATIC_STORY_ACTOR_ADULT_MALON,
+    STATIC_STORY_ACTOR_MAX,
 } StaticStoryActorType;
 
-static inline int StaticStoryActor_IsParam(int16_t params) {
-    return ((uint16_t)params & 0xFF00) == STATIC_STORY_ACTOR_PARAM_PREFIX;
-}
+typedef enum {
+    STATIC_ADAPTER_NONE,
+    STATIC_ADAPTER_IMPA,
+    STATIC_ADAPTER_MALON,
+    STATIC_ADAPTER_SARIA,
+    STATIC_ADAPTER_ADULT_ZELDA,
+    STATIC_ADAPTER_SHEIK,
+    STATIC_ADAPTER_ADULT_RUTO,
+    STATIC_ADAPTER_CHILD_RUTO,
+    STATIC_ADAPTER_KOKIRI_GIRL,
+    STATIC_ADAPTER_FADO,
+    STATIC_ADAPTER_ADULT_MALON,
+} StaticStoryActorAdapter;
 
-static inline int StaticStoryActor_GetType(int16_t params) {
-    int type = (uint16_t)params & 0x0F;
-    return StaticStoryActor_IsParam(params) && type > 0 && type < STATIC_STORY_ACTOR_MAX ? type : 0;
-}
+typedef enum {
+    STATIC_SKELETON_NONE,
+    STATIC_SKELETON_IMPA,
+    STATIC_SKELETON_MALON_CHILD,
+    STATIC_SKELETON_SARIA,
+    STATIC_SKELETON_SHEIK,
+    STATIC_SKELETON_ADULT_RUTO,
+    STATIC_SKELETON_CHILD_RUTO,
+    STATIC_SKELETON_KOKIRI,
+    STATIC_SKELETON_MALON_ADULT,
+} StaticStorySkeletonFamily;
 
-static inline int StaticStoryActor_GetPose(int16_t params) {
-    return StaticStoryActor_IsParam(params) ? (((uint16_t)params >> 4) & 0x0F) : 0;
-}
+typedef enum {
+    STATIC_ANIM_NONE,
+    STATIC_ANIM_IMPA_IDLE,
+    STATIC_ANIM_MALON_IDLE,
+    STATIC_ANIM_MALON_SING,
+    STATIC_ANIM_SARIA_ARMS_TO_SIDE,
+    STATIC_ANIM_SARIA_HANDS_BEHIND,
+    STATIC_ANIM_SARIA_OCARINA,
+    STATIC_ANIM_SARIA_SEATED,
+    STATIC_ANIM_SHEIK_IDLE,
+    STATIC_ANIM_SHEIK_ARMS_CROSSED,
+    STATIC_ANIM_SHEIK_HARP,
+    STATIC_ANIM_ADULT_RUTO_IDLE,
+    STATIC_ANIM_ADULT_RUTO_HANDS_HIPS,
+    STATIC_ANIM_ADULT_RUTO_LOOK_DOWN_LEFT,
+    STATIC_ANIM_CHILD_RUTO_HANDS_BEHIND,
+    STATIC_ANIM_CHILD_RUTO_HANDS_HIPS,
+    STATIC_ANIM_CHILD_RUTO_SITTING,
+    STATIC_ANIM_KOKIRI_IDLE,
+    STATIC_ANIM_KOKIRI_ARMS_BEHIND,
+    STATIC_ANIM_KOKIRI_HANDS_HIPS,
+    STATIC_ANIM_KOKIRI_SITTING_HEAD_HAND,
+    STATIC_ANIM_KOKIRI_SITTING_CROSSED_LEGS,
+    STATIC_ANIM_KOKIRI_SITTING_CROSSED_ARMS_LEGS,
+    STATIC_ANIM_FADO_IDLE,
+    STATIC_ANIM_FADO_POSE_1,
+    STATIC_ANIM_FADO_POSE_2,
+    STATIC_ANIM_FADO_POSE_3,
+    STATIC_ANIM_FADO_POSE_4,
+    STATIC_ANIM_FADO_POSE_5,
+    STATIC_ANIM_ADULT_MALON_IDLE,
+    STATIC_ANIM_ADULT_MALON_BASKET,
+    STATIC_ANIM_ADULT_MALON_SING,
+} StaticStoryAnimation;
+
+enum {
+    STATIC_POSE_FLAG_NONE = 0,
+    STATIC_POSE_FLAG_VOCAL = 1 << 0,
+    STATIC_POSE_FLAG_OCARINA = 1 << 1,
+    STATIC_POSE_FLAG_BASKET = 1 << 2,
+};
+
+typedef struct {
+    uint16_t animation;
+    float playbackSpeed;
+    uint16_t flags;
+    StaticStorySkeletonFamily skeletonFamily;
+} StaticStoryPoseDescriptor;
+
+typedef struct {
+    uint8_t maxPose;
+    uint8_t available;
+    int16_t objectId;
+    StaticStoryActorAdapter adapter;
+    float scale;
+    float focusHeight;
+    int16_t colliderRadius;
+    int16_t colliderHeight;
+    int16_t colliderYShift;
+    int16_t blinkMin;
+    int16_t blinkRange;
+} StaticStoryActorDefinition;
+
+int StaticStoryActor_IsParam(int16_t params);
+StaticStoryActorType StaticStoryActor_GetType(int16_t params);
+uint8_t StaticStoryActor_GetPose(int16_t params);
+uint8_t StaticStoryActor_SanitizePose(StaticStoryActorType type, uint8_t pose);
+int StaticStoryActor_IsAvailable(StaticStoryActorType type);
+const StaticStoryActorDefinition* StaticStoryActor_GetDefinition(StaticStoryActorType type);
+const StaticStoryPoseDescriptor* StaticStoryActor_ResolvePose(StaticStoryActorType type, uint8_t pose);
 
 #endif

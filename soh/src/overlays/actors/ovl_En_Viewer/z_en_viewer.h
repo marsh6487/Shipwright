@@ -29,7 +29,13 @@ typedef enum {
     /* 2 */ ENVIEWER_DRAW_ZELDA,
     /* 3 */ ENVIEWER_DRAW_IMPA,
     /* 4 */ ENVIEWER_DRAW_STATIC_CHILD_MALON,
-    /* 5 */ ENVIEWER_DRAW_STATIC_SARIA
+    /* 5 */ ENVIEWER_DRAW_STATIC_SARIA,
+    /* 6 */ ENVIEWER_DRAW_STATIC_SHEIK,
+    /* 7 */ ENVIEWER_DRAW_STATIC_ADULT_RUTO,
+    /* 8 */ ENVIEWER_DRAW_STATIC_CHILD_RUTO,
+    /* 9 */ ENVIEWER_DRAW_STATIC_KOKIRI_GIRL,
+    /* 10 */ ENVIEWER_DRAW_STATIC_FADO,
+    /* 11 */ ENVIEWER_DRAW_STATIC_ADULT_MALON
 } EnViewerDrawType;
 
 typedef enum {
@@ -61,6 +67,17 @@ typedef struct {
     u32 epoch;
 } EnViewerFireEffect; // size = 0x34
 
+typedef struct {
+    uint8_t staticMode;
+    uint8_t type;
+    uint8_t pose;
+    uint8_t initialized;
+    uint8_t eyeIndex;
+    int16_t blinkTimer;
+    int16_t objectSlots[4];
+    ColliderCylinder collider;
+} EnViewerStaticState;
+
 typedef struct EnViewer {
     /* 0x0000 */ Actor actor;
     /* 0x014C */ Skin skin;
@@ -70,9 +87,7 @@ typedef struct EnViewer {
     /* 0x01E4 */ u8 unused;
     /* 0x01E5 */ u8 state;
     /* 0x01E6 */ u8 isVisible;
-    ColliderCylinder collider;
-    s16 blinkTimer;
-    u8 eyeIndex;
+    EnViewerStaticState staticState;
     /* 0x01E8 */ EnViewerFireEffect fireEffects[20];
 } EnViewer; // size = 0x05F8
 

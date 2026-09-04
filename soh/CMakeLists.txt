@@ -6,6 +6,18 @@ project(soh LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "The C++ standard to use")
 set(CMAKE_C_STANDARD 23 CACHE STRING "The C standard to use")
 
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(static_story_actor_test
+        tests/static_story_actor_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+    )
+    target_include_directories(static_story_actor_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    add_test(NAME static_story_actor_test COMMAND static_story_actor_test)
+endif()
+
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     enable_language(OBJCXX)
     set(CMAKE_OBJC_FLAGS "${CMAKE_OBJC_FLAGS} -fobjc-arc")
