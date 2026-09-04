@@ -8,6 +8,7 @@
 
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/cvar_prefixes.h"
+#include <libultraship/bridge/consolevariablebridge.h>
 #include "z64audio.h"
 
 namespace {
