@@ -32,6 +32,7 @@ extern "C" {
 #include "sequence.h"
 #include "variables.h"
 #include "z64.h"
+extern PlayState* gPlayState;
 }
 
 static constexpr uint16_t kDefaultNightSequence = NA_BGM_KAKARIKO_ADULT;
