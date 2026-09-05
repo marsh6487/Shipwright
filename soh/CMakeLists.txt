@@ -16,6 +16,28 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
     add_test(NAME static_story_actor_test COMMAND static_story_actor_test)
+
+    add_executable(hyrule_field_night_music_test
+        tests/hyrule_field_night_music_test.cpp
+        soh/Enhancements/audio/HyruleFieldNightMusic.cpp
+    )
+    target_include_directories(hyrule_field_night_music_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(hyrule_field_night_music_test PRIVATE HYRULE_FIELD_NIGHT_MUSIC_TEST)
+    add_test(NAME hyrule_field_night_music_test COMMAND hyrule_field_night_music_test)
+
+    add_executable(global_outdoor_rain_test
+        tests/global_outdoor_rain_test.cpp
+        soh/Enhancements/audio/GlobalOutdoorRain.cpp
+    )
+    target_include_directories(global_outdoor_rain_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(global_outdoor_rain_test PRIVATE GLOBAL_OUTDOOR_RAIN_TEST)
+    add_test(NAME global_outdoor_rain_test COMMAND global_outdoor_rain_test)
 endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
