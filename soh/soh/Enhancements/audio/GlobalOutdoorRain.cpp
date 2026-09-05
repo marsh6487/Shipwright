@@ -28,6 +28,7 @@ extern "C" {
 #include "sfx.h"
 #include "variables.h"
 #include "z64.h"
+extern PlayState* gPlayState;
 }
 
 static constexpr int kRainDensity = 25;
