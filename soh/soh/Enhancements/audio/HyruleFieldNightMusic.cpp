@@ -13,11 +13,18 @@ HyruleFieldNightMusicDecision HyruleFieldNightMusic_Select(const HyruleFieldNigh
                                 : HyruleFieldNightMusicDecision::NoChange;
     }
     if (!state.isNight) {
-        return state.ownsNightBgm ? HyruleFieldNightMusicDecision::StopNightAndRestoreDay
+        return state.ownsNightBgm ? HyruleFieldNightMusicDecision::StopNight
                                   : HyruleFieldNightMusicDecision::NoChange;
+    }
+    if (!state.ownsNightBgm && !state.nightAmbienceReady) {
+        return HyruleFieldNightMusicDecision::WaitForNightAmbience;
     }
     return state.ownsNightBgm && state.nightBgmPlaying ? HyruleFieldNightMusicDecision::NoChange
                                                        : HyruleFieldNightMusicDecision::StartNight;
+}
+
+uint16_t HyruleFieldNightMusic_ResolveSequence(uint16_t selected) {
+    return selected;
 }
 
 uint16_t HyruleFieldNightMusic_ValidateSequence(uint16_t selected, bool isValid, uint16_t fallback) {
@@ -26,7 +33,6 @@ uint16_t HyruleFieldNightMusic_ValidateSequence(uint16_t selected, bool isValid,
 
 #ifndef HYRULE_FIELD_NIGHT_MUSIC_TEST
 #include "AudioCollection.h"
-#include "AudioEditor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ShipInit.hpp"
 #include "soh/cvar_prefixes.h"
@@ -51,10 +57,10 @@ static bool HasExplicitAudioOverride(PlayState* play) {
     const uint16_t mainSeq = func_800FA0B4(SEQ_PLAYER_BGM_MAIN);
     const uint16_t subSeq = func_800FA0B4(SEQ_PLAYER_BGM_SUB);
     const uint16_t fanfareSeq = func_800FA0B4(SEQ_PLAYER_FANFARE);
-    const bool mainIsFieldAmbience = mainSeq == NA_BGM_NATURE_AMBIENCE ||
-                                     (mainSeq & 0xFF) == NA_BGM_FIELD_LOGIC || mainSeq == NA_BGM_DISABLED;
+    const bool mainIsFieldLifecycle = mainSeq == NA_BGM_NATURE_AMBIENCE ||
+                                      (mainSeq & 0xFF) == NA_BGM_FIELD_LOGIC || mainSeq == NA_BGM_DISABLED;
     const bool subIsNightTrack = sOwnsNightBgm && (subSeq & 0xFF) == (sNightPlaybackSeq & 0xFF);
-    return !mainIsFieldAmbience || (subSeq != NA_BGM_DISABLED && !subIsNightTrack) ||
+    return !mainIsFieldLifecycle || (subSeq != NA_BGM_DISABLED && !subIsNightTrack) ||
            fanfareSeq != NA_BGM_DISABLED;
 }
 
@@ -71,6 +77,7 @@ void HyruleFieldNightMusic_Update(PlayState* play) {
         .isNight = gSaveContext.nightFlag != 0,
         .ownsNightBgm = sOwnsNightBgm,
         .nightBgmPlaying = sOwnsNightBgm && (subSeq & 0xFF) == (sNightPlaybackSeq & 0xFF),
+        .nightAmbienceReady = func_800FA0B4(SEQ_PLAYER_BGM_MAIN) == NA_BGM_NATURE_AMBIENCE,
         .explicitAudioOverride = HasExplicitAudioOverride(play),
     };
 
@@ -80,21 +87,17 @@ void HyruleFieldNightMusic_Update(PlayState* play) {
                 CVarGetInteger(CVAR_AUDIO("HyruleFieldNightSequence"), kDefaultNightSequence));
             const uint16_t valid = HyruleFieldNightMusic_ValidateSequence(
                 selected, AudioCollection::Instance->HasSequenceNum(selected), kDefaultNightSequence);
-            sNightPlaybackSeq = AudioEditor_GetReplacementSeq(valid);
+            sNightPlaybackSeq = HyruleFieldNightMusic_ResolveSequence(valid);
             Audio_QueueSeqCmd((SEQ_PLAYER_BGM_SUB << 24) | (0x1E << 16) | sNightPlaybackSeq);
             sOwnsNightBgm = true;
             break;
         }
+        case HyruleFieldNightMusicDecision::WaitForNightAmbience:
+            break;
         case HyruleFieldNightMusicDecision::StopNight:
             Audio_QueueSeqCmd((0x1 << 28) | (SEQ_PLAYER_BGM_SUB << 24) | (0x1E << 16) | 0xFF);
             sOwnsNightBgm = false;
             sNightPlaybackSeq = NA_BGM_DISABLED;
-            break;
-        case HyruleFieldNightMusicDecision::StopNightAndRestoreDay:
-            Audio_QueueSeqCmd((0x1 << 28) | (SEQ_PLAYER_BGM_SUB << 24) | (0x1E << 16) | 0xFF);
-            sOwnsNightBgm = false;
-            sNightPlaybackSeq = NA_BGM_DISABLED;
-            Audio_PlaySceneSequence(play->sequenceCtx.seqId);
             break;
         case HyruleFieldNightMusicDecision::NoChange:
             break;

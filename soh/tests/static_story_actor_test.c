@@ -130,6 +130,9 @@ int main(void) {
            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_RUTO, &complete));
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &early) == 0x404E);
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &complete) == 0x404E);
+    assert(!StaticStoryActor_ShouldCloseTerminalText(1, 0));
+    assert(StaticStoryActor_ShouldCloseTerminalText(1, 1));
+    assert(!StaticStoryActor_ShouldCloseTerminalText(0, 1));
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_KOKIRI_GIRL, &early) !=
            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_KOKIRI_GIRL, &complete));
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_FADO, &early) !=

@@ -511,8 +511,13 @@ void EnViewerStatic_OfferTalk(EnViewer* this, PlayState* play) {
     StaticStoryProgression progression;
 
     if (this->staticState.talking) {
+        s32 messageState = Message_GetState(&play->msgCtx);
+        s32 terminalState = messageState == TEXT_STATE_EVENT || messageState == TEXT_STATE_DONE;
+
         this->staticState.tracking = true;
-        if (Message_GetState(&play->msgCtx) == TEXT_STATE_CLOSING) {
+        if (terminalState && StaticStoryActor_ShouldCloseTerminalText(terminalState, Message_ShouldAdvance(play))) {
+            Message_CloseTextbox(play);
+        } else if (messageState == TEXT_STATE_CLOSING) {
             EnViewerStatic_RestorePlacementPose(this);
         }
         return;

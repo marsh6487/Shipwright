@@ -94,6 +94,7 @@ GlobalOutdoorRainColor GlobalOutdoorRain_SelectColor(bool ownsRain, GlobalOutdoo
 #include "soh/ShipInit.hpp"
 #include "soh/cvar_prefixes.h"
 #include "code/concurrent_weather_audio.h"
+#include "WeatherSamplePlayer.h"
 
 extern "C" {
 #include "functions.h"
@@ -133,6 +134,7 @@ static int RandomSustainFrames() {
 
 static void PlayRainLoop(float intensity) {
     if (Audio_IsNatureRainEnabled()) {
+        WeatherSamplePlayer_SetLoop(nullptr, 0.0f);
         return;
     }
     static float rainVolume = 0.5f;
@@ -140,8 +142,7 @@ static void PlayRainLoop(float intensity) {
                                  CVarGetInteger(CVAR_AUDIO("ProximityWeatherRainVolume"), 50)) /
                              100.0f;
     rainVolume = GlobalOutdoorRain_ScaleVolume(peakVolume, intensity);
-    Audio_PlaySoundGeneral(NA_SE_EV_RAIN - SFX_FLAG, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &rainVolume,
-                           &gSfxDefaultReverb);
+    WeatherSamplePlayer_SetLoop("audio/samples/Rainfall_META", rainVolume);
 }
 
 void GlobalOutdoorRain_Update(PlayState* play) {
@@ -186,6 +187,7 @@ void GlobalOutdoorRain_Update(PlayState* play) {
     }
 
     if (!sOwnsRain) {
+        WeatherSamplePlayer_SetLoop(nullptr, 0.0f);
         return;
     }
 
@@ -205,6 +207,7 @@ void GlobalOutdoorRain_Update(PlayState* play) {
     }
     if ((!enabled || !outdoors) && sCycle.phase == GlobalOutdoorRainPhase::Dry) {
         sOwnsRain = false;
+        WeatherSamplePlayer_SetLoop(nullptr, 0.0f);
     }
 }
 
@@ -212,6 +215,7 @@ void GlobalOutdoorRain_Reset() {
     sOwnsRain = false;
     sLastMode = -1;
     sCycle = { GlobalOutdoorRainPhase::Dry, 0, 0.0f };
+    WeatherSamplePlayer_SetLoop(nullptr, 0.0f);
 }
 
 static void RegisterGlobalOutdoorRain() {

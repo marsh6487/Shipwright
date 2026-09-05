@@ -24,6 +24,7 @@ struct Voice {
 std::mutex sMutex;
 std::unordered_map<std::string, std::vector<int16_t>> sDecodedSamples;
 std::array<Voice, kMaximumVoices> sVoices;
+Voice sLoopVoice;
 
 int16_t ClampSample(int32_t sample) {
     return static_cast<int16_t>(std::clamp(sample, -32768, 32767));
@@ -101,10 +102,31 @@ std::vector<int16_t> DecodeSample(const SoundFontSample* sample) {
 extern "C" void WeatherSamplePlayer_Init(void) {
     std::lock_guard<std::mutex> lock(sMutex);
     sDecodedSamples.clear();
-    for (const char* path : { "audio/samples/Low Thunder_META", "audio/samples/Lightning_META" }) {
+    for (const char* path : { "audio/samples/Low Thunder_META", "audio/samples/Lightning_META",
+                              "audio/samples/Rainfall_META" }) {
         sDecodedSamples.emplace(path, DecodeSample(ResourceMgr_LoadAudioSample(path)));
     }
     sVoices = {};
+    sLoopVoice = {};
+}
+
+extern "C" void WeatherSamplePlayer_SetLoop(const char* resourcePath, float gain) {
+    std::lock_guard<std::mutex> lock(sMutex);
+    gain = WeatherSamplePlayer_ClampGain(gain);
+    if (resourcePath == nullptr || gain <= 0.0f) {
+        sLoopVoice = {};
+        return;
+    }
+    const auto sample = sDecodedSamples.find(resourcePath);
+    if (sample == sDecodedSamples.end() || sample->second.empty()) {
+        sLoopVoice = {};
+        return;
+    }
+    if (sLoopVoice.samples != &sample->second) {
+        sLoopVoice = { &sample->second, 0, gain };
+    } else {
+        sLoopVoice.gain = gain;
+    }
 }
 
 extern "C" bool WeatherSamplePlayer_Play(const char* resourcePath, float gain) {
@@ -120,6 +142,21 @@ extern "C" bool WeatherSamplePlayer_Play(const char* resourcePath, float gain) {
         if (voice.samples == nullptr) {
             voice = { &sample->second, 0, WeatherSamplePlayer_ClampGain(gain) };
             return true;
+        }
+    }
+    if (sLoopVoice.samples != nullptr && !sLoopVoice.samples->empty()) {
+        size_t destinationOffset = 0;
+        size_t framesRemaining = frameCount;
+        while (framesRemaining > 0) {
+            const size_t available = sLoopVoice.samples->size() - sLoopVoice.position;
+            const size_t mixedFrames = std::min(framesRemaining, available);
+            WeatherSamplePlayer_TestMixMono(interleavedStereo + destinationOffset * 2,
+                                            sLoopVoice.samples->data() + sLoopVoice.position, mixedFrames,
+                                            sLoopVoice.gain * sfxVolume);
+            sLoopVoice.position = WeatherSamplePlayer_AdvanceLoopPosition(
+                sLoopVoice.position, sLoopVoice.samples->size(), mixedFrames);
+            destinationOffset += mixedFrames;
+            framesRemaining -= mixedFrames;
         }
     }
     return false;
@@ -149,4 +186,5 @@ extern "C" void WeatherSamplePlayer_Mix(int16_t* interleavedStereo, size_t frame
 extern "C" void WeatherSamplePlayer_Reset(void) {
     std::lock_guard<std::mutex> lock(sMutex);
     sVoices = {};
+    sLoopVoice = {};
 }

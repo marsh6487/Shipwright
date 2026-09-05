@@ -15,5 +15,10 @@ int main() {
     assert(destination[1] == -30000);
     assert(destination[2] == -1900);
     assert(destination[3] == -2100);
+
+    size_t position = 3;
+    assert(WeatherSamplePlayer_AdvanceLoopPosition(position, 4, 1) == 0);
+    assert(WeatherSamplePlayer_AdvanceLoopPosition(position, 4, 6) == 1);
+    assert(WeatherSamplePlayer_AdvanceLoopPosition(position, 0, 6) == 0);
     return 0;
 }

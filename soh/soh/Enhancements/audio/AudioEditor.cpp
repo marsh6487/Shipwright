@@ -141,7 +141,7 @@ static void DrawHyruleFieldNightTrack() {
         ImGui::EndCombo();
     }
     UIWidgets::PopStyleCombobox();
-    UIWidgets::Tooltip("Selects the nighttime BGM used only in Hyrule Field. Audio Editor replacements still apply.");
+    UIWidgets::Tooltip("Selects the exact nighttime BGM used only in Hyrule Field.");
 }
 
 // Grabs the current BGM sequence ID and replays it
