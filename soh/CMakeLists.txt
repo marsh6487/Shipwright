@@ -39,6 +39,7 @@ if(BUILD_TESTING)
     target_compile_definitions(global_outdoor_rain_test PRIVATE GLOBAL_OUTDOOR_RAIN_TEST)
     add_test(NAME global_outdoor_rain_test COMMAND global_outdoor_rain_test)
 
+    # The mixer policy helpers are header-only, so this target needs no runtime audio dependencies.
     add_executable(weather_sample_player_test tests/weather_sample_player_test.cpp)
     target_include_directories(weather_sample_player_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
