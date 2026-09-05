@@ -2,7 +2,7 @@
  * @file mm_audio_sfx_params.cpp
  * @brief MM SFX parameter tables — verbatim port of 2Ship's sfx_params.c.
  *
- * Source: c:/Users/LENOVO/Documents/GitHub/2ship/2ship2harkinian/mm/src/audio/sfx_params.c
+ * Source: 2Ship's mm/src/audio/sfx_params.c
  *
  * Renames applied (only renames, no logic changes):
  *   - SfxParams      -> MmSfxParams

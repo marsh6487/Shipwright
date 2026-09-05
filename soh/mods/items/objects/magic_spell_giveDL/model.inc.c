@@ -1,6 +1,6 @@
 /**
  * Magic Spell Give DLs - Recolored variants of OoT goddess spell model
- * Source: C:\Users\LENOVO\Documents\oot (object_gi_goddess)
+ * Source: OoT decomp (object_gi_goddess)
  * Items: Hylia's Grace (pink), Zonai Permafrost (turquoise), Demise Destruction (black)
  */
 

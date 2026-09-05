@@ -7,13 +7,17 @@ Priority:
   2. SSB64 PNGs (fallback) — used for additional expression variants that
      don't exist in the Blender export.
 """
-import re, math
+import os, re, sys, math
 from PIL import Image
 
-PIKACHU_C     = "c:/Users/LENOVO/Documents/GitHub/Shipwright/soh/mods/actors/pikachu/pikachuDL.c"
-PIKACHU_H     = "c:/Users/LENOVO/Documents/GitHub/Shipwright/soh/mods/actors/pikachu/pikachuDL.h"
-FAST64_C      = "C:/Users/LENOVO/Downloads/pikachu_fast64/pikachuDL.c"
-TEX_FOLDER    = r"C:/Users/LENOVO/Downloads/Nintendo 64 - Super Smash Bros. - Fighters - Pikachu"
+if len(sys.argv) < 3:
+    sys.exit("usage: convert_textures.py <pikachuDL.c from Fast64> <SSB64 pikachu texture folder>")
+
+HERE          = os.path.dirname(os.path.abspath(__file__))
+PIKACHU_C     = os.path.join(HERE, "pikachuDL.c")
+PIKACHU_H     = os.path.join(HERE, "pikachuDL.h")
+FAST64_C      = sys.argv[1]
+TEX_FOLDER    = sys.argv[2]
 
 # ── core pixel → RGBA16 u64 helpers ────────────────────────────────────────────
 

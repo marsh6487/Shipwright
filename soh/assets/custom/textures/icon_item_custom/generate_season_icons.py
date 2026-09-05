@@ -14,7 +14,7 @@ from collections import deque
 
 from PIL import Image
 
-DEFAULT_SRC = r"C:/Users/LENOVO/Documents/GitHub/magic_staff_3d/low_poly/textures"
+DEFAULT_SRC = os.path.join("magic_staff_3d", "low_poly", "textures")
 
 # Coin -> season. Oracle of Seasons' own reading: clover spring, red sun summer, gold autumn,
 # blue winter. Keep in sync with sSeasonColor in mods/extended_inventory.c.

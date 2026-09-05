@@ -5,6 +5,14 @@
 #include <stdbool.h>
 #endif
 
+// Entry points the ComboShip launcher resolves out of the built binary. __declspec is MSVC-only,
+// so clang/gcc get the equivalent visibility attribute instead.
+#ifdef _WIN32
+#define FLEET_COMBO_EXPORT __declspec(dllexport)
+#else
+#define FLEET_COMBO_EXPORT __attribute__((visibility("default")))
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

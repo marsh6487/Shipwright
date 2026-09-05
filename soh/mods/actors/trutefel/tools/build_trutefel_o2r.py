@@ -17,7 +17,8 @@ follow OTRExporter/DisplayListExporter.cpp.
 """
 import os, re, sys, struct, zipfile, math, json
 
-GBI_H = r"c:\Users\LENOVO\Documents\GitHub\2ship\2ship2harkinian\libultraship\include\libultraship\libultra\gbi.h"
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), *[os.pardir] * 5))
+GBI_H = os.path.join(REPO, "libultraship", "include", "libultraship", "libultra", "gbi.h")
 SCRATCH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENEMIES_DIR = os.path.join(SCRATCH, "enemies")
 OUT_DIR = os.path.join(SCRATCH, "out")

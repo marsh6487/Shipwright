@@ -17,7 +17,7 @@ import sys
 
 from PIL import Image
 
-DEFAULT_SRC = r"C:/Users/LENOVO/Documents/GitHub/Shipwright/x64/o2r mods/hd 3d/BotW_Sheikah_Slate_Model.png"
+DEFAULT_SRC = "BotW_Sheikah_Slate_Model.png"
 
 OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
 

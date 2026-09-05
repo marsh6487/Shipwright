@@ -1,6 +1,6 @@
 /**
  * Iron Knuckle Axe DL - extracted from OOT decomp (object_ik)
- * Source: C:\Users\LENOVO\Documents\z_oot_decomp (object_ik)
+ * Source: OoT decomp (object_ik)
  * DL: gIronKnuckleAxeDL (69 vtx)
  *
  * Segments 0x08/0x0A replaced with inline PrimColor/EnvColor DLs.

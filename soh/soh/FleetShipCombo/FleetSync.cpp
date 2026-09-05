@@ -1899,7 +1899,7 @@ static RegisterShipInitFunc initFleetSync(RegisterFleetSync, {});
 // ComboShip: the file-mirror pumps above stay off, but the two games still reconcile at every
 // switch — the peer pulls this snapshot (FleetSharedItems::PullFromPeer) and applies it max-merge.
 // Save-only: valid while this game is dormant.
-extern "C" __declspec(dllexport) const char* SOH_ExtractSharedState(void) {
+extern "C" FLEET_COMBO_EXPORT const char* SOH_ExtractSharedState(void) {
     static std::string cached;
     nlohmann::json sh;
     ExtractShared(sh);
