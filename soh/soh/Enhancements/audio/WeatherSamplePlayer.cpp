@@ -144,21 +144,6 @@ extern "C" bool WeatherSamplePlayer_Play(const char* resourcePath, float gain) {
             return true;
         }
     }
-    if (sLoopVoice.samples != nullptr && !sLoopVoice.samples->empty()) {
-        size_t destinationOffset = 0;
-        size_t framesRemaining = frameCount;
-        while (framesRemaining > 0) {
-            const size_t available = sLoopVoice.samples->size() - sLoopVoice.position;
-            const size_t mixedFrames = std::min(framesRemaining, available);
-            WeatherSamplePlayer_TestMixMono(interleavedStereo + destinationOffset * 2,
-                                            sLoopVoice.samples->data() + sLoopVoice.position, mixedFrames,
-                                            sLoopVoice.gain * sfxVolume);
-            sLoopVoice.position = WeatherSamplePlayer_AdvanceLoopPosition(
-                sLoopVoice.position, sLoopVoice.samples->size(), mixedFrames);
-            destinationOffset += mixedFrames;
-            framesRemaining -= mixedFrames;
-        }
-    }
     return false;
 }
 
@@ -179,6 +164,21 @@ extern "C" void WeatherSamplePlayer_Mix(int16_t* interleavedStereo, size_t frame
         voice.position += mixedFrames;
         if (voice.position >= voice.samples->size()) {
             voice = {};
+        }
+    }
+    if (sLoopVoice.samples != nullptr && !sLoopVoice.samples->empty()) {
+        size_t destinationOffset = 0;
+        size_t framesRemaining = frameCount;
+        while (framesRemaining > 0) {
+            const size_t available = sLoopVoice.samples->size() - sLoopVoice.position;
+            const size_t mixedFrames = std::min(framesRemaining, available);
+            WeatherSamplePlayer_TestMixMono(interleavedStereo + destinationOffset * 2,
+                                            sLoopVoice.samples->data() + sLoopVoice.position, mixedFrames,
+                                            sLoopVoice.gain * sfxVolume);
+            sLoopVoice.position = WeatherSamplePlayer_AdvanceLoopPosition(
+                sLoopVoice.position, sLoopVoice.samples->size(), mixedFrames);
+            destinationOffset += mixedFrames;
+            framesRemaining -= mixedFrames;
         }
     }
 }
