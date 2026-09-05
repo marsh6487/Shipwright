@@ -6,7 +6,7 @@ enum class HyruleFieldNightMusicDecision {
     NoChange,
     StartNight,
     StopNight,
-    Release,
+    StopNightAndRestoreDay,
 };
 
 struct HyruleFieldNightMusicState {

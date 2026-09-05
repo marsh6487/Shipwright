@@ -44,6 +44,8 @@ static WidgetInfo proximityWeatherRainVolume;
 static WidgetInfo proximityWeatherThunderVolume;
 static WidgetInfo hyruleFieldNightMusic;
 static WidgetInfo globalOutdoorRain;
+static WidgetInfo globalOutdoorRainMode;
+static WidgetInfo globalOutdoorRainColor;
 
 namespace SohGui {
 extern std::shared_ptr<SohMenu> mSohMenu;
@@ -100,6 +102,11 @@ static const std::map<int32_t, const char*> audioRandomizerModes = {
 static const std::map<int32_t, const char*> proximityWeatherThunderStyles = {
     { CONCURRENT_WEATHER_THUNDER_LOW, "Low Thunder" },
     { CONCURRENT_WEATHER_THUNDER_LAYERED, "Layered Thunder" },
+};
+
+static const std::map<int32_t, const char*> globalOutdoorRainModes = {
+    { 0, "Persistent" },
+    { 1, "Intermittent Storms" },
 };
 
 static void DrawHyruleFieldNightTrack() {
@@ -656,11 +663,20 @@ void AudioEditor::DrawElement() {
                                       UIWidgets::ButtonOptions().Size(ImVec2(80, 36)).Padding(ImVec2(5.0f, 0.0f)))) {
                     CVarSetFloat(CVAR_AUDIO("LinkVoiceFreqMultiplier"), 1.0f);
                 }
+                ImGui::SeparatorText("Weather");
                 SohGui::mSohMenu->MenuDrawItem(hyruleFieldNightMusic,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 DrawHyruleFieldNightTrack();
                 SohGui::mSohMenu->MenuDrawItem(globalOutdoorRain,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
+                if (CVarGetInteger(CVAR_AUDIO("GlobalOutdoorRain"), 0)) {
+                    SohGui::mSohMenu->MenuDrawItem(globalOutdoorRainMode,
+                                                   static_cast<uint32_t>(ImGui::GetContentRegionAvail().x),
+                                                   THEME_COLOR);
+                    SohGui::mSohMenu->MenuDrawItem(globalOutdoorRainColor,
+                                                   static_cast<uint32_t>(ImGui::GetContentRegionAvail().x),
+                                                   THEME_COLOR);
+                }
                 SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunder,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunderStyle,
@@ -1018,6 +1034,25 @@ void RegisterAudioWidgets() {
                      .Tooltip("Displays rain and plays the concurrent rain loop in outdoor scenes without requiring "
                               "a proximity-weather actor. Does not force lightning or thunder."));
     SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRain, "Enhancements", "Audio Editor", "Audio Options" });
+
+    globalOutdoorRainMode = { .name = "Global Rain Mode", .type = WidgetType::WIDGET_CVAR_COMBOBOX };
+    globalOutdoorRainMode.CVar(CVAR_AUDIO("GlobalOutdoorRainMode"))
+        .Options(ComboboxOptions()
+                     .DefaultIndex(0)
+                     .ComboMap(globalOutdoorRainModes)
+                     .Tooltip("Persistent rains continuously. Intermittent Storms alternate randomized dry and "
+                              "rain periods with synchronized visual and audio fades."));
+    SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRainMode, "Enhancements", "Audio Editor", "Audio Options" });
+
+    globalOutdoorRainColor = { .name = "Global Rain Color", .type = WidgetType::WIDGET_CVAR_COLOR_PICKER };
+    globalOutdoorRainColor.CVar(CVAR_AUDIO("GlobalOutdoorRainColor"))
+        .Options(ColorPickerOptions()
+                     .Color(THEME_COLOR)
+                     .DefaultValue({ 150, 255, 255, 255 })
+                     .ShowReset()
+                     .Tooltip("Changes only rain created by Enable Rain in Outdoor Scenes. Native story and "
+                              "proximity-weather rain keep their original color."));
+    SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRainColor, "Enhancements", "Audio Editor", "Audio Options" });
 
     proximityWeatherThunder = { .name = "Enable Proximity Weather Thunder",
                                 .type = WidgetType::WIDGET_CVAR_CHECKBOX };

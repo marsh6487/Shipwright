@@ -9,6 +9,7 @@
 #include "soh/Enhancements/savestate_serialize.h"
 #include "concurrent_weather_audio.h"
 #include "soh/Enhancements/audio/WeatherSamplePlayer.h"
+#include "soh/Enhancements/audio/GlobalOutdoorRainBridge.h"
 
 typedef enum {
     /* 0 */ LENS_FLARE_CIRCLE0,
@@ -1670,8 +1671,13 @@ void Environment_DrawRain(PlayState* play, View* view, GraphicsContext* gfxCtx) 
         z280 = view->eye.z + temp3 * 280.0f;
 
         if (play->envCtx.unk_EE[1]) {
+            u8 rainRed = 150;
+            u8 rainGreen = 255;
+            u8 rainBlue = 255;
+
+            GlobalOutdoorRain_GetRenderColor(&rainRed, &rainGreen, &rainBlue);
             gDPPipeSync(POLY_XLU_DISP++);
-            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 150, 255, 255, 30);
+            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, rainRed, rainGreen, rainBlue, 30);
             POLY_XLU_DISP = Gfx_SetupDL(POLY_XLU_DISP, 20);
         }
 
