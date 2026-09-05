@@ -44,7 +44,9 @@ static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STO
         STATIC_POSE(STATIC_ANIM_SARIA_HANDS_BEHIND, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_SARIA),
         STATIC_POSE(STATIC_ANIM_SARIA_OCARINA, STATIC_POSE_FLAG_OCARINA | STATIC_POSE_FLAG_NO_TRACKING,
                     STATIC_SKELETON_SARIA),
-        STATIC_POSE(STATIC_ANIM_SARIA_SEATED, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_SARIA),
+        STATIC_POSE(STATIC_ANIM_SARIA_SEATED,
+                    STATIC_POSE_FLAG_NO_TRACKING | STATIC_POSE_FLAG_LOCK_ROOT_TRANSLATION,
+                    STATIC_SKELETON_SARIA),
     },
     [STATIC_STORY_ACTOR_ADULT_ZELDA] = {
         STATIC_POSE(STATIC_ANIM_ADULT_ZELDA_NEUTRAL, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_ZELDA),
@@ -172,7 +174,8 @@ uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticSt
         case STATIC_STORY_ACTOR_ADULT_RUTO:
             return progression->waterComplete ? 0x403E : 0x402C;
         case STATIC_STORY_ACTOR_CHILD_RUTO:
-            return progression->waterComplete ? 0x404E : 0x404C;
+            /* 0x404C is coupled to Ruto's Jabu-Jabu progression action. */
+            return 0x404E;
         case STATIC_STORY_ACTOR_KOKIRI_GIRL:
             return progression->forestComplete ? 0x10DA : 0x1004;
         case STATIC_STORY_ACTOR_FADO:
@@ -193,4 +196,16 @@ int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose) {
     }
 
     return definition->trackingAdapter != STATIC_TRACKING_NONE;
+}
+
+void StaticStoryActor_NormalizePlacementRotation(int16_t* pitch, int16_t* yaw, int16_t* roll) {
+    (void)yaw;
+    *pitch = 0;
+    *roll = 0;
+}
+
+int StaticStoryActor_LocksRootTranslation(StaticStoryActorType type, uint8_t pose) {
+    const StaticStoryPoseDescriptor* descriptor = StaticStoryActor_ResolvePose(type, pose);
+
+    return descriptor != NULL && (descriptor->flags & STATIC_POSE_FLAG_LOCK_ROOT_TRANSLATION) != 0;
 }

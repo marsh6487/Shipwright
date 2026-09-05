@@ -104,6 +104,8 @@ enum {
     STATIC_POSE_FLAG_BASKET = 1 << 2,
     /* Performance and seated poses preserve their authored silhouette. */
     STATIC_POSE_FLAG_NO_TRACKING = 1 << 3,
+    /* Ignore animation-authored root motion and honor the Prelude placement. */
+    STATIC_POSE_FLAG_LOCK_ROOT_TRANSLATION = 1 << 4,
 };
 
 /* A read-only snapshot: selectors never inspect or mutate save state directly. */
@@ -149,5 +151,7 @@ const StaticStoryActorDefinition* StaticStoryActor_GetDefinition(StaticStoryActo
 const StaticStoryPoseDescriptor* StaticStoryActor_ResolvePose(StaticStoryActorType type, uint8_t pose);
 uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticStoryProgression* progression);
 int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose);
+void StaticStoryActor_NormalizePlacementRotation(int16_t* pitch, int16_t* yaw, int16_t* roll);
+int StaticStoryActor_LocksRootTranslation(StaticStoryActorType type, uint8_t pose);
 
 #endif

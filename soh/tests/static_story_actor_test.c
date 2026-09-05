@@ -30,6 +30,9 @@ int main(void) {
     assert(StaticStoryActor_GetType(0x7F0B) == 0);
     assert(StaticStoryActor_GetType(0x0101) == 0);
     assert(StaticStoryActor_GetType(-1) == 0);
+    assert(!StaticStoryActor_IsParam(0x0000));
+    assert(!StaticStoryActor_IsParam(0x0200));
+    assert(!StaticStoryActor_IsParam(0x0703));
     assert(StaticStoryActor_SanitizePose(STATIC_STORY_ACTOR_IMPA, 15) == 0);
     assert(StaticStoryActor_SanitizePose(STATIC_STORY_ACTOR_FADO, 5) == 5);
     assert(StaticStoryActor_SanitizePose(STATIC_STORY_ACTOR_FADO, 6) == 0);
@@ -125,8 +128,8 @@ int main(void) {
            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_SHEIK, &complete));
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_RUTO, &early) !=
            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_RUTO, &complete));
-    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &early) !=
-           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &complete));
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &early) == 0x404E);
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &complete) == 0x404E);
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_KOKIRI_GIRL, &early) !=
            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_KOKIRI_GIRL, &complete));
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_FADO, &early) !=
@@ -144,5 +147,16 @@ int main(void) {
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_RUTO)->blinkRange == 60);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->blinkMin == 60);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->blinkRange == 60);
+
+    int16_t placementPitch = 0x2000;
+    int16_t placementYaw = -0x3456;
+    int16_t placementRoll = 0x1000;
+    StaticStoryActor_NormalizePlacementRotation(&placementPitch, &placementYaw, &placementRoll);
+    assert(placementPitch == 0);
+    assert(placementYaw == -0x3456);
+    assert(placementRoll == 0);
+    assert(StaticStoryActor_LocksRootTranslation(STATIC_STORY_ACTOR_SARIA, 3));
+    assert(!StaticStoryActor_LocksRootTranslation(STATIC_STORY_ACTOR_SARIA, 0));
+    assert(!StaticStoryActor_LocksRootTranslation(STATIC_STORY_ACTOR_KOKIRI_GIRL, 3));
     return 0;
 }

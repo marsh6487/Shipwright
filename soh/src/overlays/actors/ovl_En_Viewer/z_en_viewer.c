@@ -316,6 +316,12 @@ static void EnViewerStatic_InitSkeleton(EnViewer* this, PlayState* play,
 void EnViewerStatic_Init(EnViewer* this, PlayState* play) {
     StaticStoryActorType type = StaticStoryActor_GetType(this->actor.params);
 
+    StaticStoryActor_NormalizePlacementRotation(&this->actor.world.rot.x, &this->actor.world.rot.y,
+                                                 &this->actor.world.rot.z);
+    this->actor.shape.rot.x = this->actor.world.rot.x;
+    this->actor.shape.rot.z = this->actor.world.rot.z;
+    this->actor.home.rot.x = this->actor.world.rot.x;
+    this->actor.home.rot.z = this->actor.world.rot.z;
     this->staticState.type = type;
     this->staticState.pose = StaticStoryActor_SanitizePose(type, StaticStoryActor_GetPose(this->actor.params));
     if (this->staticState.pose != StaticStoryActor_GetPose(this->actor.params)) {
@@ -413,6 +419,12 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
     if (poseDescriptor->skeletonFamily != STATIC_SKELETON_NONE &&
         poseDescriptor->animation != STATIC_ANIM_ADULT_ZELDA_NEUTRAL) {
         SkelAnime_Update(&this->skin.skelAnime);
+        if (StaticStoryActor_LocksRootTranslation((StaticStoryActorType)this->staticState.type,
+                                                   this->staticState.pose)) {
+            this->skin.skelAnime.jointTable[0].x = 0;
+            this->skin.skelAnime.jointTable[0].y = 0;
+            this->skin.skelAnime.jointTable[0].z = 0;
+        }
     }
     if (poseDescriptor->flags & STATIC_POSE_FLAG_OCARINA) {
         this->staticState.eyeIndex = 2;
