@@ -16,6 +16,7 @@
 #include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/randomizer/randomizer_check_tracker.h"
 #include "soh/Enhancements/randomizer/RCToRandInf.h"
+#include "soh/Enhancements/randomizer/StoryNpcCheckLifecycle.h"
 
 extern "C" {
 #include "macros.h"
@@ -1122,8 +1123,10 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
             }
             break;
         case VB_MALON_RETURN_FROM_CASTLE:
-            *should = Flags_GetEventChkInf(EVENTCHKINF_TALON_RETURNED_FROM_CASTLE) &&
-                      Flags_GetEventChkInf(EVENTCHKINF_OBTAINED_POCKET_EGG);
+            *should = Rando::StoryNpcCheck_MalonReturned(
+                IS_RANDO, *should, Flags_GetEventChkInf(EVENTCHKINF_TALON_RETURNED_FROM_CASTLE),
+                Rando::Context::GetInstance()->GetItemLocation(RC_HC_MALON_EGG)->HasObtained(),
+                Rando::Context::GetInstance()->GetItemLocation(RC_SONG_FROM_MALON)->HasObtained());
             break;
         case VB_SEND_MALON_HOME:
             *should = Flags_GetRandomizerInf(RAND_INF_TALON_SENT_MALON_HOME);
@@ -1409,7 +1412,9 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
             break;
         }
         case VB_BE_ELIGIBLE_FOR_SARIAS_SONG: {
-            *should = !Flags_GetEventChkInf(EVENTCHKINF_LEARNED_SARIAS_SONG);
+            *should = Rando::StoryNpcCheck_SariaEligible(
+                IS_RANDO, *should,
+                Rando::Context::GetInstance()->GetItemLocation(RC_SONG_FROM_SARIA)->HasObtained());
             break;
         }
         case VB_GIVE_ITEM_FROM_DEKU_THEATER: {
