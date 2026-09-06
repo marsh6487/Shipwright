@@ -279,6 +279,7 @@ void EnMa1_Init(Actor* thisx, PlayState* play) {
     bool malonTaughtEponasSong =
         GameInteractor_Should(VB_MALON_ALREADY_TAUGHT_EPONAS_SONG, CHECK_QUEST_ITEM(QUEST_SONG_EPONA));
     s32 pad;
+    s32 shouldSpawn;
 
     ActorShape_Init(&this->actor.shape, 0.0f, ActorShadow_DrawCircle, 18.0f);
     SkelAnime_InitFlex(play, &this->skelAnime, &gMalonChildSkel, NULL, NULL, NULL, 0);
@@ -286,7 +287,14 @@ void EnMa1_Init(Actor* thisx, PlayState* play) {
     Collider_SetCylinder(play, &this->collider, &this->actor, &sCylinderInit);
     CollisionCheck_SetInfo2(&this->actor.colChkInfo, DamageTable_Get(22), &sColChkInfoInit);
 
-    if (!EnMa1_ShouldSpawn(this, play)) {
+    shouldSpawn = EnMa1_ShouldSpawn(this, play);
+    osSyncPrintf("[POC5 NPC DIAG] EnMa1 init scene=%d params=%04x rotZ=%d child=%d day=%d rando=%d "
+                 "talonReturned=%d pocketEgg=%d song=%d selector=%d\n",
+                 play->sceneNum, (u16)this->actor.params, this->actor.shape.rot.z, LINK_IS_CHILD, IS_DAY, IS_RANDO,
+                 Flags_GetEventChkInf(EVENTCHKINF_TALON_RETURNED_FROM_CASTLE),
+                 Flags_GetEventChkInf(EVENTCHKINF_OBTAINED_POCKET_EGG), CHECK_QUEST_ITEM(QUEST_SONG_EPONA),
+                 shouldSpawn);
+    if (!shouldSpawn) {
         Actor_Kill(&this->actor);
         return;
     }
