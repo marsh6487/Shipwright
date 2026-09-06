@@ -12,11 +12,9 @@ int main() {
     assert(StoryNpcCheck_SariaEligible(false, true, true));
     assert(!StoryNpcCheck_SariaEligible(false, false, false));
 
-    // In randomizer, Malon returns only after the egg check and remains until her song check is collected.
+    // Randomizer location bookkeeping must never suppress the native reward actor.
     assert(StoryNpcCheck_MalonReturned(true, false, true, true, false));
-    assert(!StoryNpcCheck_MalonReturned(true, true, false, true, false));
-    assert(!StoryNpcCheck_MalonReturned(true, true, true, false, false));
-    assert(!StoryNpcCheck_MalonReturned(true, true, true, true, true));
+    assert(StoryNpcCheck_MalonReturned(true, false, false, false, true));
 
     // Saria remains eligible until her shuffled song check is collected.
     assert(StoryNpcCheck_SariaEligible(true, false, false));
