@@ -485,6 +485,7 @@ void func_80AF6170(CsCmdActorCue* csAction, Vec3f* dst) {
 void EnSa_Init(Actor* thisx, PlayState* play) {
     EnSa* this = (EnSa*)thisx;
     s32 pad;
+    s32 spawnMode;
 
     ActorShape_Init(&this->actor.shape, 0.0f, ActorShadow_DrawCircle, 12.0f);
     SkelAnime_InitFlex(play, &this->skelAnime, &gSariaSkel, NULL, this->jointTable, this->morphTable, 17);
@@ -492,7 +493,13 @@ void EnSa_Init(Actor* thisx, PlayState* play) {
     Collider_SetCylinder(play, &this->collider, &this->actor, &sCylinderInit);
     CollisionCheck_SetInfo2(&this->actor.colChkInfo, NULL, &sColChkInfoInit);
 
-    switch (func_80AF5DFC(this, play)) {
+    spawnMode = func_80AF5DFC(this, play);
+    osSyncPrintf("[POC5 NPC DIAG] EnSa init scene=%d params=%04x child=%d rando=%d letter=%d emerald=%d "
+                 "sariaSong=%d cutscene=%04x selector=%d\n",
+                 play->sceneNum, (u16)this->actor.params, LINK_IS_CHILD, IS_RANDO,
+                 Flags_GetEventChkInf(EVENTCHKINF_OBTAINED_ZELDAS_LETTER), CHECK_QUEST_ITEM(QUEST_KOKIRI_EMERALD),
+                 CHECK_QUEST_ITEM(QUEST_SONG_SARIA), gSaveContext.cutsceneIndex, spawnMode);
+    switch (spawnMode) {
         case 2:
             EnSa_ChangeAnim(this, ENSA_ANIM1_11);
             this->actionFunc = func_80AF6448;
