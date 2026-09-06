@@ -25,6 +25,10 @@ inline void WeatherSamplePlayer_TestMixMono(int16_t* destination, const int16_t*
     }
 }
 
+inline size_t WeatherSamplePlayer_AdvanceLoopPosition(size_t position, size_t sampleCount, size_t frames) {
+    return sampleCount == 0 ? 0 : (position + frames) % sampleCount;
+}
+
 extern "C" {
 #else
 #include <stdbool.h>
@@ -34,6 +38,7 @@ extern "C" {
 
 void WeatherSamplePlayer_Init(void);
 bool WeatherSamplePlayer_Play(const char* resourcePath, float gain);
+void WeatherSamplePlayer_SetLoop(const char* resourcePath, float gain);
 void WeatherSamplePlayer_Mix(int16_t* interleavedStereo, size_t frameCount);
 void WeatherSamplePlayer_Reset(void);
 #ifdef __cplusplus

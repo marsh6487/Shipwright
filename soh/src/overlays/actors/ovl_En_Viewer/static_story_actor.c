@@ -209,3 +209,7 @@ int StaticStoryActor_LocksRootTranslation(StaticStoryActorType type, uint8_t pos
 
     return descriptor != NULL && (descriptor->flags & STATIC_POSE_FLAG_LOCK_ROOT_TRANSLATION) != 0;
 }
+
+int StaticStoryActor_ShouldCloseTerminalText(int terminalState, int shouldAdvance) {
+    return terminalState && shouldAdvance;
+}
