@@ -14,16 +14,23 @@
 #include <string.h>
 #include <math.h>
 
+// The names are libsm64's own Makefile output per platform, so a build of the fork drops in as is.
 #ifdef _WIN32
 #include <windows.h>
 #define SM64_LOAD_LIB(path) LoadLibraryA(path)
 #define SM64_GET_PROC(h, name) (void*)GetProcAddress((HMODULE)(h), name)
 #define SM64_FREE_LIB(h) FreeLibrary((HMODULE)(h))
+#define SM64_LIB_NAME "sm64.dll"
 #else
 #include <dlfcn.h>
 #define SM64_LOAD_LIB(path) dlopen(path, RTLD_LAZY)
 #define SM64_GET_PROC(h, name) dlsym(h, name)
 #define SM64_FREE_LIB(h) dlclose(h)
+#ifdef __APPLE__
+#define SM64_LIB_NAME "libsm64.dylib"
+#else
+#define SM64_LIB_NAME "libsm64.so"
+#endif
 #endif
 
 // =============================================================================
@@ -102,16 +109,35 @@ static void* sDllHandle = NULL;
 // The NEI folder is per game in ComboShip, so the path is built, never a literal (OTRGlobals.h).
 extern const char* Nei_AssetDir(void);
 
+static s32 Sm64_FileExists(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        return 0;
+    }
+    fclose(f);
+    return 1;
+}
+
+// Nei_AssetDir() is per game under ComboShip ("nei/soh"), but both builds drop sm64.dll next to the
+// executable, so the plain name is the fallback when the asset folder has no copy.
+static void Sm64_ResolveAssetPath(char* out, size_t size, const char* name) {
+    snprintf(out, size, "%s/%s", Nei_AssetDir(), name);
+    if (Sm64_FileExists(out)) {
+        return;
+    }
+    snprintf(out, size, "%s", name);
+}
+
 static s32 Sm64_LoadDll(void) {
     char libPath[128];
 
     if (sDllHandle)
         return 1;
 
-    snprintf(libPath, sizeof(libPath), "%s/sm64.dll", Nei_AssetDir());
+    Sm64_ResolveAssetPath(libPath, sizeof(libPath), SM64_LIB_NAME);
     sDllHandle = SM64_LOAD_LIB(libPath);
     if (!sDllHandle) {
-        lusprintf(__FILE__, __LINE__, 2, "[SM64] ERROR: Could not load sm64.dll\n");
+        lusprintf(__FILE__, __LINE__, 2, "[SM64] ERROR: Could not load %s\n", SM64_LIB_NAME);
         return 0;
     }
 
@@ -362,6 +388,21 @@ static uint8_t* Sm64_LoadRomFile(const char* path, size_t* outSize) {
     return data;
 }
 
+// libsm64 is built from the US decompilation and reads the cartridge data itself, so a byte-swapped
+// dump or another region passes the size check and then renders garbage. The N64 header settles it:
+// magic at 0, internal name at 0x20, country code at 0x3E.
+static s32 Sm64_IsUsRom(const uint8_t* rom) {
+    static const char internalName[] = "SUPER MARIO 64";
+
+    if (rom[0] != 0x80 || rom[1] != 0x37 || rom[2] != 0x12 || rom[3] != 0x40) {
+        return 0;
+    }
+    if (memcmp(&rom[0x20], internalName, sizeof(internalName) - 1) != 0) {
+        return 0;
+    }
+    return rom[0x3E] == 'E';
+}
+
 // =============================================================================
 // Initialization
 // =============================================================================
@@ -382,7 +423,7 @@ static s32 Sm64_InitLibrary(void) {
     romPath = CVarGetString("gSm64RomPath", "");
     if (romPath == NULL || romPath[0] == '\0') {
         static char romDefault[128];
-        snprintf(romDefault, sizeof(romDefault), "%s/sm64.z64", Nei_AssetDir());
+        Sm64_ResolveAssetPath(romDefault, sizeof(romDefault), "sm64.z64");
         romPath = romDefault;
     }
 
@@ -395,6 +436,13 @@ static s32 Sm64_InitLibrary(void) {
 
     if (romSize != 8 * 1024 * 1024) {
         lusprintf(__FILE__, __LINE__, 2, "[SM64] FAIL: ROM wrong size %zu", romSize);
+        free(sSm64RomData);
+        sSm64RomData = NULL;
+        return 0;
+    }
+
+    if (!Sm64_IsUsRom(sSm64RomData)) {
+        lusprintf(__FILE__, __LINE__, 2, "[SM64] FAIL: not the US ROM (byte-swapped dump or another region)");
         free(sSm64RomData);
         sSm64RomData = NULL;
         return 0;

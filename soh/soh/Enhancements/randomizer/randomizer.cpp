@@ -311,7 +311,8 @@ static const CustomItemMessageEntry customItemMessages[] = {
     { RG_EXT_TRIDENT, static_cast<ItemID>(ITEM_EXT_SWORD_3),
       "You got the %pTrident%w!&A gunlance in all but name.^Equip on the %ysword slot%w (%y\xA2%w toggles).^%y\xA0%w "
       "chains three slashes, %yforward + \xA0%w&lunges, and %rholding%w %y\xA0%w charges&three levels - the last one "
-      "fires.^%y\xA3%w guards, %y\xA3%w + %y\xA0%w dashes with the&lance out front, and %rholding%w %y\xA3%w + %y\x9F%w "
+      "fires.^%y\xA3%w guards, %y\xA3%w + %y\xA0%w dashes with the&lance out front, and %rholding%w %y\xA3%w + "
+      "%y\x9F%w "
       "%gflies%w.^In flight: stick moves, %y\xA3%w up, %y\xA2%w down,&%y\xA0%w fires, %y\x9F%w dives at the target.",
       "Du hast den %pDreizack%w!&Eine Gunlance, nur anders benannt.^Rüste ihn am %ySchwert-Platz%w aus.^%y\xA0%w "
       "verkettet drei Hiebe, %yvorwärts + \xA0%w&sticht, %rHalten%w von %y\xA0%w lädt drei&Stufen - die letzte "

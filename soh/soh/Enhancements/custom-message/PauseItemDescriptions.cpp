@@ -189,7 +189,8 @@ static const ItemDescEntry sMedallionDescs[] = {
     { ITEM_MEDALLION_SPIRIT, TEXT_DESC_MEDALLION_SPIRIT,
       "Soul spell, 24 MP. Turns you into a&fairy until you cast it again.&C here equips the spell." },
     { ITEM_MEDALLION_SHADOW, TEXT_DESC_MEDALLION_SHADOW,
-      "Dark spell, 12 MP. A shield that blocks&all damage for a minute while the&world dims. C here equips the spell." },
+      "Dark spell, 12 MP. A shield that blocks&all damage for a minute while the&world dims. C here equips the "
+      "spell." },
     { ITEM_MEDALLION_LIGHT, TEXT_DESC_MEDALLION_LIGHT,
       "Light spell, 24 MP. Undead freeze for&30 seconds and you heal 6 hearts.&C here equips the spell." },
 };
@@ -317,8 +318,8 @@ static const ItemDescEntry* sAllDescs[] = {
     sExtEquipDescs,   sMedallionDescs, sBossRemainsDescs, sVanillaItemDescs,
 };
 static const size_t sAllDescCounts[] = {
-    ARRAY_COUNT(sCustomItemDescs),  ARRAY_COUNT(sMaskDescs),         ARRAY_COUNT(sSw97ElemDescs),
-    ARRAY_COUNT(sWandModeDescs),    ARRAY_COUNT(sExtEquipDescs),     ARRAY_COUNT(sMedallionDescs),
+    ARRAY_COUNT(sCustomItemDescs),  ARRAY_COUNT(sMaskDescs),        ARRAY_COUNT(sSw97ElemDescs),
+    ARRAY_COUNT(sWandModeDescs),    ARRAY_COUNT(sExtEquipDescs),    ARRAY_COUNT(sMedallionDescs),
     ARRAY_COUNT(sBossRemainsDescs), ARRAY_COUNT(sVanillaItemDescs),
 };
 

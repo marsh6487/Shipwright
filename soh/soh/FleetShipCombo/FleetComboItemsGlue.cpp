@@ -6,8 +6,8 @@
 
 #include "FleetComboItemsGlue.h"
 #include "FleetComboItems.h"
-#include "FleetComboIds.h"    // FC_COMBO_OBTAINED_FC_SIZE
-#include "FleetShipCombo.h"   // FLEET_COMBO_EXPORT
+#include "FleetComboIds.h"  // FC_COMBO_OBTAINED_FC_SIZE
+#include "FleetShipCombo.h" // FLEET_COMBO_EXPORT
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/ShipInit.hpp"
 

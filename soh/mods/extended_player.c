@@ -179,7 +179,8 @@ static const NeiItem sNeiItems[] = {
       "%y\xA1%w pour l'%gactiver%w&ou l'arrêter. %rTous les ennemis%w,&%yéléments de puzzle%w et le %ccycle "
       "jour/nuit%w&s'arrêtent jusqu'au prochain appui.^%g4 Magie%w au départ, puis %g1 Magie%w&toutes les 10 frames. "
       "La jauge vide&y met fin. Bougez librement.",
-      "Du hast den %cSonau-Zeitmesser%w!&Uralte Sonau-Technologie die&den Fluss der Zeit einfriert.^Drücke %y\xA1%w zum "
+      "Du hast den %cSonau-Zeitmesser%w!&Uralte Sonau-Technologie die&den Fluss der Zeit einfriert.^Drücke %y\xA1%w "
+      "zum "
       "%gUmschalten%w.&%rAlle Feinde%w, %yRätsel-Elemente%w&und der %cTag/Nacht-Zyklus%w stehen&bis zum nächsten "
       "Druck still.^%g4 Magie%w zum Start, dann %g1 Magie%w&alle 10 Frames. Eine leere Leiste&beendet es." },
     { ITEM_DEMISE_DESTRUCTION, PLAYER_IA_DEMISE_DESTRUCTION, PLAYER_MODELGROUP_DEFAULT, SLOT_DEMISE_DESTRUCTION,
@@ -274,13 +275,15 @@ static const NeiItem sNeiItems[] = {
       "Vous obtenez la %yToupie%w!&Technologie ancienne des&sables du désert.^%rMaintenez%w %y\xA1%w pour charger, "
       "puis&relâchez pour rouler. Plus la charge&est longue, plus vous filez vite.^Relâchez en visant avec %g\xA4%w "
       "pour&une attaque guidée. Brise les rochers!",
-      "Du hast den %yKreisel%w!&Uralte Technologie aus dem&Wüstensand.^%rHalte%w %y\xA1%w zum Aufladen und&lass los zum "
+      "Du hast den %yKreisel%w!&Uralte Technologie aus dem&Wüstensand.^%rHalte%w %y\xA1%w zum Aufladen und&lass los "
+      "zum "
       "Fahren. Je länger&die Ladung, desto schneller.^Loslassen beim %g\xA4%w-Zielen gibt&einen Verfolgungs-Angriff. "
       "Zerbricht Felsen!" },
     { ITEM_CANE_OF_SOMARIA, PLAYER_IA_CANE_OF_SOMARIA, PLAYER_MODELGROUP_BGS, SLOT_CANE_OF_SOMARIA, AGE_REQ_NONE,
       (void*)gItemIconCaneOfSomariaTex, Player_UpperAction_CaneOfSomaria, Player_InitCaneOfSomariaIA,
       Randomizer_DrawCaneOfSomaria, RG_CANE_OF_SOMARIA,
-      "You got the %rCane of Somaria%w!&A wand that creates magical&blocks out of thin air.^Press %y\x9F%w on its pause "
+      "You got the %rCane of Somaria%w!&A wand that creates magical&blocks out of thin air.^Press %y\x9F%w on its "
+      "pause "
       "cell to&cycle between the canes you own.^%y\xA1%w draws the cane, then casts.&%y\xA3%w and %y\xA2%w step to the "
       "next&summon: %rStatue%w, %rBlock%w, %rPlatform%w.^Use them for switches, to block&enemies, or to climb.",
       "Vous obtenez la %rCanne de Somaria%w!&Une baguette qui crée des&blocs magiques de nulle part.^%y\x9F%w sur sa "
@@ -401,7 +404,8 @@ static const NeiItem sNeiItems[] = {
       "viser,&relâchez pour lancer. Le %yStick%w dirige,&%y\x9F%w accélère, %g\xA4%w cible.^%y\xA0%w vous rend le "
       "contrôle: il rentre,&ou fonce d'abord sur la cible.^La caméra le suit pendant le vol.",
       "Du hast den %gKäfer%w erhalten!&Ein ferngesteuertes mechanisches&Insekt aus alter Zeit.^Halte %y\xA1%w zum "
-      "Zielen, lass los&zum Starten. %yAnalog-Stick%w steuert,&%y\x9F%w beschleunigt, %g\xA4%w zielt.^%y\xA0%w gibt die "
+      "Zielen, lass los&zum Starten. %yAnalog-Stick%w steuert,&%y\x9F%w beschleunigt, %g\xA4%w zielt.^%y\xA0%w gibt "
+      "die "
       "Kontrolle zurück: er&fliegt heim, oder stürzt vorher&auf das erfasste Ziel." },
     { ITEM_SHOVEL, PLAYER_IA_SHOVEL, PLAYER_MODELGROUP_DEFAULT, SLOT_SHOVEL, AGE_REQ_NONE, (void*)gItemIconShovelTex,
       Player_UpperAction_Shovel, Player_InitDefaultIA, Randomizer_DrawShovel, RG_SHOVEL,
@@ -416,9 +420,11 @@ static const NeiItem sNeiItems[] = {
       "verletzen!" },
     { ITEM_MINISH_CAP, PLAYER_IA_MINISH_CAP, PLAYER_MODELGROUP_DEFAULT, SLOT_MINISH_CAP, AGE_REQ_CHILD,
       (void*)gItemIconMinishCapTex, func_8083485C, Player_InitMinishCapIA, Randomizer_DrawMinishCap, RG_MINISH_CAP,
-      "You got %pThe Minish Cap%w!&%y\xA1%w by a pod soil opens the&fast travel map.^%y\xA1%w away from one shrinks you "
+      "You got %pThe Minish Cap%w!&%y\xA1%w by a pod soil opens the&fast travel map.^%y\xA1%w away from one shrinks "
+      "you "
       "to&%gMinish size%w - small enough for&crawlspaces, and slower.&Press again, or load a scene, to grow.",
-      "Vous obtenez %pla Casquette Minish%w!&%y\xA1%w près d'une terre meuble ouvre&la carte de voyage rapide.^%y\xA1%w "
+      "Vous obtenez %pla Casquette Minish%w!&%y\xA1%w près d'une terre meuble ouvre&la carte de voyage "
+      "rapide.^%y\xA1%w "
       "ailleurs vous réduit à la&%gtaille Minish%w - assez petit pour&les passages étroits, mais plus lent.",
       "Du hast %pdie Minish-Mütze%w!&%y\xA1%w an einem Pod Soil öffnet die&Schnellreise-Karte.^%y\xA1%w anderswo "
       "schrumpft dich auf&%gMinish-Größe%w - klein genug für&Kriechgänge, dafür langsamer." },
