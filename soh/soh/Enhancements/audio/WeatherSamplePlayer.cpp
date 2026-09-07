@@ -31,7 +31,8 @@ int16_t ClampSample(int32_t sample) {
 }
 
 std::vector<int16_t> DecodeSample(const SoundFontSample* sample) {
-    if (sample == nullptr || sample->sampleAddr == nullptr || sample->book == nullptr || sample->book->book == nullptr) {
+    if (sample == nullptr || sample->sampleAddr == nullptr || sample->book == nullptr ||
+        sample->book->book == nullptr) {
         return {};
     }
 
@@ -102,8 +103,8 @@ std::vector<int16_t> DecodeSample(const SoundFontSample* sample) {
 extern "C" void WeatherSamplePlayer_Init(void) {
     std::lock_guard<std::mutex> lock(sMutex);
     sDecodedSamples.clear();
-    for (const char* path : { "audio/samples/Low Thunder_META", "audio/samples/Lightning_META",
-                              "audio/samples/Rainfall_META" }) {
+    for (const char* path :
+         { "audio/samples/Low Thunder_META", "audio/samples/Lightning_META", "audio/samples/Rainfall_META" }) {
         sDecodedSamples.emplace(path, DecodeSample(ResourceMgr_LoadAudioSample(path)));
     }
     sVoices = {};
@@ -111,6 +112,8 @@ extern "C" void WeatherSamplePlayer_Init(void) {
 }
 
 extern "C" void WeatherSamplePlayer_SetLoop(const char* resourcePath, float gain) {
+    // Rain owns only sLoopVoice. Never reset sVoices here: either thunder layer
+    // may still be playing, and the engine's pre-mixed SFX/BGM remain separate.
     std::lock_guard<std::mutex> lock(sMutex);
     gain = WeatherSamplePlayer_ClampGain(gain);
     if (resourcePath == nullptr || gain <= 0.0f) {
@@ -175,8 +178,8 @@ extern "C" void WeatherSamplePlayer_Mix(int16_t* interleavedStereo, size_t frame
             WeatherSamplePlayer_TestMixMono(interleavedStereo + destinationOffset * 2,
                                             sLoopVoice.samples->data() + sLoopVoice.position, mixedFrames,
                                             sLoopVoice.gain * sfxVolume);
-            sLoopVoice.position = WeatherSamplePlayer_AdvanceLoopPosition(
-                sLoopVoice.position, sLoopVoice.samples->size(), mixedFrames);
+            sLoopVoice.position =
+                WeatherSamplePlayer_AdvanceLoopPosition(sLoopVoice.position, sLoopVoice.samples->size(), mixedFrames);
             destinationOffset += mixedFrames;
             framesRemaining -= mixedFrames;
         }

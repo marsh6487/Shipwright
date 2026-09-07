@@ -1,34 +1,56 @@
-#include "HyruleFieldNightMusic.h"
+#include "HyruleFieldNightMusicInternal.h"
 
 HyruleFieldNightMusicDecision HyruleFieldNightMusic_Select(const HyruleFieldNightMusicState& state) {
-    if (!state.inHyruleField) {
-        return state.ownsNightBgm ? HyruleFieldNightMusicDecision::StopNight
-                                : HyruleFieldNightMusicDecision::NoChange;
-    }
-    if (state.explicitAudioOverride) {
-        return HyruleFieldNightMusicDecision::NoChange;
-    }
-    if (!state.enabled) {
-        return state.ownsNightBgm ? HyruleFieldNightMusicDecision::StopNight
-                                : HyruleFieldNightMusicDecision::NoChange;
-    }
-    if (!state.isNight) {
-        return state.ownsNightBgm ? HyruleFieldNightMusicDecision::StopNight
+    if (!state.enabled || !state.inHyruleField) {
+        return state.ownsNightBgm ? HyruleFieldNightMusicDecision::StopNightRestoreDay
                                   : HyruleFieldNightMusicDecision::NoChange;
     }
-    if (!state.ownsNightBgm && !state.nightAmbienceReady) {
-        return HyruleFieldNightMusicDecision::WaitForNightAmbience;
+    if (state.explicitAudioOverride || state.fanfarePlaying) {
+        return HyruleFieldNightMusicDecision::NoChange;
     }
-    return state.ownsNightBgm && state.nightBgmPlaying ? HyruleFieldNightMusicDecision::NoChange
-                                                       : HyruleFieldNightMusicDecision::StartNight;
+    if (!state.isNight) {
+        return state.ownsNightBgm ? HyruleFieldNightMusicDecision::StopNightRestoreDay
+                                  : HyruleFieldNightMusicDecision::NoChange;
+    }
+    if (!state.ownsNightBgm) {
+        return HyruleFieldNightMusicDecision::StartNight;
+    }
+    return state.nightBgmPlaying ? HyruleFieldNightMusicDecision::NoChange
+                                 : HyruleFieldNightMusicDecision::RestoreNight;
 }
 
-uint16_t HyruleFieldNightMusic_ResolveSequence(uint16_t selected) {
-    return selected;
+uint16_t HyruleFieldNightMusic_ResolveSequence(uint16_t selected, uint16_t replacement) {
+    (void)selected;
+    return replacement;
 }
 
 uint16_t HyruleFieldNightMusic_ValidateSequence(uint16_t selected, bool isValid, uint16_t fallback) {
     return isValid ? selected : fallback;
+}
+
+static constexpr uint16_t kDisabledSequence = 0xFFFF;
+static uint16_t sNightPlaybackSeq = kDisabledSequence;
+
+uint16_t HyruleFieldNightMusic_StartSequence(uint16_t selected, uint16_t fallback,
+                                             HyruleFieldNightMusicSequenceValidator isValid,
+                                             HyruleFieldNightMusicSequenceResolver getReplacement) {
+    const uint16_t valid = HyruleFieldNightMusic_ValidateSequence(selected, isValid(selected), fallback);
+    const uint16_t replacement = HyruleFieldNightMusic_ResolveSequence(valid, getReplacement(valid));
+    sNightPlaybackSeq = HyruleFieldNightMusic_ValidateSequence(replacement, isValid(replacement), valid);
+    return sNightPlaybackSeq;
+}
+
+uint16_t HyruleFieldNightMusic_RestoreSequence() {
+    return sNightPlaybackSeq;
+}
+
+void HyruleFieldNightMusic_ClearSequence() {
+    sNightPlaybackSeq = kDisabledSequence;
+}
+
+bool HyruleFieldNightMusic_ShouldRestoreDaySequence(const HyruleFieldNightMusicState& state) {
+    return state.enabled && state.inHyruleField && !state.isNight && state.ownsNightBgm &&
+           !state.explicitAudioOverride && !state.fanfarePlaying;
 }
 
 #ifndef HYRULE_FIELD_NIGHT_MUSIC_TEST
@@ -47,7 +69,14 @@ extern PlayState* gPlayState;
 
 static constexpr uint16_t kDefaultNightSequence = NA_BGM_KAKARIKO_ADULT;
 static bool sOwnsNightBgm = false;
-static uint16_t sNightPlaybackSeq = NA_BGM_DISABLED;
+
+static bool IsSequenceValid(uint16_t sequence) {
+    return AudioCollection::Instance->HasSequenceNum(sequence);
+}
+
+static uint16_t GetReplacementSequence(uint16_t sequence) {
+    return AudioCollection::Instance->GetReplacementSequence(sequence);
+}
 
 static bool HasExplicitAudioOverride(PlayState* play) {
     if (play->csCtx.state != CS_STATE_IDLE || Player_InCsMode(play)) {
@@ -56,12 +85,10 @@ static bool HasExplicitAudioOverride(PlayState* play) {
 
     const uint16_t mainSeq = func_800FA0B4(SEQ_PLAYER_BGM_MAIN);
     const uint16_t subSeq = func_800FA0B4(SEQ_PLAYER_BGM_SUB);
-    const uint16_t fanfareSeq = func_800FA0B4(SEQ_PLAYER_FANFARE);
-    const bool mainIsFieldLifecycle = mainSeq == NA_BGM_NATURE_AMBIENCE ||
-                                      (mainSeq & 0xFF) == NA_BGM_FIELD_LOGIC || mainSeq == NA_BGM_DISABLED;
+    const bool mainIsFieldLifecycle =
+        mainSeq == NA_BGM_NATURE_AMBIENCE || (mainSeq & 0xFF) == NA_BGM_FIELD_LOGIC || mainSeq == NA_BGM_DISABLED;
     const bool subIsNightTrack = sOwnsNightBgm && (subSeq & 0xFF) == (sNightPlaybackSeq & 0xFF);
-    return !mainIsFieldLifecycle || (subSeq != NA_BGM_DISABLED && !subIsNightTrack) ||
-           fanfareSeq != NA_BGM_DISABLED;
+    return !mainIsFieldLifecycle || (subSeq != NA_BGM_DISABLED && !subIsNightTrack);
 }
 
 void HyruleFieldNightMusic_Update(PlayState* play) {
@@ -77,28 +104,35 @@ void HyruleFieldNightMusic_Update(PlayState* play) {
         .isNight = gSaveContext.nightFlag != 0,
         .ownsNightBgm = sOwnsNightBgm,
         .nightBgmPlaying = sOwnsNightBgm && (subSeq & 0xFF) == (sNightPlaybackSeq & 0xFF),
-        .nightAmbienceReady = func_800FA0B4(SEQ_PLAYER_BGM_MAIN) == NA_BGM_NATURE_AMBIENCE,
+        .fanfarePlaying = func_800FA0B4(SEQ_PLAYER_FANFARE) != NA_BGM_DISABLED,
         .explicitAudioOverride = HasExplicitAudioOverride(play),
     };
 
     switch (HyruleFieldNightMusic_Select(state)) {
         case HyruleFieldNightMusicDecision::StartNight: {
-            const uint16_t selected = static_cast<uint16_t>(
-                CVarGetInteger(CVAR_AUDIO("HyruleFieldNightSequence"), kDefaultNightSequence));
-            const uint16_t valid = HyruleFieldNightMusic_ValidateSequence(
-                selected, AudioCollection::Instance->HasSequenceNum(selected), kDefaultNightSequence);
-            sNightPlaybackSeq = HyruleFieldNightMusic_ResolveSequence(valid);
-            Audio_QueueSeqCmd((SEQ_PLAYER_BGM_SUB << 24) | (0x1E << 16) | sNightPlaybackSeq);
+            const uint16_t selected =
+                static_cast<uint16_t>(CVarGetInteger(CVAR_AUDIO("HyruleFieldNightSequence"), kDefaultNightSequence));
+            const uint16_t playbackSequence = HyruleFieldNightMusic_StartSequence(
+                selected, kDefaultNightSequence, IsSequenceValid, GetReplacementSequence);
+            Audio_QueueResolvedSeqCmd(SEQ_PLAYER_BGM_SUB, playbackSequence, 0x1E);
             sOwnsNightBgm = true;
             break;
         }
-        case HyruleFieldNightMusicDecision::WaitForNightAmbience:
+        case HyruleFieldNightMusicDecision::RestoreNight:
+            Audio_QueueResolvedSeqCmd(SEQ_PLAYER_BGM_SUB, HyruleFieldNightMusic_RestoreSequence(), 0x1E);
             break;
-        case HyruleFieldNightMusicDecision::StopNight:
+        case HyruleFieldNightMusicDecision::StopNightRestoreDay: {
             Audio_QueueSeqCmd((0x1 << 28) | (SEQ_PLAYER_BGM_SUB << 24) | (0x1E << 16) | 0xFF);
+            if (HyruleFieldNightMusic_ShouldRestoreDaySequence(state)) {
+                const uint16_t replacement = AudioCollection::Instance->GetReplacementSequence(NA_BGM_FIELD_LOGIC);
+                const uint16_t daySequence = HyruleFieldNightMusic_ValidateSequence(
+                    replacement, AudioCollection::Instance->HasSequenceNum(replacement), NA_BGM_FIELD_LOGIC);
+                Audio_QueueResolvedSeqCmd(SEQ_PLAYER_BGM_MAIN, daySequence, 0x1E);
+            }
             sOwnsNightBgm = false;
-            sNightPlaybackSeq = NA_BGM_DISABLED;
+            HyruleFieldNightMusic_ClearSequence();
             break;
+        }
         case HyruleFieldNightMusicDecision::NoChange:
             break;
     }
@@ -106,16 +140,13 @@ void HyruleFieldNightMusic_Update(PlayState* play) {
 
 void HyruleFieldNightMusic_Reset() {
     sOwnsNightBgm = false;
-    sNightPlaybackSeq = NA_BGM_DISABLED;
+    HyruleFieldNightMusic_ClearSequence();
 }
 
 static void RegisterHyruleFieldNightMusic() {
-    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([]() {
-        HyruleFieldNightMusic_Update(gPlayState);
-    });
-    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayDestroy>([]() {
-        HyruleFieldNightMusic_Reset();
-    });
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>(
+        []() { HyruleFieldNightMusic_Update(gPlayState); });
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayDestroy>([]() { HyruleFieldNightMusic_Reset(); });
 }
 
 static RegisterShipInitFunc initFunc(RegisterHyruleFieldNightMusic,
