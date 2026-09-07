@@ -153,5 +153,6 @@ uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticSt
 int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose);
 void StaticStoryActor_NormalizePlacementRotation(int16_t* pitch, int16_t* yaw, int16_t* roll);
 int StaticStoryActor_LocksRootTranslation(StaticStoryActorType type, uint8_t pose);
+int StaticStoryActor_ShouldCloseTerminalText(int terminalState, int shouldAdvance);
 
 #endif

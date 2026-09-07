@@ -20,8 +20,10 @@ if(BUILD_TESTING)
     add_executable(hyrule_field_night_music_test
         tests/hyrule_field_night_music_test.cpp
         soh/Enhancements/audio/HyruleFieldNightMusic.cpp
+        src/code/code_800F9280.c
     )
     target_include_directories(hyrule_field_night_music_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_sequence_stubs
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -38,6 +40,43 @@ if(BUILD_TESTING)
     )
     target_compile_definitions(global_outdoor_rain_test PRIVATE GLOBAL_OUTDOOR_RAIN_TEST)
     add_test(NAME global_outdoor_rain_test COMMAND global_outdoor_rain_test)
+
+    add_executable(concurrent_weather_audio_test
+        tests/concurrent_weather_audio_test.c
+        src/code/concurrent_weather_audio.c
+    )
+    add_test(NAME concurrent_weather_audio_test COMMAND concurrent_weather_audio_test)
+
+    # Compile the actual mixer/updater; only resources, CVars and hook registration are stubbed.
+    add_executable(weather_sample_player_test
+        tests/weather_sample_player_test.cpp
+        soh/Enhancements/audio/WeatherSamplePlayer.cpp
+    )
+    target_include_directories(weather_sample_player_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/weather_audio_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(weather_sample_player_test PRIVATE CVAR_PREFIX_SETTING="gSettings")
+    add_test(NAME weather_sample_player_test COMMAND weather_sample_player_test)
+
+    add_executable(global_outdoor_rain_audio_test
+        tests/global_outdoor_rain_audio_test.cpp
+        tests/weather_sfx_engine_fixture.c
+        soh/Enhancements/audio/GlobalOutdoorRain.cpp
+        soh/Enhancements/audio/WeatherSamplePlayer.cpp
+        src/code/concurrent_weather_audio.c
+        src/code/code_800F7260.c
+        src/code/audio_sound_params.c
+    )
+    target_include_directories(global_outdoor_rain_audio_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/weather_audio_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(global_outdoor_rain_audio_test PRIVATE
+        CVAR_PREFIX_SETTING="gSettings" CVAR_PREFIX_AUDIO="gAudioEditor"
+    )
+    add_test(NAME global_outdoor_rain_audio_test COMMAND global_outdoor_rain_audio_test)
 endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")

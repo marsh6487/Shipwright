@@ -7,6 +7,12 @@ enum class GlobalOutdoorRainDecision {
     Stop,
 };
 
+enum class GlobalOutdoorRainSource {
+    None,
+    NativePlaced,
+    EnhancedOutdoor,
+};
+
 enum class GlobalOutdoorRainMode {
     Persistent = 0,
     Intermittent = 1,
@@ -28,7 +34,7 @@ struct GlobalOutdoorRainCycle {
 struct GlobalOutdoorRainState {
     bool enabled;
     bool outdoors;
-    bool ownsRain;
+    GlobalOutdoorRainSource source;
     bool rainAlreadyActive;
 };
 
@@ -44,7 +50,8 @@ void GlobalOutdoorRain_AdvanceCycle(GlobalOutdoorRainCycle& cycle, GlobalOutdoor
                                     int dryFrames, int sustainFrames, float fadeStep);
 int GlobalOutdoorRain_ScaleDensity(int density, float intensity);
 float GlobalOutdoorRain_ScaleVolume(float volume, float intensity);
-GlobalOutdoorRainColor GlobalOutdoorRain_SelectColor(bool ownsRain, GlobalOutdoorRainColor vanillaColor,
+GlobalOutdoorRainColor GlobalOutdoorRain_SelectColor(GlobalOutdoorRainSource source,
+                                                     GlobalOutdoorRainColor vanillaColor,
                                                      GlobalOutdoorRainColor configuredColor);
 
 #ifndef GLOBAL_OUTDOOR_RAIN_TEST

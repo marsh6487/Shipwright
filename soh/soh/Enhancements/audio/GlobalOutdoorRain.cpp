@@ -1,10 +1,14 @@
 #include "GlobalOutdoorRain.h"
 
 GlobalOutdoorRainDecision GlobalOutdoorRain_Select(const GlobalOutdoorRainState& state) {
-    if (!state.enabled || !state.outdoors) {
-        return state.ownsRain ? GlobalOutdoorRainDecision::Stop : GlobalOutdoorRainDecision::NoChange;
+    if (state.source == GlobalOutdoorRainSource::NativePlaced) {
+        return GlobalOutdoorRainDecision::NoChange;
     }
-    if (state.ownsRain) {
+    if (!state.enabled || !state.outdoors) {
+        return state.source == GlobalOutdoorRainSource::EnhancedOutdoor ? GlobalOutdoorRainDecision::Stop
+                                                                        : GlobalOutdoorRainDecision::NoChange;
+    }
+    if (state.source == GlobalOutdoorRainSource::EnhancedOutdoor) {
         return GlobalOutdoorRainDecision::Maintain;
     }
     return state.rainAlreadyActive ? GlobalOutdoorRainDecision::NoChange : GlobalOutdoorRainDecision::Start;
@@ -75,17 +79,18 @@ void GlobalOutdoorRain_AdvanceCycle(GlobalOutdoorRainCycle& cycle, GlobalOutdoor
 }
 
 int GlobalOutdoorRain_ScaleDensity(int density, float intensity) {
-    return GlobalOutdoorRain_ClampDensity(static_cast<int>(density * GlobalOutdoorRain_ClampIntensity(intensity) +
-                                                           0.5f));
+    return GlobalOutdoorRain_ClampDensity(
+        static_cast<int>(density * GlobalOutdoorRain_ClampIntensity(intensity) + 0.5f));
 }
 
 float GlobalOutdoorRain_ScaleVolume(float volume, float intensity) {
     return volume * GlobalOutdoorRain_ClampIntensity(intensity);
 }
 
-GlobalOutdoorRainColor GlobalOutdoorRain_SelectColor(bool ownsRain, GlobalOutdoorRainColor vanillaColor,
+GlobalOutdoorRainColor GlobalOutdoorRain_SelectColor(GlobalOutdoorRainSource source,
+                                                     GlobalOutdoorRainColor vanillaColor,
                                                      GlobalOutdoorRainColor configuredColor) {
-    return ownsRain ? configuredColor : vanillaColor;
+    return source == GlobalOutdoorRainSource::EnhancedOutdoor ? configuredColor : vanillaColor;
 }
 
 #ifndef GLOBAL_OUTDOOR_RAIN_TEST
@@ -94,6 +99,7 @@ GlobalOutdoorRainColor GlobalOutdoorRain_SelectColor(bool ownsRain, GlobalOutdoo
 #include "soh/ShipInit.hpp"
 #include "soh/cvar_prefixes.h"
 #include "code/concurrent_weather_audio.h"
+#include "WeatherSamplePlayer.h"
 
 extern "C" {
 #include "functions.h"
@@ -106,21 +112,32 @@ extern PlayState* gPlayState;
 static constexpr int kRainDensity = 25;
 static constexpr int kFramesPerSecond = 60;
 static constexpr float kFadeStep = 1.0f / kFramesPerSecond;
-static bool sOwnsRain = false;
+static GlobalOutdoorRainSource sRainSource = GlobalOutdoorRainSource::None;
 static int sLastMode = -1;
 static GlobalOutdoorRainCycle sCycle = { GlobalOutdoorRainPhase::Dry, 0, 0.0f };
+static bool sOwnsFallbackLoop = false;
+static void PlayRainLoop(float intensity);
 
 extern "C" int32_t GlobalOutdoorRain_GetRenderColor(uint8_t* red, uint8_t* green, uint8_t* blue) {
-    if (!sOwnsRain || red == nullptr || green == nullptr || blue == nullptr) {
+    if (sRainSource != GlobalOutdoorRainSource::EnhancedOutdoor || red == nullptr || green == nullptr ||
+        blue == nullptr) {
         return false;
     }
 
-    const Color_RGB8 configuredColor =
-        CVarGetColor24(CVAR_AUDIO("GlobalOutdoorRainColor.Value"), { 150, 255, 255 });
+    const Color_RGB8 configuredColor = CVarGetColor24(CVAR_AUDIO("GlobalOutdoorRainColor.Value"), { 150, 255, 255 });
     *red = configuredColor.r;
     *green = configuredColor.g;
     *blue = configuredColor.b;
     return true;
+}
+
+extern "C" void GlobalOutdoorRain_NotifyNativeRainActive(int32_t active) {
+    if (active) {
+        sRainSource = GlobalOutdoorRainSource::NativePlaced;
+        PlayRainLoop(0.0f);
+    } else if (sRainSource == GlobalOutdoorRainSource::NativePlaced) {
+        sRainSource = GlobalOutdoorRainSource::None;
+    }
 }
 
 static int RandomDryFrames() {
@@ -132,16 +149,23 @@ static int RandomSustainFrames() {
 }
 
 static void PlayRainLoop(float intensity) {
-    if (Audio_IsNatureRainEnabled()) {
-        return;
+    const float peakVolume =
+        ConcurrentWeatherAudio_ClampPercent(CVarGetInteger(CVAR_AUDIO("ProximityWeatherRainVolume"), 50)) / 100.0f;
+    const float rainVolume = GlobalOutdoorRain_ScaleVolume(peakVolume, intensity);
+    switch (ConcurrentWeatherAudio_SelectRainAction(sOwnsFallbackLoop,
+                                                    sRainSource == GlobalOutdoorRainSource::EnhancedOutdoor,
+                                                    Audio_IsNatureRainEnabled(), rainVolume)) {
+        case CONCURRENT_WEATHER_RAIN_SET_LOOP:
+            WeatherSamplePlayer_SetLoop("audio/samples/Rainfall_META", rainVolume);
+            sOwnsFallbackLoop = true;
+            break;
+        case CONCURRENT_WEATHER_RAIN_STOP_LOOP:
+            WeatherSamplePlayer_SetLoop(nullptr, 0.0f);
+            sOwnsFallbackLoop = false;
+            break;
+        case CONCURRENT_WEATHER_RAIN_NO_CHANGE:
+            break;
     }
-    static float rainVolume = 0.5f;
-    const float peakVolume = ConcurrentWeatherAudio_ClampPercent(
-                                 CVarGetInteger(CVAR_AUDIO("ProximityWeatherRainVolume"), 50)) /
-                             100.0f;
-    rainVolume = GlobalOutdoorRain_ScaleVolume(peakVolume, intensity);
-    Audio_PlaySoundGeneral(NA_SE_EV_RAIN - SFX_FLAG, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &rainVolume,
-                           &gSfxDefaultReverb);
 }
 
 void GlobalOutdoorRain_Update(PlayState* play) {
@@ -159,23 +183,23 @@ void GlobalOutdoorRain_Update(PlayState* play) {
     const GlobalOutdoorRainState state = {
         .enabled = enabled,
         .outdoors = outdoors,
-        .ownsRain = sOwnsRain,
+        .source = sRainSource,
         .rainAlreadyActive = play->envCtx.unk_EE[0] != 0,
     };
 
     const GlobalOutdoorRainDecision decision = GlobalOutdoorRain_Select(state);
     if (modeValue != sLastMode) {
         sLastMode = modeValue;
-        sCycle = { GlobalOutdoorRainPhase::Dry,
-                   mode == GlobalOutdoorRainMode::Intermittent ? RandomDryFrames() : 0, 0.0f };
-        if (sOwnsRain && play->envCtx.unk_EE[0] <= kRainDensity) {
+        sCycle = { GlobalOutdoorRainPhase::Dry, mode == GlobalOutdoorRainMode::Intermittent ? RandomDryFrames() : 0,
+                   0.0f };
+        if (sRainSource == GlobalOutdoorRainSource::EnhancedOutdoor && play->envCtx.unk_EE[0] <= kRainDensity) {
             play->envCtx.unk_EE[0] = 0;
         }
     }
 
     switch (decision) {
         case GlobalOutdoorRainDecision::Start:
-            sOwnsRain = true;
+            sRainSource = GlobalOutdoorRainSource::EnhancedOutdoor;
             break;
         case GlobalOutdoorRainDecision::Maintain:
             break;
@@ -185,13 +209,13 @@ void GlobalOutdoorRain_Update(PlayState* play) {
             break;
     }
 
-    if (!sOwnsRain) {
+    if (sRainSource != GlobalOutdoorRainSource::EnhancedOutdoor) {
         return;
     }
 
     const GlobalOutdoorRainPhase previousPhase = sCycle.phase;
-    GlobalOutdoorRain_AdvanceCycle(sCycle, mode, enabled && outdoors, 10 * kFramesPerSecond,
-                                   15 * kFramesPerSecond, kFadeStep);
+    GlobalOutdoorRain_AdvanceCycle(sCycle, mode, enabled && outdoors, 10 * kFramesPerSecond, 15 * kFramesPerSecond,
+                                   kFadeStep);
     if (mode == GlobalOutdoorRainMode::Intermittent && previousPhase != sCycle.phase) {
         if (sCycle.phase == GlobalOutdoorRainPhase::Dry) {
             sCycle.framesRemaining = RandomDryFrames();
@@ -200,27 +224,24 @@ void GlobalOutdoorRain_Update(PlayState* play) {
         }
     }
     play->envCtx.unk_EE[0] = GlobalOutdoorRain_ScaleDensity(kRainDensity, sCycle.intensity);
-    if (sCycle.intensity > 0.0f) {
-        PlayRainLoop(sCycle.intensity);
-    }
+    // Zero intensity is also an audio transition (intermittent dry/mode reset).
+    PlayRainLoop(sCycle.intensity);
     if ((!enabled || !outdoors) && sCycle.phase == GlobalOutdoorRainPhase::Dry) {
-        sOwnsRain = false;
+        sRainSource = GlobalOutdoorRainSource::None;
     }
 }
 
 void GlobalOutdoorRain_Reset() {
-    sOwnsRain = false;
+    sRainSource = GlobalOutdoorRainSource::None;
     sLastMode = -1;
     sCycle = { GlobalOutdoorRainPhase::Dry, 0, 0.0f };
+    PlayRainLoop(0.0f);
 }
 
 static void RegisterGlobalOutdoorRain() {
-    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([]() {
-        GlobalOutdoorRain_Update(gPlayState);
-    });
-    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayDestroy>([]() {
-        GlobalOutdoorRain_Reset();
-    });
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>(
+        []() { GlobalOutdoorRain_Update(gPlayState); });
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayDestroy>([]() { GlobalOutdoorRain_Reset(); });
 }
 
 static RegisterShipInitFunc initFunc(RegisterGlobalOutdoorRain,
