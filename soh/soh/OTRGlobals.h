@@ -144,6 +144,10 @@ void Messagebox_ShowErrorBox(char* title, char* body);
 extern "C" {
 #endif
 uint64_t GetUnixTimestamp();
+
+// The NEI asset folder for THIS game ("nei", or "nei/soh" in ComboShip, where both games share one
+// Ship directory and their packs collide by name). Build every nei/ path from this, never a literal.
+const char* Nei_AssetDir(void);
 // Lock/unlock the audio thread's mutex (the SAME `audio.mutex` instance held in
 // OTRAudio_Thread while AudioMgr_CreateNextAudioBuffer runs the mixer). Game-thread
 // code that mutates state the mixer reads (e.g. the MM SFX bank engine) must hold

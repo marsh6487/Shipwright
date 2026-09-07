@@ -3,9 +3,10 @@
  *
  * ONE item, ONE inventory slot, TWO canes, SIX skills. Skijer's NEI.
  *
- *   TAP  L  -> flip cane (Somaria <-> Pacci)
- *   HOLD L  -> 4-spoke radial wheel; the stick picks a skill, releasing confirms
- *              (UP still flips cane, RIGHT/DOWN/LEFT are the three skills)
+ *   A on the kaleido cell -> switch cane (Somaria / Trirod / Pacci / Ultrahand)
+ *   C                     -> first press draws the cane; after that it casts
+ *   L / R, cane drawn     -> step the active summon (Somaria) or echo (Trirod)
+ *   HOLD L, Trirod        -> the echo grid
  *
  *   C, Somaria  -> casts the active skill. Hold length is irrelevant.
  *   C, Pacci    -> Stone / Ultrahand cast on press, same as Somaria.
@@ -14,11 +15,13 @@
  *                     HOLD = LIFT the target and hold it in the air
  *                     release from a hold = THROW it, aimed at Link's lock-on
  *                                           target if he has one
+ *   C, Ultrahand -> opens its own mode instead of casting (B leaves it).
  *
- *   Somaria (RED cane)     A Statue    B Block      C Platform
- *   Pacci   (YELLOW cane)  A Flip      B Stone      C Ultrahand
+ *   Somaria summons  Statue  Block  Platform
+ *   Pacci   skills   Flip    Stone  Ultrahand
  *
- * Selection lives on L so that C is free to mean two things per cane.
+ * Cane selection lives on the pause cell so that in-game L and R are free to
+ * step the summon without a menu.
  *
  * Both canes share the same display list; only the prim/env tint differs.
  *

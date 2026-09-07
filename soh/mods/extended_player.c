@@ -173,16 +173,15 @@ static const NeiItem sNeiItems[] = {
       (void*)gItemIconZonaiPermafrostTex, func_8083485C, Player_InitZonaiPermafrostIA, Randomizer_DrawZonaiPermafrost,
       RG_ZONAI_PERMAFROST,
       "You got the %cZonai Timer%w!&Ancient Zonai technology that&freezes the flow of time itself.^Press %y\xA1%w to "
-      "cast the spell.&%rAll enemies%w, %ypuzzle elements%w,&and even the %cday/night cycle%w&freeze for %g10 "
-      "seconds%w!^Costs %g12 Magic%w per use.&Move freely while time is stopped.",
+      "%gtoggle%w it.&%rAll enemies%w, %ypuzzle elements%w,&and even the %cday/night cycle%w&stop until you press "
+      "again.^%g4 Magic%w to start, then %g1 Magic%w&every 10 frames. An empty meter&ends it. Move freely meanwhile.",
       "Vous obtenez le %cMinuteur Soneau%w!&Technologie ancienne des Soneau&qui gèle le flux du temps.^Appuyez sur "
-      "%y\xA1%w pour lancer&le sort. %rTous les ennemis%w,&%yéléments de puzzle%w, et même&le %ccycle jour/nuit%w "
-      "gèlent&pendant %g10 secondes%w!^Coûte %g12 Magie%w par utilisation.&Bougez librement pendant que&le temps est "
-      "arrêté.",
-      "Du hast den %cSonau-Zeitmesser%w!&Uralte Sonau-Technologie die&den Fluss der Zeit einfriert.^Drücke %y\xA1%w um "
-      "den "
-      "Zauber&zu wirken. %rAlle Feinde%w,&%yRätsel-Elemente%w, und sogar&der %cTag/Nacht-Zyklus%w frieren&für %g10 "
-      "Sekunden%w ein!^Kostet %g12 Magie%w pro Nutzung.&Bewege dich frei während die&Zeit angehalten ist." },
+      "%y\xA1%w pour l'%gactiver%w&ou l'arrêter. %rTous les ennemis%w,&%yéléments de puzzle%w et le %ccycle "
+      "jour/nuit%w&s'arrêtent jusqu'au prochain appui.^%g4 Magie%w au départ, puis %g1 Magie%w&toutes les 10 frames. "
+      "La jauge vide&y met fin. Bougez librement.",
+      "Du hast den %cSonau-Zeitmesser%w!&Uralte Sonau-Technologie die&den Fluss der Zeit einfriert.^Drücke %y\xA1%w zum "
+      "%gUmschalten%w.&%rAlle Feinde%w, %yRätsel-Elemente%w&und der %cTag/Nacht-Zyklus%w stehen&bis zum nächsten "
+      "Druck still.^%g4 Magie%w zum Start, dann %g1 Magie%w&alle 10 Frames. Eine leere Leiste&beendet es." },
     { ITEM_DEMISE_DESTRUCTION, PLAYER_IA_DEMISE_DESTRUCTION, PLAYER_MODELGROUP_DEFAULT, SLOT_DEMISE_DESTRUCTION,
       AGE_REQ_NONE, (void*)gItemIconDemiseDestructionTex, func_8083485C, Player_InitDemiseDestructionIA,
       Randomizer_DrawDemiseDestruction, RG_DEMISE_DESTRUCTION,
@@ -269,29 +268,29 @@ static const NeiItem sNeiItems[] = {
       "Items!" },
     { ITEM_SPINNER, PLAYER_IA_SPINNER, PLAYER_MODELGROUP_DEFAULT, SLOT_SPINNER, AGE_REQ_NONE,
       (void*)gItemIconSpinnerTex, func_8083485C, Player_InitSpinnerIA, Randomizer_DrawSpinner, RG_SPINNER,
-      "You got the %ySpinner%w!&Ancient technology from the&desert sands.^Press %y\xA1%w to ride it&and glide around. "
-      "Use it to&cross great distances.^With %g\xA4%w you perform&a homing attack towards&the enemy. Breaks rocks!",
-      "Vous obtenez la %yToupie%w!&Technologie ancienne des&sables du désert.^Appuyez sur %y\xA1%w pour monter&et "
-      "glisser. Utilisez-la pour&traverser de grandes distances.^Avec %g\xA4%w vous effectuez&une attaque guidée "
-      "vers&l'ennemi. Brise les rochers!",
-      "Du hast den %yKreisel%w!&Uralte Technologie aus dem&Wüstensand.^Drücke %y\xA1%w um aufzusteigen&und zu gleiten. "
-      "Überbrücke&große Distanzen damit.^Mit %g\xA4%w führst du einen&Verfolgungs-Angriff auf&den Feind aus. "
+      "You got the %ySpinner%w!&Ancient technology from the&desert sands.^%rHold%w %y\xA1%w to charge, then let&go to "
+      "ride. The longer the charge,&the faster you go.^Let go while %g\xA4%w-targeting for&a homing dash attack. "
+      "Breaks rocks!",
+      "Vous obtenez la %yToupie%w!&Technologie ancienne des&sables du désert.^%rMaintenez%w %y\xA1%w pour charger, "
+      "puis&relâchez pour rouler. Plus la charge&est longue, plus vous filez vite.^Relâchez en visant avec %g\xA4%w "
+      "pour&une attaque guidée. Brise les rochers!",
+      "Du hast den %yKreisel%w!&Uralte Technologie aus dem&Wüstensand.^%rHalte%w %y\xA1%w zum Aufladen und&lass los zum "
+      "Fahren. Je länger&die Ladung, desto schneller.^Loslassen beim %g\xA4%w-Zielen gibt&einen Verfolgungs-Angriff. "
       "Zerbricht Felsen!" },
     { ITEM_CANE_OF_SOMARIA, PLAYER_IA_CANE_OF_SOMARIA, PLAYER_MODELGROUP_BGS, SLOT_CANE_OF_SOMARIA, AGE_REQ_NONE,
       (void*)gItemIconCaneOfSomariaTex, Player_UpperAction_CaneOfSomaria, Player_InitCaneOfSomariaIA,
       Randomizer_DrawCaneOfSomaria, RG_CANE_OF_SOMARIA,
-      "You got the %rCane of Somaria%w!&A wand that creates magical&blocks out of thin air.^Press %y\xA1%w to swing "
-      "and "
-      "create&a %rmagical block%w. Up to %g3&blocks%w can exist at once.^The %roldest block%w is destroyed&when you "
-      "create a 4th.^Use them to activate switches,&block enemies, or as&platforms to reach heights.",
-      "Vous obtenez la %rCanne de Somaria%w!&Une baguette qui crée des&blocs magiques de nulle part.^Appuyez sur "
-      "%y\xA1%w pour brandir&et créer un %rbloc magique%w.&Jusqu'à %g3 blocs%w peuvent exister.^Le %rbloc le plus "
-      "ancien%w est&détruit quand vous en créez un 4e.^Utilisez-les pour activer des&interrupteurs, bloquer des "
-      "ennemis,&ou comme plateformes.",
-      "Du hast den %rStab von Somaria%w!&Ein Stab der magische Blöcke&aus dem Nichts erschafft.^Drücke %y\xA1%w zum "
-      "Schwingen&und erschaffe einen %rmagischen&Block%w. Bis zu %g3 Blöcke%w können&gleichzeitig existieren.^Der "
-      "%rälteste Block%w wird zerstört&wenn du einen 4. erschaffst.^Nutze sie für Schalter, um Feinde&zu blockieren, "
-      "oder als Plattform." },
+      "You got the %rCane of Somaria%w!&A wand that creates magical&blocks out of thin air.^Press %y\x9F%w on its pause "
+      "cell to&cycle between the canes you own.^%y\xA1%w draws the cane, then casts.&%y\xA3%w and %y\xA2%w step to the "
+      "next&summon: %rStatue%w, %rBlock%w, %rPlatform%w.^Use them for switches, to block&enemies, or to climb.",
+      "Vous obtenez la %rCanne de Somaria%w!&Une baguette qui crée des&blocs magiques de nulle part.^%y\x9F%w sur sa "
+      "case du menu pause&change de canne.^%y\xA1%w sort la canne, puis lance.&%y\xA3%w et %y\xA2%w passent à "
+      "l'invocation&suivante: %rStatue%w, %rBloc%w, %rPlateforme%w.^Pour les interrupteurs, bloquer&les ennemis ou "
+      "grimper.",
+      "Du hast den %rStab von Somaria%w!&Ein Stab der magische Blöcke&aus dem Nichts erschafft.^%y\x9F%w auf seiner "
+      "Menüzelle wechselt&zwischen deinen Stäben.^%y\xA1%w zieht den Stab, dann wirkt er.&%y\xA3%w und %y\xA2%w "
+      "schalten zur nächsten&Beschwörung: %rStatue%w, %rBlock%w, %rPlattform%w.^Für Schalter, zum Blockieren&oder zum "
+      "Klettern." },
     // 2026-08-06: the rod rides the SHOVEL cell (46) as a wheel entry; cell 47 is the Rod of
     // Seasons. A dominion pickup lands on the shared cell; the wheel flips between the two.
     { ITEM_DOMINION_ROD, PLAYER_IA_DOMINION_ROD, PLAYER_MODELGROUP_DEFAULT, SLOT_SHOVEL, AGE_REQ_NONE,
@@ -343,12 +342,12 @@ static const NeiItem sNeiItems[] = {
     { ITEM_ELEMENTAL_WAND, PLAYER_IA_ELEMENTAL_WAND, PLAYER_MODELGROUP_DEFAULT, SLOT_ELEMENTAL_WAND, AGE_REQ_NONE,
       (void*)gItemIconElementalWandTex, Nei_SharedIA_UpperAction, Nei_SharedIA_Init, Randomizer_DrawElementalWand,
       RG_ELEMENTAL_WAND,
-      "You got the %cElemental Wand%w!&Six rods in one.^Press %y\xA1%w on it in the pause&menu to switch between the "
-      "rods&you have unlocked.",
-      "Vous obtenez la %cBaguette&Élémentaire%w!&Six sceptres en un.^Appuyez sur %y\xA1%w dans le menu&pause pour "
-      "changer de sceptre.",
-      "Du hast den %cElementarstab%w!&Sechs Stäbe in einem.^Drücke %y\xA1%w im Pausenmenü,&um zwischen den "
-      "freigeschalteten&Stäben zu wechseln." },
+      "You got the %cElemental Wand%w!&Six rods in one.^%rHold%w %y\xA2%w for the rod wheel;&the stick picks and "
+      "letting go&confirms.^%y\xA1%w casts the active rod.",
+      "Vous obtenez la %cBaguette&Élémentaire%w!&Six sceptres en un.^%rMaintenez%w %y\xA2%w pour la roue des&sceptres; "
+      "le stick choisit, relâcher&confirme.^%y\xA1%w lance le sceptre actif.",
+      "Du hast den %cElementarstab%w!&Sechs Stäbe in einem.^%rHalte%w %y\xA2%w für das Stab-Rad;&der Stick wählt, "
+      "Loslassen bestätigt.^%y\xA1%w wirkt den aktiven Stab." },
     // Rods use the BGS (two-handed) model group + sword mechanics for charge attacks.
     { ITEM_ROD_FIRE, PLAYER_IA_ROD_FIRE, PLAYER_MODELGROUP_BGS, SLOT_FIRE_ROD, AGE_REQ_NONE, (void*)gItemIconFireRodTex,
       Player_UpperAction_Sword, Player_InitFireRodIA, Randomizer_DrawFireRod, RG_FIRE_ROD,
@@ -395,16 +394,15 @@ static const NeiItem sNeiItems[] = {
       "Achte auf&genug Magie!" },
     { ITEM_BEETLE, PLAYER_IA_BEETLE, PLAYER_MODELGROUP_DEFAULT, SLOT_BEETLE, AGE_REQ_ADULT, (void*)gItemIconBeetleTex,
       Player_UpperAction_Beetle, Player_InitBeetleIA, Randomizer_DrawBeetle, RG_BEETLE,
-      "You got the %gBeetle%w!&A remote-controlled mechanical&insect from ancient times.^%y\xA1%w = Launch "
-      "beetle&%yAnalog Stick%w = Steer flight&%y\xA1%w again = Recall beetle&%y\xA0%w = Speed boost^The camera follows "
-      "the beetle.&Use it to grab distant items,&hit switches, and scout ahead!",
-      "Vous obtenez le %gScarabée%w!&Un insecte mécanique télécommandé&des temps anciens.^%y\xA1%w = Lancer le "
-      "scarabée&%yStick Analogique%w = Diriger le vol&%y\xA1%w à nouveau = Rappeler&%y\xA0%w = Accélération^La caméra "
-      "suit le scarabée.&Utilisez-le pour attraper des objets,&activer des interrupteurs et explorer!",
-      "Du hast den %gKäfer%w erhalten!&Ein ferngesteuertes mechanisches&Insekt aus alter Zeit.^%y\xA1%w = Käfer "
-      "starten&%yAnalog-Stick%w = Flug steuern&%y\xA1%w erneut = Käfer zurückrufen&%y\xA0%w = "
-      "Geschwindigkeitsschub^Die "
-      "Kamera folgt dem Käfer.&Nutze ihn um Items zu holen,&Schalter zu treffen und voraus zu spähen!" },
+      "You got the %gBeetle%w!&A remote-controlled mechanical&insect from ancient times.^Hold %y\xA1%w to aim, release "
+      "to&launch. %yAnalog Stick%w steers,&%y\x9F%w boosts, %g\xA4%w locks on.^%y\xA0%w hands control back: the beetle&"
+      "flies home, or dives at a locked&target first.^The camera follows it while you fly.",
+      "Vous obtenez le %gScarabée%w!&Un insecte mécanique télécommandé&des temps anciens.^Maintenez %y\xA1%w pour "
+      "viser,&relâchez pour lancer. Le %yStick%w dirige,&%y\x9F%w accélère, %g\xA4%w cible.^%y\xA0%w vous rend le "
+      "contrôle: il rentre,&ou fonce d'abord sur la cible.^La caméra le suit pendant le vol.",
+      "Du hast den %gKäfer%w erhalten!&Ein ferngesteuertes mechanisches&Insekt aus alter Zeit.^Halte %y\xA1%w zum "
+      "Zielen, lass los&zum Starten. %yAnalog-Stick%w steuert,&%y\x9F%w beschleunigt, %g\xA4%w zielt.^%y\xA0%w gibt die "
+      "Kontrolle zurück: er&fliegt heim, oder stürzt vorher&auf das erfasste Ziel." },
     { ITEM_SHOVEL, PLAYER_IA_SHOVEL, PLAYER_MODELGROUP_DEFAULT, SLOT_SHOVEL, AGE_REQ_NONE, (void*)gItemIconShovelTex,
       Player_UpperAction_Shovel, Player_InitDefaultIA, Randomizer_DrawShovel, RG_SHOVEL,
       "You got the %yShovel%w!&A reliable tool for&excavation.^Use %y\xA1%w on soft soil&to dig and find "
@@ -418,9 +416,12 @@ static const NeiItem sNeiItems[] = {
       "verletzen!" },
     { ITEM_MINISH_CAP, PLAYER_IA_MINISH_CAP, PLAYER_MODELGROUP_DEFAULT, SLOT_MINISH_CAP, AGE_REQ_CHILD,
       (void*)gItemIconMinishCapTex, func_8083485C, Player_InitMinishCapIA, Randomizer_DrawMinishCap, RG_MINISH_CAP,
-      "You got %pThe Minish Cap%w!&Fast travel between pod soils.",
-      "Vous obtenez %pPending Item 1%w!&Cet objet n'est pas encore implémenté.",
-      "Du hast %pThe Minish Cap%w!&Schnellreise zwischen Pod Soils." },
+      "You got %pThe Minish Cap%w!&%y\xA1%w by a pod soil opens the&fast travel map.^%y\xA1%w away from one shrinks you "
+      "to&%gMinish size%w - small enough for&crawlspaces, and slower.&Press again, or load a scene, to grow.",
+      "Vous obtenez %pla Casquette Minish%w!&%y\xA1%w près d'une terre meuble ouvre&la carte de voyage rapide.^%y\xA1%w "
+      "ailleurs vous réduit à la&%gtaille Minish%w - assez petit pour&les passages étroits, mais plus lent.",
+      "Du hast %pdie Minish-Mütze%w!&%y\xA1%w an einem Pod Soil öffnet die&Schnellreise-Karte.^%y\xA1%w anderswo "
+      "schrumpft dich auf&%gMinish-Größe%w - klein genug für&Kriechgänge, dafür langsamer." },
     // Lantern: icon is dynamic (chosen by fire type) -> NULL, getter handles it. Skijer's NEI
     { ITEM_LANTERN, PLAYER_IA_LANTERN, PLAYER_MODELGROUP_DEFAULT, SLOT_LANTERN, AGE_REQ_NONE, NULL, func_8083485C,
       Player_InitLanternIA, Randomizer_DrawLantern, RG_LANTERN,

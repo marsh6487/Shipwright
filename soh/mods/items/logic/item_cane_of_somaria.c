@@ -3,9 +3,9 @@
  *
  * See item_cane_of_somaria.h for the full control scheme. In short:
  *
- *   TAP  the equipped C button  -> cast the active skill
- *   HOLD the equipped C button  -> 4-spoke radial wheel (stick picks, release confirms)
- *                                  UP = flip cane, the other three = that cane's skills
+ *   A on the kaleido cell       -> switch cane
+ *   the equipped C button       -> draw the cane, then cast the active skill
+ *   L / R with the cane drawn   -> step the summon
  *
  *   Somaria (red)     Statue  Block  Platform
  *   Pacci   (yellow)  Flip    Stone  Ultrahand

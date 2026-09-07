@@ -25,6 +25,7 @@ u8 MasterCycle_IsRiding(void);
 u8 Cryonis_ModeActive(void);
 void MmForm_StartDekuSpinFromOot(Player* player, PlayState* play);
 void MmForm_StartGoronCurlFromOot(Player* player, PlayState* play);
+u8 WolfLinkForm_IsSelected(void);
 u8 GerudoForm_IsActive(void);
 u8 KafeiForm_SuppressRoll(Player* player);
 }
@@ -60,6 +61,10 @@ static bool RollIsOverridden(Player* player, PlayState* play) {
         case MM_PLAYER_FORM_GORON:
             MmForm_StartGoronCurlFromOot(player, play);
             return true;
+        // Wolf Link shares Pikachu's slot and puts TP's A-dash on A. Its own update runs after the
+        // actionFunc, so without this the press starts an OOT roll and the dash in the same frame.
+        case MM_PLAYER_FORM_PIKACHU:
+            return WolfLinkForm_IsSelected();
         default:
             return false;
     }

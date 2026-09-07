@@ -124,15 +124,17 @@ static const CustomItemMessageEntry customItemMessages[] = {
     // ─────────────────────────────────────────────────────────────────────────
     { RG_EXT_CANE_OF_BYRNA, static_cast<ItemID>(ITEM_EXT_SWORD_1),
       "You got the %cCane of Byrna%w!&A blue cane of legend.^Equip on the %ysword slot%w&(%y\xA2%w toggles equipment "
-      "pages).^Wields like the %cBiggoron Sword%w&(long range, two-handed). %gSpin%w&and %gcharge attacks%w always "
-      "work.^Every melee hit %crestores HP%w&and %crefills Magic%w!",
+      "pages).^%y\xA0\xA0\xA0%w chains, %yforward + \xA0%w thrusts,&%y\xA4%w + %y\x9F%w jump-slashes, and %y\xA3%w "
+      "sends&the %gKinsect%w - at full charge it&launches you instead.^Airborne: %y\x9F%w dashes, %y\xA0%w spins,&"
+      "%y\xA3%w ground-pounds.",
       "Du hast den %cStab von Byrna%w!&Ein blauer Stab der Legenden.^Rüste ihn am %ySchwert-Platz%w aus&(%y\xA2%w "
-      "wechselt Seiten).^Führt sich wie das %cBiggoron-Schwert%w&(lange Reichweite, beidhändig). %gKreisangriffe%w&und "
-      "%gAufladeangriffe%w gehen immer.^Jeder Treffer %cstellt HP%w und&%cMagie%w wieder her!",
+      "wechselt Seiten).^%y\xA0\xA0\xA0%w als Kette, %yvorwärts + \xA0%w sticht,&%y\xA4%w + %y\x9F%w springt, %y\xA3%w "
+      "schickt&den %gKinsect%w - voll geladen&schleudert er dich selbst.^In der Luft: %y\x9F%w Sprint, %y\xA0%w "
+      "Wirbel,&%y\xA3%w Stampfer.",
       "Vous obtenez la %cCanne de Byrna%w!&Une canne bleue de légende.^Équipez-la dans l'%yemplacement "
-      "épée%w&(%y\xA2%w change de page).^Se manie comme l'%cÉpée de Biggoron%w&(longue portée, à deux "
-      "mains).&%gAttaques tournoyantes%w et %gchargées%w&fonctionnent toujours.^Chaque coup %crestaure des PV%w&et "
-      "%crecharge la Magie%w!" },
+      "épée%w&(%y\xA2%w change de page).^%y\xA0\xA0\xA0%w enchaîne, %yavant + \xA0%w transperce,&%y\xA4%w + %y\x9F%w "
+      "saute, %y\xA3%w lance&le %gKinsect%w - à pleine charge&c'est vous qu'il propulse.^En l'air: %y\x9F%w foncez, "
+      "%y\xA0%w tournoyez,&%y\xA3%w écrasez." },
 
     { RG_EXT_FOUR_SWORD, static_cast<ItemID>(ITEM_EXT_SWORD_2),
       "You got the %gFour Sword%w!&A blade that splits its wielder&into four heroes.^Equip on the %ysword slot%w "
@@ -150,14 +152,14 @@ static const CustomItemMessageEntry customItemMessages[] = {
 
     { RG_PROGRESSIVE_HAMMER, static_cast<ItemID>(ITEM_HAMMER),
       "You got a %rProgressive Hammer%w!&First the %rMegaton Hammer%w, then the&%rIron Knuckle's Axe%w - %gdouble "
-      "damage%w,&%gdouble reach%w, and a tomahawk&%rthrow%w (C-Up to aim) that&boomerangs back to your hand.",
+      "damage%w,&%gdouble reach%w, and a tomahawk&%rthrow%w that boomerangs back.^%y\xA5%w aims it, the hammer's own "
+      "%y\xA1%w&button lets it fly.",
       "Du hast das %rHammer-Upgrade%w!&Dein %rStahlhammer%w wird zur&%rEisenknöchel-Axt%w - dem massiven&Tomahawk der "
       "Ritter Ganons.^Schwerer chunky Schwung:&%gdoppelter Schaden%w, %gdoppelte Reichweite%w,&langsameres "
-      "Gehen.^Halte %y\xA3%w + %y\xA0%w 15 Frames um die&Axt zu %rwerfen%w - fliegt nach vorn,&kommt dann zu dir "
-      "zurück.",
+      "Gehen.^%y\xA5%w zielt, die %y\xA1%w-Taste des&Hammers %rwirft%w die Axt - sie kommt&wie ein Bumerang zurück.",
       "Vous obtenez l'%rAmélioration de Masse%w!&Votre %rMasse des Titans%w devient la&%rHache d'Iron Knuckle%w - le "
       "tomahawk&massif des chevaliers de Ganon.^Coups lourds:&%gdouble dégâts%w, %gdouble portée%w,&marche plus "
-      "lente.^Maintenez %y\xA3%w + %y\xA0%w 15 frames pour&%rlancer%w la hache - elle revient&en boomerang." },
+      "lente.^%y\xA5%w vise, la touche %y\xA1%w de la masse&%rlance%w la hache - elle revient&en boomerang." },
 
     { RG_PROGRESSIVE_KOKIRI_SWORD, static_cast<ItemID>(ITEM_SWORD_KOKIRI),
       "You got a %gKokiri Sword Upgrade%w!&Sharpens your %gKokiri Sword%w&into the %gRazor Sword%w, then the&%gGilded "
@@ -214,11 +216,11 @@ static const CustomItemMessageEntry customItemMessages[] = {
 
     { RG_IRON_KNUCKLE_AXE, static_cast<ItemID>(ITEM_HAMMER),
       "You got the %rIron Knuckle's Axe%w!&The massive tomahawk of Ganon's&knights - %gdouble damage%w, %gdouble "
-      "reach%w,&and hold %y\xA3%w + %y\xA0%w to %rthrow%w it.",
+      "reach%w.^%y\xA5%w aims the %rthrow%w, the hammer's&own %y\xA1%w button lets it fly.",
       "Du hast die %rEisenknöchel-Axt%w!&Der massive Tomahawk der Ritter&Ganons - %gdoppelter Schaden%w,&%gdoppelte "
-      "Reichweite%w, werfbar.",
+      "Reichweite%w.^%y\xA5%w zielt, die %y\xA1%w-Taste des&Hammers %rwirft%w sie.",
       "Vous obtenez la %rHache d'Iron Knuckle%w!&Le tomahawk massif des chevaliers&de Ganon - %gdouble "
-      "dégâts%w,&%gdouble portée%w, lançable." },
+      "dégâts%w,&%gdouble portée%w.^%y\xA5%w vise, la touche %y\xA1%w de la&masse la %rlance%w." },
 
     { RG_ULTRASHOT, static_cast<ItemID>(ITEM_LONGSHOT),
       "You got the %yUltrashot%w!&Your Longshot surges with light -&%y4x reach%w and %y2x speed%w.&Nothing is out of "
@@ -282,15 +284,15 @@ static const CustomItemMessageEntry customItemMessages[] = {
       "TOUS les ennemis%w à l'écran!" },
 
     { RG_EXT_SHEIKAH_SHIELD, static_cast<ItemID>(ITEM_EXT_SHIELD_2),
-      "You got the %cSheikah Shield%w!&A ceremonial shield bearing the&eye of the Sheikah tribe.^Equip on the %yshield "
-      "slot%w (%y\xA2%w toggles).^Hold %y\xA3%w to block normally.&Currently a %ycosmetic shield%w -&no special "
-      "effect.",
-      "Du hast den %cSheikah-Schild%w!&Ein zeremonieller Schild mit dem&Auge des Sheikah-Stammes.^Rüste ihn am "
-      "%ySchild-Platz%w aus.^%y\xA3%w zum normalen Blocken.&Derzeit ein %ykosmetischer Schild%w -&kein besonderer "
-      "Effekt.",
-      "Vous obtenez le %cBouclier Sheikah%w!&Un bouclier cérémoniel portant&l'œil de la tribu Sheikah.^Équipez-le dans "
-      "l'%yemplacement bouclier%w.^Maintenez %y\xA3%w pour parer normalement.&Actuellement un %ybouclier cosmétique%w "
-      "-&pas d'effet particulier." },
+      "You got the %cKite Shield%w!&A rider's shield, made to be&stood on.^Equip on the %yshield slot%w "
+      "(%y\xA2%w toggles).^Press %y\xA3%w %rin mid-air%w to drop it&under your feet and %gsurf%w.&Downhill builds "
+      "speed with no cap.^%y\x9F%w hops, %y\xA0%w spins,&%y\xA0%w + %y\xA3%w gets off.",
+      "Du hast den %cNormannenschild%w!&Ein Reiterschild, gemacht&zum Draufstehen.^Rüste ihn am %ySchild-Platz%w "
+      "aus.^%y\xA3%w %rin der Luft%w legt ihn unter&deine Füße und du %gsurfst%w.&Bergab wird es immer "
+      "schneller.^%y\x9F%w hüpft, %y\xA0%w dreht,&%y\xA0%w + %y\xA3%w steigt ab.",
+      "Vous obtenez le %cBouclier Normand%w!&Un bouclier de cavalier, fait&pour qu'on monte dessus.^Équipez-le dans "
+      "l'%yemplacement bouclier%w.^%y\xA3%w %ren l'air%w le glisse sous vos&pieds et vous %gsurfez%w.&En descente, "
+      "aucune limite de vitesse.^%y\x9F%w saute, %y\xA0%w pivote,&%y\xA0%w + %y\xA3%w descend." },
 
     { RG_EXT_SHIELD_OF_IKANA, static_cast<ItemID>(ITEM_EXT_SHIELD_3),
       "You got the %pShield of Ikana%w!&A cursed mirror shield from the&fallen kingdom of Ikana.^Equip on the %yshield "
@@ -306,6 +308,36 @@ static const CustomItemMessageEntry customItemMessages[] = {
       "les %rPV%w de l'attaquant et&vous soigne d'un demi-cœur.^%pSauvegarde de Mort%w: ressuscite&%pune fois par "
       "scène%w avec 3 cœurs&et une aura sombre." },
 
+    { RG_EXT_TRIDENT, static_cast<ItemID>(ITEM_EXT_SWORD_3),
+      "You got the %pTrident%w!&A gunlance in all but name.^Equip on the %ysword slot%w (%y\xA2%w toggles).^%y\xA0%w "
+      "chains three slashes, %yforward + \xA0%w&lunges, and %rholding%w %y\xA0%w charges&three levels - the last one "
+      "fires.^%y\xA3%w guards, %y\xA3%w + %y\xA0%w dashes with the&lance out front, and %rholding%w %y\xA3%w + %y\x9F%w "
+      "%gflies%w.^In flight: stick moves, %y\xA3%w up, %y\xA2%w down,&%y\xA0%w fires, %y\x9F%w dives at the target.",
+      "Du hast den %pDreizack%w!&Eine Gunlance, nur anders benannt.^Rüste ihn am %ySchwert-Platz%w aus.^%y\xA0%w "
+      "verkettet drei Hiebe, %yvorwärts + \xA0%w&sticht, %rHalten%w von %y\xA0%w lädt drei&Stufen - die letzte "
+      "feuert.^%y\xA3%w blockt, %y\xA3%w + %y\xA0%w stürmt mit der&Lanze voran, %rHalten%w von %y\xA3%w + %y\x9F%w "
+      "%gfliegt%w.^Im Flug: Stick lenkt, %y\xA3%w hoch, %y\xA2%w runter,&%y\xA0%w feuert, %y\x9F%w stürzt aufs Ziel.",
+      "Vous obtenez le %pTrident%w!&Une gunlance qui ne dit pas son nom.^Équipez-le dans l'%yemplacement "
+      "épée%w.^%y\xA0%w enchaîne trois coups, %yavant + \xA0%w&fend, et %rmaintenir%w %y\xA0%w charge trois&niveaux - "
+      "le dernier tire.^%y\xA3%w pare, %y\xA3%w + %y\xA0%w charge lance en&avant, %rmaintenir%w %y\xA3%w + %y\x9F%w "
+      "fait %gvoler%w.^En vol: le stick dirige, %y\xA3%w monte,&%y\xA2%w descend, %y\xA0%w tire, %y\x9F%w plonge." },
+
+    { RG_EXT_CLIMB_BOOTS, static_cast<ItemID>(ITEM_EXT_BOOTS_2),
+      "You got the %yClimb Boots%w!&Equip on the %yboots slot%w (%y\xA2%w toggles).^They grip every floor: %cice%w "
+      "stops&being slippery and %csteep slopes%w&stop sliding you away.",
+      "Du hast die %yKletterstiefel%w!&Rüste sie am %yStiefel-Platz%w aus.^Sie greifen jeden Boden: %cEis%w ist&nicht "
+      "mehr rutschig und %csteile Hänge%w&lassen dich nicht mehr abgleiten.",
+      "Vous obtenez les %yBottes d'Escalade%w!&Équipez-les dans l'%yemplacement bottes%w.^Elles agrippent tout sol: "
+      "la %cglace%w&ne glisse plus et les %cpentes raides%w&ne vous font plus déraper." },
+
+    { RG_EXT_ROC_BOOTS, static_cast<ItemID>(ITEM_EXT_BOOTS_3),
+      "You got %rRoc's Boots%w!&Equip on the %yboots slot%w (%y\xA2%w toggles).^%cWater and lava%w become solid "
+      "ground&under your feet, and you fall at&%chalf gravity%w - so every jump&goes higher.",
+      "Du hast %rRocs Stiefel%w!&Rüste sie am %yStiefel-Platz%w aus.^%cWasser und Lava%w werden zu festem&Boden, und "
+      "du fällst mit %chalber&Schwerkraft%w - jeder Sprung geht höher.",
+      "Vous obtenez les %rBottes de Roc%w!&Équipez-les dans l'%yemplacement bottes%w.^L'%ceau et la lave%w deviennent "
+      "du sol&solide, et vous tombez en %cgravité&réduite de moitié%w - tous vos sauts&montent plus haut." },
+
     // (2026-08-07: texto legacy corregido — la capa ya NO ocupa el slot de túnica; es una pieza
     // propia de la columna de upgrades que se activa sola al poseerla.)
     { RG_EXT_MAGIC_CAPE, static_cast<ItemID>(ITEM_EXT_TUNIC_1),
@@ -320,9 +352,10 @@ static const CustomItemMessageEntry customItemMessages[] = {
       "réduits&de moitié%w (arrondi vers le bas)." },
 
     { RG_EXT_SPIRIT_BREASTPLATE, static_cast<ItemID>(ITEM_EXT_TUNIC_2),
-      "You got the %ySpirit Breastplate%w!&The golden armor of the Iron&Knuckle Nabooru.^Equip on the %ytunic slot%w "
-      "(%y\xA2%w toggles).^Damage costs %gRupees%w instead&of hearts (1 HP = 1 Rupee).&%gPassive drain%w: 1 Rupee "
-      "every&30 frames while equipped.^If your wallet runs %rempty%w,&you take damage normally and&move at half speed.",
+      "You got the %ySpirit Tunic%w!&The golden ward of the Iron&Knuckle Nabooru.^Equip on the %ytunic slot%w "
+      "(%y\xA2%w toggles).^Damage costs %gRupees%w instead&of hearts (1 HP = 1 Rupee), and&some of it spills out as "
+      "pickups.^While you hold Rupees the %rheat%w and&%bunderwater%w timers never start.^If your wallet runs "
+      "%rempty%w,&you take damage normally and&move at half speed.",
       "Du hast den %ySpirit-Brustpanzer%w!&Die goldene Rüstung der Eisenknöchel&Nabooru.^Rüste ihn am %yTunika-Platz%w "
       "aus.^Schaden kostet %gRupien%w statt&Herzen (1 HP = 1 Rupie).&%gPassiver Verbrauch%w: 1 Rupie alle&30 Frames im "
       "Tragen.^Wenn dein Beutel %rleer%w ist,&erleidest du Schaden normal und&bewegst dich halb so schnell.",
@@ -365,20 +398,20 @@ static const CustomItemMessageEntry customItemMessages[] = {
     { RG_EXT_PENDANT_OF_MEMORIES, static_cast<ItemID>(ITEM_EXT_BOOTS_2),
       "You got the %pPendant of Memories%w!&A pendant carrying the techniques&of heroes past.^Equip on the %yboots "
       "slot%w (%y\xA2%w toggles).^Three combat techniques unlock:^%c#1 Mortal Draw%w (TP): %y\xA0%w near an&enemy + "
-      "sheathed + still + NOT&%y\xA5%w-targeting -> devastating draw&slash, often a one-hit kill.^%c#2 Ground Pound%w "
+      "sheathed + still + NOT&%y\xA4%w-targeting -> devastating draw&slash, often a one-hit kill.^%c#2 Ground Pound%w "
       "(Smash): %y\xA0%w in&air with sword -> fast fall ->&pogo bounce on hit, shockwave on landing.^%c#3 Parry Leap%w "
-      "(WW): %y\xA5%w-target +&3 sidehops + %y\xA0%w -> parabolic arc&over the foe, land behind them.",
+      "(WW): %y\xA4%w-target +&3 sidehops + %y\xA0%w -> parabolic arc&over the foe, land behind them.",
       "Du hast das %pAmulett der Erinnerungen%w!&Ein Anhänger mit Techniken vergangener&Helden.^Rüste es am "
       "%yStiefel-Platz%w aus.^Drei Kampftechniken werden frei:^%c#1 Mortal Draw%w (TP): %y\xA0%w bei einem&Feind + "
-      "eingesteckt + still + NICHT&%y\xA5%w-fokussieren -> vernichtender Hieb,&oft One-Hit-Kill.^%c#2 Ground Pound%w "
+      "eingesteckt + still + NICHT&%y\xA4%w-fokussieren -> vernichtender Hieb,&oft One-Hit-Kill.^%c#2 Ground Pound%w "
       "(Smash): %y\xA0%w in&der Luft mit Schwert -> schneller Fall&-> Bounce bei Treffer, Schockwelle "
-      "beim&Landen.^%c#3 Parry Leap%w (WW): %y\xA5%w-fokussieren&+ 3 Seitsprünge + %y\xA0%w -> parabolischer&Bogen "
+      "beim&Landen.^%c#3 Parry Leap%w (WW): %y\xA4%w-fokussieren&+ 3 Seitsprünge + %y\xA0%w -> parabolischer&Bogen "
       "über den Feind, hinter ihm landen.",
       "Vous obtenez le %pPendentif des Souvenirs%w!&Un pendentif portant les techniques&des héros passés.^Équipez-le "
       "dans l'%yemplacement bottes%w.^Trois techniques de combat:^%c#1 Mortal Draw%w (TP): %y\xA0%w près d'un&ennemi + "
-      "rengainé + immobile + PAS&en %y\xA5%w-cible -> tranche dévastatrice,&souvent un one-shot.^%c#2 Ground Pound%w "
+      "rengainé + immobile + PAS&en %y\xA4%w-cible -> tranche dévastatrice,&souvent un one-shot.^%c#2 Ground Pound%w "
       "(Smash): %y\xA0%w en l'air&avec épée -> chute rapide -> rebond&sur impact, onde de choc à l'atterrissage.^%c#3 "
-      "Parry Leap%w (WW): %y\xA5%w-cible +&3 esquives + %y\xA0%w -> arc parabolique&par-dessus l'ennemi, atterrir "
+      "Parry Leap%w (WW): %y\xA4%w-cible +&3 esquives + %y\xA0%w -> arc parabolique&par-dessus l'ennemi, atterrir "
       "derrière." },
 
     { RG_EXT_WATER_DRAGON_SCALE, static_cast<ItemID>(ITEM_EXT_TUNIC_3),
@@ -393,32 +426,36 @@ static const CustomItemMessageEntry customItemMessages[] = {
     // composite with the rune's badge; the flame on the get-item model matches the color named here.
     { RG_SLATE_RUNE_BOMB, static_cast<ItemID>(EXT_ITEM_SHEIKAH_SLATE),
       "Your %cSheikah Slate%w learned the&%bRemote Bomb%w rune!&An ancient rune glows cyan on&the slate's face.^Select "
-      "it with %y\xA0%w on the slate's&cell in the pause menu.&Its power is still %rdormant%w.",
+      "it by holding %y\xA2%w for the rune&wheel. %y\xA1%w draws the slate, then&casts the active rune.",
       "Dein %cSheikah-Stein%w hat das&%bFernzündbomben%w-Modul gelernt!&Eine uralte Rune leuchtet cyan&auf dem "
-      "Stein.^Wähle sie mit %y\xA0%w auf der Zelle&im Pausenmenü.&Ihre Kraft %rschlummert%w noch.",
+      "Stein.^Wähle sie mit gehaltenem %y\xA2%w im&Runen-Rad. %y\xA1%w zieht den Stein&und wirkt dann die aktive Rune.",
       "Votre %cTablette Sheikah%w apprend le&module %bBombe à Distance%w!&Une rune ancienne brille en cyan&sur la "
-      "tablette.^Sélectionnez-la avec %y\xA0%w sur sa&case du menu pause.&Son pouvoir est encore %rendormi%w." },
+      "tablette.^Sélectionnez-la en maintenant %y\xA2%w:&la roue des runes. "
+      "%y\xA1%w sort la&tablette, puis lance la rune active." },
     { RG_SLATE_RUNE_MASTER_CYCLE, static_cast<ItemID>(EXT_ITEM_SHEIKAH_SLATE),
       "Your %cSheikah Slate%w learned the&%gMaster Cycle%w rune!&An ancient rune glows teal on&the slate's "
-      "face.^Select it with %y\xA0%w on the slate's&cell in the pause menu.&Its power is still %rdormant%w.",
+      "face.^Select it by holding %y\xA2%w for the rune&wheel. %y\xA1%w draws the slate, then&casts the active rune.",
       "Dein %cSheikah-Stein%w hat das&%gMaster Cycle%w-Modul gelernt!&Eine uralte Rune leuchtet türkis&auf dem "
-      "Stein.^Wähle sie mit %y\xA0%w auf der Zelle&im Pausenmenü.&Ihre Kraft %rschlummert%w noch.",
+      "Stein.^Wähle sie mit gehaltenem %y\xA2%w im&Runen-Rad. %y\xA1%w zieht den Stein&und wirkt dann die aktive Rune.",
       "Votre %cTablette Sheikah%w apprend le&module %gMaster Cycle%w!&Une rune ancienne brille en turquoise&sur la "
-      "tablette.^Sélectionnez-la avec %y\xA0%w sur sa&case du menu pause.&Son pouvoir est encore %rendormi%w." },
+      "tablette.^Sélectionnez-la en maintenant %y\xA2%w:&la roue des runes. "
+      "%y\xA1%w sort la&tablette, puis lance la rune active." },
     { RG_SLATE_RUNE_STASIS, static_cast<ItemID>(EXT_ITEM_SHEIKAH_SLATE),
       "Your %cSheikah Slate%w learned the&%yStasis%w rune!&An ancient rune glows gold on&the slate's face.^Select it "
-      "with %y\xA0%w on the slate's&cell in the pause menu.&Its power is still %rdormant%w.",
+      "by holding %y\xA2%w for the rune&wheel. %y\xA1%w draws the slate, then&casts the active rune.",
       "Dein %cSheikah-Stein%w hat das&%yStasis%w-Modul gelernt!&Eine uralte Rune leuchtet golden&auf dem Stein.^Wähle "
-      "sie mit %y\xA0%w auf der Zelle&im Pausenmenü.&Ihre Kraft %rschlummert%w noch.",
+      "sie mit gehaltenem %y\xA2%w im&Runen-Rad. %y\xA1%w zieht den Stein&und wirkt dann die aktive Rune.",
       "Votre %cTablette Sheikah%w apprend le&module %yCinetis%w!&Une rune ancienne brille en or&sur la "
-      "tablette.^Sélectionnez-la avec %y\xA0%w sur sa&case du menu pause.&Son pouvoir est encore %rendormi%w." },
+      "tablette.^Sélectionnez-la en maintenant %y\xA2%w:&la roue des runes. "
+      "%y\xA1%w sort la&tablette, puis lance la rune active." },
     { RG_SLATE_RUNE_CRYONIS, static_cast<ItemID>(EXT_ITEM_SHEIKAH_SLATE),
       "Your %cSheikah Slate%w learned the&%bCryonis%w rune!&An ancient rune glows ice-blue on&the slate's face.^Select "
-      "it with %y\xA0%w on the slate's&cell in the pause menu.&Its power is still %rdormant%w.",
+      "it by holding %y\xA2%w for the rune&wheel. %y\xA1%w draws the slate, then&casts the active rune.",
       "Dein %cSheikah-Stein%w hat das&%bCryonis%w-Modul gelernt!&Eine uralte Rune leuchtet eisblau&auf dem "
-      "Stein.^Wähle sie mit %y\xA0%w auf der Zelle&im Pausenmenü.&Ihre Kraft %rschlummert%w noch.",
+      "Stein.^Wähle sie mit gehaltenem %y\xA2%w im&Runen-Rad. %y\xA1%w zieht den Stein&und wirkt dann die aktive Rune.",
       "Votre %cTablette Sheikah%w apprend le&module %bGlaciera%w!&Une rune ancienne brille en bleu&glacé sur la "
-      "tablette.^Sélectionnez-la avec %y\xA0%w sur sa&case du menu pause.&Son pouvoir est encore %rendormi%w." },
+      "tablette.^Sélectionnez-la en maintenant %y\xA2%w:&la roue des runes. "
+      "%y\xA1%w sort la&tablette, puis lance la rune active." },
 
     { RG_DESIRE_SENSOR, static_cast<ItemID>(EXT_ITEM_SHEIKAH_SLATE),
       "Your %cSheikah Slate%w learned the&%pSensor%w rune!&An ancient rune glows violet on&the slate's face.^Cast it "
@@ -433,34 +470,34 @@ static const CustomItemMessageEntry customItemMessages[] = {
     // Rod of Seasons — one textbox per sibling pickup. The flame on the get-item model matches the
     // colour named here, and hold %y\xA0%w on the rod's button opens the season wheel.
     { RG_SEASON_SPRING, static_cast<ItemID>(EXT_ITEM_ROD_OF_SEASONS),
-      "Your %cRod of Seasons%w drew in&%pSpring%w!&Blossom drifts on the wind&wherever you carry it.^%rHold%w the "
-      "rod's %y\xA0%w button to&turn the world to another season.",
+      "Your %cRod of Seasons%w drew in&%pSpring%w!&Blossom drifts on the wind&wherever you carry it.^%rPress%w the "
+      "rod's %y\xA1%w button again to&change season. %y\x9F%w confirms, %y\xA0%w cancels.",
       "Dein %cZepter der Jahreszeiten%w zog&den %pFrühling%w ein!&Blüten treiben im Wind,&wohin du es auch "
-      "trägst.^%rHalte%w die %y\xA0%w-Taste des Zepters,&um die Welt zu wandeln.",
+      "trägst.^%rDrücke%w die %y\xA1%w-Taste des Zepters&erneut, um die Jahreszeit zu wechseln.",
       "Votre %cSceptre des Saisons%w attire&le %pPrintemps%w!&Les pétales dérivent au vent&où que vous "
-      "alliez.^%rMaintenez%w la touche %y\xA0%w du sceptre&pour changer de saison." },
+      "alliez.^%rAppuyez%w sur la touche %y\xA1%w du sceptre&pour changer de saison." },
 
     { RG_SEASON_SUMMER, static_cast<ItemID>(EXT_ITEM_ROD_OF_SEASONS),
-      "Your %cRod of Seasons%w drew in&%ySummer%w!&The sky stays clear and the sun&stands high.^%rHold%w the rod's "
-      "%y\xA0%w button to&turn the world to another season.",
+      "Your %cRod of Seasons%w drew in&%ySummer%w!&The sky stays clear and the sun&stands high.^%rPress%w the rod's "
+      "%y\xA1%w button again to&change season. %y\x9F%w confirms, %y\xA0%w cancels.",
       "Dein %cZepter der Jahreszeiten%w zog&den %ySommer%w ein!&Der Himmel bleibt klar und die&Sonne steht "
-      "hoch.^%rHalte%w die %y\xA0%w-Taste des Zepters,&um die Welt zu wandeln.",
+      "hoch.^%rDrücke%w die %y\xA1%w-Taste des Zepters&erneut, um die Jahreszeit zu wechseln.",
       "Votre %cSceptre des Saisons%w attire&l'%yÉté%w!&Le ciel reste clair et le soleil&est au zénith.^%rMaintenez%w "
-      "la touche %y\xA0%w du sceptre&pour changer de saison." },
+      "la touche %y\xA1%w du sceptre&pour changer de saison." },
 
     { RG_SEASON_AUTUMN, static_cast<ItemID>(EXT_ITEM_ROD_OF_SEASONS),
-      "Your %cRod of Seasons%w drew in&%rAutumn%w!&The sky greys over and the rain&never quite stops.^%rHold%w the "
-      "rod's %y\xA0%w button to&turn the world to another season.",
+      "Your %cRod of Seasons%w drew in&%rAutumn%w!&The sky greys over and the rain&never quite stops.^%rPress%w the "
+      "rod's %y\xA1%w button again to&change season. %y\x9F%w confirms, %y\xA0%w cancels.",
       "Dein %cZepter der Jahreszeiten%w zog&den %rHerbst%w ein!&Der Himmel vergraut und der Regen&hört kaum "
-      "auf.^%rHalte%w die %y\xA0%w-Taste des Zepters,&um die Welt zu wandeln.",
+      "auf.^%rDrücke%w die %y\xA1%w-Taste des Zepters&erneut, um die Jahreszeit zu wechseln.",
       "Votre %cSceptre des Saisons%w attire&l'%rAutomne%w!&Le ciel se voile et la pluie&ne cesse "
-      "jamais.^%rMaintenez%w la touche %y\xA0%w du sceptre&pour changer de saison." },
+      "jamais.^%rAppuyez%w sur la touche %y\xA1%w du sceptre&pour changer de saison." },
 
     { RG_SEASON_WINTER, static_cast<ItemID>(EXT_ITEM_ROD_OF_SEASONS),
-      "Your %cRod of Seasons%w drew in&%bWinter%w!&Snow falls under every open sky&you walk beneath.^%rHold%w the "
-      "rod's %y\xA0%w button to&turn the world to another season.",
+      "Your %cRod of Seasons%w drew in&%bWinter%w!&Snow falls under every open sky&you walk beneath.^%rPress%w the "
+      "rod's %y\xA1%w button again to&change season. %y\x9F%w confirms, %y\xA0%w cancels.",
       "Dein %cZepter der Jahreszeiten%w zog&den %bWinter%w ein!&Unter jedem freien Himmel&fällt nun Schnee.^%rHalte%w "
-      "die %y\xA0%w-Taste des Zepters,&um die Welt zu wandeln.",
+      "die %y\xA1%w-Taste des Zepters&erneut, um die Jahreszeit zu wechseln.",
       "Votre %cSceptre des Saisons%w attire&l'%bHiver%w!&La neige tombe sous chaque ciel&ouvert.^%rMaintenez%w la "
       "touche %y\xA0%w du sceptre&pour changer de saison." },
 };

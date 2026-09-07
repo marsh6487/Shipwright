@@ -39,6 +39,10 @@
 #include "mods/transformation_masks/wolf_link_form.h"
 #include "soh/frame_interpolation.h"
 
+// Defined in OTRGlobals.cpp. Declared here rather than including that header, which drags the whole
+// OTRGlobals class into this TU for one accessor.
+extern "C" const char* Nei_AssetDir(void);
+
 #include <libultraship/bridge.h>
 #include <libultraship/libultraship.h>
 
@@ -334,9 +338,10 @@ static bool RangeOk(u32 offset, u32 size) {
 }
 
 static std::string FindAssetPath() {
-    std::string path = Ship::Context::LocateFileAcrossAppDirs("nei/wolf_link.bin");
+    const std::string rel = std::string(Nei_AssetDir()) + "/wolf_link.bin";
+    std::string path = Ship::Context::LocateFileAcrossAppDirs(rel);
     if (path.empty()) {
-        path = "nei/wolf_link.bin";
+        path = rel;
     }
     return path;
 }
@@ -698,7 +703,7 @@ static void AdvanceAnim() {
 struct WolfInput {
     f32 stickMag = 0.0f;   // 0..60
     s16 stickWorldYaw = 0; // camera-relative stick direction, world yaw
-    u8 aPress = 0, bPress = 0, rHold = 0;
+    u8 aPress = 0, bPress = 0;
     u8 blocked = 0;
 };
 
@@ -709,7 +714,6 @@ static WolfInput ReadInput(Player* player, PlayState* play) {
     in.stickWorldYaw = (s16)(Camera_GetInputDirYaw(GET_ACTIVE_CAM(play)) + in.stickWorldYaw);
     in.aPress = CHECK_BTN_ALL(input->press.button, BTN_A) != 0;
     in.bPress = CHECK_BTN_ALL(input->press.button, BTN_B) != 0;
-    in.rHold = CHECK_BTN_ALL(input->cur.button, BTN_R) != 0;
     u32 blockMask = PLAYER_STATE1_LOADING | PLAYER_STATE1_TALKING | PLAYER_STATE1_DEAD | PLAYER_STATE1_GETTING_ITEM |
                     PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_HANGING_OFF_LEDGE |
                     PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_IN_ITEM_CS |

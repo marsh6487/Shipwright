@@ -4144,6 +4144,12 @@ static void PakLoader_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, 
 // Public API Implementation
 // ============================================================================
 
+// mods/soh and mods/2ship sit side by side when both games share one install (ComboShip); the
+// other game's skins are not ours to list.
+static bool IsSiblingGameModsDir(const std::string& name) {
+    return (name == "soh" || name == "2ship") && name != appShortName;
+}
+
 extern "C" void PakLoader_Init(void) {
     if (sInitialized)
         return;
@@ -4179,8 +4185,12 @@ extern "C" void PakLoader_Init(void) {
         for (; it != end; it.increment(ec)) {
             if (ec)
                 break;
-            if (it->is_directory(ec))
+            if (it->is_directory(ec)) {
+                if (IsSiblingGameModsDir(it->path().filename().string())) {
+                    it.disable_recursion_pending();
+                }
                 continue;
+            }
             std::string ext = it->path().extension().string();
             for (char& c : ext)
                 c = (char)tolower((unsigned char)c);

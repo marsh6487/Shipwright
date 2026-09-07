@@ -37,34 +37,37 @@ static const ItemDescEntry sCustomItemDescs[] = {
     { ITEM_HYLIAS_GRACE, TEXT_DESC_HYLIAS_GRACE,
       "Fairy flight for 10s. Ignores walls.&A=up, B=down, L=sprint. 24 MP." },
     { ITEM_ZONAI_PERMAFROST, TEXT_DESC_ZONAI_PERMAFROST,
-      "Stop time for 10s. Enemies, NPCs&and bosses freeze. Costs 12 magic." },
+      "Toggle the time stop. 4 MP to start,&then 1 MP every 10 frames. Ends on&a second press or an empty meter." },
     { ITEM_DEMISE_DESTRUCTION, TEXT_DESC_DEMISE_DESTRUCTION,
       "Massive AoE explosion. Damages all&enemies in range. Ground only. 12 MP." },
     { ITEM_DEKU_LEAF, TEXT_DESC_DEKU_LEAF, "Ground: blow wind gust. Air: hold&to glide. Drains magic while gliding." },
     { ITEM_SWITCH_HOOK, TEXT_DESC_SWITCH_HOOK, "Aim and fire to swap positions&with objects and enemies." },
     { ITEM_MOGMA_MITTS, TEXT_DESC_MOGMA_MITTS, "Toggle to climb any wall.&Drains magic over time." },
-    { ITEM_GUST_JAR, TEXT_DESC_GUST_JAR, "Pull enemies toward you, then push&them away. Hold C for element select." },
+    { ITEM_GUST_JAR, TEXT_DESC_GUST_JAR,
+      "Hold C to suck things in, release to&fire them back. Hold C 20 frames while&idle for the element wheel." },
     { ITEM_BALL_AND_CHAIN, TEXT_DESC_BALL_AND_CHAIN,
       "Heavy thrown weapon. Breaks ice walls&and heavy objects. Hold C to charge.&C-Up to aim." },
     { ITEM_WHIP, TEXT_DESC_WHIP, "Grapple from any bar surface. Swing&with joystick. Release for momentum&launch." },
-    { ITEM_SPINNER, TEXT_DESC_SPINNER, "Toggle to ride. A for homing dash&attack. Breaks rocks." },
+    { ITEM_SPINNER, TEXT_DESC_SPINNER,
+      "Hold C to charge, release to ride.&Release while Z-targeting for a&homing dash. Breaks rocks." },
     { ITEM_CANE_OF_SOMARIA, TEXT_DESC_CANE_OF_SOMARIA,
-      "Four canes on one cell. Summon&blocks, flip enemies, build with&Ultrahand. A cycles the cane." },
+      "Four canes on one cell. A here cycles&the cane; C draws it, then casts.&L and R step the summon." },
     { ITEM_DOMINION_ROD, TEXT_DESC_DOMINION_ROD,
       "Fire orb to possess Beamos, Armos&or Anubis. Control them with analog+C." },
     { ITEM_TIME_GATE, TEXT_DESC_TIME_GATE, "Travel through time. Swap between&child and adult. Costs 48 magic." },
     // ITEM_BOMB_ARROWS moved to sSw97ElemDescs — it owns no inventory cell any more, so it can only
     // be hovered as the bow's primed element.
-    { ITEM_ELEMENTAL_WAND, TEXT_DESC_ELEMENTAL_WAND,
-      "Six rods in one. Press A to cycle&between the modes you have unlocked." },
+    // No ITEM_ELEMENTAL_WAND row: this table is searched before the mode block below, so a generic
+    // row here would shadow all six of sWandModeDescs.
     { ITEM_ROD_FIRE, TEXT_DESC_FIRE_ROD,
       "Slash=3 fireballs. Stab=long shot.&Jump=flamethrower. Spin=fire AoE.&C-Up to aim." },
     { ITEM_ROD_ICE, TEXT_DESC_ICE_ROD, "Slash=3 iceballs. Stab=long shot.&Jump=ice wave. Spin=ice AoE.&C-Up to aim." },
     { ITEM_ROD_LIGHT, TEXT_DESC_LIGHT_ROD, "Slash=3 orbs. Stab=long shot.&Jump=beam. Spin=light AoE.&C-Up to aim." },
     { ITEM_BEETLE, TEXT_DESC_BEETLE,
-      "Launch remote beetle. Steer with&joystick. B=boost. Grabs items and&hits enemies." },
+      "Hold C to aim, release to launch.&Stick steers, A boosts, Z locks on,&B lets it fly home on its own." },
     { ITEM_SHOVEL, TEXT_DESC_SHOVEL, "Dig to uncover grottos, Gold&Skulltulas and graveyard rewards." },
-    { ITEM_MINISH_CAP, TEXT_DESC_MINISH_CAP, "Fast travel to 10 pod soil spots.&Kill Gold Skulltulas to unlock them." },
+    { ITEM_MINISH_CAP, TEXT_DESC_MINISH_CAP,
+      "C by a pod soil: fast travel map.&C away from one: shrink or grow back.&Gold Skulltulas unlock the soils." },
     { ITEM_LANTERN, TEXT_DESC_LANTERN,
       "Swing near fire to catch it. 4 types.&Blue=melts red ice. Green=HP regen.&Poe/Green=free Lens. Swing=fire "
       "dmg." },
@@ -72,13 +75,13 @@ static const ItemDescEntry sCustomItemDescs[] = {
     { ITEM_POKEBALL, TEXT_DESC_POKEBALL, "Transform into Pikachu.&Press again to revert." },
     // Page-2 cells (2026-08-06 re-layout)
     { EXT_ITEM_SHEIKAH_SLATE, TEXT_DESC_SHEIKAH_SLATE,
-      "Draw the slate to cast a rune.&A cycles Remote Bomb, Stasis,&Cryonis and Master Cycle." },
+      "C draws the slate, then casts the&active rune. Hold L for the rune wheel." },
     { EXT_ITEM_PHANTOM_HOURGLASS, TEXT_DESC_PHANTOM_HOURGLASS,
-      "Aim at a moving object to rewind it&along its own path while the world&holds still." },
+      "C stops time and aims. C again rewinds&what the reticle holds along its own&path. C or B lets go." },
     { EXT_ITEM_SHADOW_CRYSTAL, TEXT_DESC_SHADOW_CRYSTAL,
       "Turn into Wolf Link. Bite combo&and a running dash. Press again&to turn back." },
     { EXT_ITEM_ROD_OF_SEASONS, TEXT_DESC_ROD_OF_SEASONS,
-      "Pick a season from the prompt and&the world reloads under it." },
+      "C draws the rod, then opens the season&prompt. A confirms, B cancels, and a&new season reloads the scene." },
     // Bottle row
     { ITEM_NET, TEXT_DESC_NET, "Swing it like a sword to scoop bugs,&fish and fairies into a bottle." },
     { ITEM_BOTTOMLESS_BOTTLE, TEXT_DESC_BOTTOMLESS_BOTTLE, "Refills itself for a set number of&uses per fill." },
@@ -134,7 +137,8 @@ static const ItemDescEntry sSw97ElemDescs[] = {
     { SW97_ELEM_DARK, TEXT_DESC_SW97_ARROW_DARK, "Dark elemental shot. Costs no magic." },
     { SW97_ELEM_SOUL, TEXT_DESC_SW97_ARROW_SOUL, "Soul elemental shot. Costs no magic." },
     { SW97_ELEM_WIND, TEXT_DESC_SW97_ARROW_WIND, "Wind elemental shot. Costs no magic." },
-    { SW97_ELEM_BOMB, TEXT_DESC_BOMB_ARROWS, "Explosive arrows. Hold C to aim.&Consumes 1 arrow and 1 bomb per shot." },
+    { SW97_ELEM_BOMB, TEXT_DESC_BOMB_ARROWS,
+      "Hold C to aim, release to fire. Costs&1 arrow and 1 bomb. Holding past 70&frames drops a live bomb instead." },
 };
 
 // The six rods share one item id, so their descriptions key off the active mode.
@@ -153,10 +157,11 @@ static const ItemDescEntry sWandModeDescs[] = {
 //   Memories (described here), while the page-2 GRID cell with the same id is the Climb Boots.
 static const ItemDescEntry sExtEquipDescs[] = {
     { ITEM_EXT_SWORD_1, TEXT_DESC_EXT_BYRNA,
-      "Two-handed glaive. Its Kinsect orb&guards, marks foes and launches you." },
+      "Glaive: B chains, fwd+B thrusts,&Z+A jumps, R sends the Kinsect.&In the air A dashes, R pounds." },
     { ITEM_EXT_SWORD_2, TEXT_DESC_EXT_FOUR_SWORD,
-      "R+B to charge. Spawns 3 clones&(36 MP). Clones mirror your attacks." },
-    { ITEM_EXT_SWORD_3, TEXT_DESC_EXT_TRIDENT, "Gunlance moveset. Guard dash,&charged blast and flight." },
+      "Hold R+B for 3 clones that mirror&your attacks, 12 MP each.&Hold L for the formation wheel." },
+    { ITEM_EXT_SWORD_3, TEXT_DESC_EXT_TRIDENT,
+      "Gunlance: B chains, hold B charges,&R+B guard dashes, hold R+A flies." },
     { ITEM_EXT_SHIELD_1, TEXT_DESC_EXT_DIVINE_SHIELD,
       "Fire immune. Block within 10 frames&to stun all nearby enemies." },
     { ITEM_EXT_SHIELD_2, TEXT_DESC_EXT_GERUDO_SCIMITAR,
@@ -164,9 +169,9 @@ static const ItemDescEntry sExtEquipDescs[] = {
     { ITEM_EXT_SHIELD_3, TEXT_DESC_EXT_SHIELD_IKANA,
       "Perfect guard drains enemy HP.&Death save: revive once with 3 hearts." },
     { ITEM_EXT_TUNIC_1, TEXT_DESC_EXT_CHAMPION_TUNIC,
-      "Flurry Rush on dodge. Bullet Time&when aiming in air. 15% world speed." },
+      "Dodge past an attack for a Flurry&Rush, aim in mid-air for Bullet Time.&Both slow the world to 33%." },
     { ITEM_EXT_TUNIC_2, TEXT_DESC_EXT_BREASTPLATE,
-      "Damage immunity. Costs rupees per&hit. No rupees = slow movement." },
+      "Rupees absorb damage, 1 HP each, and&the fire and water timers stop.&At zero you are slow and unprotected." },
     { ITEM_EXT_TUNIC_3, TEXT_DESC_EXT_SAGES_TUNIC, "Each medallion you own adds a&passive resistance while worn." },
     { ITEM_EXT_BOOTS_1, TEXT_DESC_EXT_PEGASUS_ANKLET, "Keep holding B after a swing to&charge forward, sword first." },
     { ITEM_EXT_BOOTS_2, TEXT_DESC_EXT_CLIMB_BOOTS,
@@ -175,12 +180,36 @@ static const ItemDescEntry sExtEquipDescs[] = {
 };
 
 static const ItemDescEntry sMedallionDescs[] = {
-    { ITEM_MEDALLION_FOREST, TEXT_DESC_MEDALLION_FOREST, "Wind spell. 12 MP.&C to equip the spell." },
-    { ITEM_MEDALLION_FIRE, TEXT_DESC_MEDALLION_FIRE, "Fire spell. 12 MP.&C to equip the spell." },
-    { ITEM_MEDALLION_WATER, TEXT_DESC_MEDALLION_WATER, "Ice spell. 24 MP.&C to equip the spell." },
-    { ITEM_MEDALLION_SPIRIT, TEXT_DESC_MEDALLION_SPIRIT, "Soul spell. 24 MP.&C to equip the spell." },
-    { ITEM_MEDALLION_SHADOW, TEXT_DESC_MEDALLION_SHADOW, "Dark spell. 12 MP.&C to equip the spell." },
-    { ITEM_MEDALLION_LIGHT, TEXT_DESC_MEDALLION_LIGHT, "Light spell. 24 MP.&C to equip the spell." },
+    { ITEM_MEDALLION_FOREST, TEXT_DESC_MEDALLION_FOREST,
+      "Wind spell, 12 MP. A tornado that&drags enemies in and grinds them.&C here equips the spell." },
+    { ITEM_MEDALLION_FIRE, TEXT_DESC_MEDALLION_FIRE,
+      "Fire spell, 12 MP. A column of flame&that burns harder the longer it&stands. C here equips the spell." },
+    { ITEM_MEDALLION_WATER, TEXT_DESC_MEDALLION_WATER,
+      "Ice spell, 24 MP. Freezes every enemy&it touches for 6 seconds.&C here equips the spell." },
+    { ITEM_MEDALLION_SPIRIT, TEXT_DESC_MEDALLION_SPIRIT,
+      "Soul spell, 24 MP. Turns you into a&fairy until you cast it again.&C here equips the spell." },
+    { ITEM_MEDALLION_SHADOW, TEXT_DESC_MEDALLION_SHADOW,
+      "Dark spell, 12 MP. A shield that blocks&all damage for a minute while the&world dims. C here equips the spell." },
+    { ITEM_MEDALLION_LIGHT, TEXT_DESC_MEDALLION_LIGHT,
+      "Light spell, 24 MP. Undead freeze for&30 seconds and you heal 6 hearts.&C here equips the spell." },
+};
+
+// Boss remains, read on the NEI MM quest page. That page has no item ids of its own: it publishes
+// `0x100 + cursor point` as the hovered item, and points 0-3 are the four remains.
+#define MM_QUEST_POINT_ITEM(point) (0x100 + (point))
+
+static const ItemDescEntry sBossRemainsDescs[] = {
+    { MM_QUEST_POINT_ITEM(0), TEXT_DESC_REMAINS_ODOLWA,
+      "Press its button to wear it.&Hold A to sprint, trailing fire.&R+B calls 6 beetles (6 MP).&A by soft soil "
+      "takes off on moths." },
+    { MM_QUEST_POINT_ITEM(1), TEXT_DESC_REMAINS_GOHT,
+      "Press its button to wear it.&Hold A to charge like a bull, R+A to&ground-pound. Hold B for a thunder&bolt "
+      "(4 MP). R+B throws a bombchu." },
+    { MM_QUEST_POINT_ITEM(2), TEXT_DESC_REMAINS_GYORG,
+      "Press its button to wear it.&Swim like a Zora. In water R calls a&fish school and B holds a whirlpool;&on "
+      "land R+B calls the fish." },
+    { MM_QUEST_POINT_ITEM(3), TEXT_DESC_REMAINS_TWINMOLD,
+      "Press its button to wear it.&Its Dark Link companion is not&implemented yet." },
 };
 
 // Vanilla OOT usable items (shown on the ITEM page when no custom item matches).
@@ -253,11 +282,17 @@ extern "C" u16 PauseItemDesc_GetTextId(u16 cursorItem, s32 pageIndex) {
         }
     }
 
-    // SW97 Medallions on QUEST page (only when SW97 enabled)
-    if (pageIndex == PAUSE_QUEST && SW97_MEDALLIONS_ENABLED()) {
-        for (size_t i = 0; i < ARRAY_COUNT(sMedallionDescs); i++) {
-            if (sMedallionDescs[i].itemId == cursorItem)
-                return sMedallionDescs[i].textId;
+    if (pageIndex == PAUSE_QUEST) {
+        // The remains ride the MM quest page, which is independent of the SW97 medallion toggle.
+        for (size_t i = 0; i < ARRAY_COUNT(sBossRemainsDescs); i++) {
+            if (sBossRemainsDescs[i].itemId == cursorItem)
+                return sBossRemainsDescs[i].textId;
+        }
+        if (SW97_MEDALLIONS_ENABLED()) {
+            for (size_t i = 0; i < ARRAY_COUNT(sMedallionDescs); i++) {
+                if (sMedallionDescs[i].itemId == cursorItem)
+                    return sMedallionDescs[i].textId;
+            }
         }
     }
 
@@ -278,12 +313,13 @@ static void BuildDescMessage(const char* desc, uint16_t* textId, bool* loadFromM
 // All description tables for single-hook lookup
 // Matched on textId only, so the element/mode-keyed tables slot in here unchanged.
 static const ItemDescEntry* sAllDescs[] = {
-    sCustomItemDescs, sMaskDescs, sSw97ElemDescs, sWandModeDescs, sExtEquipDescs, sMedallionDescs, sVanillaItemDescs,
+    sCustomItemDescs, sMaskDescs,      sSw97ElemDescs,    sWandModeDescs,
+    sExtEquipDescs,   sMedallionDescs, sBossRemainsDescs, sVanillaItemDescs,
 };
 static const size_t sAllDescCounts[] = {
-    ARRAY_COUNT(sCustomItemDescs),  ARRAY_COUNT(sMaskDescs),     ARRAY_COUNT(sSw97ElemDescs),
-    ARRAY_COUNT(sWandModeDescs),    ARRAY_COUNT(sExtEquipDescs), ARRAY_COUNT(sMedallionDescs),
-    ARRAY_COUNT(sVanillaItemDescs),
+    ARRAY_COUNT(sCustomItemDescs),  ARRAY_COUNT(sMaskDescs),         ARRAY_COUNT(sSw97ElemDescs),
+    ARRAY_COUNT(sWandModeDescs),    ARRAY_COUNT(sExtEquipDescs),     ARRAY_COUNT(sMedallionDescs),
+    ARRAY_COUNT(sBossRemainsDescs), ARRAY_COUNT(sVanillaItemDescs),
 };
 
 // Single hook for all descriptions: fires on ANY OnOpenText, checks if textId matches

@@ -97,7 +97,7 @@ void* CustomForms_ResolveVanillaTexture(const char* vanillaSymbol); // eyes / mo
 // a two-item cycle answers the same for prev and next. Only offered to a save
 // that owns Farore's Wind — the cell IS the state, nothing extra is stored.
 void RitoItem_NoteCellItem(s32 item); // remember that this file owns that cell item
-void RitoItem_SyncCell(void);         // record ownership + seed an empty cell (call before the cycler)
+void RitoItem_SyncCell(void);         // record ownership (call before the cycler); never writes the cell
 s32 RitoItem_OtherItem(void);
 u8 RitoItem_CanCycle(void);
 

@@ -1,525 +1,216 @@
-# Not Enough Items - Controls Guide
-### Complete control reference for all 21 custom items
+# Not Enough Items — Controls
+
+Source of truth for every in-game control string: the get-item textboxes
+(`mods/extended_player.c` `sNeiItems[]`, `soh/Enhancements/randomizer/randomizer.cpp`
+`customItemMessages[]`) and the C-Up pause descriptions
+(`soh/Enhancements/custom-message/PauseItemDescriptions.cpp`, and the 2ship/ComboShip copies).
+
+Every row below was read off the behaviour code, not off those strings. When they disagree, the
+code wins and the strings get fixed.
+
+**C** = the button the item sits on (C-Left/Down/Right, plus the D-pad when that enhancement is on).
+
+Message-font button glyphs (`sFontWidths` in `z_message_PAL.c`, indexed from `' '`): `\x9F` A ·
+`\xA0` B · `\xA1` C · `\xA2` L · `\xA3` R · `\xA4` Z · `\xA5` C-Up · `\xA6` C-Down · `\xA7` C-Left ·
+`\xA8` C-Right · `\xAA` control stick · `\xAB` D-pad.
 
 ---
 
-## Control Conventions
+## Page-2 items
 
-| Term | Meaning |
-|------|---------|
-| **C Button** | The C-button slot where the item is equipped (C-Left, C-Down, C-Right), including the DPads when enhancement active |
-| **Hold** | Press and hold the button |
-| **Tap** | Quick press and release |
-| **Z-Target** | Lock onto enemies/objects with Z button |
-| **First-Person Mode** | Some items automatically enter aiming mode by pressing C-Up |
+| Item | Input | Result |
+|---|---|---|
+| Roc's Feather | C | High jump. Works in water (shorter) |
+| Roc's Cape | C | High jump |
+| | C in mid-air | Double jump, once per landing |
+| Deku Leaf | C on the ground | Wind gust that pushes objects and enemies |
+| | Hold C in the air | Glide. Drains magic |
+| Whip | C | Lash forward; latches onto beams and bars |
+| | Stick while swinging | Steer the pendulum |
+| | Release | Launch with the swing's momentum |
+| Spinner | Hold C | Charge (longer = faster ride) |
+| | Release C | Ride forward |
+| | Release C while Z-targeting | Homing dash attack at the target |
+| Ball and Chain | Hold C | Spin the ball overhead |
+| | Release C | Throw. Z-targeting aims it at the target, otherwise the stick aims |
+| | C-Up | Toggle first-person aim |
+| Fire / Ice / Light Rod | B slash | 3 projectiles at +30/0/-30 degrees |
+| | B stab | One long-range shot |
+| | B jump slash | Downward cone |
+| | Spin attack | Expanding ring |
+| | Hold C | Charge attack |
+| | C-Up | Toggle first-person aim |
+| Bomb Arrows | Hold C | First-person aim |
+| | Release C | Fire. Costs 1 arrow (or seed) + 1 bomb |
+| | Hold C past 70 frames | Drops a live bomb in hand instead |
+| Switch Hook | Hold C | First-person aim |
+| | Release C | Fire. Swaps places with the target, or damages it |
+| | Z-target | Aim in third person |
+| Gust Jar | Hold C | Suck. Pulls objects and enemies in |
+| | Release C | Fire what you caught |
+| | Hold C 20 frames while idle | Element wheel |
+| | L / R in the wheel | Step the element |
+| Dominion Rod | C | Fire the possession orb |
+| | Stick, possessed | Move the possessed actor |
+| | A, possessed | Jump |
+| | C, possessed | The actor's own attack |
+| | C-Up | Toggle first-person aim |
+| Beetle | Hold C | Aim |
+| | C-Up while aiming | Toggle first person |
+| | Release C | Launch |
+| | Stick, flying | Steer |
+| | A, flying | Boost |
+| | Z, flying | Lock / unlock the nearest enemy |
+| | B, flying | Let go: the beetle flies home, or kamikazes a locked target first |
+| Shovel | C | Dig |
+| Mogma Mitts | C | Toggle wall climbing. Drains magic |
+| Demise Destruction | C | AoE lightning explosion. Ground only |
+| Time Gate | C | "Travel through time?" prompt |
+| | A / B | Confirm / cancel. 48 MP, charged on confirm |
+| Zonai Permafrost | C | Toggle the time stop |
+| | | 4 MP to start, then 1 MP every 10 frames. Ends on a second press or an empty meter |
+| Minish Cap | C near a pod soil | Fast-travel map |
+| | C away from one | Shrink to Minish size / grow back |
+| | | Any scene load grows you back |
+| Lantern | C | Swing. Catches fire from a nearby flame |
+| | Hold C in the pause cell | Put the flame out |
+| Phantom Hourglass | C | Raise it: time stops and you aim |
+| | C again | Rewind whatever the reticle holds along its own path |
+| | C / B / any other button | Let go |
+| Shadow Crystal | C | Wolf Link / back. OoT only |
+| Rod of Seasons | C | First press draws the rod |
+| | C again | Season prompt. A confirms, B cancels; a new season reloads the scene. OoT only |
+| Elemental Wand | Hold L | Rod wheel, when you own more than one |
+| | C | Cast the active rod |
+| Pokeball | C | Pikachu / back |
+| Power Keg | C | Drop a lit keg |
+| Net | Swing | Scoop bugs, fish and fairies into a bottle |
 
----
+### Dual Cane (one cell, four canes, six skills)
 
-## Traversal Items
+| Input | Result |
+|---|---|
+| A on the pause cell | Switch cane: Somaria / Trirod / Pacci / Ultrahand |
+| C | First press draws the cane; after that it casts |
+| L / R with the cane drawn | Step the summon (Somaria) or the echo (Trirod) |
+| Hold L, Trirod | Echo grid |
 
-### Roc's Feather
-> *Origin: Oracle Games*
+Pacci's Flip is the one skill that splits C:
 
-**Type:** Passive Jump
-**Age:** Child & Adult
+| Input | Result |
+|---|---|
+| Tap C | Flip the target onto its back |
+| Hold C | Lift it into the air |
+| Release | Throw it, at your lock-on target if you have one |
 
-| Input | Action |
-|-------|--------|
-| C Button (ground) | High jump with sparkle effects |
-| C Button (water) | Reduced-height water jump |
+Trirod:
 
-**Notes:**
-- If mm.o2r file present it uses MM animations
+| Input | Result |
+|---|---|
+| C on a highlighted prop | Learn its echo |
+| C on one of your summons | Dismiss it |
+| C otherwise | Summon the selected echo at the ghost marker |
+| | Creature echoes are learned by killing the creature with the rod drawn |
 
----
+Ultrahand (C opens the mode; B always leaves):
 
-### Roc's Cape
-> *Origin: Four Swords Adventures*
-
-**Type:** Progressive upgrade of Roc's Feather
-**Age:** Child & Adult
-
-| Input | Action |
-|-------|--------|
-| C Button (ground) | High jump |
-| C Button (air) | Double jump (once per airtime) |
-
-**Notes:**
-- Double jump resets when you land
-- Shockwave effect on double jump
-- Requires Roc's Feather first
-- If mm.o2r file present it uses MM animations
----
-
-### Deku Leaf
-> *Origin: The Wind Waker*
-
-**Type:** Glider and Combat
-**Age:** Child & Adult
-**Cost:** Magic
-
-| Input | Context | Action |
-|-------|---------|--------|
-| C Button | Ground | Swing leaf - creates wind gust |
-| Hold C Button | Air | Glide - reduces fall speed |
-| Release C | Gliding | Stop gliding |
-
-**Notes:**
-- Wind gust pushes enemies and objects forward
-- Gliding consumes magic over time (1 MP per 30 frames)
-
----
-
-### Whip
-> *Origin: Spirit Tracks*
-
-**Type:** Grappling Hook + Boomerang Damage
-**Age:** Child & Adult
-
-| Input | Context | Action |
-|-------|---------|--------|
-| C Button | Equipped | Enter first-person aiming |
-| C Button | Aiming | Lash whip forward |
-| Analog Stick | Swinging | Control pendulum direction |
-| Any Button | Swinging | Release with momentum |
-
-**Swinging Mechanics:**
-- **Stick Y:** Lean forward/backward for momentum
-- **Stick X:** Turn swing plane
-- Release at peak momentum for maximum launch distance
-
-**Combat Uses:**
-- Paralyzes Keese and Bubbles
-- Disarms Stalfos and Lizalfos (Not tested yet)
-- Boomerang Damage to other enemies
-
-**Notes:**
-- It can glide to any geometry with beam shape (theoretically)
-
----
-
-### Spinner
-> *Origin: Twilight Princess*
-
-**Type:** Vehicle
-**Age:** Child & Adult
-
-| Input | Action |
-|-------|--------|
-| C Button | Activate/deactivate spinner ride |
-| Analog Stick | Steer direction |
-| Z Target + C Button | Homing dash attack toward nearest enemy |
-| C Button (Ridding) | Attack |
-
-**Notes:**
-- Constant spinning animation while riding
-- Homing attack: 8 hearts damage
-- Ridding attack: 2 hearts damage on contact
-- Can break all boulders with both attacks
+| Input | Result |
+|---|---|
+| A | Grab, then weld, then release |
+| D-pad | Push / pull / slide the held object |
+| L + D-pad | Rotate (snapped) |
+| R + D-pad | Raise / lower / slide |
+| Z | Reset the rotation to how you grabbed it |
+| Shake the stick | Pull a structure apart |
+| L + R + A | Store the structure |
+| Keep holding C | Rebuild the stored structure |
 
 ---
 
-## Combat Items
+## Extended equipment (page 2, cycle with L in the pause menu)
 
-### Ball and Chain
-> *Origin: Twilight Princess*
-
-**Type:** Heavy Projectile Weapon
-**Age:** Child & Adult
-
-| Input | Action |
-|-------|--------|
-| Hold C Button | Spin ball overhead (charging) |
-| Release C Button | Throw ball in aimed direction |
-| C-Up | Toggle first-person aiming (while charging) |
-| Analog (while spinning) | Lean/tilt spin direction |
-
-**Notes:**
-- Charge time affects throw distance (150-300 units)
-- 40% movement speed while equipped
-- Heavy damage to enemies (Giant's Knife level)
-- Breaks ice walls, Iron Knuckle Pillars, Goron City Big Jar, Shadow Temple Jars
-
----
-
-### Fire Rod
-> *Origin: A Link Between Worlds*
-
-**Type:** Magic Combat Rod
-**Age:** Child & Adult
-**Cost:** Magic per attack
-
-| Input | Attack Type | Effect |
-|-------|-------------|--------|
-| B (slash) | Triple Spread | 3 fireballs at +30/0/-30 degrees |
-| B (stab) | Single Shot | Long-range single fireball |
-| B (jump slash) | Flamethrower | Cone of 6 flame colliders |
-| Spin Attack | Fire Ring | Expanding fire cylinder |
-| C-Up | Toggle | First-person aiming mode |
-
-**Magic Costs:**
-- Slash/Stab: 3 MP
-- Jump Slash: 6 MP
-- Spin (small): 6 MP
-- Spin (big): 12 MP
-
-**Warning:** Using without magic has a chance to backfire and burn Link!
+| Slot | Item | Input | Result |
+|---|---|---|---|
+| Sword 1 | Cane of Byrna | B, B, B | Ground chain |
+| | *(Insect Glaive — OoT only; 2ship keeps the Biggoron-reach cane that restores HP and MP on hit)* | Forward + B | Thrust |
+| | | Hold B | Quick spin |
+| | | Z + A | Jump slash |
+| | | R | Kinsect; at full charge it launches you |
+| | | A / A+back / B / R in the air | Dash / climb / spin / ground pound |
+| Sword 2 | Four Sword | Hold R + B, 15 frames | 3 clones that mirror your attacks. 12 MP each |
+| | | Hold L | Formation wheel |
+| Sword 3 | Trident | B, B, B | Three-slash chain |
+| | | Forward + B | Lunging thrust |
+| | | Hold B | Charge, 3 levels; full fires the magic ball |
+| | | Z + A | Rising strike |
+| | | R | Shield |
+| | | R + B | Guard dash |
+| | | Hold R + A | Flight — stick moves, R up, L down, B light ball, A launch at the target |
+| Shield 1 | Divine Shield | R | Block. Fireproof |
+| | | Block within 10 frames of the attack | Stuns every enemy nearby |
+| Shield 2 | Kite Shield | R in mid-air | Drop the shield and surf. Downhill builds speed |
+| | | A / B / B+R | Hop / spin / dismount |
+| Shield 3 | Shield of Ikana | Block within 12 frames | Drains the attacker's HP |
+| | | On a killing blow | Revives you once per scene with 3 hearts |
+| Tunic 1 | Champion's Tunic | Sidehop or backflip past an attack | Flurry Rush: slow motion, i-frames, up to 7 hits |
+| | | Aim while airborne | Bullet Time |
+| Tunic 2 | Spirit Tunic | Passive | Rupees absorb damage, 1 HP = 1 rupee, and 30% of each charge spills as pickups |
+| | | Passive | Fire and underwater timers are skipped while you hold rupees |
+| | | At zero rupees | No protection and half speed |
+| Tunic 3 | Sage's Tunic | Passive | One resistance per medallion owned |
+| Boots 1 | Pegasus Anklet | Keep holding B after a swing | Dash forward, sword first. Wind barrier costs 1 MP per 15 frames |
+| Boots 2 | Climb Boots | Passive | Ice stops being slippery, steep slopes stop sliding you |
+| Boots 3 | Roc Boots | Passive | Walk on water and lava; half gravity |
+| Upgrades | Magic Cape | Passive on pickup | Halves every magic cost, rounded down |
+| | | A on its cell | Show / hide the cape |
+| Upgrades | Pendant of Memories | B near an enemy, sheathed, still, no Z | Mortal Draw |
+| | | B in mid-air | Ground Pound |
+| | | Z + 3 sidehops + B | Parry Leap |
+| | | A on its cell | Turn the moveset on / off |
 
 ---
 
-### Ice Rod
-> *Origin: A Link Between Worlds*
+## SW97 medallion spells (quest page; C there equips the spell to that button)
 
-**Type:** Magic Combat Rod
-**Age:** Child & Adult
-**Cost:** Magic per attack
+Costs are `sSw97MagicSpellCosts` in `expansions/sw97/player/sw97_player_behavior.inc.c`.
 
-| Input | Attack Type | Effect |
-|-------|-------------|--------|
-| B (slash) | Triple Spread | 3 ice projectiles at +30/0/-30 degrees |
-| B (stab) | Single Shot | Long-range ice projectile |
-| B (jump slash) | Ice Wave | Cone of 6 ice wave colliders |
-| Spin Attack | Ice Ring | Expanding ice cylinder |
-| C-Up | Toggle | First-person aiming mode |
+| Medallion | Spell | MP | Effect |
+|---|---|---|---|
+| Forest | Wind | 12 | Tornado: drags enemies into the core and damages them there. It pulls you too, but never hurts you |
+| Fire | Fire | 12 | A column of flame whose damage grows the longer it stands |
+| Water | Ice | 24 | Freezes what it hits for 120 frames (6 s) |
+| Spirit | Soul | 24 | Hands off to the fairy form — a toggle, no timer |
+| Shadow | Dark | 12 | Nayru's-Love shield: no damage for 1200 frames, and the lighting dims |
+| Light | Light | 24 | Sun's Song blast: undead freeze for 600 frames (30 s) and you heal 6 hearts |
 
-**Notes:**
-- Freezes enemies for 60 frames
-- Same magic costs as Fire Rod
-- Backfire freezes Link if used without magic
+## Boss remains (MM quest page; a C or D-pad press there equips one, then that button wears it)
 
----
-
-### Light Rod
-> *Origin: A Link Between Worlds (?)*
-
-**Type:** Magic Rod
-**Age:** Child & Adult
-**Cost:** Magic per attack
-
-| Input | Attack Type | Effect |
-|-------|-------------|--------|
-| B (slash) | Triple Spread | 3 light projectiles |
-| B (stab) | Single Shot | Long-range light beam |
-| B (jump slash) | Light Beam | Cone of 6 beam colliders |
-| Spin Attack | Light Ring | Expanding light cylinder |
-| C-Up | Toggle | First-person aiming mode |
-
-**Notes:**
-- Stuns/paralyzes enemies
-- Same magic costs as Fire/Ice Rods
-- Backfire electrocutes Link if used without magic
+| Remains | Input | Result |
+|---|---|---|
+| Odolwa | Move while worn | Red trail |
+| | Hold A | ~2x run with a purple trail |
+| | R + B | 6 friendly beetles. 6 MP |
+| | A near soft soil | Take off on the moth cloud; auto-lands after 200 frames |
+| Goht | Hold A | Bull charge (~3x run). Magic powers its contact damage and cone |
+| | R + A | Ground-pound quake |
+| | Hold B, release | Charged thunder bolt — longer charge, more range and damage. 4 MP |
+| | R + B | Throw a friendly bombchu; R + B again detonates it |
+| Gyorg | — | Zora-style swimming |
+| | R in water | Fish school |
+| | Hold B in water | Whirlpool, while magic lasts |
+| | R + B on land | Fish school |
+| Twinmold | — | Nothing yet: the Dark Link companion is stubbed |
 
 ---
 
-### Bomb Arrows
-> *Origin: Twilight Princess*
-
-**Type:** Combination Weapon
-**Age:** Child & Adult
-**Cost:** 1 Arrow + 1 Bomb per shot
-
-| Input | Action |
-|-------|--------|
-| Hold C Button | First-person aiming mode |
-| Release C Button | Fire bomb arrow |
-
-**Notes:**
-- Combines bow and bomb into single projectile
-- Explosive damage on impact
-- Requires both arrows and bombs in inventory
-
----
-
-### Switch Hook
-> *Origin: Oracle of Ages*
-
-**Type:** Position Swap Hookshot
-**Age:** Child & Adult
-**Range:** Longshot distance
-
-| Input | Action |
-|-------|--------|
-| Hold C Button | First-person aiming mode |
-| Release C Button | Fire hook projectile |
-| Z-Target + C | Instant swap with targeted actor |
-
-**Swappable Targets:**
-- Crates
-- Torches
-- Signs
-- Chests
-- Scarecrow
-- Enemies: Poes/Ghosts, Like Likes, Armos, Tektites Lizalfos/Dinolfos, ReDeads/Gibdos, Floormasters, Wallmasters, Freezards, Anubis
-
-**Notes:**
-- Non-swappable actors take hookshot damage
-- Blue reticle during aiming
-- No First Person Model
-
----
-
-### Gust Jar
-> *Origin: The Minish Cap*
-
-**Type:** Suction & Projectile Device
-**Age:** Child & Adult
-
-| Input | Action |
-|-------|--------|
-| Hold C Button | Suction mode - pulls items/enemies toward Link |
-| Release C Button | Fire sucked object as projectile |
-| Z-Target | Toggle between first-person and Z-target modes |
-
-**Reticle Colors:**
-| Color | Mode |
-|-------|------|
-| Blue | Suction (pulling) |
-| Red | Shoot/idle (expelling) |
-
----
-**Notes:**
-- It has different damage accordingly to the enemy sucked
-
-### Cane of Somaria
-> *Origin: A Link to the Past*
-
-**Type:** Block Creation
-**Age:** Child & Adult
-
-| Input | Action |
-|-------|--------|
-| C Button | Swing cane - spawn a hookshot / switchhook block |
-
-**Notes:**
-- Maximum 3 blocks active at once
-- Oldest block destroyed when limit reached
-- Blocks can press all floor switches (including the ones that require Link be lifting Ruto), except rust
-- Blocks are liftable
-- Blocks can be swapped and hookshotted
-
----
-
-### Dominion Rod
-> *Origin: Twilight Princess*
-
-**Type:** Remote Control
-**Age:** Child & Adult
-
-| Input | Action |
-|-------|--------|
-| C Button | Fire control orb at target |
-| Analog Stick | Move controlled actor |
-| A Button | Make controlled actor jump |
-| C-Up | Toggle first-person aiming |
-| C Button (controlled) | Use actor's special ability |
-
-**Controllable Actors:**
-- Beamos (laser attack)
-- Armos (explode)
-- Anubis (fire attack)
-- Statue-type actors
-
-**Notes:**
-- Green reticle in control mode
-- Controlled actors mimic Link's movement
-
----
-
-### Beetle
-> *Origin: Skyward Sword*
-
-**Type:** Remote Boomerang
-**Age:** Child & Adult
-
-| Input | State | Action |
-|-------|-------|--------|
-| C Button | Equipped | Launch beetle |
-| Analog Stick | Flying | Steer flight path |
-| C Button | Flying | Recall beetle early |
-| B Button | Flying | Boost speed temporarily |
-
-**Notes:**
-- Camera follows beetle during flight
-- Can grab and carry items back to Link
-- Damages enemies on impact
-- Can carry silver rupees
-- Limited flight time (600 frames) before auto-return
-
----
-
-### Shovel
-> *Origin: Link's Awakening*
-
-**Type:** Digging Tool
-**Age:** Child & Adult
-
-| Input | Action |
-|-------|--------|
-| C Button | Dig at current position |
-
-
-**Notes:**
-- Uses Dampe dig animation
-- Uncovers buried items: rupees, hearts, secret items
-- Instant graveyard reward
-- Summon pod soild GS
-- Summon hidden grottos
-
----
-
-### Mogma Mitts
-> *Origin: Skyward Sword*
-
-**Type:** Wall Climbing
-**Age:** Child & Adult
-**Cost:** Magic drain while active
-
-| Input | Action |
-|-------|--------|
-| C Button | Toggle climb mode on/off |
-
-**Notes:**
-- All walls become climbable while active
-- Consumes 1 MP per interval
-- Auto-deactivates when magic depleted
-- Forces white gauntlets visible on Link
-
----
-
-### Demise Destruction
-> *Origin: A Link to the Past (Quake)*
-
-**Type:** AoE Spell
-**Age:** Child & Adult
-**Cost:** High magic consumption
-
-| Input | Action |
-|-------|--------|
-| C Button | Activate destruction attack |
-
-**Notes:**
-- Large area explosion with lightning effects
-- Heavy damage to all enemies in radius
-- Ground only - cannot use while airborne
-- Custom "superhero landing" animation
-- Blocks all other items while active
-
----
-
-### Time Gate
-> *Origin: Custom (Hyrule Warriors)*
-
-**Type:** Age Swap Spell
-**Age:** Child & Adult
-**Cost:** 48 MP
-
-| Input | Action |
-|-------|--------|
-| C Button | Activate time travel |
-| A (on prompt) | Confirm - "Travel through time?" |
-| B (on prompt) | Cancel |
-
-**Notes:**
-- Swaps between Child and Adult Link
-- Scene reloads after age change
-
----
-
-### Desire Sensor
-> *Origin: Custom (Monster Hunter)*
-
-**Type:** Item Sensor Spell
-**Age:** Child & Adult
-**Cost:** 3 hearts
-
-| Input | Action |
-|-------|--------|
-| C Button | Activate sensing |
-
-**Effects:**
-- **Major item found:** Golden sparkles + chime sound
-- **No major item:** Ganondorf laugh + dark flash
-
-**Notes:**
-- Detects major items in current scene
-
----
-
-### Hylia's Grace
-> *Origin: Zelda II: Adventure of Link (Fairy Spell)*
-
-**Type:** Fairy Transformation Spell
-**Age:** Child & Adult
-
-| Input | Action |
-|-------|--------|
-| C Button | Activate fairy mode |
-| A Button | Ascend while flying |
-| B Button | Descend while flying |
-| L Button | Sprint while flying |
-| Analog Stick | Control flight direction |
-
-**Notes:**
-- 10-second flight duration
-- Ignores collision while active
-- Requires Fairy in a Bottle
-- Blocks all other items while active
-
----
-
-### Zonai Permafrost
-> *Origin: Custom*
-
-**Type:** Time Stop
-**Age:** Child & Adult
-**Cost:** 12 MP
-
-| Input | Action |
-|-------|--------|
-| C Button | Activate time freeze |
-
-**Notes:**
-- Freezes all actors for 30 seconds
-- Day/night cycle also frozen
-- Link moves freely during freeze
-- For your own safety do NOT use it with beetle
-
----
-
-## Reticle Color Reference
-
-| Color | Meaning | Items Using This |
-|-------|---------|------------------|
-| **Red** | Attack/Expel | Fire/Ice/Light Rods, Ball and Chain, Bomb Arrows, Whip |
-| **Blue** | Pull/Swap | Switch Hook, Gust Jar (suck mode) |
-| **Green** | Control | Beetle, Dominion Rod |
-
----
-
-## First-Person Mode Items
-
-These items can enter first-person aiming mode:
-
-| Item | How to Enter | How to Exit |
-|------|--------------|-------------|
-| Ball and Chain | C-Up | C-Up or fire |
-| Fire/Ice/Light Rod | C-Up | C-Up |
-| Switch Hook | Hold C | Release C |
-| Gust Jar | Hold C | Release C |
-| Beetle | C (launch) | Auto-exits |
-| Bomb Arrows | Hold C | Release C |
-| Dominion Rod | C-Up | C-Up |
-
----
-
-## Tips
-
-1. **Combining Items:** Some items work well together:
-   - You can use mogma mitts mid air, use it after roc's item
-   - Cane of Somaria Blocks can be swapped by Switch Hook
-
-2. **Magic Rods:**
-- Light Rod attacks can hit Ganon (excluding charge attack)
-
-3. **KNOWN ISSUES**
-- Using Beetle while in Permafrost State can stop beetle and give a potential crash
+## Weapon upgrades
+
+| Item | Input | Result |
+|---|---|---|
+| Iron Knuckle's Axe | Passive | Double damage and reach, slower walk |
+| | C-Up with the hammer out | Aim the throw |
+| | The hammer's own C button | Throw. It returns like a boomerang |
+| Razor / Gilded Sword | Passive | Double damage per level |
+| True Master Sword | Swing at full health | Fires a thunder beam |
+| Great Fairy's Sword | On hit | Restores HP and magic |
+| Ultrashot | Passive | Longshot with 4x reach and 2x speed |

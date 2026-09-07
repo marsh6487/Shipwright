@@ -349,11 +349,10 @@ static const CustomFormDef* RitoRow() {
 // shows ONE item, so it cannot answer "do you also own the other one?". Roc's Feather
 // solves the same problem with its two RAND_INF flags; this is the non-rando version.
 //
-// Sync + seed, called once per pause frame before the cycler runs (the adult-trade
-// wheel does the same thing at the top of KaleidoScope_HandleItemCycles):
-//   - seeing either item in the cell records that this file owns it;
-//   - with the form enabled, the mask is granted, so an EMPTY cell gets seeded with
-//     it — that is how a save that never got Farore's Wind can still become a Rito.
+// Called once per pause frame before the cycler runs (the adult-trade wheel does the
+// same at the top of KaleidoScope_HandleItemCycles). It only RECORDS: the mask is
+// reached by cycling a cell that already holds Farore's Wind, never by seeding.
+//
 // Record that this file owns whatever is sitting in the shared cell. Public because
 // the save editor overwrites that cell directly: dropping the mask onto a cell that
 // held Farore's Wind would otherwise erase the spell with nothing remembering it
@@ -375,10 +374,11 @@ extern "C" void RitoItem_SyncCell(void) {
     u8* cell = &gSaveContext.inventory.items[SLOT_FARORES_WIND];
 
     RitoItem_NoteCellItem(*cell);
-    nei->ritoMaskFlags |= RITO_FLAG_MASK_OWNED; // the form being enabled IS the unlock
-    if (*cell == ITEM_NONE) {
-        *cell = ITEM_RITO_MASK;
-    }
+    // Enabling the form grants the mask, but it must NEVER put it in the cell: seeding an empty one
+    // fabricated the mask into a slot the randomizer owns (every seed opened the pause menu already
+    // holding it) and handed it out without the spell, against this file's own contract. Writing is
+    // the cycler's job — this stays a pure query, exactly like RocsFeatherCycle.c.
+    nei->ritoMaskFlags |= RITO_FLAG_MASK_OWNED;
 }
 
 // The item this cell can flip to, or ITEM_NONE when there is nothing to cycle.

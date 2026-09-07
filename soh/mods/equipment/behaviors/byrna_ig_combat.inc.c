@@ -72,40 +72,43 @@ typedef struct {
 #define BYIG_JUMP BYIG("BackwardRisingMultiHitRetreatingStaffStrike")      //  93f
 #define BYIG_REC BYIG("StationaryDoubleStaffTransition")                   //  19f, turn 0
 
+// Windows MEASURED in the lab (sword-hand tip speed, bursts at 42% of peak). C3's
+// strike is a 3-frame flick inside a tumble, widened to 10-18 so the resample hits it.
 static const ByrnaIgBinding sByrnaIgBindings[] = {
     // The chain. Which row holds which step is arbitrary — ByrnaIg_NextComboMwa
     // picks it, not OOT's stick-angle picker. Both 1H and 2H rows are bound so the
     // chain holds whatever sword is underneath the cane.
-    { PLAYER_MWA_FORWARD_SLASH_1H, BYIG_C1, -1, -1, 20, 10, 0, BYIG_REC },
-    { PLAYER_MWA_FORWARD_SLASH_2H, BYIG_C1, -1, -1, 20, 10, 0, BYIG_REC },
-    { PLAYER_MWA_RIGHT_SLASH_1H, BYIG_C2, -1, -1, 24, 12, 0, BYIG_REC },
-    { PLAYER_MWA_RIGHT_SLASH_2H, BYIG_C2, -1, -1, 24, 12, 0, BYIG_REC },
-    { PLAYER_MWA_FORWARD_COMBO_1H, BYIG_C3, -1, -1, 26, 14, 0, BYIG_REC },
-    { PLAYER_MWA_FORWARD_COMBO_2H, BYIG_C3, -1, -1, 26, 14, 0, BYIG_REC },
+    { PLAYER_MWA_FORWARD_SLASH_1H, BYIG_C1, -1, -1, 20, 6, 16, BYIG_REC },
+    { PLAYER_MWA_FORWARD_SLASH_2H, BYIG_C1, -1, -1, 20, 6, 16, BYIG_REC },
+    { PLAYER_MWA_RIGHT_SLASH_1H, BYIG_C2, -1, -1, 24, 2, 27, BYIG_REC },
+    { PLAYER_MWA_RIGHT_SLASH_2H, BYIG_C2, -1, -1, 24, 2, 27, BYIG_REC },
+    { PLAYER_MWA_FORWARD_COMBO_1H, BYIG_C3, -1, -1, 26, 10, 18, BYIG_REC },
+    { PLAYER_MWA_FORWARD_COMBO_2H, BYIG_C3, -1, -1, 26, 10, 18, BYIG_REC },
     // Left rows are never reached by the chain, but binding them keeps a glaive
     // clip on screen if anything ever does land there.
-    { PLAYER_MWA_LEFT_SLASH_1H, BYIG_C2, -1, -1, 24, 12, 0, BYIG_REC },
-    { PLAYER_MWA_LEFT_SLASH_2H, BYIG_C2, -1, -1, 24, 12, 0, BYIG_REC },
-    { PLAYER_MWA_LEFT_COMBO_1H, BYIG_C3, -1, -1, 26, 14, 0, BYIG_REC },
-    { PLAYER_MWA_LEFT_COMBO_2H, BYIG_C3, -1, -1, 26, 14, 0, BYIG_REC },
-    { PLAYER_MWA_RIGHT_COMBO_1H, BYIG_C3, -1, -1, 26, 14, 0, BYIG_REC },
-    { PLAYER_MWA_RIGHT_COMBO_2H, BYIG_C3, -1, -1, 26, 14, 0, BYIG_REC },
+    { PLAYER_MWA_LEFT_SLASH_1H, BYIG_C2, -1, -1, 24, 2, 27, BYIG_REC },
+    { PLAYER_MWA_LEFT_SLASH_2H, BYIG_C2, -1, -1, 24, 2, 27, BYIG_REC },
+    { PLAYER_MWA_LEFT_COMBO_1H, BYIG_C3, -1, -1, 26, 10, 18, BYIG_REC },
+    { PLAYER_MWA_LEFT_COMBO_2H, BYIG_C3, -1, -1, 26, 10, 18, BYIG_REC },
+    { PLAYER_MWA_RIGHT_COMBO_1H, BYIG_C3, -1, -1, 26, 10, 18, BYIG_REC },
+    { PLAYER_MWA_RIGHT_COMBO_2H, BYIG_C3, -1, -1, 26, 10, 18, BYIG_REC },
 
-    { PLAYER_MWA_STAB_1H, BYIG_STAB, -1, -1, 22, 12, 0, NULL },
-    { PLAYER_MWA_STAB_2H, BYIG_STAB, -1, -1, 22, 12, 0, NULL },
-    { PLAYER_MWA_STAB_COMBO_1H, BYIG_STAB, -1, -1, 22, 12, 0, NULL },
-    { PLAYER_MWA_STAB_COMBO_2H, BYIG_STAB, -1, -1, 22, 12, 0, NULL },
+    { PLAYER_MWA_STAB_1H, BYIG_STAB, -1, -1, 22, 7, 15, NULL },
+    { PLAYER_MWA_STAB_2H, BYIG_STAB, -1, -1, 22, 7, 15, NULL },
+    { PLAYER_MWA_STAB_COMBO_1H, BYIG_STAB, -1, -1, 22, 7, 15, NULL },
+    { PLAYER_MWA_STAB_COMBO_2H, BYIG_STAB, -1, -1, 22, 7, 15, NULL },
 
-    // JUMPSLASH_FINISH stays vanilla on purpose: the spec named one clip for the
+    // The measured peak (frame 84) is the LANDING impact; the airborne strikes are
+    // the 10-26 bursts. JUMPSLASH_FINISH stays vanilla: one clip was named for the
     // jump slash, and vanilla's landing is short and does not rotate.
-    { PLAYER_MWA_JUMPSLASH_START, BYIG_JUMP, -1, -1, 30, -1, -1, NULL },
+    { PLAYER_MWA_JUMPSLASH_START, BYIG_JUMP, -1, -1, 30, 10, 26, NULL },
 
-    // B held. Both spin rows get the quick spin: nothing here needs the two-level
-    // split the gunlance's charge uses.
-    { PLAYER_MWA_SPIN_ATTACK_1H, BYIG_SPIN, -1, -1, 26, -1, -1, NULL },
-    { PLAYER_MWA_SPIN_ATTACK_2H, BYIG_SPIN, -1, -1, 26, -1, -1, NULL },
-    { PLAYER_MWA_BIG_SPIN_1H, BYIG_SPIN, -1, -1, 26, -1, -1, NULL },
-    { PLAYER_MWA_BIG_SPIN_2H, BYIG_SPIN, -1, -1, 26, -1, -1, NULL },
+    // B held. A spin hits for its whole rotation, so first burst to last. Both spin
+    // rows get it: nothing here needs the two-level split the gunlance's charge uses.
+    { PLAYER_MWA_SPIN_ATTACK_1H, BYIG_SPIN, -1, -1, 26, 8, 50, NULL },
+    { PLAYER_MWA_SPIN_ATTACK_2H, BYIG_SPIN, -1, -1, 26, 8, 50, NULL },
+    { PLAYER_MWA_BIG_SPIN_1H, BYIG_SPIN, -1, -1, 26, 8, 50, NULL },
+    { PLAYER_MWA_BIG_SPIN_2H, BYIG_SPIN, -1, -1, 26, 8, 50, NULL },
 };
 
 #define BYIG_BINDING_COUNT ((s32)(sizeof(sByrnaIgBindings) / sizeof(sByrnaIgBindings[0])))
@@ -140,6 +143,67 @@ static struct {
 
 static s32 sByIgComboStep = 0;
 static s32 sByIgComboIdle = 0;
+
+// Hitboxes for the aerial states, which have no vanilla row to hang a quad on.
+// Written in Link's own frame (right +X, up +Y, fwd +Z) and turned by shape.rot.y,
+// same shape as the trident's boxes; `pitch` lays the box toward the floor.
+typedef struct {
+    f32 right;
+    f32 up;
+    f32 fwd;
+    f32 halfW;
+    f32 halfH;
+    f32 pitch;
+} ByrnaIgQuadBox;
+
+static const ByrnaIgQuadBox sByIgBoxSpin = { 0.0f, 30.0f, 0.0f, 62.0f, 40.0f, 0.0f };
+static const ByrnaIgQuadBox sByIgBoxDash = { 0.0f, 34.0f, 54.0f, 24.0f, 26.0f, 0.0f };
+static const ByrnaIgQuadBox sByIgBoxPound = { 0.0f, 10.0f, 30.0f, 58.0f, 44.0f, 1.2f };
+
+static ColliderQuad sByIgAtkQuad;
+static u8 sByIgQuadInited = 0;
+
+static ColliderQuadInit sByIgAtkQuadInit = {
+    { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_QUAD },
+    {
+        ELEMTYPE_UNK2,
+        { DMG_SLASH_MASTER, 0x00, 0x01 },
+        { 0xFFCFFFFF, 0x00, 0x00 },
+        TOUCH_ON | TOUCH_NEAREST | TOUCH_SFX_NORMAL,
+        BUMP_NONE,
+        OCELEM_NONE,
+    },
+    { { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } } },
+};
+
+static void ByrnaIg_PlaceQuad(PlayState* play, Player* player, const ByrnaIgQuadBox* box) {
+    static const f32 sCornerX[4] = { -1.0f, 1.0f, 1.0f, -1.0f };
+    static const f32 sCornerY[4] = { 1.0f, 1.0f, -1.0f, -1.0f };
+    Vec3f v[4];
+    f32 sinY = Math_SinS(player->actor.shape.rot.y);
+    f32 cosY = Math_CosS(player->actor.shape.rot.y);
+    f32 upY = cosf(box->pitch);
+    f32 upZ = sinf(box->pitch);
+    s32 i;
+
+    if (!sByIgQuadInited) {
+        Collider_InitQuad(play, &sByIgAtkQuad);
+        Collider_SetQuad(play, &sByIgAtkQuad, &player->actor, &sByIgAtkQuadInit);
+        sByIgQuadInited = 1;
+    }
+    for (i = 0; i < 4; i++) {
+        f32 lx = box->right + (sCornerX[i] * box->halfW);
+        f32 ly = box->up + (sCornerY[i] * box->halfH * upY);
+        f32 lz = box->fwd + (sCornerY[i] * box->halfH * upZ);
+
+        v[i].x = player->actor.world.pos.x + (lx * cosY) + (lz * sinY);
+        v[i].y = player->actor.world.pos.y + ly;
+        v[i].z = player->actor.world.pos.z + (lz * cosY) - (lx * sinY);
+    }
+    Collider_SetQuadVertices(&sByIgAtkQuad, &v[0], &v[1], &v[2], &v[3]);
+    CollisionCheck_SetAT(play, &play->colChkCtx, &sByIgAtkQuad.base);
+    sByIgAtkQuad.base.atFlags &= ~AT_HIT;
+}
 
 // ---------------------------------------------------------------------------
 // Install / restore
@@ -510,6 +574,7 @@ static void ByrnaIg_TickAir(PlayState* play, Player* player) {
             // The dash carries Link at the locked-on enemy, so no gravity while it
             // runs — that is what makes it read as a closing move.
             player->actor.world.pos.y += sByIg.vy;
+            ByrnaIg_PlaceQuad(play, player, &sByIgBoxDash);
             if (sByIg.timer >= BYIG_DASH_FRAMES) {
                 sByIg.state = BYIG_AIR;
                 sByIg.timer = 12;
@@ -529,6 +594,7 @@ static void ByrnaIg_TickAir(PlayState* play, Player* player) {
             // Hangs while it spins: the spin is the reason to be up here.
             sByIg.vy = 0.0f;
             player->linearVelocity *= 0.85f;
+            ByrnaIg_PlaceQuad(play, player, &sByIgBoxSpin);
             if (sByIg.timer >= BYIG_SPIN_HOLD) {
                 sByIg.state = BYIG_AIR;
                 sByIg.timer = 12;
@@ -538,6 +604,7 @@ static void ByrnaIg_TickAir(PlayState* play, Player* player) {
 
         case BYIG_POUND:
             player->actor.world.pos.y += sByIg.vy;
+            ByrnaIg_PlaceQuad(play, player, &sByIgBoxPound);
             if (sByIg.timer == 8) {
                 ByrnaIg_PlayClip(play, player, BYIG("StationaryStaffReadyIdle_Variant05"), 12, 1);
             }
@@ -604,4 +671,5 @@ static void ByrnaIg_Cleanup(void) {
     sByIg.timer = 0;
     sByIgComboStep = 0;
     sByIgComboIdle = 0;
+    sByIgQuadInited = 0;
 }

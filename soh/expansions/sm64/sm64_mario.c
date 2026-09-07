@@ -99,13 +99,19 @@ static pfn_sm64_mario_tick_puppet p_sm64_mario_tick_puppet = NULL;
 
 static void* sDllHandle = NULL;
 
+// The NEI folder is per game in ComboShip, so the path is built, never a literal (OTRGlobals.h).
+extern const char* Nei_AssetDir(void);
+
 static s32 Sm64_LoadDll(void) {
+    char libPath[128];
+
     if (sDllHandle)
         return 1;
 
-    sDllHandle = SM64_LOAD_LIB("nei/sm64.dll");
+    snprintf(libPath, sizeof(libPath), "%s/sm64.dll", Nei_AssetDir());
+    sDllHandle = SM64_LOAD_LIB(libPath);
     if (!sDllHandle) {
-        lusprintf(__FILE__, __LINE__, 2, "[SM64] ERROR: Could not load nei/sm64.dll\n");
+        lusprintf(__FILE__, __LINE__, 2, "[SM64] ERROR: Could not load sm64.dll\n");
         return 0;
     }
 
@@ -375,7 +381,9 @@ static s32 Sm64_InitLibrary(void) {
 
     romPath = CVarGetString("gSm64RomPath", "");
     if (romPath == NULL || romPath[0] == '\0') {
-        romPath = "nei/sm64.z64";
+        static char romDefault[128];
+        snprintf(romDefault, sizeof(romDefault), "%s/sm64.z64", Nei_AssetDir());
+        romPath = romDefault;
     }
 
     sSm64RomData = Sm64_LoadRomFile(romPath, &romSize);

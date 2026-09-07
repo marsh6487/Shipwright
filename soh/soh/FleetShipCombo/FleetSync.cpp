@@ -58,6 +58,7 @@ extern PlayState* gPlayState;
 int MmForm_GetCurrentForm(void);
 int MmForm_GetFleetPublishForm(void); // pending target form if one is queued, else current (anti force-loop)
 void MmForm_FleetApplyForm(int mmForm);
+unsigned char TransformMasks_IsTransformedAny(void); // gates the form publish — see ExtractShared
 void SwitchAge(void); // flips gSaveContext.linkAge + respawns at the current entrance (Enhancements/SwitchAge.cpp)
 
 // Fleet age bridge: the TARGET linkAge the peer (MM's timeGateAdultMode) last asked for, -1 = none
@@ -569,6 +570,12 @@ void ExtractShared(nlohmann::json& sh) {
 
     // Publish the pending target form while a peer-requested change is applying (anti force-loop).
     int form = MmForm_GetFleetPublishForm();
+    // gFormState is zero-initialised and Fierce Deity IS form 0, so an untransformed Link published
+    // "Fierce Deity" and forced MM into it on a fresh seed's first sync. Narrow override: only that
+    // ambiguous pair, so a genuinely queued form still publishes and keeps the anti force-loop.
+    if (form == 0 && !TransformMasks_IsTransformedAny()) {
+        form = 4;
+    }
     sh["form"] = (form >= 0 && form <= 4) ? form : 4; // custom forms sync as Human
 
     // Adult/child age <-> MM's timeGateAdultMode. LINK_AGE_ADULT == 0. Last-writer-wins (not OR-merged).

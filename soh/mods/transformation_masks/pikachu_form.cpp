@@ -31,6 +31,10 @@
 
 #include <libultraship/bridge.h>
 #include <libultraship/libultraship.h> // Ship::Context::LocateFileAcrossAppDirs (anim .bin loader)
+
+// Defined in OTRGlobals.cpp. Declared here rather than including that header, which drags the whole
+// OTRGlobals class into this TU for one accessor.
+extern "C" const char* Nei_AssetDir(void);
 // OPEN_DISPS/CLOSE_DISPS declare FrameInterpolation_Record* INSIDE the macro
 // without extern "C"; in a plain C++ (non-extern-"C") function that produces a
 // mangled unresolved symbol. This header pre-declares them with proper guards
@@ -512,11 +516,12 @@ static u8 PikaAnims_EnsureLoaded(void) {
         return 1;
     }
 
-    // Same convention as the other loose NEI assets (nei/sm64.z64, …):
-    // a "nei/" folder next to soh.exe. Lower-case for Linux/macOS case-sensitivity.
-    std::string path = Ship::Context::LocateFileAcrossAppDirs("nei/pikachu_anims.bin");
+    // Same convention as the other loose NEI assets (sm64.z64, …): the game's own NEI folder next to
+    // the exe. Lower-case for Linux/macOS case-sensitivity.
+    const std::string rel = std::string(Nei_AssetDir()) + "/pikachu_anims.bin";
+    std::string path = Ship::Context::LocateFileAcrossAppDirs(rel);
     if (path.empty()) {
-        path = "nei/pikachu_anims.bin"; // fallback: current working directory
+        path = rel; // fallback: current working directory
     }
 
     FILE* fp = fopen(path.c_str(), "rb"); // "rb" required on Windows (no CRLF translation)

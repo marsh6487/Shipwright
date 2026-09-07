@@ -318,7 +318,16 @@ u8 ItemEquip_Update(ItemEquipState* state, ItemInputState* input, EquipCallback 
     return state->isEquipped;
 }
 
+// Chateau Romani and rando's Magic Infinite both raise this flag, and the vanilla magic path
+// honours it — custom items must read the same one or they drain a meter the engine calls bottomless.
+static u8 ItemMagic_IsInfinite(void) {
+    return Flags_GetRandomizerInf(RAND_INF_HAS_INFINITE_MAGIC_METER) != 0;
+}
+
 void ItemMagic_Consume(PlayState* play, s16 amount) {
+    if (ItemMagic_IsInfinite())
+        return;
+
     // Magic Cape passive (Skijer 2026-07-15): all custom magic items cost HALF while the cape is
     // owned — and the matching HasEnough check below means they're castable with half the magic.
     // (Commit 10a66533's MAGIC_REQ, applied once here for every ItemMagic_* user.)
@@ -331,11 +340,16 @@ void ItemMagic_Consume(PlayState* play, s16 amount) {
 }
 
 s32 ItemMagic_HasEnough(PlayState* play, s16 amount) {
+    if (gSaveContext.magicCapacity <= 0)
+        return 0;
+    if (ItemMagic_IsInfinite())
+        return 1;
+
     extern u8 ExtEquip_CapeOwned(void);
     if (ExtEquip_CapeOwned())
         amount /= 2; // Magic Cape: castable with half the base cost
 
-    return (gSaveContext.magicCapacity > 0 && gSaveContext.magic >= amount);
+    return (gSaveContext.magic >= amount);
 }
 
 u8 ItemSword_HasAnySword(void) {
