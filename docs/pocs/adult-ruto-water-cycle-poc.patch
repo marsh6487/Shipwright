@@ -1,0 +1,236 @@
+diff --git a/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.h b/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.h
+--- a/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.h
++++ b/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.h
+@@ -74,6 +74,7 @@ typedef enum {
+     STATIC_ANIM_ADULT_RUTO_IDLE,
+     STATIC_ANIM_ADULT_RUTO_HANDS_HIPS,
+     STATIC_ANIM_ADULT_RUTO_LOOK_DOWN_LEFT,
++    STATIC_ANIM_ADULT_RUTO_SWIM_UP,
+     STATIC_ANIM_CHILD_RUTO_HANDS_BEHIND,
+@@ -105,6 +106,8 @@ enum {
+     STATIC_POSE_FLAG_NO_TRACKING = 1 << 3,
+     /* Ignore animation-authored root motion and honor the Prelude placement. */
+     STATIC_POSE_FLAG_LOCK_ROOT_TRANSLATION = 1 << 4,
++    /* En_Zo-inspired water-aware surface/tread/dive cycle. */
++    STATIC_POSE_FLAG_WATER_CYCLE = 1 << 5,
+ };
+
+diff --git a/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.c b/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+--- a/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.c
++++ b/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+@@ -20,7 +20,7 @@ static const StaticStoryActorDefinition sDefinitions[STATIC_STORY_ACTOR_MAX] = {
+     [STATIC_STORY_ACTOR_SHEIK] = { 2, 1, OBJECT_XC, STATIC_ADAPTER_SHEIK, 0.01f, 52.0f, 25, 80, 0, 60, 60, 90.0f,
+                                     STATIC_TRACKING_SHEIK, 12, -3.0f },
+-    [STATIC_STORY_ACTOR_ADULT_RUTO] = { 2, 1, OBJECT_RU2, STATIC_ADAPTER_ADULT_RUTO, 0.01f, 54.0f, 30, 100, 0, 60,
++    [STATIC_STORY_ACTOR_ADULT_RUTO] = { 3, 1, OBJECT_RU2, STATIC_ADAPTER_ADULT_RUTO, 0.01f, 54.0f, 30, 100, 0, 60,
+                                          60, 90.0f, STATIC_TRACKING_ADULT_RUTO, 12, -3.0f },
+@@ -72,6 +72,8 @@ static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STO
+         STATIC_POSE(STATIC_ANIM_ADULT_RUTO_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_RUTO),
+         STATIC_POSE(STATIC_ANIM_ADULT_RUTO_HANDS_HIPS, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_RUTO),
+         STATIC_POSE(STATIC_ANIM_ADULT_RUTO_LOOK_DOWN_LEFT, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_RUTO),
++        STATIC_POSE(STATIC_ANIM_ADULT_RUTO_SWIM_UP,
++                    STATIC_POSE_FLAG_WATER_CYCLE | STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_ADULT_RUTO),
+     },
+
+diff --git a/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.h b/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.h
+--- a/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.h
++++ b/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.h
+@@ -65,6 +65,13 @@ typedef struct {
+     u32 epoch;
+ } EnViewerFireEffect; // size = 0x34
+ 
++typedef enum {
++    ENVIEWER_STATIC_WATER_SUBMERGED,
++    ENVIEWER_STATIC_WATER_SURFACING,
++    ENVIEWER_STATIC_WATER_TREADING,
++    ENVIEWER_STATIC_WATER_DIVING,
++} EnViewerStaticWaterState;
++
+ typedef struct {
+     uint8_t staticMode;
+     uint8_t type;
+@@ -73,6 +80,8 @@ typedef struct {
+     uint8_t talking;
+     uint8_t tracking;
++    uint8_t waterState;
++    int16_t waterTimer;
+     int16_t blinkTimer;
+     int16_t objectSlots[4];
+     NpcInteractInfo interactInfo;
+
+diff --git a/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.c b/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.c
+--- a/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.c
++++ b/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.c
+@@ -54,6 +54,7 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play);
+ void EnViewerStatic_Draw(EnViewer* this, PlayState* play);
+ void EnViewerStatic_OfferTalk(EnViewer* this, PlayState* play);
+ static void EnViewerStatic_UpdateTracking(EnViewer* this, PlayState* play);
++static void EnViewerStatic_RestorePlacementPose(EnViewer* this);
+ s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
+@@ -253,6 +254,8 @@ static AnimationHeader* EnViewerStatic_GetAnimation(uint16_t animation) {
+             return &gAdultRutoIdleHandsOnHipsAnim;
+         case STATIC_ANIM_ADULT_RUTO_LOOK_DOWN_LEFT:
+             return &gAdultRutoLookingDownLeftAnim;
++        case STATIC_ANIM_ADULT_RUTO_SWIM_UP:
++            return &gAdultRutoSwimmingUpAnim;
+         case STATIC_ANIM_CHILD_RUTO_HANDS_BEHIND:
+@@ -336,6 +339,8 @@ void EnViewerStatic_Init(EnViewer* this, PlayState* play) {
+     this->staticState.objectSlots[1] = -1;
+     this->staticState.objectSlots[2] = -1;
+     this->staticState.objectSlots[3] = -1;
++    this->staticState.waterState = ENVIEWER_STATIC_WATER_SUBMERGED;
++    this->staticState.waterTimer = 0;
+     EnViewer_SetupAction(this, EnViewerStatic_WaitForObjects);
+ }
++
++static bool EnViewerStatic_IsWaterCycle(const StaticStoryPoseDescriptor* poseDescriptor) {
++    return poseDescriptor != NULL && (poseDescriptor->flags & STATIC_POSE_FLAG_WATER_CYCLE) != 0;
++}
++
++static bool EnViewerStatic_PlayerNearWaterSurface(EnViewer* this, PlayState* play) {
++    Player* player = GET_PLAYER(play);
++    Vec3f surfacePos = this->actor.world.pos;
++
++    surfacePos.y += this->actor.yDistToWater;
++    return Math_Vec3f_DistXZ(&surfacePos, &player->actor.world.pos) < 240.0f &&
++           fabsf(player->actor.world.pos.y - surfacePos.y) < 80.0f;
++}
++
++static void EnViewerStatic_SetRutoSwimDirection(EnViewer* this, s32 direction) {
++    AnimationHeader* animation = &gAdultRutoSwimmingUpAnim;
++    f32 endFrame = Animation_GetLastFrame(animation);
++
++    if (direction < 0) {
++        Animation_Change(&this->skin.skelAnime, animation, -1.0f, endFrame, 0.0f, ANIMMODE_LOOP, -8.0f);
++    } else if (direction > 0) {
++        Animation_Change(&this->skin.skelAnime, animation, 1.0f, 0.0f, endFrame, ANIMMODE_LOOP, -8.0f);
++    } else {
++        this->skin.skelAnime.playSpeed = 0.0f;
++    }
++}
++
++static bool EnViewerStatic_UpdateRutoWaterCycle(EnViewer* this, PlayState* play) {
++    bool playerNear;
++
++    Actor_MoveXZGravity(&this->actor);
++    Actor_UpdateBgCheckInfo(play, &this->actor, this->staticState.collider.dim.radius,
++                            this->staticState.collider.dim.height * 0.25f, 0.0f, 5);
++
++    if (!(this->actor.bgCheckFlags & BGCHECKFLAG_WATER)) {
++        this->actor.velocity.y = 0.0f;
++        this->staticState.waterState = ENVIEWER_STATIC_WATER_SUBMERGED;
++        this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
++        return false;
++    }
++
++    playerNear = EnViewerStatic_PlayerNearWaterSurface(this, play);
++    switch (this->staticState.waterState) {
++        case ENVIEWER_STATIC_WATER_SUBMERGED:
++            this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
++            this->actor.velocity.y = 0.0f;
++            EnViewerStatic_SetRutoSwimDirection(this, 0);
++            if (this->actor.yDistToWater < 54.0f) {
++                this->staticState.waterState = ENVIEWER_STATIC_WATER_TREADING;
++                this->staticState.waterTimer = Rand_S16Offset(40, 40);
++                this->actor.flags |= ACTOR_FLAG_ATTENTION_ENABLED;
++                EnViewerStatic_SetRutoSwimDirection(this, 1);
++            } else if (playerNear) {
++                this->staticState.waterState = ENVIEWER_STATIC_WATER_SURFACING;
++                this->actor.velocity.y = 4.0f;
++                EnViewerStatic_SetRutoSwimDirection(this, 1);
++            }
++            return false;
++
++        case ENVIEWER_STATIC_WATER_SURFACING:
++            this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
++            if (this->actor.yDistToWater < 54.0f) {
++                this->actor.velocity.y = 0.0f;
++                this->staticState.waterState = ENVIEWER_STATIC_WATER_TREADING;
++                this->staticState.waterTimer = Rand_S16Offset(40, 40);
++                this->actor.flags |= ACTOR_FLAG_ATTENTION_ENABLED;
++            } else if (this->actor.yDistToWater < 80.0f) {
++                Math_ApproachF(&this->actor.velocity.y, 2.0f, 0.4f, 0.6f);
++            }
++            return false;
++
++        case ENVIEWER_STATIC_WATER_TREADING:
++            this->actor.flags |= ACTOR_FLAG_ATTENTION_ENABLED;
++            Math_ApproachF(&this->actor.velocity.y, this->actor.yDistToWater < 54.0f ? -0.6f : 0.6f, 0.3f, 0.2f);
++            if (playerNear) {
++                this->staticState.waterTimer = Rand_S16Offset(40, 40);
++            } else if (this->staticState.waterTimer > 0) {
++                this->staticState.waterTimer--;
++            } else {
++                this->staticState.waterState = ENVIEWER_STATIC_WATER_DIVING;
++                this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
++                this->actor.velocity.y = -4.0f;
++                EnViewerStatic_SetRutoSwimDirection(this, -1);
++                return false;
++            }
++            return true;
++
++        case ENVIEWER_STATIC_WATER_DIVING:
++            this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
++            Math_ApproachF(&this->actor.velocity.y, -1.0f, 0.4f, 0.6f);
++            if (this->actor.world.pos.y <= this->actor.home.pos.y + 2.0f ||
++                (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
++                this->actor.world.pos = this->actor.home.pos;
++                this->actor.velocity.y = 0.0f;
++                this->staticState.waterState = ENVIEWER_STATIC_WATER_SUBMERGED;
++                EnViewerStatic_SetRutoSwimDirection(this, 0);
++            }
++            return false;
++    }
++
++    return false;
++}
+@@ -407,6 +482,15 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
+     this->staticState.talking = false;
+     this->staticState.tracking = false;
+     this->staticState.interactInfo.talkState = NPC_TALK_STATE_IDLE;
++    if (EnViewerStatic_IsWaterCycle(poseDescriptor)) {
++        this->actor.gravity = 0.0f;
++        Actor_UpdateBgCheckInfo(play, &this->actor, this->staticState.collider.dim.radius,
++                                this->staticState.collider.dim.height * 0.25f, 0.0f, 5);
++        this->staticState.waterState = this->actor.yDistToWater < 54.0f ? ENVIEWER_STATIC_WATER_TREADING
++                                                                       : ENVIEWER_STATIC_WATER_SUBMERGED;
++        this->staticState.waterTimer = Rand_S16Offset(40, 40);
++        if (this->staticState.waterState == ENVIEWER_STATIC_WATER_SUBMERGED) {
++            this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
++            EnViewerStatic_SetRutoSwimDirection(this, 0);
++        }
++    }
+     this->staticState.initialized = true;
+@@ -438,6 +522,16 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
+         this->staticState.eyeIndex = 0;
+         this->staticState.blinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
+     }
++
++    if (EnViewerStatic_IsWaterCycle(poseDescriptor)) {
++        bool canInteract = EnViewerStatic_UpdateRutoWaterCycle(this, play);
++        Collider_UpdateCylinder(&this->actor, &this->staticState.collider);
++        CollisionCheck_SetOC(play, &play->colChkCtx, &this->staticState.collider.base);
++        Actor_SetFocus(&this->actor, definition->focusHeight);
++        if (!canInteract) {
++            EnViewerStatic_RestorePlacementPose(this);
++            return;
++        }
++    }
++
+     Collider_UpdateCylinder(&this->actor, &this->staticState.collider);
+     CollisionCheck_SetOC(play, &play->colChkCtx, &this->staticState.collider.base);
+     Actor_SetFocus(&this->actor, definition->focusHeight);
+
+diff --git a/soh/tests/static_story_actor_test.c b/soh/tests/static_story_actor_test.c
+--- a/soh/tests/static_story_actor_test.c
++++ b/soh/tests/static_story_actor_test.c
+@@ -51,6 +51,11 @@ int main(void) {
+     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_RUTO)->objectId == OBJECT_RU2);
+     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO, 1)->animation ==
+            STATIC_ANIM_ADULT_RUTO_HANDS_HIPS);
++    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO, 3)->animation ==
++           STATIC_ANIM_ADULT_RUTO_SWIM_UP);
++    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO, 3)->flags & STATIC_POSE_FLAG_WATER_CYCLE);
++    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO, 3)->flags & STATIC_POSE_FLAG_NO_TRACKING);
++    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_RUTO, 3));
+     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->objectId == OBJECT_RU1);
