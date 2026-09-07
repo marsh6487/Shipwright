@@ -1,5 +1,4 @@
 diff --git a/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.h b/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.h
-index 74d0a75ae..POC000001 100644
 --- a/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.h
 +++ b/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.h
 @@ -74,6 +74,7 @@ typedef enum {
@@ -17,7 +16,6 @@ index 74d0a75ae..POC000001 100644
  };
 
 diff --git a/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.c b/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.c
-index 83fe952e4..POC000002 100644
 --- a/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.c
 +++ b/soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.c
 @@ -20,7 +20,7 @@ static const StaticStoryActorDefinition sDefinitions[STATIC_STORY_ACTOR_MAX] = {
@@ -35,7 +33,6 @@ index 83fe952e4..POC000002 100644
      },
 
 diff --git a/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.h b/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.h
-index ba12155c9..POC000003 100644
 --- a/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.h
 +++ b/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.h
 @@ -65,6 +65,13 @@ typedef struct {
@@ -62,17 +59,22 @@ index ba12155c9..POC000003 100644
      NpcInteractInfo interactInfo;
 
 diff --git a/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.c b/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.c
-index 73af18f65..POC000004 100644
 --- a/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.c
 +++ b/soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.c
-@@ -253,6 +253,8 @@ static AnimationHeader* EnViewerStatic_GetAnimation(uint16_t animation) {
+@@ -54,6 +54,7 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play);
+ void EnViewerStatic_Draw(EnViewer* this, PlayState* play);
+ void EnViewerStatic_OfferTalk(EnViewer* this, PlayState* play);
+ static void EnViewerStatic_UpdateTracking(EnViewer* this, PlayState* play);
++static void EnViewerStatic_RestorePlacementPose(EnViewer* this);
+ s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
+@@ -253,6 +254,8 @@ static AnimationHeader* EnViewerStatic_GetAnimation(uint16_t animation) {
              return &gAdultRutoIdleHandsOnHipsAnim;
          case STATIC_ANIM_ADULT_RUTO_LOOK_DOWN_LEFT:
              return &gAdultRutoLookingDownLeftAnim;
 +        case STATIC_ANIM_ADULT_RUTO_SWIM_UP:
 +            return &gAdultRutoSwimmingUpAnim;
          case STATIC_ANIM_CHILD_RUTO_HANDS_BEHIND:
-@@ -336,6 +338,8 @@ void EnViewerStatic_Init(EnViewer* this, PlayState* play) {
+@@ -336,6 +339,8 @@ void EnViewerStatic_Init(EnViewer* this, PlayState* play) {
      this->staticState.objectSlots[1] = -1;
      this->staticState.objectSlots[2] = -1;
      this->staticState.objectSlots[3] = -1;
@@ -182,7 +184,7 @@ index 73af18f65..POC000004 100644
 +
 +    return false;
 +}
-@@ -407,6 +480,15 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
+@@ -407,6 +482,15 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
      this->staticState.talking = false;
      this->staticState.tracking = false;
      this->staticState.interactInfo.talkState = NPC_TALK_STATE_IDLE;
@@ -199,7 +201,7 @@ index 73af18f65..POC000004 100644
 +        }
 +    }
      this->staticState.initialized = true;
-@@ -438,6 +520,16 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
+@@ -438,6 +522,16 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
          this->staticState.eyeIndex = 0;
          this->staticState.blinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
      }
@@ -220,7 +222,6 @@ index 73af18f65..POC000004 100644
      Actor_SetFocus(&this->actor, definition->focusHeight);
 
 diff --git a/soh/tests/static_story_actor_test.c b/soh/tests/static_story_actor_test.c
-index 200d77afb..POC000005 100644
 --- a/soh/tests/static_story_actor_test.c
 +++ b/soh/tests/static_story_actor_test.c
 @@ -51,6 +51,11 @@ int main(void) {
