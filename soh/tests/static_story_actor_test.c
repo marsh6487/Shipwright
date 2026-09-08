@@ -1,6 +1,13 @@
-#include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#define REQUIRE(condition)                                                                                              \
+    do {                                                                                                                \
+        if (!(condition)) {                                                                                             \
+            return 1;                                                                                                   \
+        }                                                                                                               \
+    } while (0)
+#define assert(condition) REQUIRE(condition)
 
 #include "z64object.h"
 #include "../src/overlays/actors/ovl_En_Viewer/static_story_actor.h"
@@ -26,6 +33,16 @@ int main(void) {
     assert(StaticStoryActor_GetType(0x7F0A) == STATIC_STORY_ACTOR_ADULT_MALON);
     assert(StaticStoryActor_GetType(0x7F59) == STATIC_STORY_ACTOR_FADO);
     assert(StaticStoryActor_GetPose(0x7F59) == 5);
+    assert(StaticStoryActor_IsParam((int16_t)0x7E01));
+    assert(StaticStoryActor_GetType((int16_t)0x7E01) == STATIC_STORY_ACTOR_DARUNIA);
+    assert(StaticStoryActor_GetType((int16_t)0x7E02) == STATIC_STORY_ACTOR_NABOORU);
+    assert(StaticStoryActor_GetType((int16_t)0x7E03) == STATIC_STORY_ACTOR_ADULT_RUTO_WATER);
+    assert(StaticStoryActor_GetPose((int16_t)0x7E11) == 1);
+    assert(StaticStoryActor_GetPose((int16_t)0x7E23) == 2);
+    assert(StaticStoryActor_GetType((int16_t)0x7E00) == STATIC_STORY_ACTOR_NONE);
+    assert(StaticStoryActor_GetType((int16_t)0x7E04) == STATIC_STORY_ACTOR_NONE);
+    assert(StaticStoryActor_GetType((int16_t)0x7D01) == STATIC_STORY_ACTOR_NONE);
+    assert(StaticStoryActor_GetType((int16_t)0x7F06) == STATIC_STORY_ACTOR_ADULT_RUTO);
     assert(StaticStoryActor_GetType(0x7F00) == 0);
     assert(StaticStoryActor_GetType(0x7F0B) == 0);
     assert(StaticStoryActor_GetType(0x0101) == 0);
@@ -44,9 +61,27 @@ int main(void) {
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_RUTO)->objectId == OBJECT_RU2);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO, 1)->animation ==
            STATIC_ANIM_ADULT_RUTO_HANDS_HIPS);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 0)->animation ==
+           STATIC_ANIM_ADULT_RUTO_IDLE);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 0)->waterMode == STATIC_RUTO_GROUNDED);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 1)->waterMode == STATIC_RUTO_SURFACE);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 2)->waterMode == STATIC_RUTO_DIVE_LOOP);
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, &complete) == 0x403E);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->objectId == OBJECT_DU);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->adapter == STATIC_ADAPTER_DARUNIA);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_DARUNIA, 0)->animation == STATIC_ANIM_DARUNIA_IDLE);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_DARUNIA, 1)->animation == STATIC_ANIM_DARUNIA_DANCE_1);
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_DARUNIA, 1));
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_DARUNIA, &complete) != 0);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_NABOORU)->objectId == OBJECT_NB);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_NABOORU)->adapter == STATIC_ADAPTER_NABOORU);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_NABOORU, 0)->animation == STATIC_ANIM_NABOORU_IDLE);
+    assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_NABOORU, 0));
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_NABOORU, &complete) != 0);
+    assert(StaticStoryActor_GetAnimationObjectId(STATIC_STORY_ACTOR_ADULT_ZELDA) == OBJECT_ZL2_ANIME2);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_ZELDA, 0)->animation == STATIC_ANIM_ADULT_ZELDA_IDLE);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->objectId == OBJECT_RU1);
-    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_CHILD_RUTO, 2)->animation ==
-           STATIC_ANIM_CHILD_RUTO_SITTING);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_CHILD_RUTO, 2)->animation == STATIC_ANIM_CHILD_RUTO_SITTING);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_ZELDA)->objectId == OBJECT_ZL2);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_ZELDA, 0) != NULL);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_ZELDA, 1) != NULL);
@@ -96,8 +131,7 @@ int main(void) {
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_SHEIK)->trackingAdapter == STATIC_TRACKING_SHEIK);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->trackingAdapter ==
            STATIC_TRACKING_CHILD_RUTO);
-    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_KOKIRI_GIRL)->trackingAdapter ==
-           STATIC_TRACKING_KOKIRI);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_KOKIRI_GIRL)->trackingAdapter == STATIC_TRACKING_KOKIRI);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_FADO)->trackingAdapter == STATIC_TRACKING_KOKIRI);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_MALON)->trackingAdapter ==
            STATIC_TRACKING_ADULT_MALON);

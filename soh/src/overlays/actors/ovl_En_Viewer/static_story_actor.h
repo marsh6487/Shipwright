@@ -4,7 +4,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define STATIC_STORY_ACTOR_PARAM_PREFIX 0x7F00
+#include "static_story_ruto_water.h"
+
+#define STATIC_STORY_ACTOR_LEGACY_PARAM_PREFIX 0x7F00
+#define STATIC_STORY_ACTOR_EXPANDED_PARAM_PREFIX 0x7E00
+#define STATIC_STORY_ACTOR_PARAM_PREFIX STATIC_STORY_ACTOR_LEGACY_PARAM_PREFIX
 #define STATIC_STORY_ACTOR_POSE_COUNT 16
 
 typedef enum {
@@ -19,6 +23,9 @@ typedef enum {
     STATIC_STORY_ACTOR_KOKIRI_GIRL,
     STATIC_STORY_ACTOR_FADO,
     STATIC_STORY_ACTOR_ADULT_MALON,
+    STATIC_STORY_ACTOR_DARUNIA,
+    STATIC_STORY_ACTOR_NABOORU,
+    STATIC_STORY_ACTOR_ADULT_RUTO_WATER,
     STATIC_STORY_ACTOR_MAX,
 } StaticStoryActorType;
 
@@ -34,6 +41,8 @@ typedef enum {
     STATIC_ADAPTER_KOKIRI_GIRL,
     STATIC_ADAPTER_FADO,
     STATIC_ADAPTER_ADULT_MALON,
+    STATIC_ADAPTER_DARUNIA,
+    STATIC_ADAPTER_NABOORU,
 } StaticStoryActorAdapter;
 
 typedef enum {
@@ -47,6 +56,8 @@ typedef enum {
     STATIC_SKELETON_KOKIRI,
     STATIC_SKELETON_MALON_ADULT,
     STATIC_SKELETON_ADULT_ZELDA,
+    STATIC_SKELETON_DARUNIA,
+    STATIC_SKELETON_NABOORU,
 } StaticStorySkeletonFamily;
 
 typedef enum {
@@ -59,6 +70,8 @@ typedef enum {
     STATIC_TRACKING_CHILD_RUTO,
     STATIC_TRACKING_KOKIRI,
     STATIC_TRACKING_ADULT_MALON,
+    STATIC_TRACKING_DARUNIA,
+    STATIC_TRACKING_NABOORU,
 } StaticStoryTrackingAdapter;
 
 typedef enum {
@@ -95,6 +108,13 @@ typedef enum {
     STATIC_ANIM_ADULT_MALON_BASKET,
     STATIC_ANIM_ADULT_MALON_SING,
     STATIC_ANIM_ADULT_ZELDA_NEUTRAL,
+    STATIC_ANIM_ADULT_ZELDA_IDLE,
+    STATIC_ANIM_DARUNIA_IDLE,
+    STATIC_ANIM_DARUNIA_DANCE_1,
+    STATIC_ANIM_DARUNIA_DANCE_2,
+    STATIC_ANIM_DARUNIA_DANCE_3,
+    STATIC_ANIM_DARUNIA_DANCE_4,
+    STATIC_ANIM_NABOORU_IDLE,
 } StaticStoryAnimation;
 
 enum {
@@ -119,6 +139,7 @@ typedef struct {
     float playbackSpeed;
     uint16_t flags;
     StaticStorySkeletonFamily skeletonFamily;
+    uint8_t waterMode;
 } StaticStoryPoseDescriptor;
 
 typedef struct {
@@ -146,6 +167,7 @@ uint8_t StaticStoryActor_GetPose(int16_t params);
 uint8_t StaticStoryActor_SanitizePose(StaticStoryActorType type, uint8_t pose);
 int StaticStoryActor_IsAvailable(StaticStoryActorType type);
 const StaticStoryActorDefinition* StaticStoryActor_GetDefinition(StaticStoryActorType type);
+int16_t StaticStoryActor_GetAnimationObjectId(StaticStoryActorType type);
 const StaticStoryPoseDescriptor* StaticStoryActor_ResolvePose(StaticStoryActorType type, uint8_t pose);
 uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticStoryProgression* progression);
 int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose);

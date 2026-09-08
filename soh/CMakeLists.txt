@@ -16,6 +16,12 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
     add_test(NAME static_story_actor_test COMMAND static_story_actor_test)
+
+    add_executable(static_story_ruto_water_test
+        tests/static_story_ruto_water_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_ruto_water.c
+    )
+    add_test(NAME static_story_ruto_water_test COMMAND static_story_ruto_water_test)
 endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")

@@ -4,30 +4,38 @@
 
 #include "z64object.h"
 
-#define STATIC_POSE(animation, flags, skeleton) { animation, 1.0f, flags, skeleton }
+#define STATIC_POSE(animation, flags, skeleton) \
+    { animation, 1.0f, flags, skeleton, STATIC_RUTO_GROUNDED }
+#define STATIC_WATER_POSE(animation, flags, skeleton, waterMode) \
+    { animation, 1.0f, flags, skeleton, waterMode }
 
 static const StaticStoryActorDefinition sDefinitions[STATIC_STORY_ACTOR_MAX] = {
-    [STATIC_STORY_ACTOR_IMPA] =
-        { 0, 1, OBJECT_IM, STATIC_ADAPTER_IMPA, 0.01f, 50.0f, 18, 46, 0, 30, 30, 80.0f, STATIC_TRACKING_IMPA, 12,
-          4.0f },
-    [STATIC_STORY_ACTOR_CHILD_MALON] = { 2, 1, OBJECT_MA1, STATIC_ADAPTER_MALON, 0.01f, 42.0f, 18, 46, 0, 30, 30,
-                                          70.0f, STATIC_TRACKING_CHILD_MALON, 0, 0.0f, 10.0f },
+    [STATIC_STORY_ACTOR_IMPA] = { 0, 1, OBJECT_IM, STATIC_ADAPTER_IMPA, 0.01f, 50.0f, 18, 46, 0, 30, 30, 80.0f,
+                                  STATIC_TRACKING_IMPA, 12, 4.0f },
+    [STATIC_STORY_ACTOR_CHILD_MALON] = { 2, 1, OBJECT_MA1, STATIC_ADAPTER_MALON, 0.01f, 42.0f, 18, 46, 0, 30, 30, 70.0f,
+                                         STATIC_TRACKING_CHILD_MALON, 0, 0.0f, 10.0f },
     [STATIC_STORY_ACTOR_SARIA] = { 3, 1, OBJECT_SA, STATIC_ADAPTER_SARIA, 0.01f, 40.0f, 20, 46, 0, 30, 30, 70.0f,
-                                    STATIC_TRACKING_SARIA, 2, 4.0f },
-    [STATIC_STORY_ACTOR_ADULT_ZELDA] = { 1, 1, OBJECT_ZL2, STATIC_ADAPTER_ADULT_ZELDA, 0.01f, 60.0f, 25, 80, 0, 30,
-                                          30, 90.0f, STATIC_TRACKING_NONE, 0, 0.0f },
+                                   STATIC_TRACKING_SARIA, 2, 4.0f },
+    [STATIC_STORY_ACTOR_ADULT_ZELDA] = { 1, 1, OBJECT_ZL2, STATIC_ADAPTER_ADULT_ZELDA, 0.01f, 60.0f, 25, 80, 0, 30, 30,
+                                         90.0f, STATIC_TRACKING_NONE, 0, 0.0f },
     [STATIC_STORY_ACTOR_SHEIK] = { 2, 1, OBJECT_XC, STATIC_ADAPTER_SHEIK, 0.01f, 52.0f, 25, 80, 0, 60, 60, 90.0f,
-                                    STATIC_TRACKING_SHEIK, 12, -3.0f },
-    [STATIC_STORY_ACTOR_ADULT_RUTO] = { 2, 1, OBJECT_RU2, STATIC_ADAPTER_ADULT_RUTO, 0.01f, 54.0f, 30, 100, 0, 60,
-                                         60, 90.0f, STATIC_TRACKING_ADULT_RUTO, 12, -3.0f },
-    [STATIC_STORY_ACTOR_CHILD_RUTO] = { 2, 1, OBJECT_RU1, STATIC_ADAPTER_CHILD_RUTO, 0.01f, 42.0f, 25, 80, 0, 60,
-                                         60, 80.0f, STATIC_TRACKING_CHILD_RUTO, 12, -3.0f },
-    [STATIC_STORY_ACTOR_KOKIRI_GIRL] = { 5, 1, OBJECT_KW1, STATIC_ADAPTER_KOKIRI_GIRL, 0.01f, 40.0f, 20, 46, 0, 30,
-                                          30, 70.0f, STATIC_TRACKING_KOKIRI, 2, 0.0f },
+                                   STATIC_TRACKING_SHEIK, 12, -3.0f },
+    [STATIC_STORY_ACTOR_ADULT_RUTO] = { 2, 1, OBJECT_RU2, STATIC_ADAPTER_ADULT_RUTO, 0.01f, 54.0f, 30, 100, 0, 60, 60,
+                                        90.0f, STATIC_TRACKING_ADULT_RUTO, 12, -3.0f },
+    [STATIC_STORY_ACTOR_CHILD_RUTO] = { 2, 1, OBJECT_RU1, STATIC_ADAPTER_CHILD_RUTO, 0.01f, 42.0f, 25, 80, 0, 60, 60,
+                                        80.0f, STATIC_TRACKING_CHILD_RUTO, 12, -3.0f },
+    [STATIC_STORY_ACTOR_KOKIRI_GIRL] = { 5, 1, OBJECT_KW1, STATIC_ADAPTER_KOKIRI_GIRL, 0.01f, 40.0f, 20, 46, 0, 30, 30,
+                                         70.0f, STATIC_TRACKING_KOKIRI, 2, 0.0f },
     [STATIC_STORY_ACTOR_FADO] = { 5, 1, OBJECT_FA, STATIC_ADAPTER_FADO, 0.01f, 40.0f, 20, 46, 0, 30, 30, 70.0f,
-                                   STATIC_TRACKING_KOKIRI, 2, 0.0f },
-    [STATIC_STORY_ACTOR_ADULT_MALON] = { 3, 1, OBJECT_MA2, STATIC_ADAPTER_ADULT_MALON, 0.01f, 52.0f, 18, 46, 0, 30,
-                                          30, 80.0f, STATIC_TRACKING_ADULT_MALON, 0, 0.0f },
+                                  STATIC_TRACKING_KOKIRI, 2, 0.0f },
+    [STATIC_STORY_ACTOR_ADULT_MALON] = { 3, 1, OBJECT_MA2, STATIC_ADAPTER_ADULT_MALON, 0.01f, 52.0f, 18, 46, 0, 30, 30,
+                                         80.0f, STATIC_TRACKING_ADULT_MALON, 0, 0.0f },
+    [STATIC_STORY_ACTOR_DARUNIA] = { 1, 1, OBJECT_DU, STATIC_ADAPTER_DARUNIA, 0.01f, 60.0f, 28, 70, 0, 30, 30, 120.0f,
+                                     STATIC_TRACKING_DARUNIA, 12, 0.0f },
+    [STATIC_STORY_ACTOR_NABOORU] = { 0, 1, OBJECT_NB, STATIC_ADAPTER_NABOORU, 0.01f, 60.0f, 25, 80, 0, 30, 30, 110.0f,
+                                     STATIC_TRACKING_NABOORU, 12, 0.0f },
+    [STATIC_STORY_ACTOR_ADULT_RUTO_WATER] = { 2, 1, OBJECT_RU2, STATIC_ADAPTER_ADULT_RUTO, 0.01f, 54.0f, 30, 100, 0, 60,
+                                              60, 90.0f, STATIC_TRACKING_ADULT_RUTO, 12, -3.0f },
 };
 
 static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STORY_ACTOR_POSE_COUNT] = {
@@ -47,9 +55,8 @@ static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STO
         STATIC_POSE(STATIC_ANIM_SARIA_SEATED, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_SARIA),
     },
     [STATIC_STORY_ACTOR_ADULT_ZELDA] = {
-        STATIC_POSE(STATIC_ANIM_ADULT_ZELDA_NEUTRAL, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_ZELDA),
-        /* OBJECT_ZL2_ANIME1 is asynchronous, so pose 1 uses the object-only neutral pose. */
-        STATIC_POSE(STATIC_ANIM_ADULT_ZELDA_NEUTRAL, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_ZELDA),
+        STATIC_POSE(STATIC_ANIM_ADULT_ZELDA_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_ZELDA),
+        STATIC_POSE(STATIC_ANIM_ADULT_ZELDA_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_ZELDA),
     },
     [STATIC_STORY_ACTOR_SHEIK] = {
         STATIC_POSE(STATIC_ANIM_SHEIK_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_SHEIK),
@@ -92,26 +99,61 @@ static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STO
         STATIC_POSE(STATIC_ANIM_ADULT_MALON_SING, STATIC_POSE_FLAG_VOCAL | STATIC_POSE_FLAG_NO_TRACKING,
                     STATIC_SKELETON_MALON_ADULT),
     },
+    [STATIC_STORY_ACTOR_ADULT_RUTO_WATER] = {
+        STATIC_WATER_POSE(STATIC_ANIM_ADULT_RUTO_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_RUTO,
+                          STATIC_RUTO_GROUNDED),
+        STATIC_WATER_POSE(STATIC_ANIM_ADULT_RUTO_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_RUTO,
+                          STATIC_RUTO_SURFACE),
+        STATIC_WATER_POSE(STATIC_ANIM_ADULT_RUTO_IDLE, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_ADULT_RUTO,
+                          STATIC_RUTO_DIVE_LOOP),
+    },
+    [STATIC_STORY_ACTOR_DARUNIA] = {
+        STATIC_POSE(STATIC_ANIM_DARUNIA_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_DARUNIA),
+        STATIC_POSE(STATIC_ANIM_DARUNIA_DANCE_1, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_DARUNIA),
+    },
+    [STATIC_STORY_ACTOR_NABOORU] = {
+        STATIC_POSE(STATIC_ANIM_NABOORU_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_NABOORU),
+    },
 };
 
 _Static_assert(sizeof(sDefinitions) / sizeof(sDefinitions[0]) == STATIC_STORY_ACTOR_MAX,
                "Every static story actor type needs a definition");
 _Static_assert(sizeof(sPoses) / sizeof(sPoses[0]) == STATIC_STORY_ACTOR_MAX,
                "Every static story actor type needs a pose row");
-enum { STATIC_STORY_DEFINITION_COUNT = 10, STATIC_STORY_POSE_ROW_COUNT = 10 };
+enum { STATIC_STORY_DEFINITION_COUNT = 13, STATIC_STORY_POSE_ROW_COUNT = 13 };
 _Static_assert(STATIC_STORY_DEFINITION_COUNT == STATIC_STORY_ACTOR_MAX - 1,
                "Definition count must change with the actor registry");
 _Static_assert(STATIC_STORY_POSE_ROW_COUNT == STATIC_STORY_ACTOR_MAX - 1,
                "Pose-row count must change with the actor registry");
 
 int StaticStoryActor_IsParam(int16_t params) {
-    return ((uint16_t)params & 0xFF00) == STATIC_STORY_ACTOR_PARAM_PREFIX;
+    uint16_t prefix = (uint16_t)params & 0xFF00;
+
+    return prefix == STATIC_STORY_ACTOR_LEGACY_PARAM_PREFIX || prefix == STATIC_STORY_ACTOR_EXPANDED_PARAM_PREFIX;
 }
 
 StaticStoryActorType StaticStoryActor_GetType(int16_t params) {
-    StaticStoryActorType type = (StaticStoryActorType)((uint16_t)params & 0x0F);
+    uint16_t prefix = (uint16_t)params & 0xFF00;
+    uint16_t id = (uint16_t)params & 0x000F;
+    StaticStoryActorType type;
 
-    return StaticStoryActor_IsParam(params) && type > STATIC_STORY_ACTOR_NONE && type < STATIC_STORY_ACTOR_MAX
+    if (prefix == STATIC_STORY_ACTOR_EXPANDED_PARAM_PREFIX) {
+        switch (id) {
+            case 1:
+                return STATIC_STORY_ACTOR_DARUNIA;
+            case 2:
+                return STATIC_STORY_ACTOR_NABOORU;
+            case 3:
+                return STATIC_STORY_ACTOR_ADULT_RUTO_WATER;
+            default:
+                return STATIC_STORY_ACTOR_NONE;
+        }
+    }
+
+    type = (StaticStoryActorType)id;
+
+    return prefix == STATIC_STORY_ACTOR_LEGACY_PARAM_PREFIX && type > STATIC_STORY_ACTOR_NONE &&
+                   type <= STATIC_STORY_ACTOR_ADULT_MALON
                ? type
                : STATIC_STORY_ACTOR_NONE;
 }
@@ -122,6 +164,15 @@ uint8_t StaticStoryActor_GetPose(int16_t params) {
 
 const StaticStoryActorDefinition* StaticStoryActor_GetDefinition(StaticStoryActorType type) {
     return type > STATIC_STORY_ACTOR_NONE && type < STATIC_STORY_ACTOR_MAX ? &sDefinitions[type] : NULL;
+}
+
+int16_t StaticStoryActor_GetAnimationObjectId(StaticStoryActorType type) {
+    const StaticStoryActorDefinition* definition = StaticStoryActor_GetDefinition(type);
+
+    if (definition == NULL) {
+        return OBJECT_INVALID;
+    }
+    return type == STATIC_STORY_ACTOR_ADULT_ZELDA ? OBJECT_ZL2_ANIME2 : definition->objectId;
 }
 
 int StaticStoryActor_IsAvailable(StaticStoryActorType type) {
@@ -179,6 +230,12 @@ uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticSt
             return progression->forestComplete ? 0x10D9 : 0x1005;
         case STATIC_STORY_ACTOR_ADULT_MALON:
             return progression->eponaComplete ? 0x2056 : 0x204C;
+        case STATIC_STORY_ACTOR_DARUNIA:
+            return progression->forestComplete ? 0x301E : 0x301A;
+        case STATIC_STORY_ACTOR_NABOORU:
+            return progression->forestComplete ? 0x6012 : 0x600C;
+        case STATIC_STORY_ACTOR_ADULT_RUTO_WATER:
+            return progression->waterComplete ? 0x403E : 0x402C;
         default:
             return 0;
     }

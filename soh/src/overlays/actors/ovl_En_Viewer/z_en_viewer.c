@@ -23,6 +23,9 @@
 #include "objects/object_fa/object_fa.h"
 #include "objects/object_ma2/object_ma2.h"
 #include "objects/object_zl2/object_zl2.h"
+#include "objects/object_zl2_anime2/object_zl2_anime2.h"
+#include "objects/object_du/object_du.h"
+#include "objects/object_nb/object_nb.h"
 #include "objects/object_os_anime/object_os_anime.h"
 #include "static_story_actor.h"
 #include "static_story_kokiri.h"
@@ -53,6 +56,9 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play);
 void EnViewerStatic_Draw(EnViewer* this, PlayState* play);
 void EnViewerStatic_OfferTalk(EnViewer* this, PlayState* play);
 static void EnViewerStatic_UpdateTracking(EnViewer* this, PlayState* play);
+static void EnViewerStatic_InitRutoWater(EnViewer* this, PlayState* play,
+                                         const StaticStoryPoseDescriptor* poseDescriptor);
+static bool EnViewerStatic_UpdateRutoWater(EnViewer* this, PlayState* play, bool animationEnded);
 s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
 
 static u8 sHorseSfxPlayed = false;
@@ -274,6 +280,20 @@ static AnimationHeader* EnViewerStatic_GetAnimation(uint16_t animation) {
             return &gMalonAdultStandStillAnim;
         case STATIC_ANIM_ADULT_MALON_SING:
             return &gMalonAdultSingAnim;
+        case STATIC_ANIM_DARUNIA_IDLE:
+            return &gDaruniaIdleAnim;
+        case STATIC_ANIM_DARUNIA_DANCE_1:
+            return &gDaruniaDancingLoop1Anim;
+        case STATIC_ANIM_DARUNIA_DANCE_2:
+            return &gDaruniaDancingLoop2Anim;
+        case STATIC_ANIM_DARUNIA_DANCE_3:
+            return &gDaruniaDancingLoop3Anim;
+        case STATIC_ANIM_DARUNIA_DANCE_4:
+            return &gDaruniaDancingLoop4Anim;
+        case STATIC_ANIM_NABOORU_IDLE:
+            return &gNabooruStandingHandsOnHipsAnim;
+        case STATIC_ANIM_ADULT_ZELDA_IDLE:
+            return &gZelda2Anime2Anim_009FBC;
         default:
             return NULL;
     }
@@ -305,12 +325,33 @@ static void EnViewerStatic_InitSkeleton(EnViewer* this, PlayState* play,
             break;
         case STATIC_SKELETON_ADULT_ZELDA:
             SkelAnime_InitFlex(play, &this->skin.skelAnime, &gZelda2Skel, NULL, NULL, NULL, 0);
-            return;
+            break;
+        case STATIC_SKELETON_DARUNIA:
+            SkelAnime_InitFlex(play, &this->skin.skelAnime, &gDaruniaSkel, NULL, NULL, NULL, 0);
+            break;
+        case STATIC_SKELETON_NABOORU:
+            SkelAnime_InitFlex(play, &this->skin.skelAnime, &gNabooruSkel, NULL, NULL, NULL, 0);
+            break;
         default:
             return;
     }
     Animation_PlayLoopSetSpeed(&this->skin.skelAnime, EnViewerStatic_GetAnimation(poseDescriptor->animation),
                                poseDescriptor->playbackSpeed);
+}
+
+static void EnViewerStatic_SetDaruniaDanceStep(EnViewer* this, uint8_t step) {
+    static AnimationHeader* sDanceAnimations[] = {
+        &gDaruniaDancingLoop1Anim,
+        &gDaruniaDancingLoop2Anim,
+        &gDaruniaDancingLoop3Anim,
+        &gDaruniaDancingLoop4Anim,
+    };
+    static const float sDanceSpeeds[] = { 0.78f, 0.78f, 0.77f, 0.78f };
+
+    this->staticState.danceStep = step % 4;
+    Animation_Change(&this->skin.skelAnime, sDanceAnimations[this->staticState.danceStep],
+                     sDanceSpeeds[this->staticState.danceStep], 0.0f,
+                     Animation_GetLastFrame(sDanceAnimations[this->staticState.danceStep]), ANIMMODE_ONCE, 0.0f);
 }
 
 void EnViewerStatic_Init(EnViewer* this, PlayState* play) {
@@ -319,13 +360,84 @@ void EnViewerStatic_Init(EnViewer* this, PlayState* play) {
     this->staticState.type = type;
     this->staticState.pose = StaticStoryActor_SanitizePose(type, StaticStoryActor_GetPose(this->actor.params));
     if (this->staticState.pose != StaticStoryActor_GetPose(this->actor.params)) {
-        osSyncPrintf("Static story actor: unsupported pose %d; using pose 0\n", StaticStoryActor_GetPose(this->actor.params));
+        osSyncPrintf("Static story actor: unsupported pose %d; using pose 0\n",
+                     StaticStoryActor_GetPose(this->actor.params));
     }
     this->staticState.objectSlots[0] = -1;
     this->staticState.objectSlots[1] = -1;
     this->staticState.objectSlots[2] = -1;
     this->staticState.objectSlots[3] = -1;
+    this->staticState.previousRutoWaterPhase = STATIC_RUTO_PHASE_GROUNDED;
+    this->staticState.danceStep = 0;
     EnViewer_SetupAction(this, EnViewerStatic_WaitForObjects);
+}
+
+static bool EnViewerStatic_QueryWater(EnViewer* this, PlayState* play, float* surfaceY) {
+    WaterBox* waterBox = NULL;
+
+    return WaterBox_GetSurface1(play, &play->colCtx, this->actor.world.pos.x, this->actor.world.pos.z, surfaceY,
+                                &waterBox) != 0;
+}
+
+static void EnViewerStatic_SetRutoWaterAnimation(EnViewer* this, StaticRutoWaterPhase phase) {
+    float lastFrame = Animation_GetLastFrame(&gAdultRutoSwimmingUpAnim);
+
+    switch (phase) {
+        case STATIC_RUTO_PHASE_DIVING:
+            Animation_Change(&this->skin.skelAnime, &gAdultRutoSwimmingUpAnim, -1.0f, lastFrame, 0.0f, ANIMMODE_ONCE,
+                             -4.0f);
+            break;
+        case STATIC_RUTO_PHASE_RISING:
+            Animation_Change(&this->skin.skelAnime, &gAdultRutoSwimmingUpAnim, 1.0f, 0.0f, lastFrame, ANIMMODE_ONCE,
+                             -4.0f);
+            break;
+        case STATIC_RUTO_PHASE_GROUNDED:
+        case STATIC_RUTO_PHASE_SURFACED:
+            Animation_PlayLoop(&this->skin.skelAnime, &gAdultRutoIdleAnim);
+            break;
+        case STATIC_RUTO_PHASE_SUBMERGED:
+        default:
+            break;
+    }
+}
+
+static void EnViewerStatic_InitRutoWater(EnViewer* this, PlayState* play,
+                                         const StaticStoryPoseDescriptor* poseDescriptor) {
+    float surfaceY = 0.0f;
+    bool hasWater = EnViewerStatic_QueryWater(this, play, &surfaceY);
+
+    StaticRutoWater_Init(&this->staticState.rutoWater, (StaticRutoWaterMode)poseDescriptor->waterMode, hasWater,
+                         this->actor.home.pos.y, surfaceY);
+    this->actor.world.pos.y = this->staticState.rutoWater.currentY;
+    this->actor.velocity.y = this->staticState.rutoWater.velocityY;
+    this->staticState.previousRutoWaterPhase = this->staticState.rutoWater.phase;
+    EnViewerStatic_SetRutoWaterAnimation(this, this->staticState.rutoWater.phase);
+}
+
+static bool EnViewerStatic_UpdateRutoWater(EnViewer* this, PlayState* play, bool animationEnded) {
+    float surfaceY = 0.0f;
+    bool hasWater = EnViewerStatic_QueryWater(this, play, &surfaceY);
+    StaticRutoWaterPhase phase;
+
+    StaticRutoWater_Update(&this->staticState.rutoWater, hasWater, surfaceY, animationEnded);
+    phase = this->staticState.rutoWater.phase;
+    if (phase != this->staticState.previousRutoWaterPhase) {
+        EnViewerStatic_SetRutoWaterAnimation(this, phase);
+        this->staticState.previousRutoWaterPhase = phase;
+    }
+
+    this->actor.world.pos.y = this->staticState.rutoWater.currentY;
+    this->actor.velocity.y = this->staticState.rutoWater.velocityY;
+    this->isVisible = phase != STATIC_RUTO_PHASE_SUBMERGED && phase != STATIC_RUTO_PHASE_RISING;
+    if (phase == STATIC_RUTO_PHASE_GROUNDED || phase == STATIC_RUTO_PHASE_SURFACED) {
+        this->actor.flags |= ACTOR_FLAG_ATTENTION_ENABLED;
+        return true;
+    }
+
+    this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
+    this->staticState.talking = false;
+    this->staticState.tracking = false;
+    return false;
 }
 
 void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
@@ -360,6 +472,19 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         }
         objectSlot = this->staticState.objectSlots[0];
     }
+    if (this->staticState.type == STATIC_STORY_ACTOR_ADULT_ZELDA && this->staticState.objectSlots[1] < 0) {
+        int16_t animationObjectId = StaticStoryActor_GetAnimationObjectId(STATIC_STORY_ACTOR_ADULT_ZELDA);
+
+        this->staticState.objectSlots[1] = Object_GetIndex(&play->objectCtx, animationObjectId);
+        if (this->staticState.objectSlots[1] < 0) {
+            this->staticState.objectSlots[1] = Object_Spawn(&play->objectCtx, animationObjectId);
+        }
+        if (this->staticState.objectSlots[1] < 0) {
+            osSyncPrintf("Static story actor: Zelda animation object request failed\n");
+            Actor_Kill(&this->actor);
+            return;
+        }
+    }
     for (int slot = 0; slot < 4 && this->staticState.objectSlots[slot] >= 0; ++slot) {
         if (!Object_IsLoaded(&play->objectCtx, this->staticState.objectSlots[slot])) {
             this->actor.flags &= ~ACTOR_FLAG_INSIDE_CULLING_VOLUME;
@@ -367,12 +492,13 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         }
     }
 
-    this->actor.objBankIndex = (this->staticState.type == STATIC_STORY_ACTOR_FADO ||
+    this->actor.objBankIndex =
+        (this->staticState.type == STATIC_STORY_ACTOR_FADO || this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL)
+            ? this->staticState.objectSlots[2]
+            : objectSlot;
+    this->animObjBankIndex = this->staticState.type == STATIC_STORY_ACTOR_ADULT_ZELDA ? this->staticState.objectSlots[1]
+                             : (this->staticState.type == STATIC_STORY_ACTOR_FADO ||
                                 this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL)
-                                   ? this->staticState.objectSlots[2]
-                                   : objectSlot;
-    this->animObjBankIndex = (this->staticState.type == STATIC_STORY_ACTOR_FADO ||
-                              this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL)
                                  ? this->staticState.objectSlots[3]
                                  : objectSlot;
     this->isVisible = true;
@@ -384,6 +510,12 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         StaticStoryKokiri_Init(this, play);
     } else {
         EnViewerStatic_InitSkeleton(this, play, poseDescriptor);
+    }
+    if (this->staticState.type == STATIC_STORY_ACTOR_ADULT_RUTO_WATER) {
+        EnViewerStatic_InitRutoWater(this, play, poseDescriptor);
+    }
+    if (this->staticState.type == STATIC_STORY_ACTOR_DARUNIA && this->staticState.pose == 1) {
+        EnViewerStatic_SetDaruniaDanceStep(this, 0);
     }
     Collider_InitCylinder(play, &this->staticState.collider);
     Collider_SetCylinder(play, &this->staticState.collider, &this->actor, &sStaticCylinderInit);
@@ -410,9 +542,18 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
     if (definition == NULL || poseDescriptor == NULL) {
         return;
     }
+    bool animationEnded = false;
+    bool canInteract = true;
+
     if (poseDescriptor->skeletonFamily != STATIC_SKELETON_NONE &&
         poseDescriptor->animation != STATIC_ANIM_ADULT_ZELDA_NEUTRAL) {
-        SkelAnime_Update(&this->skin.skelAnime);
+        animationEnded = SkelAnime_Update(&this->skin.skelAnime);
+    }
+    if (this->staticState.type == STATIC_STORY_ACTOR_ADULT_RUTO_WATER) {
+        canInteract = EnViewerStatic_UpdateRutoWater(this, play, animationEnded);
+    }
+    if (this->staticState.type == STATIC_STORY_ACTOR_DARUNIA && this->staticState.pose == 1 && animationEnded) {
+        EnViewerStatic_SetDaruniaDanceStep(this, this->staticState.danceStep + 1);
     }
     if (poseDescriptor->flags & STATIC_POSE_FLAG_OCARINA) {
         this->staticState.eyeIndex = 2;
@@ -422,11 +563,15 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
         this->staticState.eyeIndex = 0;
         this->staticState.blinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
     }
-    Collider_UpdateCylinder(&this->actor, &this->staticState.collider);
-    CollisionCheck_SetOC(play, &play->colChkCtx, &this->staticState.collider.base);
+    if (canInteract) {
+        Collider_UpdateCylinder(&this->actor, &this->staticState.collider);
+        CollisionCheck_SetOC(play, &play->colChkCtx, &this->staticState.collider.base);
+    }
     Actor_SetFocus(&this->actor, definition->focusHeight);
-    EnViewerStatic_OfferTalk(this, play);
-    EnViewerStatic_UpdateTracking(this, play);
+    if (canInteract) {
+        EnViewerStatic_OfferTalk(this, play);
+        EnViewerStatic_UpdateTracking(this, play);
+    }
 }
 
 void EnViewer_InitImpl(EnViewer* this, PlayState* play) {
@@ -473,8 +618,8 @@ static void EnViewerStatic_UpdateTracking(EnViewer* this, PlayState* play) {
         StaticStoryActor_GetDefinition((StaticStoryActorType)this->staticState.type);
     NpcInteractInfo* interactInfo = &this->staticState.interactInfo;
 
-    if (definition != NULL && StaticStoryActor_CanTrack((StaticStoryActorType)this->staticState.type,
-                                                         this->staticState.pose) &&
+    if (definition != NULL &&
+        StaticStoryActor_CanTrack((StaticStoryActorType)this->staticState.type, this->staticState.pose) &&
         this->staticState.tracking) {
         interactInfo->trackPos = GET_PLAYER(play)->actor.world.pos;
         interactInfo->trackPos.y += definition->trackingTargetYOffset;
@@ -1032,7 +1177,7 @@ void EnViewer_DrawImpa(EnViewer* this, PlayState* play) {
 }
 
 static s32 EnViewer_StaticChildMalonOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
-                                                      Vec3s* rot, void* thisx) {
+                                                     Vec3s* rot, void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
 
     if (limbIndex == 2 || limbIndex == 5) {
@@ -1062,12 +1207,12 @@ void EnViewer_DrawStaticChildMalon(EnViewer* this, PlayState* play) {
 }
 
 static s32 EnViewer_StaticSariaOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
-                                                 void* thisx) {
+                                                void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
 
-    if (limbIndex == 15 && (StaticStoryActor_ResolvePose((StaticStoryActorType)this->staticState.type,
-                                                          this->staticState.pose)
-                              ->flags & STATIC_POSE_FLAG_OCARINA)) {
+    if (limbIndex == 15 &&
+        (StaticStoryActor_ResolvePose((StaticStoryActorType)this->staticState.type, this->staticState.pose)->flags &
+         STATIC_POSE_FLAG_OCARINA)) {
         *dList = gSariaRightHandAndOcarinaDL;
     }
     if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SARIA, this->staticState.pose)) {
@@ -1095,7 +1240,7 @@ void EnViewer_DrawStaticSaria(EnViewer* this, PlayState* play) {
 }
 
 static s32 EnViewer_StaticSheikOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
-                                                 void* thisx) {
+                                                void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
 
     if (StaticStoryActor_CanTrack((StaticStoryActorType)this->staticState.type, this->staticState.pose)) {
@@ -1108,9 +1253,9 @@ static s32 EnViewer_StaticSheikOverrideLimbDraw(PlayState* play, s32 limbIndex, 
             rot->z += this->staticState.interactInfo.headRot.x;
         }
     }
-    if (limbIndex == 12 && StaticStoryActor_ResolvePose((StaticStoryActorType)this->staticState.type,
-                                                         this->staticState.pose)
-                              ->animation == STATIC_ANIM_SHEIK_HARP) {
+    if (limbIndex == 12 &&
+        StaticStoryActor_ResolvePose((StaticStoryActorType)this->staticState.type, this->staticState.pose)->animation ==
+            STATIC_ANIM_SHEIK_HARP) {
         *dList = gSheikHarpDL;
     }
     return false;
@@ -1128,11 +1273,11 @@ void EnViewer_DrawStaticSheik(EnViewer* this, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-static s32 EnViewer_StaticAdultRutoOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
-                                                     Vec3s* rot, void* thisx) {
+static s32 EnViewer_StaticAdultRutoOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
+                                                    void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
 
-    if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_RUTO, this->staticState.pose)) {
+    if (StaticStoryActor_CanTrack((StaticStoryActorType)this->staticState.type, this->staticState.pose)) {
         /* object_ru2's 23-limb hierarchy: torso 9, head 20. */
         if (limbIndex == 9) {
             rot->x += this->staticState.interactInfo.torsoRot.y;
@@ -1158,8 +1303,8 @@ void EnViewer_DrawStaticAdultRuto(EnViewer* this, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-static s32 EnViewer_StaticChildRutoOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
-                                                     Vec3s* rot, void* thisx) {
+static s32 EnViewer_StaticChildRutoOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
+                                                    void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
 
     if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_CHILD_RUTO, this->staticState.pose)) {
@@ -1189,7 +1334,7 @@ void EnViewer_DrawStaticChildRuto(EnViewer* this, PlayState* play) {
 }
 
 static s32 EnViewer_StaticAdultMalonOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
-                                                      Vec3s* rot, void* thisx) {
+                                                     Vec3s* rot, void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
 
     if (limbIndex == 3 || limbIndex == 6) {
@@ -1210,7 +1355,7 @@ static s32 EnViewer_StaticAdultMalonOverrideLimbDraw(PlayState* play, s32 limbIn
 }
 
 static void EnViewer_StaticAdultMalonPostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot,
-                                                   void* thisx) {
+                                                  void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
 
     if (limbIndex == 14 &&
@@ -1248,6 +1393,65 @@ void EnViewer_DrawStaticAdultZelda(EnViewer* this, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+static s32 EnViewer_StaticDaruniaOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
+                                                  void* thisx) {
+    EnViewer* this = (EnViewer*)thisx;
+
+    if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_DARUNIA, this->staticState.pose)) {
+        if (limbIndex == 16) {
+            Matrix_Translate(2400.0f, 0.0f, 0.0f, MTXMODE_APPLY);
+            Matrix_RotateX(BINANG_TO_RAD(this->staticState.interactInfo.headRot.y), MTXMODE_APPLY);
+            Matrix_RotateZ(BINANG_TO_RAD(this->staticState.interactInfo.headRot.x), MTXMODE_APPLY);
+            Matrix_Translate(-2400.0f, 0.0f, 0.0f, MTXMODE_APPLY);
+        } else if (limbIndex == 8) {
+            Matrix_RotateY(BINANG_TO_RAD(this->staticState.interactInfo.torsoRot.y), MTXMODE_APPLY);
+            Matrix_RotateX(BINANG_TO_RAD(this->staticState.interactInfo.torsoRot.x), MTXMODE_APPLY);
+        }
+    }
+    return false;
+}
+
+void EnViewer_DrawStaticDarunia(EnViewer* this, PlayState* play) {
+    static void* sEyes[] = { gDaruniaEyeOpenTex, gDaruniaEyeOpeningTex, gDaruniaEyeShutTex };
+    bool dancing = this->staticState.pose == 1;
+
+    OPEN_DISPS(play->state.gfxCtx);
+    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
+    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(dancing ? gDaruniaMouthHappyTex : gDaruniaMouthSeriousTex));
+    gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(dancing ? gDaruniaNoseHappyTex : gDaruniaNoseSeriousTex));
+    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, EnViewer_StaticDaruniaOverrideLimbDraw, NULL, this);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static s32 EnViewer_StaticNabooruOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
+                                                  void* thisx) {
+    EnViewer* this = (EnViewer*)thisx;
+
+    if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_NABOORU, this->staticState.pose)) {
+        if (limbIndex == 8) {
+            rot->x += this->staticState.interactInfo.torsoRot.y;
+            rot->y -= this->staticState.interactInfo.torsoRot.x;
+        } else if (limbIndex == 15) {
+            rot->x += this->staticState.interactInfo.headRot.y;
+            rot->z += this->staticState.interactInfo.headRot.x;
+        }
+    }
+    return false;
+}
+
+void EnViewer_DrawStaticNabooru(EnViewer* this, PlayState* play) {
+    static void* sEyes[] = { gNabooruEyeOpenTex, gNabooruEyeHalfTex, gNabooruEyeClosedTex };
+
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
+    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
+    gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
+    gSPSegment(POLY_OPA_DISP++, 0x0C, &D_80116280[2]);
+    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, EnViewer_StaticNabooruOverrideLimbDraw, NULL, this);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 void EnViewerStatic_Draw(EnViewer* this, PlayState* play) {
     switch ((StaticStoryActorType)this->staticState.type) {
         case STATIC_STORY_ACTOR_IMPA:
@@ -1266,6 +1470,7 @@ void EnViewerStatic_Draw(EnViewer* this, PlayState* play) {
             EnViewer_DrawStaticSheik(this, play);
             break;
         case STATIC_STORY_ACTOR_ADULT_RUTO:
+        case STATIC_STORY_ACTOR_ADULT_RUTO_WATER:
             EnViewer_DrawStaticAdultRuto(this, play);
             break;
         case STATIC_STORY_ACTOR_CHILD_RUTO:
@@ -1277,6 +1482,12 @@ void EnViewerStatic_Draw(EnViewer* this, PlayState* play) {
             break;
         case STATIC_STORY_ACTOR_ADULT_MALON:
             EnViewer_DrawStaticAdultMalon(this, play);
+            break;
+        case STATIC_STORY_ACTOR_DARUNIA:
+            EnViewer_DrawStaticDarunia(this, play);
+            break;
+        case STATIC_STORY_ACTOR_NABOORU:
+            EnViewer_DrawStaticNabooru(this, play);
             break;
         default:
             break;
