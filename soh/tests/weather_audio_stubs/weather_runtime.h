@@ -6,6 +6,12 @@ struct Color_RGB8 {
     uint8_t r, g, b;
 };
 struct PlayState {
+    int16_t sceneNum;
+    struct {
+        struct {
+            int8_t num;
+        } curRoom;
+    } roomCtx;
     struct {
         uint8_t indoors;
         uint8_t unk_EE[4];
@@ -21,6 +27,7 @@ uint8_t Audio_IsNatureRainEnabled(void);
 struct GameInteractor {
     struct OnGameFrameUpdate {};
     struct OnPlayDestroy {};
+    struct OnExitGame {};
     static GameInteractor* Instance;
     template <class Hook, class Callback> void RegisterGameHook(Callback) {
     }

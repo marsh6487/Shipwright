@@ -94,6 +94,7 @@ GlobalOutdoorRainColor GlobalOutdoorRain_SelectColor(GlobalOutdoorRainSource sou
 }
 
 #ifndef GLOBAL_OUTDOOR_RAIN_TEST
+#include <cstdio>
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "GlobalOutdoorRainBridge.h"
 #include "soh/ShipInit.hpp"
@@ -176,6 +177,20 @@ void GlobalOutdoorRain_Update(PlayState* play) {
 
     const bool enabled = CVarGetInteger(CVAR_AUDIO("GlobalOutdoorRain"), 0) != 0;
     const bool outdoors = play->envCtx.indoors == 0;
+    if (CVarGetInteger(CVAR_AUDIO("WeatherAudioDiagnostics"), 0)) {
+        static int16_t previousScene = -1;
+        static int8_t previousRoom = -1;
+        static int8_t previousIndoors = -1;
+        if (previousScene != play->sceneNum || previousRoom != play->roomCtx.curRoom.num ||
+            previousIndoors != play->envCtx.indoors) {
+            std::fprintf(stderr, "[weather-audio] location scene=%d room=%d indoors=%d source=%d density=%d\n",
+                         play->sceneNum, play->roomCtx.curRoom.num, play->envCtx.indoors,
+                         static_cast<int>(sRainSource), play->envCtx.unk_EE[0]);
+            previousScene = play->sceneNum;
+            previousRoom = play->roomCtx.curRoom.num;
+            previousIndoors = play->envCtx.indoors;
+        }
+    }
     const int modeValue = CVarGetInteger(CVAR_AUDIO("GlobalOutdoorRainMode"), 0);
     const GlobalOutdoorRainMode mode = modeValue == static_cast<int>(GlobalOutdoorRainMode::Intermittent)
                                            ? GlobalOutdoorRainMode::Intermittent
@@ -231,6 +246,12 @@ void GlobalOutdoorRain_Update(PlayState* play) {
     }
 }
 
+void GlobalOutdoorRain_OnPlayDestroy() {
+    // Rain is global rather than PlayState-owned. Keep its cycle and decoded
+    // loop voice alive across ordinary scene transitions; the next PlayState
+    // decides whether to maintain it outdoors or fade it out indoors.
+}
+
 void GlobalOutdoorRain_Reset() {
     sRainSource = GlobalOutdoorRainSource::None;
     sLastMode = -1;
@@ -241,7 +262,9 @@ void GlobalOutdoorRain_Reset() {
 static void RegisterGlobalOutdoorRain() {
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>(
         []() { GlobalOutdoorRain_Update(gPlayState); });
-    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayDestroy>([]() { GlobalOutdoorRain_Reset(); });
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayDestroy>(
+        []() { GlobalOutdoorRain_OnPlayDestroy(); });
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnExitGame>([](int32_t) { GlobalOutdoorRain_Reset(); });
 }
 
 static RegisterShipInitFunc initFunc(RegisterGlobalOutdoorRain,

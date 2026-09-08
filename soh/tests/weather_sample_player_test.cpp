@@ -1,4 +1,5 @@
 #include "test_require.h"
+#include <cstring>
 #include <cstdint>
 
 #include "../soh/Enhancements/audio/WeatherSamplePlayer.h"
@@ -8,7 +9,10 @@ static int32_t sSfxVolume = 100;
 extern "C" SoundFontSample* ResourceMgr_LoadAudioSample(const char* path) {
     return WeatherAudioFixture(path);
 }
-extern "C" int32_t CVarGetInteger(const char*, int32_t) {
+extern "C" int32_t CVarGetInteger(const char* name, int32_t fallback) {
+    if (std::strcmp(name, "gAudioEditor.WeatherAudioDiagnostics") == 0)
+        return 0;
+    (void)fallback;
     return sSfxVolume;
 }
 
@@ -54,7 +58,10 @@ static void TestLoopAndOneShotsPreserveEngineMix() {
     WeatherSamplePlayer_SetLoop("audio/samples/Rainfall_META", 1.0f);
     int16_t wrapped[36] = {};
     WeatherSamplePlayer_Mix(wrapped, 18);
-    REQUIRE(wrapped[30] == 2 && wrapped[32] == 1 && wrapped[34] == 2);
+    // Play the intro once through loopEnd, then return to the authored
+    // loopStart instead of restarting the sample at zero.
+    REQUIRE(wrapped[22] == 5 && wrapped[24] == 5 && wrapped[26] == 6);
+    REQUIRE(wrapped[30] == 1 && wrapped[32] == 2 && wrapped[34] == 3);
     WeatherSamplePlayer_Reset();
 }
 
@@ -66,15 +73,16 @@ int main() {
 
     int16_t destination[] = { 32000, -32000, 100, -100 };
     const int16_t source[] = { 2000, -2000 };
-    WeatherSamplePlayer_TestMixMono(destination, source, 2, 1.0f);
+    const size_t clampCount = WeatherSamplePlayer_TestMixMonoCountClamps(destination, source, 2, 1.0f);
+    REQUIRE(clampCount == 1);
     REQUIRE(destination[0] == 32767);
     REQUIRE(destination[1] == -30000);
     REQUIRE(destination[2] == -1900);
     REQUIRE(destination[3] == -2100);
 
     size_t position = 3;
-    REQUIRE(WeatherSamplePlayer_AdvanceLoopPosition(position, 4, 1) == 0);
-    REQUIRE(WeatherSamplePlayer_AdvanceLoopPosition(position, 4, 6) == 1);
-    REQUIRE(WeatherSamplePlayer_AdvanceLoopPosition(position, 0, 6) == 0);
+    REQUIRE(WeatherSamplePlayer_AdvanceLoopPosition(11, 4, 12, 1) == 4);
+    REQUIRE(WeatherSamplePlayer_AdvanceLoopPosition(11, 4, 12, 7) == 10);
+    REQUIRE(WeatherSamplePlayer_AdvanceLoopPosition(position, 0, 0, 6) == 0);
     return 0;
 }

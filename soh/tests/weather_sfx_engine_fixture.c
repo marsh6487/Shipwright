@@ -13,9 +13,11 @@ WeatherTestAudioContext gAudioContext;
 static SequenceChannel sChannels[16];
 static u16 sStartedChannels;
 static Vec3f sFlamePos = { 10.0f, 0.0f, 0.0f };
+static Vec3f sDenseFlamePos[10];
 static Vec3f sEnemyPos = { 20.0f, 0.0f, 0.0f };
 static const u16 sEffects[] = {
-    NA_SE_VO_NA_HELLO_2,
+    // En_Elf's actual emergence/movement sound, not a Navi voice line.
+    NA_SE_EV_FAIRY_DASH,
     NA_SE_EV_TORCH - SFX_FLAG,
     NA_SE_EN_STALKID_ATTACK,
     NA_SE_SY_GET_RUPY,
@@ -75,6 +77,21 @@ void WeatherSfxEngine_Reset(void) {
 void WeatherSfxEngine_Start(void) {
     Request(sEffects[0], &gSfxDefaultPos);
     Request(sEffects[1], &sFlamePos); // En_Light / Obj_Syokudai's continuous torch ID
+    Request(sEffects[2], &sEnemyPos);
+    Request(sEffects[3], &gSfxDefaultPos);
+    Audio_ProcessSoundRequests();
+    func_800F8F88();
+    WeatherSfxEngine_RequirePlaying();
+}
+
+void WeatherSfxEngine_StartDenseFlameHub(void) {
+    /* Model the reported central Hyrule Field load: ten independent En_Light
+     * actors resubmit the same positional loop while Navi emerges. */
+    for (size_t i = 0; i < ARRAY_COUNT(sDenseFlamePos); ++i) {
+        sDenseFlamePos[i] = (Vec3f){ 10.0f + (float)i * 10.0f, 0.0f, 0.0f };
+        Request(sEffects[1], &sDenseFlamePos[i]);
+    }
+    Request(sEffects[0], &gSfxDefaultPos);
     Request(sEffects[2], &sEnemyPos);
     Request(sEffects[3], &gSfxDefaultPos);
     Audio_ProcessSoundRequests();

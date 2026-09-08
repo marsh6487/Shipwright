@@ -46,6 +46,7 @@ static WidgetInfo hyruleFieldNightMusic;
 static WidgetInfo globalOutdoorRain;
 static WidgetInfo globalOutdoorRainMode;
 static WidgetInfo globalOutdoorRainColor;
+static WidgetInfo weatherAudioDiagnostics;
 
 namespace SohGui {
 extern std::shared_ptr<SohMenu> mSohMenu;
@@ -685,6 +686,8 @@ void AudioEditor::DrawElement() {
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunderVolume,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
+                SohGui::mSohMenu->MenuDrawItem(weatherAudioDiagnostics,
+                                               static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 SohGui::mSohMenu->MenuDrawItem(randomAudioGenModes,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 SohGui::mSohMenu->MenuDrawItem(lowerOctaves, static_cast<uint32_t>(ImGui::GetContentRegionAvail().x),
@@ -1053,6 +1056,17 @@ void RegisterAudioWidgets() {
                      .Tooltip("Changes only rain created by Enable Rain in Outdoor Scenes. Native story and "
                               "proximity-weather rain keep their original color."));
     SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRainColor, "Enhancements", "Audio Editor", "Audio Options" });
+
+    weatherAudioDiagnostics = { .name = "Log Weather Audio Diagnostics",
+                                .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    weatherAudioDiagnostics.CVar(CVAR_AUDIO("WeatherAudioDiagnostics"))
+        .Options(CheckboxOptions()
+                     .Color(THEME_COLOR)
+                     .DefaultValue(false)
+                     .Tooltip("Logs thunder voice admission and periodic pre/post weather PCM peaks and clamp "
+                              "counts. Intended only for the POC7 stabilization playthrough."));
+    SohGui::mSohMenu->AddSearchWidget(
+        { weatherAudioDiagnostics, "Enhancements", "Audio Editor", "Audio Options" });
 
     proximityWeatherThunder = { .name = "Enable Proximity Weather Thunder",
                                 .type = WidgetType::WIDGET_CVAR_CHECKBOX };

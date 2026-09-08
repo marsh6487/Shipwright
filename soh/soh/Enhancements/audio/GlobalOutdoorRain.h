@@ -57,5 +57,6 @@ GlobalOutdoorRainColor GlobalOutdoorRain_SelectColor(GlobalOutdoorRainSource sou
 #ifndef GLOBAL_OUTDOOR_RAIN_TEST
 struct PlayState;
 void GlobalOutdoorRain_Update(PlayState* play);
+void GlobalOutdoorRain_OnPlayDestroy();
 void GlobalOutdoorRain_Reset();
 #endif

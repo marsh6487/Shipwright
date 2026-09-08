@@ -81,8 +81,45 @@ static void TestSimultaneousEngineAndWeatherVoices() {
     SetNatureRain(false);
 }
 
+static void TestDenseFlameHubDoesNotStealNaviOrThunder() {
+    WeatherSamplePlayer_Init();
+    GlobalOutdoorRain_Reset();
+    WeatherSfxEngine_Reset();
+    SetNatureRain(false);
+    PlayState play = {};
+    for (int frame = 0; frame < 62; ++frame)
+        GlobalOutdoorRain_Update(&play);
+    REQUIRE(WeatherSamplePlayer_Play("audio/samples/Low Thunder_META", 1.0f));
+    REQUIRE(WeatherSamplePlayer_Play("audio/samples/Lightning_META", 1.0f));
+    WeatherSfxEngine_StartDenseFlameHub();
+    RequireMixFrame(106);
+}
+
 int main() {
     TestSimultaneousEngineAndWeatherVoices();
+    TestDenseFlameHubDoesNotStealNaviOrThunder();
+
+    // A normal scene handoff must not restart the authored rain loop. The next
+    // outdoor PlayState adopts the existing global voice and cycle.
+    WeatherSamplePlayer_Init();
+    GlobalOutdoorRain_Reset();
+    sEnabled = 1;
+    sMode = 0;
+    sRainVolume = 100;
+    SetNatureRain(false);
+    PlayState outgoing = {};
+    for (int frame = 0; frame < 62; ++frame)
+        GlobalOutdoorRain_Update(&outgoing);
+    int16_t beforeHandoff[6] = {};
+    WeatherSamplePlayer_Mix(beforeHandoff, 3);
+    REQUIRE(beforeHandoff[0] == 1 && beforeHandoff[2] == 2 && beforeHandoff[4] == 3);
+    GlobalOutdoorRain_OnPlayDestroy();
+    PlayState incoming = {};
+    GlobalOutdoorRain_Update(&incoming);
+    int16_t afterHandoff[2] = {};
+    WeatherSamplePlayer_Mix(afterHandoff, 1);
+    REQUIRE(afterHandoff[0] == 4);
+
     WeatherSamplePlayer_Init();
     GlobalOutdoorRain_Reset();
     WeatherSfxEngine_Reset();
