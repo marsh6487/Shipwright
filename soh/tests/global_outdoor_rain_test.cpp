@@ -30,7 +30,10 @@ int main() {
 
     state.outdoors = true;
     state.rainAlreadyActive = true;
-    REQUIRE(GlobalOutdoorRain_Select(state) == GlobalOutdoorRainDecision::NoChange);
+    // A room can retain visual rain density after its audible owner disappears.
+    // Persistent outdoor rain must reacquire the loop instead of treating the
+    // nonzero density as proof that audio is still owned.
+    REQUIRE(GlobalOutdoorRain_Select(state) == GlobalOutdoorRainDecision::Start);
 
     // A native weather tag is authoritative even when enhanced rain is otherwise eligible to run.
     state.rainAlreadyActive = false;

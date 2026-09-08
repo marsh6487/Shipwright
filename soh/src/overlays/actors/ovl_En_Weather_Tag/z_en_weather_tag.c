@@ -33,14 +33,9 @@ void EnWeatherTag_DisabledRainThunder(EnWeatherTag* this, PlayState* play);
 void EnWeatherTag_EnabledRainThunder(EnWeatherTag* this, PlayState* play);
 
 static void EnWeatherTag_PlayRain(void) {
-    static f32 rainVolume = 0.5f;
-
-    if (!Audio_IsNatureRainEnabled()) {
-        rainVolume =
-            ConcurrentWeatherAudio_ClampPercent(CVarGetInteger(CVAR_AUDIO("ProximityWeatherRainVolume"), 50)) / 100.0f;
-        Audio_PlaySoundGeneral(NA_SE_EV_RAIN - SFX_FLAG, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &rainVolume,
-                               &gSfxDefaultReverb);
-    }
+    // Keep placed rain out of ordinary SFX banks. Re-notifying each frame
+    // updates volume and hands off cleanly if native nature ambience starts.
+    GlobalOutdoorRain_NotifyNativeRainActive(true);
 }
 
 #define WEATHER_TAG_RANGE100(x) ((x >> 8) * 100.0f)

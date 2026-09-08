@@ -11,7 +11,10 @@ GlobalOutdoorRainDecision GlobalOutdoorRain_Select(const GlobalOutdoorRainState&
     if (state.source == GlobalOutdoorRainSource::EnhancedOutdoor) {
         return GlobalOutdoorRainDecision::Maintain;
     }
-    return state.rainAlreadyActive ? GlobalOutdoorRainDecision::NoChange : GlobalOutdoorRainDecision::Start;
+    // Visual rain density can survive a room transition after its audible
+    // owner disappears. With no explicit native owner, reacquire the enhanced
+    // loop even when the scene still reports rain particles.
+    return GlobalOutdoorRainDecision::Start;
 }
 
 int GlobalOutdoorRain_ClampDensity(int density) {
@@ -135,8 +138,9 @@ extern "C" int32_t GlobalOutdoorRain_GetRenderColor(uint8_t* red, uint8_t* green
 extern "C" void GlobalOutdoorRain_NotifyNativeRainActive(int32_t active) {
     if (active) {
         sRainSource = GlobalOutdoorRainSource::NativePlaced;
-        PlayRainLoop(0.0f);
+        PlayRainLoop(1.0f);
     } else if (sRainSource == GlobalOutdoorRainSource::NativePlaced) {
+        PlayRainLoop(0.0f);
         sRainSource = GlobalOutdoorRainSource::None;
     }
 }
@@ -153,8 +157,7 @@ static void PlayRainLoop(float intensity) {
     const float peakVolume =
         ConcurrentWeatherAudio_ClampPercent(CVarGetInteger(CVAR_AUDIO("ProximityWeatherRainVolume"), 50)) / 100.0f;
     const float rainVolume = GlobalOutdoorRain_ScaleVolume(peakVolume, intensity);
-    switch (ConcurrentWeatherAudio_SelectRainAction(sOwnsFallbackLoop,
-                                                    sRainSource == GlobalOutdoorRainSource::EnhancedOutdoor,
+    switch (ConcurrentWeatherAudio_SelectRainAction(sOwnsFallbackLoop, sRainSource != GlobalOutdoorRainSource::None,
                                                     Audio_IsNatureRainEnabled(), rainVolume)) {
         case CONCURRENT_WEATHER_RAIN_SET_LOOP:
             WeatherSamplePlayer_SetLoop("audio/samples/Rainfall_META", rainVolume);

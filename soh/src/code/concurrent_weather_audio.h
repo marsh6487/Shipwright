@@ -23,7 +23,7 @@ typedef enum {
 extern "C" {
 #endif
 ConcurrentWeatherRainAction ConcurrentWeatherAudio_SelectRainAction(uint8_t ownsFallbackLoop,
-                                                                    uint8_t enhancedOwnsRain,
+                                                                    uint8_t weatherOwnsRain,
                                                                     uint8_t natureRainEnabled, float gain);
 #ifdef __cplusplus
 }

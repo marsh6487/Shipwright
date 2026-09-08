@@ -95,9 +95,31 @@ static void TestDenseFlameHubDoesNotStealNaviOrThunder() {
     RequireMixFrame(106);
 }
 
+static void TestPlacedWeatherRainUsesPrivateLoop() {
+    WeatherSamplePlayer_Init();
+    GlobalOutdoorRain_Reset();
+    WeatherSfxEngine_Reset();
+    WeatherSfxEngine_StartDenseFlameHub();
+    SetNatureRain(false);
+
+    GlobalOutdoorRain_NotifyNativeRainActive(1);
+    RequireMixFrame(101);
+
+    GlobalOutdoorRain_NotifyNativeRainActive(0);
+    RequireMixFrame(100);
+
+    // Native nature ambience remains authoritative when it already owns rain.
+    SetNatureRain(true);
+    GlobalOutdoorRain_NotifyNativeRainActive(1);
+    RequireMixFrame(100);
+    GlobalOutdoorRain_NotifyNativeRainActive(0);
+    SetNatureRain(false);
+}
+
 int main() {
     TestSimultaneousEngineAndWeatherVoices();
     TestDenseFlameHubDoesNotStealNaviOrThunder();
+    TestPlacedWeatherRainUsesPrivateLoop();
 
     // A normal scene handoff must not restart the authored rain loop. The next
     // outdoor PlayState adopts the existing global voice and cycle.
@@ -164,7 +186,7 @@ int main() {
     sEnabled = 0;
     GlobalOutdoorRain_Update(&play);
     REQUIRE(play.envCtx.unk_EE[0] == 40);
-    RequireMixFrame(105);
+    RequireMixFrame(106);
     uint8_t red = 0, green = 0, blue = 0;
     const bool nativeHasEnhancedColor = GlobalOutdoorRain_GetRenderColor(&red, &green, &blue);
     REQUIRE(!nativeHasEnhancedColor);
@@ -172,7 +194,7 @@ int main() {
     sEnabled = 1;
     GlobalOutdoorRain_Update(&play);
     REQUIRE(play.envCtx.unk_EE[0] == 40);
-    RequireMixFrame(105);
+    RequireMixFrame(106);
     GlobalOutdoorRain_NotifyNativeRainActive(0);
     play.envCtx.unk_EE[0] = 0;
     GlobalOutdoorRain_Update(&play);
@@ -182,8 +204,8 @@ int main() {
     GlobalOutdoorRain_Reset();
     RequireMixFrame(105); // teardown stops only the loop, not either one-shot
 
-    // No enhanced owner: room updates, native notifications and repeated resets
-    // must not send a null-loop request to a voice they never acquired.
+    // A placed-weather notification adopts the shared rain loop without
+    // restarting it, and reset releases that explicitly acquired ownership.
     WeatherSamplePlayer_Reset();
     WeatherSamplePlayer_SetLoop("audio/samples/Rainfall_META", 1.0f);
     sEnabled = 0;
@@ -194,7 +216,7 @@ int main() {
     RequireMixFrame(102);
     GlobalOutdoorRain_Reset();
     GlobalOutdoorRain_Reset();
-    RequireMixFrame(103);
+    RequireMixFrame(100);
     WeatherSamplePlayer_Reset();
 
     // Volume zero must release owned fallback without changing visual density.
