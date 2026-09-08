@@ -369,6 +369,7 @@ void EnViewerStatic_Init(EnViewer* this, PlayState* play) {
     this->staticState.objectSlots[3] = -1;
     this->staticState.previousRutoWaterPhase = STATIC_RUTO_PHASE_GROUNDED;
     this->staticState.danceStep = 0;
+    this->staticState.diagnosticDrawLogged = false;
     EnViewer_SetupAction(this, EnViewerStatic_WaitForObjects);
 }
 
@@ -422,6 +423,9 @@ static bool EnViewerStatic_UpdateRutoWater(EnViewer* this, PlayState* play, bool
     StaticRutoWater_Update(&this->staticState.rutoWater, hasWater, surfaceY, animationEnded);
     phase = this->staticState.rutoWater.phase;
     if (phase != this->staticState.previousRutoWaterPhase) {
+        osSyncPrintf("[ActorCatalogueProbe] Ruto params=%04X phase=%d->%d y=%.2f surface=%.2f water=%d\n",
+                     (uint16_t)this->actor.params, this->staticState.previousRutoWaterPhase, phase,
+                     this->staticState.rutoWater.currentY, surfaceY, hasWater);
         EnViewerStatic_SetRutoWaterAnimation(this, phase);
         this->staticState.previousRutoWaterPhase = phase;
     }
@@ -530,6 +534,12 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
     this->staticState.tracking = false;
     this->staticState.interactInfo.talkState = NPC_TALK_STATE_IDLE;
     this->staticState.initialized = true;
+    osSyncPrintf(
+        "[ActorCatalogueProbe] ready params=%04X type=%d pose=%d modelObj=%d modelSlot=%d animSlot=%d limbs=%d "
+        "pos=(%.2f,%.2f,%.2f) visible=%d\n",
+        (uint16_t)this->actor.params, this->staticState.type, this->staticState.pose, definition->objectId,
+        this->actor.objBankIndex, this->animObjBankIndex, this->skin.skelAnime.dListCount, this->actor.world.pos.x,
+        this->actor.world.pos.y, this->actor.world.pos.z, this->isVisible);
     EnViewer_SetupAction(this, EnViewerStatic_Update);
 }
 
@@ -1508,6 +1518,16 @@ void EnViewer_Draw(Actor* thisx, PlayState* play) {
     if (this->isVisible) {
         type = (u16)this->actor.params >> 8;
         if (this->staticState.type != STATIC_STORY_ACTOR_NONE && this->staticState.initialized) {
+            if (!this->staticState.diagnosticDrawLogged) {
+                osSyncPrintf(
+                    "[ActorCatalogueProbe] draw params=%04X type=%d pose=%d modelSlot=%d animSlot=%d limbs=%d "
+                    "pos=(%.2f,%.2f,%.2f) projectedZ=%.2f flags=%08X\n",
+                    (uint16_t)this->actor.params, this->staticState.type, this->staticState.pose,
+                    this->actor.objBankIndex, this->animObjBankIndex, this->skin.skelAnime.dListCount,
+                    this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z,
+                    this->actor.projectedPos.z, this->actor.flags);
+                this->staticState.diagnosticDrawLogged = true;
+            }
             Gfx_SetupDL_25Opa(play->state.gfxCtx);
             EnViewerStatic_Draw(this, play);
         } else if (type <= ENVIEWER_TYPE_2_ZELDA) { // zelda's horse, impa and zelda

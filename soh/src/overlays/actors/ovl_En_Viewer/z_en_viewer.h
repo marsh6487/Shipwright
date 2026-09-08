@@ -83,6 +83,7 @@ typedef struct {
     StaticRutoWaterState rutoWater;
     StaticRutoWaterPhase previousRutoWaterPhase;
     uint8_t danceStep;
+    uint8_t diagnosticDrawLogged;
 } EnViewerStaticState;
 
 typedef struct EnViewer {
