@@ -3,6 +3,7 @@
 
 #include <libultraship/libultra.h>
 #include "global.h"
+#include "static_story_ruto_water.h"
 
 struct EnViewer;
 
@@ -47,7 +48,7 @@ typedef enum {
 typedef struct {
     /* 0x00 */ s16 skeletonObject;
     /* 0x02 */ s16 animObject;
-    /* 0x04 */ u8 scale; // divided by 100.0f
+    /* 0x04 */ u8 scale;   // divided by 100.0f
     /* 0x05 */ s8 yOffset; // multiplied by 100
     /* 0x06 */ u8 shadowType;
     /* 0x07 */ u8 shadowScale;
@@ -79,6 +80,11 @@ typedef struct {
     int16_t objectSlots[4];
     NpcInteractInfo interactInfo;
     ColliderCylinder collider;
+    StaticRutoWaterState rutoWater;
+    StaticRutoWaterPhase previousRutoWaterPhase;
+    uint8_t danceStep;
+    uint8_t diagnosticDrawLogged;
+    uint16_t greatFairyHoverPhase;
 } EnViewerStaticState;
 
 typedef struct EnViewer {
