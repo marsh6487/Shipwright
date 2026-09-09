@@ -85,6 +85,16 @@ typedef struct {
     uint8_t danceStep;
     uint8_t diagnosticDrawLogged;
     uint16_t greatFairyHoverPhase;
+    uint16_t mmHoverPhase;
+    uint16_t tatlPulsePhase;
+    uint8_t tatlInitialized;
+    SkelAnime tatlSkelAnime;
+    FlexSkeletonHeader tatlSkeleton;
+    StandardLimb tatlLimbs[6];
+    void* tatlLimbPtrs[6];
+    Gfx* skullKidHeadDL;
+    Gfx* skullKidEyesDL;
+    Gfx* skullKidMaskDL;
 } EnViewerStaticState;
 
 typedef struct EnViewer {
