@@ -12,6 +12,7 @@
 #include "objects/object_horse_ganon/object_horse_ganon.h"
 #include "objects/object_im/object_im.h"
 #include "objects/object_gndd/object_gndd.h"
+#include "objects/object_gnd/object_gnd.h"
 #include "objects/object_ganon/object_ganon.h"
 #include "objects/object_opening_demo1/object_opening_demo1.h"
 #include "objects/object_ma1/object_ma1.h"
@@ -30,6 +31,9 @@
 #include "objects/object_os_anime/object_os_anime.h"
 #include "static_story_actor.h"
 #include "static_story_kokiri.h"
+#include "static_story_mm_actor.h"
+#include "static_story_ganon.h"
+#include "mods/transformation_masks/assets/mm_asset_loader.h"
 #include "soh/frame_interpolation.h"
 #include <assert.h>
 
@@ -162,6 +166,10 @@ void EnViewer_Destroy(Actor* thisx, PlayState* play) {
 
     if (this->staticState.staticMode) {
         if (this->staticState.initialized) {
+            if (this->staticState.tatlInitialized) {
+                SkelAnime_Free(&this->staticState.tatlSkelAnime, play);
+                this->staticState.tatlInitialized = false;
+            }
             if (StaticStoryActor_ResolvePose((StaticStoryActorType)this->staticState.type, this->staticState.pose)
                     ->skeletonFamily != STATIC_SKELETON_NONE) {
                 SkelAnime_Free(&this->skin.skelAnime, play);
@@ -301,6 +309,8 @@ static AnimationHeader* EnViewerStatic_GetAnimation(uint16_t animation) {
             return &gGreatFairyLayingSidewaysAnim;
         case STATIC_ANIM_GREAT_FAIRY_AFTER_SPELL:
             return &gGreatFairyAfterSpellAnim;
+        case STATIC_ANIM_PHANTOM_GANON_NEUTRAL:
+            return &gPhantomGanonNeutralAnim;
         case STATIC_ANIM_ADULT_ZELDA_IDLE:
             return &gZelda2Anime2Anim_009FBC;
         default:
@@ -343,6 +353,9 @@ static void EnViewerStatic_InitSkeleton(EnViewer* this, PlayState* play,
             break;
         case STATIC_SKELETON_GREAT_FAIRY:
             SkelAnime_InitFlex(play, &this->skin.skelAnime, &gGreatFairySkel, NULL, NULL, NULL, 0);
+            break;
+        case STATIC_SKELETON_PHANTOM_GANON:
+            SkelAnime_Init(play, &this->skin.skelAnime, &gPhantomGanonSkel, NULL, NULL, NULL, 0);
             break;
         default:
             return;
@@ -501,12 +514,66 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
     StaticStoryObjectRequirements objects =
         StaticStoryActor_GetObjectRequirements((StaticStoryActorType)this->staticState.type);
     int16_t objectSlot = this->staticState.objectSlots[0];
+    bool usesMmAssets = StaticStoryActor_GetResourceSource((StaticStoryActorType)this->staticState.type) ==
+                        STATIC_STORY_RESOURCE_MM_ARCHIVE;
 
     if (definition == NULL || !definition->available || poseDescriptor == NULL) {
         Actor_Kill(&this->actor);
         return;
     }
-    if (objectSlot < 0) {
+    if (usesMmAssets && !this->staticState.initialized) {
+        const StaticStoryMmPresentation* presentation =
+            StaticStoryMm_GetPresentation((StaticStoryActorType)this->staticState.type, this->staticState.pose);
+        FlexSkeletonHeader* skeleton;
+        AnimationHeader* animation;
+        FlexSkeletonHeader* secondarySkeleton = NULL;
+        AnimationHeader* secondaryAnimation = NULL;
+        bool secondaryComplete = false;
+
+        MmAssets_Init();
+        skeleton = (FlexSkeletonHeader*)MmAssets_LoadSkeleton(presentation != NULL ? presentation->skeletonPath : "");
+        animation =
+            (AnimationHeader*)MmAssets_LoadAnimation(presentation != NULL ? presentation->animationPath : "");
+        if (presentation != NULL && presentation->requiresSecondarySkeleton) {
+            secondarySkeleton = (FlexSkeletonHeader*)MmAssets_LoadSkeleton(presentation->secondarySkeletonPath);
+            secondaryAnimation = (AnimationHeader*)MmAssets_LoadAnimation(presentation->secondaryAnimationPath);
+            this->staticState.skullKidMaskDL = (Gfx*)MmAssets_LoadResource(presentation->maskDisplayListPath);
+            this->staticState.skullKidHeadDL = (Gfx*)MmAssets_LoadResource(presentation->headDisplayListPath);
+            this->staticState.skullKidEyesDL = (Gfx*)MmAssets_LoadResource(presentation->eyesDisplayListPath);
+            secondaryComplete = secondarySkeleton != NULL && secondaryAnimation != NULL &&
+                                this->staticState.skullKidMaskDL != NULL && this->staticState.skullKidHeadDL != NULL &&
+                                this->staticState.skullKidEyesDL != NULL;
+            for (int limb = 0; limb < 6 && secondaryComplete; ++limb) {
+                StandardLimb* sourceLimb =
+                    (StandardLimb*)MmAssets_LoadResource(StaticStoryMm_GetTatlLimbPath(limb));
+                Gfx* sourceDList = (Gfx*)MmAssets_LoadResource(StaticStoryMm_GetTatlDListPath(limb));
+
+                secondaryComplete = sourceLimb != NULL && sourceDList != NULL;
+                if (secondaryComplete) {
+                    this->staticState.tatlLimbs[limb] = *sourceLimb;
+                    this->staticState.tatlLimbs[limb].dList = sourceDList;
+                    this->staticState.tatlLimbPtrs[limb] = &this->staticState.tatlLimbs[limb];
+                }
+            }
+        }
+        if (!StaticStoryMm_ResourcesComplete(presentation, skeleton != NULL, animation != NULL,
+                                              secondaryComplete)) {
+            osSyncPrintf("Static story actor: MM resources unavailable for type %d pose %d\n",
+                         this->staticState.type, this->staticState.pose);
+            Actor_Kill(&this->actor);
+            return;
+        }
+        SkelAnime_InitFlex(play, &this->skin.skelAnime, skeleton, NULL, NULL, NULL, 0);
+        Animation_PlayLoopSetSpeed(&this->skin.skelAnime, animation, poseDescriptor->playbackSpeed);
+        if (presentation->requiresSecondarySkeleton) {
+            this->staticState.tatlSkeleton = *secondarySkeleton;
+            this->staticState.tatlSkeleton.sh.segment = this->staticState.tatlLimbPtrs;
+            this->staticState.tatlSkeleton.sh.limbCount = 6;
+            SkelAnime_Init(play, &this->staticState.tatlSkelAnime, &this->staticState.tatlSkeleton.sh,
+                           secondaryAnimation, NULL, NULL, 0);
+            this->staticState.tatlInitialized = true;
+        }
+    } else if (objectSlot < 0) {
         if ((this->staticState.type == STATIC_STORY_ACTOR_FADO ||
              this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL) &&
             !StaticStoryKokiri_RequestObjects(this, play)) {
@@ -527,7 +594,7 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         }
         objectSlot = this->staticState.objectSlots[0];
     }
-    if (this->staticState.type != STATIC_STORY_ACTOR_FADO &&
+    if (!usesMmAssets && this->staticState.type != STATIC_STORY_ACTOR_FADO &&
         this->staticState.type != STATIC_STORY_ACTOR_KOKIRI_GIRL && this->staticState.objectSlots[1] < 0) {
         if (objects.animationObjectId == objects.modelObjectId) {
             this->staticState.objectSlots[1] = objectSlot;
@@ -546,27 +613,37 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
     ActorCatalogue_LogLifecycle("objects", this->actor.params, this->staticState.type, this->staticState.pose,
                                 objects.modelObjectId, this->staticState.objectSlots[0], objects.animationObjectId,
                                 this->staticState.objectSlots[1]);
-    for (int slot = 0; slot < 4 && this->staticState.objectSlots[slot] >= 0; ++slot) {
+    for (int slot = 0; !usesMmAssets && slot < 4 && this->staticState.objectSlots[slot] >= 0; ++slot) {
         if (!Object_IsLoaded(&play->objectCtx, this->staticState.objectSlots[slot])) {
             this->actor.flags &= ~ACTOR_FLAG_INSIDE_CULLING_VOLUME;
             return;
         }
     }
 
-    this->actor.objBankIndex =
-        (this->staticState.type == STATIC_STORY_ACTOR_FADO || this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL)
-            ? this->staticState.objectSlots[2]
-            : objectSlot;
-    this->animObjBankIndex = (this->staticState.type == STATIC_STORY_ACTOR_FADO ||
-                                this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL)
-                                 ? this->staticState.objectSlots[3]
-                                 : this->staticState.objectSlots[1];
+    if (!usesMmAssets) {
+        this->actor.objBankIndex =
+            (this->staticState.type == STATIC_STORY_ACTOR_FADO ||
+             this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL)
+                ? this->staticState.objectSlots[2]
+                : objectSlot;
+        this->animObjBankIndex = (this->staticState.type == STATIC_STORY_ACTOR_FADO ||
+                                    this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL)
+                                     ? this->staticState.objectSlots[3]
+                                     : this->staticState.objectSlots[1];
+    }
     this->isVisible = true;
-    Actor_SetObjectDependency(play, &this->actor);
+    if (!usesMmAssets) {
+        Actor_SetObjectDependency(play, &this->actor);
+    }
     Actor_SetScale(&this->actor, definition->scale);
     ActorShape_Init(&this->actor.shape, 0.0f, ActorShadow_DrawCircle, definition->colliderRadius);
-    gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[this->animObjBankIndex].segment);
-    if (this->staticState.type == STATIC_STORY_ACTOR_FADO || this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL) {
+    if (!usesMmAssets) {
+        gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[this->animObjBankIndex].segment);
+    }
+    if (usesMmAssets) {
+        /* The archive-backed skeleton and animation were initialized above. */
+    } else if (this->staticState.type == STATIC_STORY_ACTOR_FADO ||
+               this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL) {
         StaticStoryKokiri_Init(this, play);
     } else {
         EnViewerStatic_InitSkeleton(this, play, poseDescriptor);
@@ -631,6 +708,15 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
         this->actor.world.pos.y = this->actor.home.pos.y +
                                   Math_SinS(this->staticState.greatFairyHoverPhase) *
                                       StaticStoryActor_GetGreatFairyHoverAmplitude(this->staticState.pose);
+    }
+    if (this->staticState.type == STATIC_STORY_ACTOR_SKULL_KID) {
+        this->staticState.mmHoverPhase += 0x4B0;
+        this->staticState.tatlPulsePhase += 0x600;
+        this->actor.world.pos.y = StaticStoryMm_ComposeHoverY(this->actor.home.pos.y,
+                                                              this->staticState.mmHoverPhase);
+        if (this->staticState.tatlInitialized) {
+            SkelAnime_Update(&this->staticState.tatlSkelAnime);
+        }
     }
     int8_t fixedEyeIndex = StaticStoryActor_GetFixedEyeIndex((StaticStoryActorType)this->staticState.type,
                                                              this->staticState.pose);
@@ -1677,6 +1763,104 @@ void EnViewer_DrawStaticGreatFairy(EnViewer* this, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+static s32 EnViewer_StaticBombShopLadyOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
+                                                       Vec3s* rot, void* thisx) {
+    EnViewer* this = (EnViewer*)thisx;
+
+    if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, this->staticState.pose)) {
+        /* object_bba enum order: head 7, torso 9. */
+        if (limbIndex == 7) {
+            rot->x += this->staticState.interactInfo.headRot.y;
+            rot->z += this->staticState.interactInfo.headRot.x;
+        } else if (limbIndex == 9) {
+            rot->x += this->staticState.interactInfo.torsoRot.y;
+            rot->z += this->staticState.interactInfo.torsoRot.x;
+        }
+    }
+    return false;
+}
+
+static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
+    OverrideLimbDraw overrideLimbDraw = NULL;
+
+    if (this->staticState.type == STATIC_STORY_ACTOR_BOMB_SHOP_LADY) {
+        overrideLimbDraw = EnViewer_StaticBombShopLadyOverrideLimbDraw;
+    }
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, overrideLimbDraw, NULL, this);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static s32 EnViewer_StaticSkullKidOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
+                                                   Vec3s* rot, void* thisx) {
+    if (limbIndex == 17) {
+        *dList = NULL;
+    }
+    return false;
+}
+
+static void EnViewer_StaticSkullKidPostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot,
+                                                void* thisx) {
+    EnViewer* this = (EnViewer*)thisx;
+
+    if (limbIndex == 17) {
+        OPEN_DISPS(play->state.gfxCtx);
+        MATRIX_FINALIZE_AND_LOAD(POLY_OPA_DISP++, play->state.gfxCtx);
+        gSPDisplayList(POLY_OPA_DISP++, this->staticState.skullKidHeadDL);
+        gSPDisplayList(POLY_OPA_DISP++, this->staticState.skullKidEyesDL);
+        gSPDisplayList(POLY_OPA_DISP++, this->staticState.skullKidMaskDL);
+        CLOSE_DISPS(play->state.gfxCtx);
+    }
+}
+
+static void EnViewer_DrawStaticTatl(EnViewer* this, PlayState* play) {
+    StaticStoryMmVec3f anchor = StaticStoryMm_GetTatlAnchor(this->staticState.pose);
+    float orbitX = Math_SinS(this->staticState.tatlPulsePhase) * 4.0f;
+    float orbitZ = Math_CosS(this->staticState.tatlPulsePhase) * 4.0f;
+    float scale = StaticStoryMm_GetTatlScale(this->staticState.tatlPulsePhase);
+    uint8_t outerAlpha = StaticStoryMm_GetTatlOuterAlpha(this->staticState.tatlPulsePhase);
+    Gfx* fairySetup = GRAPH_ALLOC(play->state.gfxCtx, 4 * sizeof(Gfx));
+
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_27Xlu(play->state.gfxCtx);
+    gSPSegment(POLY_XLU_DISP++, 0x08, fairySetup);
+    gDPPipeSync(fairySetup++);
+    gDPSetPrimColor(fairySetup++, 0, 1, 255, 255, 230, 255);
+    gDPSetRenderMode(fairySetup++, G_RM_PASS, G_RM_ZB_CLD_SURF2);
+    gSPEndDisplayList(fairySetup);
+    gDPSetEnvColor(POLY_XLU_DISP++, 220, 160, 80, outerAlpha);
+    Matrix_Push();
+    Matrix_Translate((anchor.x + orbitX) * 100.0f, anchor.y * 100.0f, (anchor.z + orbitZ) * 100.0f,
+                     MTXMODE_APPLY);
+    Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
+    POLY_XLU_DISP = SkelAnime_Draw(play, this->staticState.tatlSkelAnime.skeleton,
+                                   this->staticState.tatlSkelAnime.jointTable, NULL, NULL, this, POLY_XLU_DISP);
+    Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static void EnViewer_DrawStaticSkullKid(EnViewer* this, PlayState* play) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, EnViewer_StaticSkullKidOverrideLimbDraw,
+                              EnViewer_StaticSkullKidPostLimbDraw, this);
+    CLOSE_DISPS(play->state.gfxCtx);
+    EnViewer_DrawStaticTatl(this, play);
+}
+
+static void EnViewer_DrawStaticPhantomGanon(EnViewer* this, PlayState* play) {
+    Gfx* nullDList = GRAPH_ALLOC(play->state.gfxCtx, sizeof(Gfx));
+
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gDPSetEnvColor(POLY_OPA_DISP++, 255, 255, 255, 255);
+    gSPEndDisplayList(nullDList);
+    gSPSegment(POLY_OPA_DISP++, 0x08, nullDList);
+    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, NULL, NULL, this);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 void EnViewerStatic_Draw(EnViewer* this, PlayState* play) {
     switch ((StaticStoryActorType)this->staticState.type) {
         case STATIC_STORY_ACTOR_IMPA:
@@ -1722,6 +1906,15 @@ void EnViewerStatic_Draw(EnViewer* this, PlayState* play) {
             break;
         case STATIC_STORY_ACTOR_GREAT_FAIRY:
             EnViewer_DrawStaticGreatFairy(this, play);
+            break;
+        case STATIC_STORY_ACTOR_BOMB_SHOP_LADY:
+            EnViewer_DrawStaticMmActor(this, play);
+            break;
+        case STATIC_STORY_ACTOR_SKULL_KID:
+            EnViewer_DrawStaticSkullKid(this, play);
+            break;
+        case STATIC_STORY_ACTOR_PHANTOM_GANON:
+            EnViewer_DrawStaticPhantomGanon(this, play);
             break;
         default:
             break;
