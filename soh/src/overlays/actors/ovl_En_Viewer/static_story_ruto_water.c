@@ -1,6 +1,7 @@
 #include "static_story_ruto_water.h"
 
-static const float sSurfaceOffset = 54.0f;
+/* Adult Ruto's taller rig sits visibly lower than En_Zora at the same 54-unit anchor. */
+static const float sSurfaceOffset = 44.0f;
 static const float sDiveVelocity = -4.0f;
 static const float sRiseVelocity = 4.0f;
 static const float sTreadExtent = 1.5f;
@@ -15,10 +16,10 @@ bool StaticRutoWater_CanTrack(const StaticRutoWaterState* state) {
 
 void StaticRutoWater_GetTreadLegRotations(int16_t treadOffset, int16_t* leftHip, int16_t* leftKnee,
                                           int16_t* rightHip, int16_t* rightKnee) {
-    *leftHip = 0x500 + treadOffset;
-    *leftKnee = -0xA00 - treadOffset;
-    *rightHip = 0x500 - treadOffset;
-    *rightKnee = -0xA00 + treadOffset;
+    *leftHip = 0xA00 + treadOffset;
+    *leftKnee = -0x1800 - treadOffset;
+    *rightHip = 0xA00 - treadOffset;
+    *rightKnee = -0x1800 + treadOffset;
 }
 
 static uint8_t StaticRutoWater_AlphaForDepth(float currentY, float surfaceTarget) {

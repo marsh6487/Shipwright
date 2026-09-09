@@ -235,7 +235,8 @@ uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticSt
         case STATIC_STORY_ACTOR_ADULT_RUTO:
             return progression->waterComplete ? 0x403E : 0x402C;
         case STATIC_STORY_ACTOR_CHILD_RUTO:
-            return progression->waterComplete ? 0x404E : 0x404C;
+            /* Post-Jabu throne-room text: closes normally without En_Ru1's Jabu action chain. */
+            return 0x402C;
         case STATIC_STORY_ACTOR_KOKIRI_GIRL:
             return progression->forestComplete ? 0x10DA : 0x1004;
         case STATIC_STORY_ACTOR_FADO:
@@ -262,4 +263,15 @@ int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose) {
     }
 
     return definition->trackingAdapter != STATIC_TRACKING_NONE;
+}
+
+StaticStoryAdultRutoTrackingLimb StaticStoryActor_GetAdultRutoTrackingLimb(int limbIndex) {
+    /* Flex callbacks number object_ru2's root as limb 1. */
+    if (limbIndex == 10) {
+        return STATIC_RUTO_TRACKING_LIMB_TORSO;
+    }
+    if (limbIndex == 21) {
+        return STATIC_RUTO_TRACKING_LIMB_HEAD;
+    }
+    return STATIC_RUTO_TRACKING_LIMB_NONE;
 }

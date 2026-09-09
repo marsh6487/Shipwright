@@ -76,6 +76,12 @@ typedef enum {
 } StaticStoryTrackingAdapter;
 
 typedef enum {
+    STATIC_RUTO_TRACKING_LIMB_NONE,
+    STATIC_RUTO_TRACKING_LIMB_TORSO,
+    STATIC_RUTO_TRACKING_LIMB_HEAD,
+} StaticStoryAdultRutoTrackingLimb;
+
+typedef enum {
     STATIC_DRAW_CONTRACT_STANDARD_OPA,
     STATIC_DRAW_CONTRACT_NPC_FLEX,
     STATIC_DRAW_CONTRACT_FACE_FLEX,
@@ -185,5 +191,6 @@ StaticStoryObjectRequirements StaticStoryActor_GetObjectRequirements(StaticStory
 const StaticStoryPoseDescriptor* StaticStoryActor_ResolvePose(StaticStoryActorType type, uint8_t pose);
 uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticStoryProgression* progression);
 int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose);
+StaticStoryAdultRutoTrackingLimb StaticStoryActor_GetAdultRutoTrackingLimb(int limbIndex);
 
 #endif

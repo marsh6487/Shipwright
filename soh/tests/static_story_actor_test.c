@@ -138,6 +138,11 @@ int main(void) {
     assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_ZELDA, 0));
     assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 2));
     assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_RUTO, 0));
+    assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_RUTO, 1));
+    assert(StaticStoryActor_GetAdultRutoTrackingLimb(9) == STATIC_RUTO_TRACKING_LIMB_NONE);
+    assert(StaticStoryActor_GetAdultRutoTrackingLimb(10) == STATIC_RUTO_TRACKING_LIMB_TORSO);
+    assert(StaticStoryActor_GetAdultRutoTrackingLimb(20) == STATIC_RUTO_TRACKING_LIMB_NONE);
+    assert(StaticStoryActor_GetAdultRutoTrackingLimb(21) == STATIC_RUTO_TRACKING_LIMB_HEAD);
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_CHILD_MALON, 1));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SARIA, 2));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SARIA, 3));
@@ -180,8 +185,9 @@ int main(void) {
            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_SHEIK, &complete));
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_RUTO, &early) !=
            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_RUTO, &complete));
-    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &early) !=
-           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &complete));
+    /* Static Child Ruto must never enter the 0x404C-0x404E Jabu dialogue chain. */
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &early) == 0x402C);
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &complete) == 0x402C);
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_KOKIRI_GIRL, &early) !=
            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_KOKIRI_GIRL, &complete));
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_FADO, &early) !=

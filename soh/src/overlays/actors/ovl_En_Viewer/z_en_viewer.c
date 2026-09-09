@@ -1358,11 +1358,12 @@ static s32 EnViewer_StaticAdultRutoOverrideLimbDraw(PlayState* play, s32 limbInd
     if (StaticStoryActor_CanTrack((StaticStoryActorType)this->staticState.type, this->staticState.pose) &&
         (this->staticState.type != STATIC_STORY_ACTOR_ADULT_RUTO_WATER ||
          StaticRutoWater_CanTrack(&this->staticState.rutoWater))) {
-        /* object_ru2's 23-limb hierarchy: torso 9, head 20. */
-        if (limbIndex == 9) {
+        StaticStoryAdultRutoTrackingLimb trackingLimb = StaticStoryActor_GetAdultRutoTrackingLimb(limbIndex);
+
+        if (trackingLimb == STATIC_RUTO_TRACKING_LIMB_TORSO) {
             rot->x += this->staticState.interactInfo.torsoRot.y;
             rot->y -= this->staticState.interactInfo.torsoRot.x;
-        } else if (limbIndex == 20) {
+        } else if (trackingLimb == STATIC_RUTO_TRACKING_LIMB_HEAD) {
             rot->x += this->staticState.interactInfo.headRot.y;
             rot->z += this->staticState.interactInfo.headRot.x;
         }

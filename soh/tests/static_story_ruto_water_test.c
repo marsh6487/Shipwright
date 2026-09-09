@@ -46,7 +46,8 @@ int main(void) {
     /* The persistent surface placement visibly ascends from authored Y once water resolves. */
     events = ReachSurface(&state, false);
     assert(state.phase == STATIC_RUTO_PHASE_SURFACED);
-    assert(state.currentY == 46.0f);
+    /* Adult Ruto's taller rig needs a 10-unit lift over En_Zora's 54-unit anchor. */
+    assert(state.currentY == 56.0f);
     assert(state.alpha == 255);
     assert((events & STATIC_RUTO_WATER_EVENT_EMERGED) != 0);
 
@@ -61,12 +62,12 @@ int main(void) {
     assert(state.phase == STATIC_RUTO_PHASE_SURFACED);
     assert(state.currentY != firstTreadY);
     assert(state.treadPhase != 0);
-    assert(state.currentY >= 44.5f && state.currentY <= 47.5f);
+    assert(state.currentY >= 54.5f && state.currentY <= 57.5f);
     assert(rippleSeen);
     assert(StaticRutoWater_CanTrack(&state));
     StaticRutoWater_GetTreadLegRotations(0, &leftHip, &leftKnee, &rightHip, &rightKnee);
-    assert(leftHip >= 0x400 && rightHip >= 0x400);
-    assert(leftKnee <= -0x800 && rightKnee <= -0x800);
+    assert(leftHip >= 0x800 && rightHip >= 0x800);
+    assert(leftKnee <= -0x1400 && rightKnee <= -0x1400);
     StaticRutoWater_GetTreadLegRotations(0x300, &leftHip, &leftKnee, &rightHip, &rightKnee);
     assert(leftHip != rightHip);
     assert(leftKnee != rightKnee);
@@ -100,7 +101,7 @@ int main(void) {
     assert(!StaticRutoWater_CanTrack(&state));
     events = StaticRutoWater_Update(&state, true, 100.0f, false, false, 60);
     assert(state.phase == STATIC_RUTO_PHASE_PREPARING_DIVE);
-    assert(state.currentY >= 44.5f && state.currentY <= 47.5f);
+    assert(state.currentY >= 54.5f && state.currentY <= 57.5f);
     events = StaticRutoWater_Update(&state, true, 100.0f, false, true, 60);
     assert(state.phase == STATIC_RUTO_PHASE_DIVING);
     assert(state.velocityY == -4.0f);
