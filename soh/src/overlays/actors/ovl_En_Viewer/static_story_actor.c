@@ -39,6 +39,17 @@ static const StaticStoryActorDefinition sDefinitions[STATIC_STORY_ACTOR_MAX] = {
                                               60, 90.0f, STATIC_TRACKING_ADULT_RUTO, 12, -3.0f },
     [STATIC_STORY_ACTOR_GREAT_FAIRY] = { 2, 1, OBJECT_DY_OBJ, STATIC_ADAPTER_GREAT_FAIRY, 0.035f, 262.5f, 45, 220, 0,
                                          20, 60, 180.0f, STATIC_TRACKING_GREAT_FAIRY, 12, 0.0f },
+    [STATIC_STORY_ACTOR_BOMB_SHOP_LADY] = { 2, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_BOMB_SHOP_LADY, 0.01f, 52.0f,
+                                            20, 60, 0, 30, 30, 90.0f, STATIC_TRACKING_BOMB_SHOP_LADY, 12, 0.0f },
+    [STATIC_STORY_ACTOR_ADULT_GANONDORF] = { 0, 0, OBJECT_GANON, STATIC_ADAPTER_ADULT_GANONDORF, 0.01f, 90.0f,
+                                             35, 110, 0, 30, 30, 120.0f, STATIC_TRACKING_NONE, 0, 0.0f },
+    [STATIC_STORY_ACTOR_PHANTOM_GANON] = { 0, 1, OBJECT_GND, STATIC_ADAPTER_PHANTOM_GANON, 0.01f, 80.0f, 35, 100,
+                                           0, 30, 30, 120.0f, STATIC_TRACKING_NONE, 0, 0.0f },
+    [STATIC_STORY_ACTOR_SKULL_KID] = { 1, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_SKULL_KID, 0.01f, 55.0f, 20, 60, 0,
+                                       30, 30, 90.0f, STATIC_TRACKING_NONE, 0, 0.0f },
+    [STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN] = { 2, 0, OBJECT_INVALID, STATIC_ADAPTER_MM_HAPPY_MASK_SALESMAN,
+                                                 0.01f, 60.0f, 22, 70, 0, 30, 30, 100.0f,
+                                                 STATIC_TRACKING_HAPPY_MASK_SALESMAN, 12, 0.0f },
 };
 
 static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STORY_ACTOR_POSE_COUNT] = {
@@ -125,13 +136,42 @@ static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STO
         STATIC_POSE(STATIC_ANIM_GREAT_FAIRY_AFTER_SPELL, STATIC_POSE_FLAG_HEAD_ONLY_TRACKING,
                     STATIC_SKELETON_GREAT_FAIRY),
     },
+    [STATIC_STORY_ACTOR_BOMB_SHOP_LADY] = {
+        STATIC_POSE(STATIC_ANIM_BOMB_SHOP_LADY_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_BOMB_SHOP_LADY),
+        STATIC_POSE(STATIC_ANIM_BOMB_SHOP_LADY_HOLDING_BAG, STATIC_POSE_FLAG_NO_TRACKING,
+                    STATIC_SKELETON_BOMB_SHOP_LADY),
+        STATIC_POSE(STATIC_ANIM_BOMB_SHOP_LADY_SWAY, STATIC_POSE_FLAG_NO_TRACKING,
+                    STATIC_SKELETON_BOMB_SHOP_LADY),
+    },
+    [STATIC_STORY_ACTOR_ADULT_GANONDORF] = {
+        STATIC_POSE(STATIC_ANIM_ADULT_GANONDORF_STAND, STATIC_POSE_FLAG_NO_TRACKING,
+                    STATIC_SKELETON_ADULT_GANONDORF),
+    },
+    [STATIC_STORY_ACTOR_PHANTOM_GANON] = {
+        STATIC_POSE(STATIC_ANIM_PHANTOM_GANON_NEUTRAL, STATIC_POSE_FLAG_NO_TRACKING,
+                    STATIC_SKELETON_PHANTOM_GANON),
+    },
+    [STATIC_STORY_ACTOR_SKULL_KID] = {
+        STATIC_POSE(STATIC_ANIM_SKULL_KID_RECLINING_FLOAT, STATIC_POSE_FLAG_NO_TRACKING,
+                    STATIC_SKELETON_SKULL_KID),
+        STATIC_POSE(STATIC_ANIM_SKULL_KID_ARMS_CROSSED_FLOAT, STATIC_POSE_FLAG_NO_TRACKING,
+                    STATIC_SKELETON_SKULL_KID),
+    },
+    [STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN] = {
+        STATIC_POSE(STATIC_ANIM_HAPPY_MASK_SALESMAN_IDLE, STATIC_POSE_FLAG_NONE,
+                    STATIC_SKELETON_HAPPY_MASK_SALESMAN),
+        STATIC_POSE(STATIC_ANIM_HAPPY_MASK_SALESMAN_HANDS_CLASPED, STATIC_POSE_FLAG_NO_TRACKING,
+                    STATIC_SKELETON_HAPPY_MASK_SALESMAN),
+        STATIC_POSE(STATIC_ANIM_HAPPY_MASK_SALESMAN_ARMS_OUT, STATIC_POSE_FLAG_NO_TRACKING,
+                    STATIC_SKELETON_HAPPY_MASK_SALESMAN),
+    },
 };
 
 _Static_assert(sizeof(sDefinitions) / sizeof(sDefinitions[0]) == STATIC_STORY_ACTOR_MAX,
                "Every static story actor type needs a definition");
 _Static_assert(sizeof(sPoses) / sizeof(sPoses[0]) == STATIC_STORY_ACTOR_MAX,
                "Every static story actor type needs a pose row");
-enum { STATIC_STORY_DEFINITION_COUNT = 14, STATIC_STORY_POSE_ROW_COUNT = 14 };
+enum { STATIC_STORY_DEFINITION_COUNT = 19, STATIC_STORY_POSE_ROW_COUNT = 19 };
 _Static_assert(STATIC_STORY_DEFINITION_COUNT == STATIC_STORY_ACTOR_MAX - 1,
                "Definition count must change with the actor registry");
 _Static_assert(STATIC_STORY_POSE_ROW_COUNT == STATIC_STORY_ACTOR_MAX - 1,
@@ -158,6 +198,16 @@ StaticStoryActorType StaticStoryActor_GetType(int16_t params) {
                 return STATIC_STORY_ACTOR_ADULT_RUTO_WATER;
             case 4:
                 return STATIC_STORY_ACTOR_GREAT_FAIRY;
+            case 5:
+                return STATIC_STORY_ACTOR_BOMB_SHOP_LADY;
+            case 6:
+                return STATIC_STORY_ACTOR_ADULT_GANONDORF;
+            case 7:
+                return STATIC_STORY_ACTOR_PHANTOM_GANON;
+            case 8:
+                return STATIC_STORY_ACTOR_SKULL_KID;
+            case 9:
+                return STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN;
             default:
                 return STATIC_STORY_ACTOR_NONE;
         }
@@ -185,7 +235,13 @@ int16_t StaticStoryActor_GetAnimationObjectId(StaticStoryActorType type) {
     if (definition == NULL) {
         return OBJECT_INVALID;
     }
-    return type == STATIC_STORY_ACTOR_ADULT_ZELDA ? OBJECT_ZL2_ANIME2 : definition->objectId;
+    if (type == STATIC_STORY_ACTOR_ADULT_ZELDA) {
+        return OBJECT_ZL2_ANIME2;
+    }
+    if (type == STATIC_STORY_ACTOR_ADULT_GANONDORF) {
+        return OBJECT_GANON_ANIME2;
+    }
+    return definition->objectId;
 }
 
 StaticStoryObjectRequirements StaticStoryActor_GetObjectRequirements(StaticStoryActorType type) {
@@ -262,6 +318,12 @@ uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticSt
         case STATIC_STORY_ACTOR_ADULT_RUTO_WATER:
             return progression->waterComplete ? 0x403E : 0x402C;
         case STATIC_STORY_ACTOR_GREAT_FAIRY:
+            return 0x00DB;
+        case STATIC_STORY_ACTOR_BOMB_SHOP_LADY:
+        case STATIC_STORY_ACTOR_ADULT_GANONDORF:
+        case STATIC_STORY_ACTOR_PHANTOM_GANON:
+        case STATIC_STORY_ACTOR_SKULL_KID:
+        case STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN:
             return 0x00DB;
         default:
             return 0;
@@ -340,4 +402,15 @@ StaticStoryFaceProfile StaticStoryActor_GetFaceProfile(StaticStoryActorType type
         return STATIC_FACE_PROFILE_GREAT_FAIRY;
     }
     return STATIC_FACE_PROFILE_STANDARD;
+}
+
+StaticStoryResourceSource StaticStoryActor_GetResourceSource(StaticStoryActorType type) {
+    switch (type) {
+        case STATIC_STORY_ACTOR_BOMB_SHOP_LADY:
+        case STATIC_STORY_ACTOR_SKULL_KID:
+        case STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN:
+            return STATIC_STORY_RESOURCE_MM_ARCHIVE;
+        default:
+            return STATIC_STORY_RESOURCE_OOT_OBJECT;
+    }
 }
