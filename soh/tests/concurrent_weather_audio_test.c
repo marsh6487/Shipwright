@@ -47,5 +47,11 @@ int main(void) {
     REQUIRE(ConcurrentWeatherAudio_ThunderStyle(CONCURRENT_WEATHER_THUNDER_LIGHTNING) ==
             CONCURRENT_WEATHER_THUNDER_LIGHTNING);
     REQUIRE(ConcurrentWeatherAudio_ThunderStyle(999) == CONCURRENT_WEATHER_THUNDER_LOW);
+    REQUIRE(ConcurrentWeatherAudio_ThunderFrequencyScale(-5) == 0.0f);
+    REQUIRE(ConcurrentWeatherAudio_ThunderFrequencyScale(0) == 0.0f);
+    REQUIRE(ConcurrentWeatherAudio_ThunderFrequencyScale(25) == 0.5f);
+    REQUIRE(ConcurrentWeatherAudio_ThunderFrequencyScale(50) == 1.0f);
+    REQUIRE(ConcurrentWeatherAudio_ThunderFrequencyScale(100) == 2.0f);
+    REQUIRE(ConcurrentWeatherAudio_ThunderFrequencyScale(125) == 2.0f);
     return 0;
 }

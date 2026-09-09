@@ -1822,15 +1822,20 @@ void Environment_DrawLightningFlash(PlayState* play, u8 red, u8 green, u8 blue, 
 void Environment_UpdateLightningStrike(PlayState* play) {
     if (play->envCtx.lightningMode != LIGHTNING_MODE_OFF) {
         switch (gLightningStrike.state) {
-            case LIGHTNING_STRIKE_WAIT:
+            case LIGHTNING_STRIKE_WAIT: {
+                f32 thunderFrequencyScale =
+                    CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunder"), 1)
+                        ? ConcurrentWeatherAudio_ThunderFrequencyScale(
+                              CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunderFrequency"), 50))
+                        : 0.0f;
                 // every frame theres a 10% chance of the timer advancing 50 units
-                if (Rand_ZeroOne() < 0.1f) {
-                    gLightningStrike.delayTimer += 50.0f;
+                if (thunderFrequencyScale > 0.0f && Rand_ZeroOne() < 0.1f) {
+                    gLightningStrike.delayTimer += 50.0f * thunderFrequencyScale;
                 }
 
-                gLightningStrike.delayTimer += Rand_ZeroOne();
+                gLightningStrike.delayTimer += Rand_ZeroOne() * thunderFrequencyScale;
 
-                if (gLightningStrike.delayTimer > 500.0f) {
+                if (thunderFrequencyScale > 0.0f && gLightningStrike.delayTimer > 500.0f) {
                     gLightningStrike.flashRed = 200;
                     gLightningStrike.flashGreen = 200;
                     gLightningStrike.flashBlue = 255;
@@ -1871,6 +1876,7 @@ void Environment_UpdateLightningStrike(PlayState* play) {
                     gLightningStrike.state++;
                 }
                 break;
+            }
             case LIGHTNING_STRIKE_START:
                 gLightningStrike.flashRed = 200;
                 gLightningStrike.flashGreen = 200;

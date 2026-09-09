@@ -7,6 +7,7 @@
 #include "soh/Enhancements/audio/GlobalOutdoorRain.h"
 #include "soh/Enhancements/audio/GlobalOutdoorRainBridge.h"
 #include "soh/Enhancements/audio/WeatherSamplePlayer.h"
+#include "soh/ShipInit.hpp"
 
 static int sEnabled = 1;
 static int sMode = 0;
@@ -110,28 +111,30 @@ static void TestPlacedWeatherRainUsesPrivateLoop() {
     WeatherSfxEngine_StartDenseFlameHub();
     SetNatureRain(false);
 
-    GlobalOutdoorRain_NotifyNativeRainActive(1);
+    GlobalOutdoorRain_NotifyNativeRainActive(1, 0);
     RequireMixFrame(101);
 
-    GlobalOutdoorRain_NotifyNativeRainActive(0);
+    GlobalOutdoorRain_NotifyNativeRainActive(0, 0);
     RequireMixFrame(100);
 
     // Placed weather relinquishes the unscaled native rain channel and uses
     // the same live slider-controlled private loop as enhanced outdoor rain.
     SetNatureRain(true);
     sNatureRainWrites = 0;
-    GlobalOutdoorRain_NotifyNativeRainActive(1);
+    GlobalOutdoorRain_NotifyNativeRainActive(1, 0);
     REQUIRE(sNatureRainWrites == 1);
     RequireMixFrame(101);
     sRainVolume = 0;
-    GlobalOutdoorRain_NotifyNativeRainActive(1);
+    GlobalOutdoorRain_NotifyNativeRainActive(1, 0);
     RequireMixFrame(100);
     sRainVolume = 100;
-    GlobalOutdoorRain_NotifyNativeRainActive(0);
+    GlobalOutdoorRain_NotifyNativeRainActive(0, 0);
     SetNatureRain(false);
 }
 
 int main() {
+    // Live color changes are read during rendering and must never stack update hooks.
+    REQUIRE(RegisterShipInitFunc::updatePathCount == 0);
     TestSimultaneousEngineAndWeatherVoices();
     TestDenseFlameHubDoesNotStealNaviOrThunder();
     TestPlacedWeatherRainUsesPrivateLoop();
@@ -187,6 +190,7 @@ int main() {
     for (int frame = 0; frame < 62; ++frame)
         GlobalOutdoorRain_Update(&play);
     REQUIRE(play.envCtx.unk_EE[0] == 25);
+    REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_ON);
     RequireMixFrame(101);
 
     // Persistent -> intermittent resets to dry immediately, including audio.
@@ -194,6 +198,7 @@ int main() {
     sMode = 1;
     GlobalOutdoorRain_Update(&play);
     REQUIRE(play.envCtx.unk_EE[0] == 0);
+    REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_OFF);
     RequireMixFrame(100);
 
     // Exercise a full intermittent fade-out: dry must leave no residual loop.
@@ -217,12 +222,14 @@ int main() {
     GlobalOutdoorRain_Update(&play);
     RequireMixFrame(106);
 
-    GlobalOutdoorRain_NotifyNativeRainActive(1);
+    GlobalOutdoorRain_NotifyNativeRainActive(1, 1);
+    play.envCtx.lightningMode = LIGHTNING_MODE_ON;
     play.envCtx.unk_EE[0] = 40;
     play.envCtx.indoors = 1;
     sEnabled = 0;
     GlobalOutdoorRain_Update(&play);
     REQUIRE(play.envCtx.unk_EE[0] == 40);
+    REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_ON);
     RequireMixFrame(107);
     uint8_t red = 0, green = 0, blue = 0;
     const bool nativeHasEnhancedColor = GlobalOutdoorRain_GetRenderColor(&red, &green, &blue);
@@ -232,7 +239,7 @@ int main() {
     GlobalOutdoorRain_Update(&play);
     REQUIRE(play.envCtx.unk_EE[0] == 40);
     RequireMixFrame(108);
-    GlobalOutdoorRain_NotifyNativeRainActive(0);
+    GlobalOutdoorRain_NotifyNativeRainActive(0, 1);
     play.envCtx.unk_EE[0] = 0;
     GlobalOutdoorRain_Update(&play);
     const bool enhancedHasColor = GlobalOutdoorRain_GetRenderColor(&red, &green, &blue);
@@ -248,7 +255,7 @@ int main() {
     sEnabled = 0;
     GlobalOutdoorRain_Update(&play);
     RequireMixFrame(101);
-    GlobalOutdoorRain_NotifyNativeRainActive(1);
+    GlobalOutdoorRain_NotifyNativeRainActive(1, 0);
     GlobalOutdoorRain_Update(&play);
     RequireMixFrame(102);
     GlobalOutdoorRain_Reset();
@@ -261,6 +268,22 @@ int main() {
     sEnabled = 1;
     for (int frame = 0; frame < 62; ++frame)
         GlobalOutdoorRain_Update(&play);
+    REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_ON);
+
+    // Rain-only placed weather suppresses lightning owned by enhanced rain.
+    GlobalOutdoorRain_NotifyNativeRainActive(1, 0);
+    GlobalOutdoorRain_Update(&play);
+    REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_OFF);
+    GlobalOutdoorRain_NotifyNativeRainActive(0, 0);
+    GlobalOutdoorRain_Update(&play);
+    REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_ON);
+
+    // A placed thunderstorm takes ownership and preserves its native mode.
+    GlobalOutdoorRain_NotifyNativeRainActive(1, 1);
+    GlobalOutdoorRain_Update(&play);
+    REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_ON);
+    GlobalOutdoorRain_NotifyNativeRainActive(0, 1);
+
     sRainVolume = 0;
     GlobalOutdoorRain_Update(&play);
     REQUIRE(play.envCtx.unk_EE[0] == 25);

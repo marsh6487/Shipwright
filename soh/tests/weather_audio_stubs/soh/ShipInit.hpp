@@ -1,6 +1,9 @@
 #pragma once
 #include <initializer_list>
 struct RegisterShipInitFunc {
-    RegisterShipInitFunc(void (*)(), std::initializer_list<const char*>) {
+    static inline int updatePathCount = 0;
+
+    RegisterShipInitFunc(void (*)(), std::initializer_list<const char*> updatePaths = {}) {
+        updatePathCount += static_cast<int>(updatePaths.size());
     }
 };

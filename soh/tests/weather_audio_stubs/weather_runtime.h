@@ -20,11 +20,15 @@ struct PlayState {
         uint8_t indoors;
         uint8_t skyboxDisabled;
         uint8_t gloomySkyMode;
+        uint8_t lightningMode;
         uint8_t unk_EE[4];
     } envCtx;
 };
 #define SKYBOX_NORMAL_SKY 1
 #define CS_STATE_IDLE 0
+#define LIGHTNING_MODE_OFF 0
+#define LIGHTNING_MODE_ON 1
+#define LIGHTNING_MODE_LAST 2
 extern "C" {
 Color_RGB8 CVarGetColor24(const char*, Color_RGB8);
 int16_t Rand_S16Offset(int16_t base, int16_t range);

@@ -40,6 +40,10 @@ static inline ConcurrentWeatherThunderStyle ConcurrentWeatherAudio_ThunderStyle(
                : CONCURRENT_WEATHER_THUNDER_LOW;
 }
 
+static inline float ConcurrentWeatherAudio_ThunderFrequencyScale(int32_t percent) {
+    return ConcurrentWeatherAudio_ClampPercent(percent) / 50.0f;
+}
+
 static inline void ConcurrentWeatherAudio_TrackNatureChannel(ConcurrentWeatherAudioState* state,
                                                               uint8_t channelRange, uint8_t port, uint8_t value,
                                                               uint8_t rainChannel, uint8_t lightningChannel,

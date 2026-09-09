@@ -31,6 +31,19 @@ enum class GlobalOutdoorRainOvercastDecision {
     Restore,
 };
 
+enum class GlobalOutdoorRainLightningDecision {
+    NoChange,
+    Enable,
+    Restore,
+};
+
+struct GlobalOutdoorRainLightningState {
+    bool thunderEnabled;
+    bool enhancedRainActive;
+    bool lightningAlreadyActive;
+    bool ownsLightning;
+};
+
 struct GlobalOutdoorRainOvercastState {
     bool enabled;
     bool outdoors;
@@ -65,6 +78,7 @@ void GlobalOutdoorRain_AdvanceCycle(GlobalOutdoorRainCycle& cycle, GlobalOutdoor
 int GlobalOutdoorRain_ScaleDensity(int density, float intensity);
 float GlobalOutdoorRain_ScaleVolume(float volume, float intensity);
 GlobalOutdoorRainOvercastDecision GlobalOutdoorRain_SelectOvercast(const GlobalOutdoorRainOvercastState& state);
+GlobalOutdoorRainLightningDecision GlobalOutdoorRain_SelectLightning(const GlobalOutdoorRainLightningState& state);
 GlobalOutdoorRainColor GlobalOutdoorRain_SelectColor(GlobalOutdoorRainSource source,
                                                      GlobalOutdoorRainColor vanillaColor,
                                                      GlobalOutdoorRainColor configuredColor);

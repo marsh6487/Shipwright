@@ -134,5 +134,20 @@ int main() {
     REQUIRE(selected.red == blue.red);
     REQUIRE(selected.green == blue.green);
     REQUIRE(selected.blue == blue.blue);
+
+    GlobalOutdoorRainLightningState lightning = {
+        .thunderEnabled = true,
+        .enhancedRainActive = true,
+        .lightningAlreadyActive = false,
+        .ownsLightning = false,
+    };
+    REQUIRE(GlobalOutdoorRain_SelectLightning(lightning) == GlobalOutdoorRainLightningDecision::Enable);
+    lightning.lightningAlreadyActive = true;
+    REQUIRE(GlobalOutdoorRain_SelectLightning(lightning) == GlobalOutdoorRainLightningDecision::NoChange);
+    lightning.ownsLightning = true;
+    lightning.enhancedRainActive = false;
+    REQUIRE(GlobalOutdoorRain_SelectLightning(lightning) == GlobalOutdoorRainLightningDecision::Restore);
+    lightning.ownsLightning = false;
+    REQUIRE(GlobalOutdoorRain_SelectLightning(lightning) == GlobalOutdoorRainLightningDecision::NoChange);
     return 0;
 }

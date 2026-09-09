@@ -42,6 +42,7 @@ static WidgetInfo proximityWeatherThunder;
 static WidgetInfo proximityWeatherThunderStyle;
 static WidgetInfo proximityWeatherRainVolume;
 static WidgetInfo proximityWeatherThunderVolume;
+static WidgetInfo proximityWeatherThunderFrequency;
 static WidgetInfo hyruleFieldNightMusic;
 static WidgetInfo globalOutdoorRain;
 static WidgetInfo globalOutdoorRainMode;
@@ -1084,13 +1085,14 @@ void RegisterAudioWidgets() {
     SohGui::mSohMenu->AddSearchWidget(
         { weatherAudioDiagnostics, "Enhancements", "Audio Editor", "Audio Options" });
 
-    proximityWeatherThunder = { .name = "Enable Proximity Weather Thunder",
+    proximityWeatherThunder = { .name = "Enable Weather Thunder",
                                 .type = WidgetType::WIDGET_CVAR_CHECKBOX };
     proximityWeatherThunder.CVar(CVAR_AUDIO("ProximityWeatherThunder"))
         .Options(CheckboxOptions()
                      .Color(THEME_COLOR)
                      .DefaultValue(true)
-                     .Tooltip("Plays native OoT thunder at the synchronized proximity-weather lightning strike."));
+                     .Tooltip("Enables synchronized lightning and thunder for placed, persistent, and intermittent "
+                              "weather."));
     SohGui::mSohMenu->AddSearchWidget({ proximityWeatherThunder, "Enhancements", "Audio Editor", "Audio Options" });
 
     proximityWeatherThunderStyle = { .name = "Thunder Style", .type = WidgetType::WIDGET_CVAR_COMBOBOX };
@@ -1103,19 +1105,28 @@ void RegisterAudioWidgets() {
     SohGui::mSohMenu->AddSearchWidget(
         { proximityWeatherThunderStyle, "Enhancements", "Audio Editor", "Audio Options" });
 
-    proximityWeatherRainVolume = { .name = "Proximity Rain Volume: %d%%",
+    proximityWeatherRainVolume = { .name = "Weather Rain Volume: %d%%",
                                    .type = WidgetType::WIDGET_CVAR_SLIDER_INT };
     proximityWeatherRainVolume.CVar(CVAR_AUDIO("ProximityWeatherRainVolume"))
         .Options(IntSliderOptions().Color(THEME_COLOR).Min(0).Max(100).DefaultValue(50).Size(ImVec2(300.0f, 0.0f)));
     SohGui::mSohMenu->AddSearchWidget(
         { proximityWeatherRainVolume, "Enhancements", "Audio Editor", "Audio Options" });
 
-    proximityWeatherThunderVolume = { .name = "Proximity Thunder Volume: %d%%",
+    proximityWeatherThunderVolume = { .name = "Weather Thunder Volume: %d%%",
                                       .type = WidgetType::WIDGET_CVAR_SLIDER_INT };
     proximityWeatherThunderVolume.CVar(CVAR_AUDIO("ProximityWeatherThunderVolume"))
         .Options(IntSliderOptions().Color(THEME_COLOR).Min(0).Max(100).DefaultValue(70).Size(ImVec2(300.0f, 0.0f)));
     SohGui::mSohMenu->AddSearchWidget(
         { proximityWeatherThunderVolume, "Enhancements", "Audio Editor", "Audio Options" });
+
+    proximityWeatherThunderFrequency = { .name = "Weather Thunder Frequency: %d%%",
+                                         .type = WidgetType::WIDGET_CVAR_SLIDER_INT };
+    proximityWeatherThunderFrequency.CVar(CVAR_AUDIO("ProximityWeatherThunderFrequency"))
+        .Options(IntSliderOptions().Color(THEME_COLOR).Min(0).Max(100).DefaultValue(50).Size(ImVec2(300.0f, 0.0f))
+                     .Tooltip("Controls the shared lightning cadence. 50% preserves the native timing; 0% disables "
+                              "strikes and 100% approximately doubles their frequency."));
+    SohGui::mSohMenu->AddSearchWidget(
+        { proximityWeatherThunderFrequency, "Enhancements", "Audio Editor", "Audio Options" });
 
     randomAudioGenModes = { .name = "Automatically Randomize All Music and Sound Effects",
                             .type = WidgetType::WIDGET_CVAR_COMBOBOX };
