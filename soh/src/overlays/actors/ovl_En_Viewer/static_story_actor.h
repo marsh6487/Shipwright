@@ -72,6 +72,7 @@ typedef enum {
     STATIC_TRACKING_ADULT_MALON,
     STATIC_TRACKING_DARUNIA,
     STATIC_TRACKING_NABOORU,
+    STATIC_TRACKING_ADULT_ZELDA,
 } StaticStoryTrackingAdapter;
 
 typedef enum {

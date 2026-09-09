@@ -390,9 +390,12 @@ static void EnViewerStatic_SetRutoWaterAnimation(EnViewer* this, StaticRutoWater
     float lastFrame = Animation_GetLastFrame(&gAdultRutoSwimmingUpAnim);
 
     switch (phase) {
-        case STATIC_RUTO_PHASE_DIVING:
+        case STATIC_RUTO_PHASE_PREPARING_DIVE:
             Animation_Change(&this->skin.skelAnime, &gAdultRutoSwimmingUpAnim, -1.0f, lastFrame, 0.0f, ANIMMODE_ONCE,
                              -4.0f);
+            break;
+        case STATIC_RUTO_PHASE_DIVING:
+            this->skin.skelAnime.playSpeed = 0.0f;
             break;
         case STATIC_RUTO_PHASE_RISING:
             Animation_Change(&this->skin.skelAnime, &gAdultRutoSwimmingUpAnim, 1.0f, 0.0f, lastFrame, ANIMMODE_ONCE,
@@ -1334,21 +1337,27 @@ static s32 EnViewer_StaticAdultRutoOverrideLimbDraw(PlayState* play, s32 limbInd
 
     if (this->staticState.type == STATIC_STORY_ACTOR_ADULT_RUTO_WATER &&
         this->staticState.rutoWater.phase == STATIC_RUTO_PHASE_SURFACED) {
-        s16 tread = (s16)(Math_SinS(this->staticState.rutoWater.treadPhase) * 0x180);
+        s16 tread = (s16)(Math_SinS(this->staticState.rutoWater.treadPhase) * 0x300);
+        s16 leftHip;
+        s16 leftKnee;
+        s16 rightHip;
+        s16 rightKnee;
 
-        /* A restrained alternating kick keeps the otherwise static adult skeleton from standing rigidly in water. */
+        StaticRutoWater_GetTreadLegRotations(tread, &leftHip, &leftKnee, &rightHip, &rightKnee);
         if (limbIndex == 2) {
-            rot->z += 0x180 + tread;
+            rot->z += leftHip;
         } else if (limbIndex == 3) {
-            rot->z -= 0x300 + tread;
+            rot->z += leftKnee;
         } else if (limbIndex == 6) {
-            rot->z += 0x180 - tread;
+            rot->z += rightHip;
         } else if (limbIndex == 7) {
-            rot->z -= 0x300 - tread;
+            rot->z += rightKnee;
         }
     }
 
-    if (StaticStoryActor_CanTrack((StaticStoryActorType)this->staticState.type, this->staticState.pose)) {
+    if (StaticStoryActor_CanTrack((StaticStoryActorType)this->staticState.type, this->staticState.pose) &&
+        (this->staticState.type != STATIC_STORY_ACTOR_ADULT_RUTO_WATER ||
+         StaticRutoWater_CanTrack(&this->staticState.rutoWater))) {
         /* object_ru2's 23-limb hierarchy: torso 9, head 20. */
         if (limbIndex == 9) {
             rot->x += this->staticState.interactInfo.torsoRot.y;
@@ -1467,13 +1476,22 @@ void EnViewer_DrawStaticAdultMalon(EnViewer* this, PlayState* play) {
 
 static s32 EnViewer_StaticAdultZeldaOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
                                                      Vec3s* rot, void* thisx, Gfx** gfx) {
-    const EnViewer* this = (EnViewer*)thisx;
+    EnViewer* this = (EnViewer*)thisx;
     const StaticStoryActorDefinition* definition =
         StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_ZELDA);
     Mtx* faceMtx;
 
     (void)dList;
-    (void)this;
+    if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_ZELDA, this->staticState.pose)) {
+        /* Native En_Zl3 convention for object_zl2: torso 7, head/face 14. */
+        if (limbIndex == 7) {
+            rot->x += this->staticState.interactInfo.torsoRot.y;
+            rot->y -= this->staticState.interactInfo.torsoRot.x;
+        } else if (limbIndex == 14) {
+            rot->x += this->staticState.interactInfo.headRot.y;
+            rot->z += this->staticState.interactInfo.headRot.x;
+        }
+    }
 
     if (limbIndex != 14 || definition == NULL || definition->drawContract != STATIC_DRAW_CONTRACT_FACE_FLEX) {
         return false;

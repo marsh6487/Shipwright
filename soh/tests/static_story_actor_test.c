@@ -135,7 +135,8 @@ int main(void) {
     assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SHEIK, 0));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SHEIK, 2));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_FADO, 3));
-    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_ZELDA, 0));
+    assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_ZELDA, 0));
+    assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 2));
     assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_RUTO, 0));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_CHILD_MALON, 1));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SARIA, 2));
@@ -154,7 +155,8 @@ int main(void) {
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_FADO)->trackingAdapter == STATIC_TRACKING_KOKIRI);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_MALON)->trackingAdapter ==
            STATIC_TRACKING_ADULT_MALON);
-    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_ZELDA)->trackingAdapter == STATIC_TRACKING_NONE);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_ZELDA)->trackingAdapter ==
+           STATIC_TRACKING_ADULT_ZELDA);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_RUTO)->trackingAdapter ==
            STATIC_TRACKING_ADULT_RUTO);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_IMPA)->trackingPreset == 12);

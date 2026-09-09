@@ -13,6 +13,7 @@ typedef enum {
 typedef enum {
     STATIC_RUTO_PHASE_GROUNDED,
     STATIC_RUTO_PHASE_SURFACED,
+    STATIC_RUTO_PHASE_PREPARING_DIVE,
     STATIC_RUTO_PHASE_DIVING,
     STATIC_RUTO_PHASE_SUBMERGED,
     STATIC_RUTO_PHASE_RISING,
@@ -43,5 +44,8 @@ void StaticRutoWater_Init(StaticRutoWaterState* state, StaticRutoWaterMode mode,
                           float surfaceY);
 StaticRutoWaterEvents StaticRutoWater_Update(StaticRutoWaterState* state, bool hasWater, float surfaceY,
                                              bool playerNear, bool animationEnded, uint16_t diveDelay);
+bool StaticRutoWater_CanTrack(const StaticRutoWaterState* state);
+void StaticRutoWater_GetTreadLegRotations(int16_t treadOffset, int16_t* leftHip, int16_t* leftKnee,
+                                          int16_t* rightHip, int16_t* rightKnee);
 
 #endif

@@ -17,7 +17,7 @@ static const StaticStoryActorDefinition sDefinitions[STATIC_STORY_ACTOR_MAX] = {
     [STATIC_STORY_ACTOR_SARIA] = { 3, 1, OBJECT_SA, STATIC_ADAPTER_SARIA, 0.01f, 40.0f, 20, 46, 0, 30, 30, 70.0f,
                                    STATIC_TRACKING_SARIA, 2, 4.0f },
     [STATIC_STORY_ACTOR_ADULT_ZELDA] = { 1, 1, OBJECT_ZL2, STATIC_ADAPTER_ADULT_ZELDA, 0.01f, 60.0f, 25, 80, 0, 30, 30,
-                                         90.0f, STATIC_TRACKING_NONE, 0, 0.0f, 0.0f,
+                                         90.0f, STATIC_TRACKING_ADULT_ZELDA, 12, -3.0f, 0.0f,
                                          STATIC_DRAW_CONTRACT_FACE_FLEX },
     [STATIC_STORY_ACTOR_SHEIK] = { 2, 1, OBJECT_XC, STATIC_ADAPTER_SHEIK, 0.01f, 52.0f, 25, 80, 0, 60, 60, 90.0f,
                                    STATIC_TRACKING_SHEIK, 12, -3.0f },
@@ -105,7 +105,7 @@ static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STO
                           STATIC_RUTO_GROUNDED),
         STATIC_WATER_POSE(STATIC_ANIM_ADULT_RUTO_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_RUTO,
                           STATIC_RUTO_SURFACE),
-        STATIC_WATER_POSE(STATIC_ANIM_ADULT_RUTO_IDLE, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_ADULT_RUTO,
+        STATIC_WATER_POSE(STATIC_ANIM_ADULT_RUTO_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_RUTO,
                           STATIC_RUTO_DIVE_LOOP),
     },
     [STATIC_STORY_ACTOR_DARUNIA] = {

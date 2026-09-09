@@ -24,6 +24,11 @@ int main(void) {
     StaticRutoWaterEvents events;
     float firstTreadY;
     int rippleSeen = 0;
+    int fadeFrames = 0;
+    int16_t leftHip;
+    int16_t leftKnee;
+    int16_t rightHip;
+    int16_t rightKnee;
     int i;
 
     /* A missing initial water query must not erase the placement's requested mode. */
@@ -58,6 +63,13 @@ int main(void) {
     assert(state.treadPhase != 0);
     assert(state.currentY >= 44.5f && state.currentY <= 47.5f);
     assert(rippleSeen);
+    assert(StaticRutoWater_CanTrack(&state));
+    StaticRutoWater_GetTreadLegRotations(0, &leftHip, &leftKnee, &rightHip, &rightKnee);
+    assert(leftHip >= 0x400 && rightHip >= 0x400);
+    assert(leftKnee <= -0x800 && rightKnee <= -0x800);
+    StaticRutoWater_GetTreadLegRotations(0x300, &leftHip, &leftKnee, &rightHip, &rightKnee);
+    assert(leftHip != rightHip);
+    assert(leftKnee != rightKnee);
 
     /* Dive-loop Ruto stays hidden at authored depth until Link approaches. */
     StaticRutoWater_Init(&state, STATIC_RUTO_DIVE_LOOP, true, 10.0f, 100.0f);
@@ -82,15 +94,25 @@ int main(void) {
     for (i = 0; i < 60; ++i) {
         events |= StaticRutoWater_Update(&state, true, 100.0f, false, false, 60);
     }
+    assert(state.phase == STATIC_RUTO_PHASE_PREPARING_DIVE);
+    assert(state.velocityY == 0.0f);
+    assert((events & STATIC_RUTO_WATER_EVENT_DIVE) == 0);
+    assert(!StaticRutoWater_CanTrack(&state));
+    events = StaticRutoWater_Update(&state, true, 100.0f, false, false, 60);
+    assert(state.phase == STATIC_RUTO_PHASE_PREPARING_DIVE);
+    assert(state.currentY >= 44.5f && state.currentY <= 47.5f);
+    events = StaticRutoWater_Update(&state, true, 100.0f, false, true, 60);
     assert(state.phase == STATIC_RUTO_PHASE_DIVING);
     assert(state.velocityY == -4.0f);
+    assert(state.alpha == 255);
     assert((events & STATIC_RUTO_WATER_EVENT_DIVE) != 0);
-    events = StaticRutoWater_Update(&state, true, 100.0f, false, false, 60);
-    assert(state.alpha < 255);
-    events = StaticRutoWater_Update(&state, true, 100.0f, false, true, 60);
+    while (state.phase == STATIC_RUTO_PHASE_DIVING && fadeFrames < 100) {
+        StaticRutoWater_Update(&state, true, 100.0f, false, false, 60);
+        fadeFrames++;
+    }
     assert(state.phase == STATIC_RUTO_PHASE_SUBMERGED);
     assert(state.currentY == state.homeY);
-    assert((events & STATIC_RUTO_WATER_EVENT_SUBMERGED) != 0);
+    assert(fadeFrames >= 26);
 
     /* Losing a water box is recoverable and never changes the selected water mode. */
     StaticRutoWater_Update(&state, false, 0.0f, false, false, 60);
