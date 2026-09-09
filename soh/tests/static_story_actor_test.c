@@ -39,10 +39,20 @@ int main(void) {
     assert(StaticStoryActor_GetType((int16_t)0x7E02) == STATIC_STORY_ACTOR_NABOORU);
     assert(StaticStoryActor_GetType((int16_t)0x7E03) == STATIC_STORY_ACTOR_ADULT_RUTO_WATER);
     assert(StaticStoryActor_GetType((int16_t)0x7E04) == STATIC_STORY_ACTOR_GREAT_FAIRY);
+    assert(StaticStoryActor_GetType((int16_t)0x7E05) == STATIC_STORY_ACTOR_BOMB_SHOP_LADY);
+    assert(StaticStoryActor_GetType((int16_t)0x7E15) == STATIC_STORY_ACTOR_BOMB_SHOP_LADY);
+    assert(StaticStoryActor_GetType((int16_t)0x7E25) == STATIC_STORY_ACTOR_BOMB_SHOP_LADY);
+    assert(StaticStoryActor_GetType((int16_t)0x7E06) == STATIC_STORY_ACTOR_ADULT_GANONDORF);
+    assert(StaticStoryActor_GetType((int16_t)0x7E07) == STATIC_STORY_ACTOR_PHANTOM_GANON);
+    assert(StaticStoryActor_GetType((int16_t)0x7E08) == STATIC_STORY_ACTOR_SKULL_KID);
+    assert(StaticStoryActor_GetType((int16_t)0x7E18) == STATIC_STORY_ACTOR_SKULL_KID);
+    assert(StaticStoryActor_GetType((int16_t)0x7E09) == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN);
+    assert(StaticStoryActor_GetType((int16_t)0x7E19) == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN);
+    assert(StaticStoryActor_GetType((int16_t)0x7E29) == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN);
     assert(StaticStoryActor_GetPose((int16_t)0x7E11) == 1);
     assert(StaticStoryActor_GetPose((int16_t)0x7E23) == 2);
     assert(StaticStoryActor_GetType((int16_t)0x7E00) == STATIC_STORY_ACTOR_NONE);
-    assert(StaticStoryActor_GetType((int16_t)0x7E05) == STATIC_STORY_ACTOR_NONE);
+    assert(StaticStoryActor_GetType((int16_t)0x7E0A) == STATIC_STORY_ACTOR_NONE);
     assert(StaticStoryActor_GetType((int16_t)0x7D01) == STATIC_STORY_ACTOR_NONE);
     assert(StaticStoryActor_GetType((int16_t)0x7F06) == STATIC_STORY_ACTOR_ADULT_RUTO);
     assert(StaticStoryActor_GetType(0x7F00) == 0);
@@ -80,6 +90,49 @@ int main(void) {
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_GREAT_FAIRY, 2)->animation ==
            STATIC_ANIM_GREAT_FAIRY_AFTER_SPELL);
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_GREAT_FAIRY, &early) == 0x00DB);
+    assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_BOMB_SHOP_LADY) ==
+           STATIC_STORY_RESOURCE_MM_ARCHIVE);
+    assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_SKULL_KID) == STATIC_STORY_RESOURCE_MM_ARCHIVE);
+    assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN) ==
+           STATIC_STORY_RESOURCE_MM_ARCHIVE);
+    assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_PHANTOM_GANON) == STATIC_STORY_RESOURCE_OOT_OBJECT);
+    assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_ADULT_GANONDORF) ==
+           STATIC_STORY_RESOURCE_OOT_OBJECT);
+    assert(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_ADULT_GANONDORF));
+    assert(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN));
+    assert(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_BOMB_SHOP_LADY));
+    assert(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_SKULL_KID));
+    assert(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_PHANTOM_GANON));
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 0)->animation ==
+           STATIC_ANIM_BOMB_SHOP_LADY_IDLE);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 1)->animation ==
+           STATIC_ANIM_BOMB_SHOP_LADY_HOLDING_BAG);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 2)->animation ==
+           STATIC_ANIM_BOMB_SHOP_LADY_SWAY);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_SKULL_KID, 0)->animation ==
+           STATIC_ANIM_SKULL_KID_RECLINING_FLOAT);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_SKULL_KID, 1)->animation ==
+           STATIC_ANIM_SKULL_KID_ARMS_CROSSED_FLOAT);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_PHANTOM_GANON, 0)->animation ==
+           STATIC_ANIM_PHANTOM_GANON_NEUTRAL);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_GANONDORF, 0)->animation ==
+           STATIC_ANIM_ADULT_GANONDORF_STAND);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, 0)->animation ==
+           STATIC_ANIM_HAPPY_MASK_SALESMAN_IDLE);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, 1)->animation ==
+           STATIC_ANIM_HAPPY_MASK_SALESMAN_HANDS_CLASPED);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, 2)->animation ==
+           STATIC_ANIM_HAPPY_MASK_SALESMAN_ARMS_OUT);
+    assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 0));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 1));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 2));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SKULL_KID, 0));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SKULL_KID, 1));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_PHANTOM_GANON, 0));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_GANONDORF, 0));
+    assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, 0));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, 1));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, 2));
     assert(StaticStoryActor_GetTrackingMode(STATIC_STORY_ACTOR_GREAT_FAIRY, 0) == STATIC_TRACKING_MODE_FULL);
     assert(StaticStoryActor_GetTrackingMode(STATIC_STORY_ACTOR_GREAT_FAIRY, 1) == STATIC_TRACKING_MODE_HEAD_ONLY);
     assert(StaticStoryActor_GetTrackingMode(STATIC_STORY_ACTOR_GREAT_FAIRY, 2) == STATIC_TRACKING_MODE_HEAD_ONLY);
