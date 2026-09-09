@@ -250,6 +250,7 @@ int16_t StaticStoryActor_GetAnimationObjectId(StaticStoryActorType type);
 StaticStoryObjectRequirements StaticStoryActor_GetObjectRequirements(StaticStoryActorType type);
 const StaticStoryPoseDescriptor* StaticStoryActor_ResolvePose(StaticStoryActorType type, uint8_t pose);
 uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticStoryProgression* progression);
+bool StaticStoryActor_ShouldCloseEventMessage(bool isEventState, bool shouldAdvance);
 int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose);
 StaticStoryTrackingMode StaticStoryActor_GetTrackingMode(StaticStoryActorType type, uint8_t pose);
 StaticStoryAdultRutoTrackingLimb StaticStoryActor_GetAdultRutoTrackingLimb(int limbIndex);

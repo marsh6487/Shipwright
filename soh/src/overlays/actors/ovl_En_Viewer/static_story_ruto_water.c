@@ -14,12 +14,15 @@ bool StaticRutoWater_CanTrack(const StaticRutoWaterState* state) {
     return state->phase == STATIC_RUTO_PHASE_GROUNDED || state->phase == STATIC_RUTO_PHASE_SURFACED;
 }
 
-void StaticRutoWater_GetTreadLegRotations(int16_t treadOffset, int16_t* leftHip, int16_t* leftKnee,
-                                          int16_t* rightHip, int16_t* rightKnee) {
-    *leftHip = 0xA00 + treadOffset;
-    *leftKnee = -0x1800 - treadOffset;
-    *rightHip = 0xA00 - treadOffset;
-    *rightKnee = -0x1800 + treadOffset;
+bool StaticRutoWater_ShouldTurnBody(const StaticRutoWaterState* state) {
+    return state->phase == STATIC_RUTO_PHASE_SURFACED;
+}
+
+void StaticRutoWater_GetTreadLegPose(int16_t treadOffset, StaticRutoWaterLegPose* pose) {
+    pose->leftHip = (StaticRutoWaterLimbRotation){ -0xA00 - treadOffset, 0, 0 };
+    pose->leftKnee = (StaticRutoWaterLimbRotation){ 0x1800 + treadOffset, 0, 0 };
+    pose->rightHip = (StaticRutoWaterLimbRotation){ -0xA00 + treadOffset, 0, 0 };
+    pose->rightKnee = (StaticRutoWaterLimbRotation){ 0x1800 - treadOffset, 0, 0 };
 }
 
 static uint8_t StaticRutoWater_AlphaForDepth(float currentY, float surfaceTarget) {

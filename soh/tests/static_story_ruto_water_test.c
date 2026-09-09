@@ -25,10 +25,7 @@ int main(void) {
     float firstTreadY;
     int rippleSeen = 0;
     int fadeFrames = 0;
-    int16_t leftHip;
-    int16_t leftKnee;
-    int16_t rightHip;
-    int16_t rightKnee;
+    StaticRutoWaterLegPose legPose;
     int i;
 
     /* A missing initial water query must not erase the placement's requested mode. */
@@ -65,12 +62,15 @@ int main(void) {
     assert(state.currentY >= 54.5f && state.currentY <= 57.5f);
     assert(rippleSeen);
     assert(StaticRutoWater_CanTrack(&state));
-    StaticRutoWater_GetTreadLegRotations(0, &leftHip, &leftKnee, &rightHip, &rightKnee);
-    assert(leftHip >= 0x800 && rightHip >= 0x800);
-    assert(leftKnee <= -0x1400 && rightKnee <= -0x1400);
-    StaticRutoWater_GetTreadLegRotations(0x300, &leftHip, &leftKnee, &rightHip, &rightKnee);
-    assert(leftHip != rightHip);
-    assert(leftKnee != rightKnee);
+    StaticRutoWater_GetTreadLegPose(0, &legPose);
+    assert(legPose.leftHip.x <= -0x800 && legPose.rightHip.x <= -0x800);
+    assert(legPose.leftKnee.x >= 0x1400 && legPose.rightKnee.x >= 0x1400);
+    assert(legPose.leftHip.y == 0 && legPose.leftHip.z == 0);
+    assert(legPose.leftKnee.y == 0 && legPose.leftKnee.z == 0);
+    StaticRutoWater_GetTreadLegPose(0x300, &legPose);
+    assert(legPose.leftHip.x != legPose.rightHip.x);
+    assert(legPose.leftKnee.x != legPose.rightKnee.x);
+    assert(StaticRutoWater_ShouldTurnBody(&state));
 
     /* Dive-loop Ruto stays hidden at authored depth until Link approaches. */
     StaticRutoWater_Init(&state, STATIC_RUTO_DIVE_LOOP, true, 10.0f, 100.0f);
@@ -99,6 +99,7 @@ int main(void) {
     assert(state.velocityY == 0.0f);
     assert((events & STATIC_RUTO_WATER_EVENT_DIVE) == 0);
     assert(!StaticRutoWater_CanTrack(&state));
+    assert(!StaticRutoWater_ShouldTurnBody(&state));
     events = StaticRutoWater_Update(&state, true, 100.0f, false, false, 60);
     assert(state.phase == STATIC_RUTO_PHASE_PREPARING_DIVE);
     assert(state.currentY >= 54.5f && state.currentY <= 57.5f);

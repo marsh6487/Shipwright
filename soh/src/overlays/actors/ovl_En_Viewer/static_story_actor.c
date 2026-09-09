@@ -334,6 +334,10 @@ int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose) {
     return StaticStoryActor_GetTrackingMode(type, pose) != STATIC_TRACKING_MODE_NONE;
 }
 
+bool StaticStoryActor_ShouldCloseEventMessage(bool isEventState, bool shouldAdvance) {
+    return isEventState && shouldAdvance;
+}
+
 StaticStoryTrackingMode StaticStoryActor_GetTrackingMode(StaticStoryActorType type, uint8_t pose) {
     const StaticStoryPoseDescriptor* poseDescriptor = StaticStoryActor_ResolvePose(type, pose);
     const StaticStoryActorDefinition* definition = StaticStoryActor_GetDefinition(type);

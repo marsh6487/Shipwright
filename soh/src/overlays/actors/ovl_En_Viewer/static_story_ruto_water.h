@@ -40,12 +40,25 @@ typedef struct {
     uint16_t treadPhase;
 } StaticRutoWaterState;
 
+typedef struct {
+    int16_t x;
+    int16_t y;
+    int16_t z;
+} StaticRutoWaterLimbRotation;
+
+typedef struct {
+    StaticRutoWaterLimbRotation leftHip;
+    StaticRutoWaterLimbRotation leftKnee;
+    StaticRutoWaterLimbRotation rightHip;
+    StaticRutoWaterLimbRotation rightKnee;
+} StaticRutoWaterLegPose;
+
 void StaticRutoWater_Init(StaticRutoWaterState* state, StaticRutoWaterMode mode, bool hasWater, float homeY,
                           float surfaceY);
 StaticRutoWaterEvents StaticRutoWater_Update(StaticRutoWaterState* state, bool hasWater, float surfaceY,
                                              bool playerNear, bool animationEnded, uint16_t diveDelay);
 bool StaticRutoWater_CanTrack(const StaticRutoWaterState* state);
-void StaticRutoWater_GetTreadLegRotations(int16_t treadOffset, int16_t* leftHip, int16_t* leftKnee,
-                                          int16_t* rightHip, int16_t* rightKnee);
+bool StaticRutoWater_ShouldTurnBody(const StaticRutoWaterState* state);
+void StaticRutoWater_GetTreadLegPose(int16_t treadOffset, StaticRutoWaterLegPose* pose);
 
 #endif

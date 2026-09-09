@@ -90,6 +90,9 @@ int main(void) {
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_GREAT_FAIRY, 2)->animation ==
            STATIC_ANIM_GREAT_FAIRY_AFTER_SPELL);
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_GREAT_FAIRY, &early) == 0x00DB);
+    assert(StaticStoryActor_ShouldCloseEventMessage(true, true));
+    assert(!StaticStoryActor_ShouldCloseEventMessage(true, false));
+    assert(!StaticStoryActor_ShouldCloseEventMessage(false, true));
     assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_BOMB_SHOP_LADY) ==
            STATIC_STORY_RESOURCE_MM_ARCHIVE);
     assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_SKULL_KID) == STATIC_STORY_RESOURCE_MM_ARCHIVE);

@@ -736,6 +736,11 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
     if (canInteract) {
         EnViewerStatic_OfferTalk(this, play);
         EnViewerStatic_UpdateTracking(this, play);
+        if (this->staticState.type == STATIC_STORY_ACTOR_ADULT_RUTO_WATER && this->staticState.tracking &&
+            StaticRutoWater_ShouldTurnBody(&this->staticState.rutoWater)) {
+            Math_SmoothStepToS(&this->actor.shape.rot.y, this->actor.yawTowardsPlayer, 4, 0x400, 1);
+            this->actor.world.rot.y = this->actor.shape.rot.y;
+        }
     }
 }
 
@@ -810,7 +815,11 @@ void EnViewerStatic_OfferTalk(EnViewer* this, PlayState* play) {
 
     if (this->staticState.talking) {
         this->staticState.tracking = true;
-        if (Message_GetState(&play->msgCtx) == TEXT_STATE_CLOSING) {
+        if (Message_GetState(&play->msgCtx) == TEXT_STATE_EVENT &&
+            StaticStoryActor_ShouldCloseEventMessage(true, Message_ShouldAdvance(play))) {
+            Message_CloseTextbox(play);
+            EnViewerStatic_RestorePlacementPose(this);
+        } else if (Message_GetState(&play->msgCtx) == TEXT_STATE_CLOSING) {
             EnViewerStatic_RestorePlacementPose(this);
         }
         return;
@@ -1446,20 +1455,17 @@ static s32 EnViewer_StaticAdultRutoOverrideLimbDraw(PlayState* play, s32 limbInd
     if (this->staticState.type == STATIC_STORY_ACTOR_ADULT_RUTO_WATER &&
         this->staticState.rutoWater.phase == STATIC_RUTO_PHASE_SURFACED) {
         s16 tread = (s16)(Math_SinS(this->staticState.rutoWater.treadPhase) * 0x300);
-        s16 leftHip;
-        s16 leftKnee;
-        s16 rightHip;
-        s16 rightKnee;
+        StaticRutoWaterLegPose legPose;
 
-        StaticRutoWater_GetTreadLegRotations(tread, &leftHip, &leftKnee, &rightHip, &rightKnee);
+        StaticRutoWater_GetTreadLegPose(tread, &legPose);
         if (limbIndex == 2) {
-            rot->z += leftHip;
+            rot->x += legPose.leftHip.x;
         } else if (limbIndex == 3) {
-            rot->z += leftKnee;
+            rot->x += legPose.leftKnee.x;
         } else if (limbIndex == 6) {
-            rot->z += rightHip;
+            rot->x += legPose.rightHip.x;
         } else if (limbIndex == 7) {
-            rot->z += rightKnee;
+            rot->x += legPose.rightKnee.x;
         }
     }
 
