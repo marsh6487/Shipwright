@@ -680,10 +680,9 @@ void AudioEditor::DrawElement() {
                     SohGui::mSohMenu->MenuDrawItem(globalOutdoorRainColor,
                                                    static_cast<uint32_t>(ImGui::GetContentRegionAvail().x),
                                                    THEME_COLOR);
-                    SohGui::mSohMenu->MenuDrawItem(globalOutdoorRainOvercast,
-                                                   static_cast<uint32_t>(ImGui::GetContentRegionAvail().x),
-                                                   THEME_COLOR);
                 }
+                SohGui::mSohMenu->MenuDrawItem(globalOutdoorRainOvercast,
+                                               static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunder,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunderStyle,
@@ -691,6 +690,8 @@ void AudioEditor::DrawElement() {
                 SohGui::mSohMenu->MenuDrawItem(proximityWeatherRainVolume,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunderVolume,
+                                               static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
+                SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunderFrequency,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 SohGui::mSohMenu->MenuDrawItem(weatherAudioDiagnostics,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
@@ -1063,14 +1064,14 @@ void RegisterAudioWidgets() {
                               "proximity-weather rain keep their original color."));
     SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRainColor, "Enhancements", "Audio Editor", "Audio Options" });
 
-    globalOutdoorRainOvercast = { .name = "Overcast Sky During Global Rain",
+    globalOutdoorRainOvercast = { .name = "Overcast Sky During Rain",
                                   .type = WidgetType::WIDGET_CVAR_CHECKBOX };
     globalOutdoorRainOvercast.CVar(CVAR_AUDIO("GlobalOutdoorRainOvercast"))
         .Options(CheckboxOptions()
                      .Color(THEME_COLOR)
                      .DefaultValue(true)
-                     .Tooltip("Fades the normal outdoor sky and lighting to the native overcast palette while "
-                              "global rain is active. Proximity-weather actors keep their authored sky behavior."));
+                     .Tooltip("Fades compatible outdoor skies and lighting to the native overcast palette during "
+                              "placed thunderstorms, persistent rain, and intermittent rain."));
     SohGui::mSohMenu->AddSearchWidget(
         { globalOutdoorRainOvercast, "Enhancements", "Audio Editor", "Audio Options" });
 
