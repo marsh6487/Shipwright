@@ -91,7 +91,7 @@ float GlobalOutdoorRain_ScaleVolume(float volume, float intensity) {
 }
 
 GlobalOutdoorRainOvercastDecision GlobalOutdoorRain_SelectOvercast(const GlobalOutdoorRainOvercastState& state) {
-    const bool shouldOwn = state.enabled && state.outdoors && state.compatibleSky && state.enhancedRainActive;
+    const bool shouldOwn = state.enabled && state.outdoors && state.compatibleSky && state.rainActive;
     if (shouldOwn && !state.ownsOvercast) {
         return GlobalOutdoorRainOvercastDecision::Enable;
     }
@@ -213,8 +213,9 @@ static void UpdateOvercast(PlayState* play, bool enabled, bool outdoors) {
         .enabled = enabled,
         .outdoors = outdoors,
         .compatibleSky = compatibleSky,
-        .enhancedRainActive = sRainSource == GlobalOutdoorRainSource::EnhancedOutdoor &&
-                              sCycle.phase != GlobalOutdoorRainPhase::Dry,
+        .rainActive = sRainSource == GlobalOutdoorRainSource::NativePlaced ||
+                      (sRainSource == GlobalOutdoorRainSource::EnhancedOutdoor &&
+                       sCycle.phase != GlobalOutdoorRainPhase::Dry),
         .ownsOvercast = sOwnsOvercast,
     };
 
@@ -241,7 +242,7 @@ static int RandomDryFrames() {
 }
 
 static int RandomSustainFrames() {
-    return Rand_S16Offset(15 * kFramesPerSecond, 30 * kFramesPerSecond);
+    return Rand_S16Offset(8 * kFramesPerSecond, 15 * kFramesPerSecond);
 }
 
 static void PlayRainLoop(float intensity) {
