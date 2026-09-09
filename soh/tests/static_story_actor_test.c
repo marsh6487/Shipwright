@@ -14,6 +14,7 @@
 
 int main(void) {
     const StaticStoryActorDefinition* definition;
+    StaticStoryObjectRequirements objects;
     StaticStoryProgression early = { 0 };
     StaticStoryProgression complete = {
         .metZelda = true,
@@ -69,12 +70,16 @@ int main(void) {
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, &complete) == 0x403E);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->objectId == OBJECT_DU);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->adapter == STATIC_ADAPTER_DARUNIA);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->drawContract ==
+           STATIC_DRAW_CONTRACT_NPC_FLEX);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_DARUNIA, 0)->animation == STATIC_ANIM_DARUNIA_IDLE);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_DARUNIA, 1)->animation == STATIC_ANIM_DARUNIA_DANCE_1);
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_DARUNIA, 1));
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_DARUNIA, &complete) != 0);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_NABOORU)->objectId == OBJECT_NB);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_NABOORU)->adapter == STATIC_ADAPTER_NABOORU);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_NABOORU)->drawContract ==
+           STATIC_DRAW_CONTRACT_STANDARD_OPA);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_NABOORU, 0)->animation == STATIC_ANIM_NABOORU_IDLE);
     assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_NABOORU, 0));
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_NABOORU, &complete) != 0);
@@ -83,6 +88,18 @@ int main(void) {
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->objectId == OBJECT_RU1);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_CHILD_RUTO, 2)->animation == STATIC_ANIM_CHILD_RUTO_SITTING);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_ZELDA)->objectId == OBJECT_ZL2);
+    objects = StaticStoryActor_GetObjectRequirements(STATIC_STORY_ACTOR_ADULT_RUTO_WATER);
+    assert(objects.modelObjectId == OBJECT_RU2);
+    assert(objects.animationObjectId == OBJECT_RU2);
+    objects = StaticStoryActor_GetObjectRequirements(STATIC_STORY_ACTOR_NABOORU);
+    assert(objects.modelObjectId == OBJECT_NB);
+    assert(objects.animationObjectId == OBJECT_NB);
+    objects = StaticStoryActor_GetObjectRequirements(STATIC_STORY_ACTOR_ADULT_ZELDA);
+    assert(objects.modelObjectId == OBJECT_ZL2);
+    assert(objects.animationObjectId == OBJECT_ZL2_ANIME2);
+    objects = StaticStoryActor_GetObjectRequirements(STATIC_STORY_ACTOR_DARUNIA);
+    assert(objects.modelObjectId == OBJECT_DU);
+    assert(objects.animationObjectId == OBJECT_DU);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_ZELDA, 0) != NULL);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_ZELDA, 1) != NULL);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_ZELDA, 1)->skeletonFamily ==

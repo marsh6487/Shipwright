@@ -31,7 +31,7 @@ static const StaticStoryActorDefinition sDefinitions[STATIC_STORY_ACTOR_MAX] = {
     [STATIC_STORY_ACTOR_ADULT_MALON] = { 3, 1, OBJECT_MA2, STATIC_ADAPTER_ADULT_MALON, 0.01f, 52.0f, 18, 46, 0, 30, 30,
                                          80.0f, STATIC_TRACKING_ADULT_MALON, 0, 0.0f },
     [STATIC_STORY_ACTOR_DARUNIA] = { 1, 1, OBJECT_DU, STATIC_ADAPTER_DARUNIA, 0.01f, 60.0f, 28, 70, 0, 30, 30, 120.0f,
-                                     STATIC_TRACKING_DARUNIA, 12, 0.0f },
+                                     STATIC_TRACKING_DARUNIA, 12, 0.0f, 0.0f, STATIC_DRAW_CONTRACT_NPC_FLEX },
     [STATIC_STORY_ACTOR_NABOORU] = { 0, 1, OBJECT_NB, STATIC_ADAPTER_NABOORU, 0.01f, 60.0f, 25, 80, 0, 30, 30, 110.0f,
                                      STATIC_TRACKING_NABOORU, 12, 0.0f },
     [STATIC_STORY_ACTOR_ADULT_RUTO_WATER] = { 2, 1, OBJECT_RU2, STATIC_ADAPTER_ADULT_RUTO, 0.01f, 54.0f, 30, 100, 0, 60,
@@ -173,6 +173,17 @@ int16_t StaticStoryActor_GetAnimationObjectId(StaticStoryActorType type) {
         return OBJECT_INVALID;
     }
     return type == STATIC_STORY_ACTOR_ADULT_ZELDA ? OBJECT_ZL2_ANIME2 : definition->objectId;
+}
+
+StaticStoryObjectRequirements StaticStoryActor_GetObjectRequirements(StaticStoryActorType type) {
+    const StaticStoryActorDefinition* definition = StaticStoryActor_GetDefinition(type);
+    StaticStoryObjectRequirements requirements = { OBJECT_INVALID, OBJECT_INVALID };
+
+    if (definition != NULL) {
+        requirements.modelObjectId = definition->objectId;
+        requirements.animationObjectId = StaticStoryActor_GetAnimationObjectId(type);
+    }
+    return requirements;
 }
 
 int StaticStoryActor_IsAvailable(StaticStoryActorType type) {

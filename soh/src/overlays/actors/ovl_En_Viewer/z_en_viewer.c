@@ -60,6 +60,8 @@ static void EnViewerStatic_InitRutoWater(EnViewer* this, PlayState* play,
                                          const StaticStoryPoseDescriptor* poseDescriptor);
 static bool EnViewerStatic_UpdateRutoWater(EnViewer* this, PlayState* play, bool animationEnded);
 s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
+void ActorCatalogue_LogLifecycle(const char* stage, int params, int type, int pose, int modelObjectId, int modelSlot,
+                                 int animationObjectId, int animationSlot);
 
 static u8 sHorseSfxPlayed = false;
 
@@ -356,6 +358,7 @@ static void EnViewerStatic_SetDaruniaDanceStep(EnViewer* this, uint8_t step) {
 
 void EnViewerStatic_Init(EnViewer* this, PlayState* play) {
     StaticStoryActorType type = StaticStoryActor_GetType(this->actor.params);
+    StaticStoryObjectRequirements objects = StaticStoryActor_GetObjectRequirements(type);
 
     this->staticState.type = type;
     this->staticState.pose = StaticStoryActor_SanitizePose(type, StaticStoryActor_GetPose(this->actor.params));
@@ -370,6 +373,9 @@ void EnViewerStatic_Init(EnViewer* this, PlayState* play) {
     this->staticState.previousRutoWaterPhase = STATIC_RUTO_PHASE_GROUNDED;
     this->staticState.danceStep = 0;
     this->staticState.diagnosticDrawLogged = false;
+    this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
+    ActorCatalogue_LogLifecycle("init", this->actor.params, type, this->staticState.pose, objects.modelObjectId, -1,
+                                objects.animationObjectId, -1);
     EnViewer_SetupAction(this, EnViewerStatic_WaitForObjects);
 }
 
@@ -449,6 +455,8 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         StaticStoryActor_GetDefinition((StaticStoryActorType)this->staticState.type);
     const StaticStoryPoseDescriptor* poseDescriptor =
         StaticStoryActor_ResolvePose((StaticStoryActorType)this->staticState.type, this->staticState.pose);
+    StaticStoryObjectRequirements objects =
+        StaticStoryActor_GetObjectRequirements((StaticStoryActorType)this->staticState.type);
     int16_t objectSlot = this->staticState.objectSlots[0];
 
     if (definition == NULL || !definition->available || poseDescriptor == NULL) {
@@ -464,9 +472,9 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
             return;
         } else if (this->staticState.type != STATIC_STORY_ACTOR_FADO &&
                    this->staticState.type != STATIC_STORY_ACTOR_KOKIRI_GIRL) {
-            this->staticState.objectSlots[0] = Object_GetIndex(&play->objectCtx, definition->objectId);
+            this->staticState.objectSlots[0] = Object_GetIndex(&play->objectCtx, objects.modelObjectId);
             if (this->staticState.objectSlots[0] < 0) {
-                this->staticState.objectSlots[0] = Object_Spawn(&play->objectCtx, definition->objectId);
+                this->staticState.objectSlots[0] = Object_Spawn(&play->objectCtx, objects.modelObjectId);
             }
             if (this->staticState.objectSlots[0] < 0) {
                 osSyncPrintf("Static story actor: object request failed for type %d\n", this->staticState.type);
@@ -476,19 +484,25 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         }
         objectSlot = this->staticState.objectSlots[0];
     }
-    if (this->staticState.type == STATIC_STORY_ACTOR_ADULT_ZELDA && this->staticState.objectSlots[1] < 0) {
-        int16_t animationObjectId = StaticStoryActor_GetAnimationObjectId(STATIC_STORY_ACTOR_ADULT_ZELDA);
-
-        this->staticState.objectSlots[1] = Object_GetIndex(&play->objectCtx, animationObjectId);
-        if (this->staticState.objectSlots[1] < 0) {
-            this->staticState.objectSlots[1] = Object_Spawn(&play->objectCtx, animationObjectId);
+    if (this->staticState.type != STATIC_STORY_ACTOR_FADO &&
+        this->staticState.type != STATIC_STORY_ACTOR_KOKIRI_GIRL && this->staticState.objectSlots[1] < 0) {
+        if (objects.animationObjectId == objects.modelObjectId) {
+            this->staticState.objectSlots[1] = objectSlot;
+        } else {
+            this->staticState.objectSlots[1] = Object_GetIndex(&play->objectCtx, objects.animationObjectId);
         }
         if (this->staticState.objectSlots[1] < 0) {
-            osSyncPrintf("Static story actor: Zelda animation object request failed\n");
+            this->staticState.objectSlots[1] = Object_Spawn(&play->objectCtx, objects.animationObjectId);
+        }
+        if (this->staticState.objectSlots[1] < 0) {
+            osSyncPrintf("Static story actor: animation object request failed for type %d\n", this->staticState.type);
             Actor_Kill(&this->actor);
             return;
         }
     }
+    ActorCatalogue_LogLifecycle("objects", this->actor.params, this->staticState.type, this->staticState.pose,
+                                objects.modelObjectId, this->staticState.objectSlots[0], objects.animationObjectId,
+                                this->staticState.objectSlots[1]);
     for (int slot = 0; slot < 4 && this->staticState.objectSlots[slot] >= 0; ++slot) {
         if (!Object_IsLoaded(&play->objectCtx, this->staticState.objectSlots[slot])) {
             this->actor.flags &= ~ACTOR_FLAG_INSIDE_CULLING_VOLUME;
@@ -500,11 +514,10 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         (this->staticState.type == STATIC_STORY_ACTOR_FADO || this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL)
             ? this->staticState.objectSlots[2]
             : objectSlot;
-    this->animObjBankIndex = this->staticState.type == STATIC_STORY_ACTOR_ADULT_ZELDA ? this->staticState.objectSlots[1]
-                             : (this->staticState.type == STATIC_STORY_ACTOR_FADO ||
+    this->animObjBankIndex = (this->staticState.type == STATIC_STORY_ACTOR_FADO ||
                                 this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL)
                                  ? this->staticState.objectSlots[3]
-                                 : objectSlot;
+                                 : this->staticState.objectSlots[1];
     this->isVisible = true;
     Actor_SetObjectDependency(play, &this->actor);
     Actor_SetScale(&this->actor, definition->scale);
@@ -534,6 +547,9 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
     this->staticState.tracking = false;
     this->staticState.interactInfo.talkState = NPC_TALK_STATE_IDLE;
     this->staticState.initialized = true;
+    ActorCatalogue_LogLifecycle("ready", this->actor.params, this->staticState.type, this->staticState.pose,
+                                objects.modelObjectId, this->actor.objBankIndex, objects.animationObjectId,
+                                this->animObjBankIndex);
     osSyncPrintf(
         "[ActorCatalogueProbe] ready params=%04X type=%d pose=%d modelObj=%d modelSlot=%d animSlot=%d limbs=%d "
         "pos=(%.2f,%.2f,%.2f) visible=%d\n",
@@ -1424,12 +1440,16 @@ static s32 EnViewer_StaticDaruniaOverrideLimbDraw(PlayState* play, s32 limbIndex
 void EnViewer_DrawStaticDarunia(EnViewer* this, PlayState* play) {
     static void* sEyes[] = { gDaruniaEyeOpenTex, gDaruniaEyeOpeningTex, gDaruniaEyeShutTex };
     bool dancing = this->staticState.pose == 1;
+    const StaticStoryActorDefinition* definition = StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA);
 
     OPEN_DISPS(play->state.gfxCtx);
     gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
     gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(dancing ? gDaruniaMouthHappyTex : gDaruniaMouthSeriousTex));
     gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(dancing ? gDaruniaNoseHappyTex : gDaruniaNoseSeriousTex));
-    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, EnViewer_StaticDaruniaOverrideLimbDraw, NULL, this);
+    if (definition != NULL && definition->drawContract == STATIC_DRAW_CONTRACT_NPC_FLEX) {
+        /* Darunia's object uses the native NPC flex contract, including segment 0x0C and environment state. */
+        func_80034BA0(play, &this->skin.skelAnime, EnViewer_StaticDaruniaOverrideLimbDraw, NULL, &this->actor, 255);
+    }
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
@@ -1519,6 +1539,12 @@ void EnViewer_Draw(Actor* thisx, PlayState* play) {
         type = (u16)this->actor.params >> 8;
         if (this->staticState.type != STATIC_STORY_ACTOR_NONE && this->staticState.initialized) {
             if (!this->staticState.diagnosticDrawLogged) {
+                StaticStoryObjectRequirements objects =
+                    StaticStoryActor_GetObjectRequirements((StaticStoryActorType)this->staticState.type);
+
+                ActorCatalogue_LogLifecycle("draw", this->actor.params, this->staticState.type,
+                                            this->staticState.pose, objects.modelObjectId, this->actor.objBankIndex,
+                                            objects.animationObjectId, this->animObjBankIndex);
                 osSyncPrintf(
                     "[ActorCatalogueProbe] draw params=%04X type=%d pose=%d modelSlot=%d animSlot=%d limbs=%d "
                     "pos=(%.2f,%.2f,%.2f) projectedZ=%.2f flags=%08X\n",

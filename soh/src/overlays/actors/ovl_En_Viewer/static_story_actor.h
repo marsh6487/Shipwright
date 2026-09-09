@@ -75,6 +75,11 @@ typedef enum {
 } StaticStoryTrackingAdapter;
 
 typedef enum {
+    STATIC_DRAW_CONTRACT_STANDARD_OPA,
+    STATIC_DRAW_CONTRACT_NPC_FLEX,
+} StaticStoryDrawContract;
+
+typedef enum {
     STATIC_ANIM_NONE,
     STATIC_ANIM_IMPA_IDLE,
     STATIC_ANIM_MALON_IDLE,
@@ -159,7 +164,13 @@ typedef struct {
     int16_t trackingPreset;
     float trackingYOffset;
     float trackingTargetYOffset;
+    StaticStoryDrawContract drawContract;
 } StaticStoryActorDefinition;
+
+typedef struct {
+    int16_t modelObjectId;
+    int16_t animationObjectId;
+} StaticStoryObjectRequirements;
 
 int StaticStoryActor_IsParam(int16_t params);
 StaticStoryActorType StaticStoryActor_GetType(int16_t params);
@@ -168,6 +179,7 @@ uint8_t StaticStoryActor_SanitizePose(StaticStoryActorType type, uint8_t pose);
 int StaticStoryActor_IsAvailable(StaticStoryActorType type);
 const StaticStoryActorDefinition* StaticStoryActor_GetDefinition(StaticStoryActorType type);
 int16_t StaticStoryActor_GetAnimationObjectId(StaticStoryActorType type);
+StaticStoryObjectRequirements StaticStoryActor_GetObjectRequirements(StaticStoryActorType type);
 const StaticStoryPoseDescriptor* StaticStoryActor_ResolvePose(StaticStoryActorType type, uint8_t pose);
 uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticStoryProgression* progression);
 int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose);
