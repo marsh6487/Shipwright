@@ -48,7 +48,7 @@ struct GlobalOutdoorRainOvercastState {
     bool enabled;
     bool outdoors;
     bool compatibleSky;
-    bool enhancedRainActive;
+    bool rainActive;
     bool ownsOvercast;
 };
 
