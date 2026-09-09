@@ -44,6 +44,8 @@ int main(void) {
     REQUIRE(ConcurrentWeatherAudio_ThunderStyle(-1) == CONCURRENT_WEATHER_THUNDER_LOW);
     REQUIRE(ConcurrentWeatherAudio_ThunderStyle(CONCURRENT_WEATHER_THUNDER_LAYERED) ==
             CONCURRENT_WEATHER_THUNDER_LAYERED);
+    REQUIRE(ConcurrentWeatherAudio_ThunderStyle(CONCURRENT_WEATHER_THUNDER_LIGHTNING) ==
+            CONCURRENT_WEATHER_THUNDER_LIGHTNING);
     REQUIRE(ConcurrentWeatherAudio_ThunderStyle(999) == CONCURRENT_WEATHER_THUNDER_LOW);
     return 0;
 }

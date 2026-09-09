@@ -1849,13 +1849,19 @@ void Environment_UpdateLightningStrike(PlayState* play) {
                             CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunderStyle"),
                                            CONCURRENT_WEATHER_THUNDER_LOW));
 
-                        s32 lowThunderStarted = WeatherSamplePlayer_Play(
-                            "audio/samples/Low Thunder_META",
-                            thunderStyle == CONCURRENT_WEATHER_THUNDER_LAYERED ? thunderGain * 0.7f : thunderGain);
+                        s32 lowThunderStarted = -1;
+                        if (thunderStyle != CONCURRENT_WEATHER_THUNDER_LIGHTNING) {
+                            lowThunderStarted = WeatherSamplePlayer_Play(
+                                "audio/samples/Low Thunder_META",
+                                thunderStyle == CONCURRENT_WEATHER_THUNDER_LAYERED ? thunderGain * 0.7f : thunderGain);
+                        }
                         s32 lightningStarted = -1;
-                        if (thunderStyle == CONCURRENT_WEATHER_THUNDER_LAYERED) {
+                        if (thunderStyle != CONCURRENT_WEATHER_THUNDER_LOW) {
                             lightningStarted =
-                                WeatherSamplePlayer_Play("audio/samples/Lightning_META", thunderGain * 0.7f);
+                                WeatherSamplePlayer_Play("audio/samples/Lightning_META",
+                                                         thunderStyle == CONCURRENT_WEATHER_THUNDER_LAYERED
+                                                             ? thunderGain * 0.7f
+                                                             : thunderGain);
                         }
                         if (CVarGetInteger(CVAR_AUDIO("WeatherAudioDiagnostics"), 0)) {
                             osSyncPrintf("[weather-audio] lightning trigger low=%d layer=%d style=%d gain=%.3f\n",

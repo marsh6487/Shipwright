@@ -11,7 +11,9 @@
 static int sEnabled = 1;
 static int sMode = 0;
 static int sRainVolume = 100;
+static int sOvercast = 1;
 static ConcurrentWeatherAudioState sNatureWeather = {};
+static int sNatureRainWrites = 0;
 GameInteractor* GameInteractor::Instance = nullptr;
 extern "C" {
 PlayState* gPlayState = nullptr;
@@ -25,6 +27,8 @@ int32_t CVarGetInteger(const char* name, int32_t fallback) {
         return sMode;
     if (std::strcmp(name, "gAudioEditor.ProximityWeatherRainVolume") == 0)
         return sRainVolume;
+    if (std::strcmp(name, "gAudioEditor.GlobalOutdoorRainOvercast") == 0)
+        return sOvercast;
     return fallback;
 }
 Color_RGB8 CVarGetColor24(const char*, Color_RGB8 fallback) {
@@ -37,6 +41,10 @@ int16_t Rand_S16Offset(int16_t base, int16_t) {
 // Run the real policy used by code_800EC960.c, not a weather eligibility mock.
 uint8_t Audio_IsNatureRainEnabled(void) {
     return !ConcurrentWeatherAudio_ShouldPlayRainSfx(&sNatureWeather, 0x0001, 0x0001);
+}
+void Audio_SetNatureAmbienceChannelIO(uint8_t channel, uint8_t port, uint8_t value) {
+    ++sNatureRainWrites;
+    ConcurrentWeatherAudio_TrackNatureChannel(&sNatureWeather, channel, port, value, 0x0E, 0x0F, 1);
 }
 }
 
@@ -108,10 +116,17 @@ static void TestPlacedWeatherRainUsesPrivateLoop() {
     GlobalOutdoorRain_NotifyNativeRainActive(0);
     RequireMixFrame(100);
 
-    // Native nature ambience remains authoritative when it already owns rain.
+    // Placed weather relinquishes the unscaled native rain channel and uses
+    // the same live slider-controlled private loop as enhanced outdoor rain.
     SetNatureRain(true);
+    sNatureRainWrites = 0;
+    GlobalOutdoorRain_NotifyNativeRainActive(1);
+    REQUIRE(sNatureRainWrites == 1);
+    RequireMixFrame(101);
+    sRainVolume = 0;
     GlobalOutdoorRain_NotifyNativeRainActive(1);
     RequireMixFrame(100);
+    sRainVolume = 100;
     GlobalOutdoorRain_NotifyNativeRainActive(0);
     SetNatureRain(false);
 }
@@ -120,6 +135,28 @@ int main() {
     TestSimultaneousEngineAndWeatherVoices();
     TestDenseFlameHubDoesNotStealNaviOrThunder();
     TestPlacedWeatherRainUsesPrivateLoop();
+
+    // Overcast follows the enhanced rain lifecycle, stays off fixed skies,
+    // and is reclaimed by the incoming PlayState without restarting audio.
+    WeatherSamplePlayer_Init();
+    GlobalOutdoorRain_Reset();
+    sEnabled = 1;
+    sMode = 0;
+    sOvercast = 1;
+    PlayState overcastPlay = {};
+    overcastPlay.skyboxId = SKYBOX_NORMAL_SKY;
+    GlobalOutdoorRain_Update(&overcastPlay);
+    REQUIRE(overcastPlay.envCtx.gloomySkyMode == 1);
+    GlobalOutdoorRain_OnPlayDestroy();
+    PlayState incomingOvercastPlay = {};
+    incomingOvercastPlay.skyboxId = SKYBOX_NORMAL_SKY;
+    GlobalOutdoorRain_Update(&incomingOvercastPlay);
+    REQUIRE(incomingOvercastPlay.envCtx.gloomySkyMode == 1);
+    sOvercast = 0;
+    GlobalOutdoorRain_Update(&incomingOvercastPlay);
+    REQUIRE(incomingOvercastPlay.envCtx.gloomySkyMode == 2);
+    GlobalOutdoorRain_Reset();
+    sOvercast = 1;
 
     // A normal scene handoff must not restart the authored rain loop. The next
     // outdoor PlayState adopts the existing global voice and cycle.
@@ -186,7 +223,7 @@ int main() {
     sEnabled = 0;
     GlobalOutdoorRain_Update(&play);
     REQUIRE(play.envCtx.unk_EE[0] == 40);
-    RequireMixFrame(106);
+    RequireMixFrame(107);
     uint8_t red = 0, green = 0, blue = 0;
     const bool nativeHasEnhancedColor = GlobalOutdoorRain_GetRenderColor(&red, &green, &blue);
     REQUIRE(!nativeHasEnhancedColor);
@@ -194,7 +231,7 @@ int main() {
     sEnabled = 1;
     GlobalOutdoorRain_Update(&play);
     REQUIRE(play.envCtx.unk_EE[0] == 40);
-    RequireMixFrame(106);
+    RequireMixFrame(108);
     GlobalOutdoorRain_NotifyNativeRainActive(0);
     play.envCtx.unk_EE[0] = 0;
     GlobalOutdoorRain_Update(&play);

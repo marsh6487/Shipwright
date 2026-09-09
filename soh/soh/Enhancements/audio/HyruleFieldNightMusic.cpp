@@ -53,6 +53,11 @@ bool HyruleFieldNightMusic_ShouldRestoreDaySequence(const HyruleFieldNightMusicS
            !state.explicitAudioOverride && !state.fanfarePlaying;
 }
 
+bool HyruleFieldNightMusic_ShouldStopDaySequence(const HyruleFieldNightMusicState& state) {
+    return state.enabled && state.inHyruleField && state.isNight && !state.ownsNightBgm &&
+           !state.explicitAudioOverride && !state.fanfarePlaying;
+}
+
 #ifndef HYRULE_FIELD_NIGHT_MUSIC_TEST
 #include "AudioCollection.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
@@ -110,6 +115,9 @@ void HyruleFieldNightMusic_Update(PlayState* play) {
 
     switch (HyruleFieldNightMusic_Select(state)) {
         case HyruleFieldNightMusicDecision::StartNight: {
+            if (HyruleFieldNightMusic_ShouldStopDaySequence(state)) {
+                Audio_QueueSeqCmd((0x1 << 28) | (SEQ_PLAYER_BGM_MAIN << 24) | (0x1E << 16) | 0xFF);
+            }
             const uint16_t selected =
                 static_cast<uint16_t>(CVarGetInteger(CVAR_AUDIO("HyruleFieldNightSequence"), kDefaultNightSequence));
             const uint16_t playbackSequence = HyruleFieldNightMusic_StartSequence(

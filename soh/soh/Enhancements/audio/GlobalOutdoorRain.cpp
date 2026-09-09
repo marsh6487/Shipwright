@@ -90,6 +90,17 @@ float GlobalOutdoorRain_ScaleVolume(float volume, float intensity) {
     return volume * GlobalOutdoorRain_ClampIntensity(intensity);
 }
 
+GlobalOutdoorRainOvercastDecision GlobalOutdoorRain_SelectOvercast(const GlobalOutdoorRainOvercastState& state) {
+    const bool shouldOwn = state.enabled && state.outdoors && state.compatibleSky && state.enhancedRainActive;
+    if (shouldOwn && !state.ownsOvercast) {
+        return GlobalOutdoorRainOvercastDecision::Enable;
+    }
+    if (!shouldOwn && state.ownsOvercast) {
+        return GlobalOutdoorRainOvercastDecision::Restore;
+    }
+    return GlobalOutdoorRainOvercastDecision::NoChange;
+}
+
 GlobalOutdoorRainColor GlobalOutdoorRain_SelectColor(GlobalOutdoorRainSource source,
                                                      GlobalOutdoorRainColor vanillaColor,
                                                      GlobalOutdoorRainColor configuredColor) {
@@ -107,6 +118,7 @@ GlobalOutdoorRainColor GlobalOutdoorRain_SelectColor(GlobalOutdoorRainSource sou
 
 extern "C" {
 #include "functions.h"
+#include "sequence.h"
 #include "sfx.h"
 #include "variables.h"
 #include "z64.h"
@@ -120,6 +132,7 @@ static GlobalOutdoorRainSource sRainSource = GlobalOutdoorRainSource::None;
 static int sLastMode = -1;
 static GlobalOutdoorRainCycle sCycle = { GlobalOutdoorRainPhase::Dry, 0, 0.0f };
 static bool sOwnsFallbackLoop = false;
+static bool sOwnsOvercast = false;
 static void PlayRainLoop(float intensity);
 
 extern "C" int32_t GlobalOutdoorRain_GetRenderColor(uint8_t* red, uint8_t* green, uint8_t* blue) {
@@ -138,10 +151,46 @@ extern "C" int32_t GlobalOutdoorRain_GetRenderColor(uint8_t* red, uint8_t* green
 extern "C" void GlobalOutdoorRain_NotifyNativeRainActive(int32_t active) {
     if (active) {
         sRainSource = GlobalOutdoorRainSource::NativePlaced;
+        // Native nature rain has no per-feature gain. Hand only that channel
+        // off to the private loop so placed and enhanced rain share the same
+        // live volume curve without occupying ordinary SFX voices.
+        if (Audio_IsNatureRainEnabled()) {
+            Audio_SetNatureAmbienceChannelIO(NATURE_CHANNEL_RAIN, CHANNEL_IO_PORT_1, 0);
+        }
         PlayRainLoop(1.0f);
     } else if (sRainSource == GlobalOutdoorRainSource::NativePlaced) {
         PlayRainLoop(0.0f);
         sRainSource = GlobalOutdoorRainSource::None;
+    }
+}
+
+static void UpdateOvercast(PlayState* play, bool enabled, bool outdoors) {
+    const bool compatibleSky = play->skyboxId == SKYBOX_NORMAL_SKY && !play->envCtx.skyboxDisabled &&
+                               play->csCtx.state == CS_STATE_IDLE;
+    const GlobalOutdoorRainOvercastState state = {
+        .enabled = enabled,
+        .outdoors = outdoors,
+        .compatibleSky = compatibleSky,
+        .enhancedRainActive = sRainSource == GlobalOutdoorRainSource::EnhancedOutdoor &&
+                              sCycle.phase != GlobalOutdoorRainPhase::Dry,
+        .ownsOvercast = sOwnsOvercast,
+    };
+
+    switch (GlobalOutdoorRain_SelectOvercast(state)) {
+        case GlobalOutdoorRainOvercastDecision::Enable:
+            if (play->envCtx.gloomySkyMode == 0) {
+                play->envCtx.gloomySkyMode = 1;
+                sOwnsOvercast = true;
+            }
+            break;
+        case GlobalOutdoorRainOvercastDecision::Restore:
+            if (play->envCtx.gloomySkyMode == 1) {
+                play->envCtx.gloomySkyMode = 2;
+            }
+            sOwnsOvercast = false;
+            break;
+        case GlobalOutdoorRainOvercastDecision::NoChange:
+            break;
     }
 }
 
@@ -180,6 +229,7 @@ void GlobalOutdoorRain_Update(PlayState* play) {
 
     const bool enabled = CVarGetInteger(CVAR_AUDIO("GlobalOutdoorRain"), 0) != 0;
     const bool outdoors = play->envCtx.indoors == 0;
+    const bool overcastEnabled = CVarGetInteger(CVAR_AUDIO("GlobalOutdoorRainOvercast"), 1) != 0;
     if (CVarGetInteger(CVAR_AUDIO("WeatherAudioDiagnostics"), 0)) {
         static int16_t previousScene = -1;
         static int8_t previousRoom = -1;
@@ -228,6 +278,7 @@ void GlobalOutdoorRain_Update(PlayState* play) {
     }
 
     if (sRainSource != GlobalOutdoorRainSource::EnhancedOutdoor) {
+        UpdateOvercast(play, overcastEnabled, outdoors);
         return;
     }
 
@@ -244,6 +295,7 @@ void GlobalOutdoorRain_Update(PlayState* play) {
     play->envCtx.unk_EE[0] = GlobalOutdoorRain_ScaleDensity(kRainDensity, sCycle.intensity);
     // Zero intensity is also an audio transition (intermittent dry/mode reset).
     PlayRainLoop(sCycle.intensity);
+    UpdateOvercast(play, overcastEnabled, outdoors);
     if ((!enabled || !outdoors) && sCycle.phase == GlobalOutdoorRainPhase::Dry) {
         sRainSource = GlobalOutdoorRainSource::None;
     }
@@ -253,12 +305,16 @@ void GlobalOutdoorRain_OnPlayDestroy() {
     // Rain is global rather than PlayState-owned. Keep its cycle and decoded
     // loop voice alive across ordinary scene transitions; the next PlayState
     // decides whether to maintain it outdoors or fade it out indoors.
+    // Sky state is PlayState-owned, so the incoming scene must claim its own
+    // overcast transition even while the rain loop itself remains continuous.
+    sOwnsOvercast = false;
 }
 
 void GlobalOutdoorRain_Reset() {
     sRainSource = GlobalOutdoorRainSource::None;
     sLastMode = -1;
     sCycle = { GlobalOutdoorRainPhase::Dry, 0, 0.0f };
+    sOwnsOvercast = false;
     PlayRainLoop(0.0f);
 }
 
@@ -272,5 +328,6 @@ static void RegisterGlobalOutdoorRain() {
 
 static RegisterShipInitFunc initFunc(RegisterGlobalOutdoorRain,
                                      { CVAR_AUDIO("GlobalOutdoorRain"), CVAR_AUDIO("GlobalOutdoorRainMode"),
-                                       CVAR_AUDIO("GlobalOutdoorRainColor.Value") });
+                                       CVAR_AUDIO("GlobalOutdoorRainColor.Value"),
+                                       CVAR_AUDIO("GlobalOutdoorRainOvercast") });
 #endif

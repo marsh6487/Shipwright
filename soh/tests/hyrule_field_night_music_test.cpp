@@ -122,8 +122,19 @@ int main() {
     state.isNight = false;
     assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StopNightRestoreDay);
 
+    state = BaseState();
+    assert(HyruleFieldNightMusic_ShouldStopDaySequence(state));
+    state.ownsNightBgm = true;
+    assert(!HyruleFieldNightMusic_ShouldStopDaySequence(state));
+    state.isNight = false;
+    assert(!HyruleFieldNightMusic_ShouldStopDaySequence(state));
+    state = BaseState();
+    state.explicitAudioOverride = true;
+    assert(!HyruleFieldNightMusic_ShouldStopDaySequence(state));
+
     // A second complete cycle must make the same transitions instead of
     // leaving the main player silent after the first dawn.
+    state = BaseState();
     state.ownsNightBgm = false;
     state.nightBgmPlaying = false;
     state.isNight = true;

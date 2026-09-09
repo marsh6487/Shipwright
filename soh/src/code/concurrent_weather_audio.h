@@ -11,6 +11,7 @@ typedef struct {
 typedef enum {
     CONCURRENT_WEATHER_THUNDER_LOW = 0,
     CONCURRENT_WEATHER_THUNDER_LAYERED = 1,
+    CONCURRENT_WEATHER_THUNDER_LIGHTNING = 2,
 } ConcurrentWeatherThunderStyle;
 
 typedef enum {
@@ -34,8 +35,9 @@ static inline int32_t ConcurrentWeatherAudio_ClampPercent(int32_t percent) {
 }
 
 static inline ConcurrentWeatherThunderStyle ConcurrentWeatherAudio_ThunderStyle(int32_t style) {
-    return style == CONCURRENT_WEATHER_THUNDER_LAYERED ? CONCURRENT_WEATHER_THUNDER_LAYERED
-                                                       : CONCURRENT_WEATHER_THUNDER_LOW;
+    return (style == CONCURRENT_WEATHER_THUNDER_LAYERED || style == CONCURRENT_WEATHER_THUNDER_LIGHTNING)
+               ? (ConcurrentWeatherThunderStyle)style
+               : CONCURRENT_WEATHER_THUNDER_LOW;
 }
 
 static inline void ConcurrentWeatherAudio_TrackNatureChannel(ConcurrentWeatherAudioState* state,

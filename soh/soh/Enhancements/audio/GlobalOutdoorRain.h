@@ -25,6 +25,20 @@ enum class GlobalOutdoorRainPhase {
     FadeOut,
 };
 
+enum class GlobalOutdoorRainOvercastDecision {
+    NoChange,
+    Enable,
+    Restore,
+};
+
+struct GlobalOutdoorRainOvercastState {
+    bool enabled;
+    bool outdoors;
+    bool compatibleSky;
+    bool enhancedRainActive;
+    bool ownsOvercast;
+};
+
 struct GlobalOutdoorRainCycle {
     GlobalOutdoorRainPhase phase;
     int framesRemaining;
@@ -50,6 +64,7 @@ void GlobalOutdoorRain_AdvanceCycle(GlobalOutdoorRainCycle& cycle, GlobalOutdoor
                                     int dryFrames, int sustainFrames, float fadeStep);
 int GlobalOutdoorRain_ScaleDensity(int density, float intensity);
 float GlobalOutdoorRain_ScaleVolume(float volume, float intensity);
+GlobalOutdoorRainOvercastDecision GlobalOutdoorRain_SelectOvercast(const GlobalOutdoorRainOvercastState& state);
 GlobalOutdoorRainColor GlobalOutdoorRain_SelectColor(GlobalOutdoorRainSource source,
                                                      GlobalOutdoorRainColor vanillaColor,
                                                      GlobalOutdoorRainColor configuredColor);

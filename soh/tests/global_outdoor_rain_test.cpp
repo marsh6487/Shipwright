@@ -100,6 +100,24 @@ int main() {
     REQUIRE(GlobalOutdoorRain_ScaleDensity(25, 1.0f) == 25);
     REQUIRE(GlobalOutdoorRain_ScaleVolume(0.8f, 0.5f) == 0.4f);
 
+    GlobalOutdoorRainOvercastState overcast = {
+        .enabled = true,
+        .outdoors = true,
+        .compatibleSky = true,
+        .enhancedRainActive = true,
+        .ownsOvercast = false,
+    };
+    REQUIRE(GlobalOutdoorRain_SelectOvercast(overcast) == GlobalOutdoorRainOvercastDecision::Enable);
+    overcast.ownsOvercast = true;
+    REQUIRE(GlobalOutdoorRain_SelectOvercast(overcast) == GlobalOutdoorRainOvercastDecision::NoChange);
+    overcast.enhancedRainActive = false;
+    REQUIRE(GlobalOutdoorRain_SelectOvercast(overcast) == GlobalOutdoorRainOvercastDecision::Restore);
+    overcast.enhancedRainActive = true;
+    overcast.compatibleSky = false;
+    REQUIRE(GlobalOutdoorRain_SelectOvercast(overcast) == GlobalOutdoorRainOvercastDecision::Restore);
+    overcast.ownsOvercast = false;
+    REQUIRE(GlobalOutdoorRain_SelectOvercast(overcast) == GlobalOutdoorRainOvercastDecision::NoChange);
+
     const GlobalOutdoorRainColor vanilla = { 150, 255, 255 };
     const GlobalOutdoorRainColor blue = { 48, 128, 255 };
     GlobalOutdoorRainColor selected = GlobalOutdoorRain_SelectColor(GlobalOutdoorRainSource::None, vanilla, blue);

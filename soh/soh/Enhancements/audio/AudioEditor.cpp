@@ -46,6 +46,7 @@ static WidgetInfo hyruleFieldNightMusic;
 static WidgetInfo globalOutdoorRain;
 static WidgetInfo globalOutdoorRainMode;
 static WidgetInfo globalOutdoorRainColor;
+static WidgetInfo globalOutdoorRainOvercast;
 static WidgetInfo weatherAudioDiagnostics;
 
 namespace SohGui {
@@ -103,6 +104,7 @@ static const std::map<int32_t, const char*> audioRandomizerModes = {
 static const std::map<int32_t, const char*> proximityWeatherThunderStyles = {
     { CONCURRENT_WEATHER_THUNDER_LOW, "Low Thunder" },
     { CONCURRENT_WEATHER_THUNDER_LAYERED, "Layered Thunder" },
+    { CONCURRENT_WEATHER_THUNDER_LIGHTNING, "Lightning" },
 };
 
 static const std::map<int32_t, const char*> globalOutdoorRainModes = {
@@ -677,6 +679,9 @@ void AudioEditor::DrawElement() {
                     SohGui::mSohMenu->MenuDrawItem(globalOutdoorRainColor,
                                                    static_cast<uint32_t>(ImGui::GetContentRegionAvail().x),
                                                    THEME_COLOR);
+                    SohGui::mSohMenu->MenuDrawItem(globalOutdoorRainOvercast,
+                                                   static_cast<uint32_t>(ImGui::GetContentRegionAvail().x),
+                                                   THEME_COLOR);
                 }
                 SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunder,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
@@ -1057,6 +1062,17 @@ void RegisterAudioWidgets() {
                               "proximity-weather rain keep their original color."));
     SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRainColor, "Enhancements", "Audio Editor", "Audio Options" });
 
+    globalOutdoorRainOvercast = { .name = "Overcast Sky During Global Rain",
+                                  .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    globalOutdoorRainOvercast.CVar(CVAR_AUDIO("GlobalOutdoorRainOvercast"))
+        .Options(CheckboxOptions()
+                     .Color(THEME_COLOR)
+                     .DefaultValue(true)
+                     .Tooltip("Fades the normal outdoor sky and lighting to the native overcast palette while "
+                              "global rain is active. Proximity-weather actors keep their authored sky behavior."));
+    SohGui::mSohMenu->AddSearchWidget(
+        { globalOutdoorRainOvercast, "Enhancements", "Audio Editor", "Audio Options" });
+
     weatherAudioDiagnostics = { .name = "Log Weather Audio Diagnostics",
                                 .type = WidgetType::WIDGET_CVAR_CHECKBOX };
     weatherAudioDiagnostics.CVar(CVAR_AUDIO("WeatherAudioDiagnostics"))
@@ -1082,7 +1098,8 @@ void RegisterAudioWidgets() {
         .Options(ComboboxOptions()
                      .DefaultIndex(CONCURRENT_WEATHER_THUNDER_LOW)
                      .ComboMap(proximityWeatherThunderStyles)
-                     .Tooltip("Low Thunder plays the native rumble. Layered Thunder adds the native lightning crack."));
+                     .Tooltip("Low Thunder plays the native rumble. Lightning plays the native crack. Layered "
+                              "Thunder combines both."));
     SohGui::mSohMenu->AddSearchWidget(
         { proximityWeatherThunderStyle, "Enhancements", "Audio Editor", "Audio Options" });
 
