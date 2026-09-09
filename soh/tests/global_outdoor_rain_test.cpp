@@ -104,15 +104,15 @@ int main() {
         .enabled = true,
         .outdoors = true,
         .compatibleSky = true,
-        .enhancedRainActive = true,
+        .rainActive = true,
         .ownsOvercast = false,
     };
     REQUIRE(GlobalOutdoorRain_SelectOvercast(overcast) == GlobalOutdoorRainOvercastDecision::Enable);
     overcast.ownsOvercast = true;
     REQUIRE(GlobalOutdoorRain_SelectOvercast(overcast) == GlobalOutdoorRainOvercastDecision::NoChange);
-    overcast.enhancedRainActive = false;
+    overcast.rainActive = false;
     REQUIRE(GlobalOutdoorRain_SelectOvercast(overcast) == GlobalOutdoorRainOvercastDecision::Restore);
-    overcast.enhancedRainActive = true;
+    overcast.rainActive = true;
     overcast.compatibleSky = false;
     REQUIRE(GlobalOutdoorRain_SelectOvercast(overcast) == GlobalOutdoorRainOvercastDecision::Restore);
     overcast.ownsOvercast = false;
