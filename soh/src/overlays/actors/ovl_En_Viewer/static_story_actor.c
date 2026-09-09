@@ -37,6 +37,8 @@ static const StaticStoryActorDefinition sDefinitions[STATIC_STORY_ACTOR_MAX] = {
                                      STATIC_TRACKING_NABOORU, 12, 0.0f },
     [STATIC_STORY_ACTOR_ADULT_RUTO_WATER] = { 2, 1, OBJECT_RU2, STATIC_ADAPTER_ADULT_RUTO, 0.01f, 54.0f, 30, 100, 0, 60,
                                               60, 90.0f, STATIC_TRACKING_ADULT_RUTO, 12, -3.0f },
+    [STATIC_STORY_ACTOR_GREAT_FAIRY] = { 2, 1, OBJECT_DY_OBJ, STATIC_ADAPTER_GREAT_FAIRY, 0.035f, 262.5f, 45, 220, 0,
+                                         20, 60, 180.0f, STATIC_TRACKING_GREAT_FAIRY, 12, 0.0f },
 };
 
 static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STORY_ACTOR_POSE_COUNT] = {
@@ -62,7 +64,8 @@ static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STO
     [STATIC_STORY_ACTOR_SHEIK] = {
         STATIC_POSE(STATIC_ANIM_SHEIK_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_SHEIK),
         STATIC_POSE(STATIC_ANIM_SHEIK_ARMS_CROSSED, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_SHEIK),
-        STATIC_POSE(STATIC_ANIM_SHEIK_HARP, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_SHEIK),
+        STATIC_POSE(STATIC_ANIM_SHEIK_HARP, STATIC_POSE_FLAG_NO_TRACKING | STATIC_POSE_FLAG_CLOSED_EYES,
+                    STATIC_SKELETON_SHEIK),
     },
     [STATIC_STORY_ACTOR_ADULT_RUTO] = {
         STATIC_POSE(STATIC_ANIM_ADULT_RUTO_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_RUTO),
@@ -115,13 +118,20 @@ static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STO
     [STATIC_STORY_ACTOR_NABOORU] = {
         STATIC_POSE(STATIC_ANIM_NABOORU_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_NABOORU),
     },
+    [STATIC_STORY_ACTOR_GREAT_FAIRY] = {
+        STATIC_POSE(STATIC_ANIM_GREAT_FAIRY_SITTING, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_GREAT_FAIRY),
+        STATIC_POSE(STATIC_ANIM_GREAT_FAIRY_LAYING, STATIC_POSE_FLAG_HEAD_ONLY_TRACKING,
+                    STATIC_SKELETON_GREAT_FAIRY),
+        STATIC_POSE(STATIC_ANIM_GREAT_FAIRY_AFTER_SPELL, STATIC_POSE_FLAG_HEAD_ONLY_TRACKING,
+                    STATIC_SKELETON_GREAT_FAIRY),
+    },
 };
 
 _Static_assert(sizeof(sDefinitions) / sizeof(sDefinitions[0]) == STATIC_STORY_ACTOR_MAX,
                "Every static story actor type needs a definition");
 _Static_assert(sizeof(sPoses) / sizeof(sPoses[0]) == STATIC_STORY_ACTOR_MAX,
                "Every static story actor type needs a pose row");
-enum { STATIC_STORY_DEFINITION_COUNT = 13, STATIC_STORY_POSE_ROW_COUNT = 13 };
+enum { STATIC_STORY_DEFINITION_COUNT = 14, STATIC_STORY_POSE_ROW_COUNT = 14 };
 _Static_assert(STATIC_STORY_DEFINITION_COUNT == STATIC_STORY_ACTOR_MAX - 1,
                "Definition count must change with the actor registry");
 _Static_assert(STATIC_STORY_POSE_ROW_COUNT == STATIC_STORY_ACTOR_MAX - 1,
@@ -146,6 +156,8 @@ StaticStoryActorType StaticStoryActor_GetType(int16_t params) {
                 return STATIC_STORY_ACTOR_NABOORU;
             case 3:
                 return STATIC_STORY_ACTOR_ADULT_RUTO_WATER;
+            case 4:
+                return STATIC_STORY_ACTOR_GREAT_FAIRY;
             default:
                 return STATIC_STORY_ACTOR_NONE;
         }
@@ -249,20 +261,29 @@ uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticSt
             return progression->forestComplete ? 0x6012 : 0x600C;
         case STATIC_STORY_ACTOR_ADULT_RUTO_WATER:
             return progression->waterComplete ? 0x403E : 0x402C;
+        case STATIC_STORY_ACTOR_GREAT_FAIRY:
+            return 0x00DB;
         default:
             return 0;
     }
 }
 
 int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose) {
+    return StaticStoryActor_GetTrackingMode(type, pose) != STATIC_TRACKING_MODE_NONE;
+}
+
+StaticStoryTrackingMode StaticStoryActor_GetTrackingMode(StaticStoryActorType type, uint8_t pose) {
     const StaticStoryPoseDescriptor* poseDescriptor = StaticStoryActor_ResolvePose(type, pose);
     const StaticStoryActorDefinition* definition = StaticStoryActor_GetDefinition(type);
 
     if (definition == NULL || poseDescriptor == NULL || (poseDescriptor->flags & STATIC_POSE_FLAG_NO_TRACKING)) {
-        return false;
+        return STATIC_TRACKING_MODE_NONE;
     }
-
-    return definition->trackingAdapter != STATIC_TRACKING_NONE;
+    if (definition->trackingAdapter == STATIC_TRACKING_NONE) {
+        return STATIC_TRACKING_MODE_NONE;
+    }
+    return poseDescriptor->flags & STATIC_POSE_FLAG_HEAD_ONLY_TRACKING ? STATIC_TRACKING_MODE_HEAD_ONLY
+                                                                      : STATIC_TRACKING_MODE_FULL;
 }
 
 StaticStoryAdultRutoTrackingLimb StaticStoryActor_GetAdultRutoTrackingLimb(int limbIndex) {
@@ -274,4 +295,49 @@ StaticStoryAdultRutoTrackingLimb StaticStoryActor_GetAdultRutoTrackingLimb(int l
         return STATIC_RUTO_TRACKING_LIMB_HEAD;
     }
     return STATIC_RUTO_TRACKING_LIMB_NONE;
+}
+
+StaticStoryGreatFairyTrackingLimb StaticStoryActor_GetGreatFairyTrackingLimb(int limbIndex) {
+    if (limbIndex == 8) {
+        return STATIC_GREAT_FAIRY_TRACKING_LIMB_TORSO;
+    }
+    if (limbIndex == 15) {
+        return STATIC_GREAT_FAIRY_TRACKING_LIMB_HEAD;
+    }
+    return STATIC_GREAT_FAIRY_TRACKING_LIMB_NONE;
+}
+
+int16_t StaticStoryActor_ClampGreatFairyHeadRotation(int16_t rotation) {
+    if (rotation > 0x1000) {
+        return 0x1000;
+    }
+    if (rotation < -0x1000) {
+        return -0x1000;
+    }
+    return rotation;
+}
+
+float StaticStoryActor_GetGreatFairyHoverAmplitude(uint8_t pose) {
+    return StaticStoryActor_SanitizePose(STATIC_STORY_ACTOR_GREAT_FAIRY, pose) == 1 ? 3.0f : 5.0f;
+}
+
+int8_t StaticStoryActor_GetFixedEyeIndex(StaticStoryActorType type, uint8_t pose) {
+    const StaticStoryPoseDescriptor* descriptor = StaticStoryActor_ResolvePose(type, pose);
+    return descriptor != NULL &&
+                   (descriptor->flags & (STATIC_POSE_FLAG_OCARINA | STATIC_POSE_FLAG_CLOSED_EYES))
+               ? 2
+               : -1;
+}
+
+StaticStoryFaceProfile StaticStoryActor_GetFaceProfile(StaticStoryActorType type) {
+    if (type == STATIC_STORY_ACTOR_IMPA) {
+        return STATIC_FACE_PROFILE_IMPA;
+    }
+    if (type == STATIC_STORY_ACTOR_ADULT_RUTO || type == STATIC_STORY_ACTOR_ADULT_RUTO_WATER) {
+        return STATIC_FACE_PROFILE_ADULT_RUTO;
+    }
+    if (type == STATIC_STORY_ACTOR_GREAT_FAIRY) {
+        return STATIC_FACE_PROFILE_GREAT_FAIRY;
+    }
+    return STATIC_FACE_PROFILE_STANDARD;
 }

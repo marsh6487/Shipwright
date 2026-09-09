@@ -26,6 +26,7 @@ typedef enum {
     STATIC_STORY_ACTOR_DARUNIA,
     STATIC_STORY_ACTOR_NABOORU,
     STATIC_STORY_ACTOR_ADULT_RUTO_WATER,
+    STATIC_STORY_ACTOR_GREAT_FAIRY,
     STATIC_STORY_ACTOR_MAX,
 } StaticStoryActorType;
 
@@ -43,6 +44,7 @@ typedef enum {
     STATIC_ADAPTER_ADULT_MALON,
     STATIC_ADAPTER_DARUNIA,
     STATIC_ADAPTER_NABOORU,
+    STATIC_ADAPTER_GREAT_FAIRY,
 } StaticStoryActorAdapter;
 
 typedef enum {
@@ -58,6 +60,7 @@ typedef enum {
     STATIC_SKELETON_ADULT_ZELDA,
     STATIC_SKELETON_DARUNIA,
     STATIC_SKELETON_NABOORU,
+    STATIC_SKELETON_GREAT_FAIRY,
 } StaticStorySkeletonFamily;
 
 typedef enum {
@@ -73,13 +76,33 @@ typedef enum {
     STATIC_TRACKING_DARUNIA,
     STATIC_TRACKING_NABOORU,
     STATIC_TRACKING_ADULT_ZELDA,
+    STATIC_TRACKING_GREAT_FAIRY,
 } StaticStoryTrackingAdapter;
+
+typedef enum {
+    STATIC_TRACKING_MODE_NONE,
+    STATIC_TRACKING_MODE_FULL,
+    STATIC_TRACKING_MODE_HEAD_ONLY,
+} StaticStoryTrackingMode;
 
 typedef enum {
     STATIC_RUTO_TRACKING_LIMB_NONE,
     STATIC_RUTO_TRACKING_LIMB_TORSO,
     STATIC_RUTO_TRACKING_LIMB_HEAD,
 } StaticStoryAdultRutoTrackingLimb;
+
+typedef enum {
+    STATIC_GREAT_FAIRY_TRACKING_LIMB_NONE,
+    STATIC_GREAT_FAIRY_TRACKING_LIMB_TORSO,
+    STATIC_GREAT_FAIRY_TRACKING_LIMB_HEAD,
+} StaticStoryGreatFairyTrackingLimb;
+
+typedef enum {
+    STATIC_FACE_PROFILE_STANDARD,
+    STATIC_FACE_PROFILE_IMPA,
+    STATIC_FACE_PROFILE_ADULT_RUTO,
+    STATIC_FACE_PROFILE_GREAT_FAIRY,
+} StaticStoryFaceProfile;
 
 typedef enum {
     STATIC_DRAW_CONTRACT_STANDARD_OPA,
@@ -128,6 +151,9 @@ typedef enum {
     STATIC_ANIM_DARUNIA_DANCE_3,
     STATIC_ANIM_DARUNIA_DANCE_4,
     STATIC_ANIM_NABOORU_IDLE,
+    STATIC_ANIM_GREAT_FAIRY_SITTING,
+    STATIC_ANIM_GREAT_FAIRY_LAYING,
+    STATIC_ANIM_GREAT_FAIRY_AFTER_SPELL,
 } StaticStoryAnimation;
 
 enum {
@@ -137,6 +163,8 @@ enum {
     STATIC_POSE_FLAG_BASKET = 1 << 2,
     /* Performance and seated poses preserve their authored silhouette. */
     STATIC_POSE_FLAG_NO_TRACKING = 1 << 3,
+    STATIC_POSE_FLAG_HEAD_ONLY_TRACKING = 1 << 4,
+    STATIC_POSE_FLAG_CLOSED_EYES = 1 << 5,
 };
 
 /* A read-only snapshot: selectors never inspect or mutate save state directly. */
@@ -191,6 +219,12 @@ StaticStoryObjectRequirements StaticStoryActor_GetObjectRequirements(StaticStory
 const StaticStoryPoseDescriptor* StaticStoryActor_ResolvePose(StaticStoryActorType type, uint8_t pose);
 uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticStoryProgression* progression);
 int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose);
+StaticStoryTrackingMode StaticStoryActor_GetTrackingMode(StaticStoryActorType type, uint8_t pose);
 StaticStoryAdultRutoTrackingLimb StaticStoryActor_GetAdultRutoTrackingLimb(int limbIndex);
+StaticStoryGreatFairyTrackingLimb StaticStoryActor_GetGreatFairyTrackingLimb(int limbIndex);
+int16_t StaticStoryActor_ClampGreatFairyHeadRotation(int16_t rotation);
+float StaticStoryActor_GetGreatFairyHoverAmplitude(uint8_t pose);
+int8_t StaticStoryActor_GetFixedEyeIndex(StaticStoryActorType type, uint8_t pose);
+StaticStoryFaceProfile StaticStoryActor_GetFaceProfile(StaticStoryActorType type);
 
 #endif

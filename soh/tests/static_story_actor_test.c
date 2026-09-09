@@ -38,10 +38,11 @@ int main(void) {
     assert(StaticStoryActor_GetType((int16_t)0x7E01) == STATIC_STORY_ACTOR_DARUNIA);
     assert(StaticStoryActor_GetType((int16_t)0x7E02) == STATIC_STORY_ACTOR_NABOORU);
     assert(StaticStoryActor_GetType((int16_t)0x7E03) == STATIC_STORY_ACTOR_ADULT_RUTO_WATER);
+    assert(StaticStoryActor_GetType((int16_t)0x7E04) == STATIC_STORY_ACTOR_GREAT_FAIRY);
     assert(StaticStoryActor_GetPose((int16_t)0x7E11) == 1);
     assert(StaticStoryActor_GetPose((int16_t)0x7E23) == 2);
     assert(StaticStoryActor_GetType((int16_t)0x7E00) == STATIC_STORY_ACTOR_NONE);
-    assert(StaticStoryActor_GetType((int16_t)0x7E04) == STATIC_STORY_ACTOR_NONE);
+    assert(StaticStoryActor_GetType((int16_t)0x7E05) == STATIC_STORY_ACTOR_NONE);
     assert(StaticStoryActor_GetType((int16_t)0x7D01) == STATIC_STORY_ACTOR_NONE);
     assert(StaticStoryActor_GetType((int16_t)0x7F06) == STATIC_STORY_ACTOR_ADULT_RUTO);
     assert(StaticStoryActor_GetType(0x7F00) == 0);
@@ -68,6 +69,20 @@ int main(void) {
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 1)->waterMode == STATIC_RUTO_SURFACE);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 2)->waterMode == STATIC_RUTO_DIVE_LOOP);
     assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, &complete) == 0x403E);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_GREAT_FAIRY)->objectId == OBJECT_DY_OBJ);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_GREAT_FAIRY)->adapter == STATIC_ADAPTER_GREAT_FAIRY);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_GREAT_FAIRY)->scale == 0.035f);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_GREAT_FAIRY)->focusHeight == 262.5f);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_GREAT_FAIRY, 0)->animation ==
+           STATIC_ANIM_GREAT_FAIRY_SITTING);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_GREAT_FAIRY, 1)->animation ==
+           STATIC_ANIM_GREAT_FAIRY_LAYING);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_GREAT_FAIRY, 2)->animation ==
+           STATIC_ANIM_GREAT_FAIRY_AFTER_SPELL);
+    assert(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_GREAT_FAIRY, &early) == 0x00DB);
+    assert(StaticStoryActor_GetTrackingMode(STATIC_STORY_ACTOR_GREAT_FAIRY, 0) == STATIC_TRACKING_MODE_FULL);
+    assert(StaticStoryActor_GetTrackingMode(STATIC_STORY_ACTOR_GREAT_FAIRY, 1) == STATIC_TRACKING_MODE_HEAD_ONLY);
+    assert(StaticStoryActor_GetTrackingMode(STATIC_STORY_ACTOR_GREAT_FAIRY, 2) == STATIC_TRACKING_MODE_HEAD_ONLY);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->objectId == OBJECT_DU);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->adapter == STATIC_ADAPTER_DARUNIA);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->drawContract ==
@@ -143,6 +158,20 @@ int main(void) {
     assert(StaticStoryActor_GetAdultRutoTrackingLimb(10) == STATIC_RUTO_TRACKING_LIMB_TORSO);
     assert(StaticStoryActor_GetAdultRutoTrackingLimb(20) == STATIC_RUTO_TRACKING_LIMB_NONE);
     assert(StaticStoryActor_GetAdultRutoTrackingLimb(21) == STATIC_RUTO_TRACKING_LIMB_HEAD);
+    assert(StaticStoryActor_GetGreatFairyTrackingLimb(8) == STATIC_GREAT_FAIRY_TRACKING_LIMB_TORSO);
+    assert(StaticStoryActor_GetGreatFairyTrackingLimb(15) == STATIC_GREAT_FAIRY_TRACKING_LIMB_HEAD);
+    assert(StaticStoryActor_GetGreatFairyTrackingLimb(14) == STATIC_GREAT_FAIRY_TRACKING_LIMB_NONE);
+    assert(StaticStoryActor_ClampGreatFairyHeadRotation(0x2000) == 0x1000);
+    assert(StaticStoryActor_ClampGreatFairyHeadRotation(-0x2000) == -0x1000);
+    assert(StaticStoryActor_ClampGreatFairyHeadRotation(0x0800) == 0x0800);
+    assert(StaticStoryActor_GetGreatFairyHoverAmplitude(0) == 5.0f);
+    assert(StaticStoryActor_GetGreatFairyHoverAmplitude(1) == 3.0f);
+    assert(StaticStoryActor_GetGreatFairyHoverAmplitude(2) == 5.0f);
+    assert(StaticStoryActor_GetFixedEyeIndex(STATIC_STORY_ACTOR_SHEIK, 2) == 2);
+    assert(StaticStoryActor_GetFixedEyeIndex(STATIC_STORY_ACTOR_SHEIK, 0) == -1);
+    assert(StaticStoryActor_GetFaceProfile(STATIC_STORY_ACTOR_IMPA) == STATIC_FACE_PROFILE_IMPA);
+    assert(StaticStoryActor_GetFaceProfile(STATIC_STORY_ACTOR_ADULT_RUTO) == STATIC_FACE_PROFILE_ADULT_RUTO);
+    assert(StaticStoryActor_GetFaceProfile(STATIC_STORY_ACTOR_ADULT_RUTO_WATER) == STATIC_FACE_PROFILE_ADULT_RUTO);
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_CHILD_MALON, 1));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SARIA, 2));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SARIA, 3));

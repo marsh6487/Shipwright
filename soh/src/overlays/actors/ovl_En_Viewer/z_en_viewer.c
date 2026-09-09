@@ -26,6 +26,7 @@
 #include "objects/object_zl2_anime2/object_zl2_anime2.h"
 #include "objects/object_du/object_du.h"
 #include "objects/object_nb/object_nb.h"
+#include "objects/object_dy_obj/object_dy_obj.h"
 #include "objects/object_os_anime/object_os_anime.h"
 #include "static_story_actor.h"
 #include "static_story_kokiri.h"
@@ -294,6 +295,12 @@ static AnimationHeader* EnViewerStatic_GetAnimation(uint16_t animation) {
             return &gDaruniaDancingLoop4Anim;
         case STATIC_ANIM_NABOORU_IDLE:
             return &gNabooruStandingHandsOnHipsAnim;
+        case STATIC_ANIM_GREAT_FAIRY_SITTING:
+            return &gGreatFairySittingAnim;
+        case STATIC_ANIM_GREAT_FAIRY_LAYING:
+            return &gGreatFairyLayingSidewaysAnim;
+        case STATIC_ANIM_GREAT_FAIRY_AFTER_SPELL:
+            return &gGreatFairyAfterSpellAnim;
         case STATIC_ANIM_ADULT_ZELDA_IDLE:
             return &gZelda2Anime2Anim_009FBC;
         default:
@@ -333,6 +340,9 @@ static void EnViewerStatic_InitSkeleton(EnViewer* this, PlayState* play,
             break;
         case STATIC_SKELETON_NABOORU:
             SkelAnime_InitFlex(play, &this->skin.skelAnime, &gNabooruSkel, NULL, NULL, NULL, 0);
+            break;
+        case STATIC_SKELETON_GREAT_FAIRY:
+            SkelAnime_InitFlex(play, &this->skin.skelAnime, &gGreatFairySkel, NULL, NULL, NULL, 0);
             break;
         default:
             return;
@@ -479,6 +489,7 @@ static bool EnViewerStatic_UpdateRutoWater(EnViewer* this, PlayState* play, bool
     this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
     this->staticState.talking = false;
     this->staticState.tracking = false;
+    this->staticState.greatFairyHoverPhase = 0;
     return false;
 }
 
@@ -573,7 +584,9 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
     this->staticState.collider.dim.yShift = definition->colliderYShift;
     this->actor.colChkInfo.mass = MASS_IMMOVABLE;
     this->staticState.blinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
-    this->staticState.eyeIndex = poseDescriptor->flags & STATIC_POSE_FLAG_OCARINA ? 2 : 0;
+    int8_t fixedEyeIndex = StaticStoryActor_GetFixedEyeIndex((StaticStoryActorType)this->staticState.type,
+                                                             this->staticState.pose);
+    this->staticState.eyeIndex = fixedEyeIndex >= 0 ? fixedEyeIndex : 0;
     this->actor.flags |= ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY;
     this->staticState.talking = false;
     this->staticState.tracking = false;
@@ -613,8 +626,16 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
     if (this->staticState.type == STATIC_STORY_ACTOR_DARUNIA && this->staticState.pose == 1 && animationEnded) {
         EnViewerStatic_SetDaruniaDanceStep(this, this->staticState.danceStep + 1);
     }
-    if (poseDescriptor->flags & STATIC_POSE_FLAG_OCARINA) {
-        this->staticState.eyeIndex = 2;
+    if (this->staticState.type == STATIC_STORY_ACTOR_GREAT_FAIRY) {
+        this->staticState.greatFairyHoverPhase += 0x300;
+        this->actor.world.pos.y = this->actor.home.pos.y +
+                                  Math_SinS(this->staticState.greatFairyHoverPhase) *
+                                      StaticStoryActor_GetGreatFairyHoverAmplitude(this->staticState.pose);
+    }
+    int8_t fixedEyeIndex = StaticStoryActor_GetFixedEyeIndex((StaticStoryActorType)this->staticState.type,
+                                                             this->staticState.pose);
+    if (fixedEyeIndex >= 0) {
+        this->staticState.eyeIndex = fixedEyeIndex;
     } else if (this->staticState.blinkTimer > 0) {
         this->staticState.blinkTimer--;
     } else if (++this->staticState.eyeIndex >= 3) {
@@ -1226,6 +1247,7 @@ void EnViewer_DrawImpa(EnViewer* this, PlayState* play) {
     static void* sEyes[] = { gImpaEyeOpenTex, gImpaEyeHalfTex, gImpaEyeClosedTex };
     void* eye = this->staticState.type != STATIC_STORY_ACTOR_NONE ? sEyes[this->staticState.eyeIndex] : gImpaEyeOpenTex;
     OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
     gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(eye));
     gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(eye));
     gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
@@ -1371,12 +1393,18 @@ static s32 EnViewer_StaticAdultRutoOverrideLimbDraw(PlayState* play, s32 limbInd
     return false;
 }
 
-void EnViewer_DrawStaticAdultRuto(EnViewer* this, PlayState* play) {
+static void* EnViewer_GetAdultRutoEye(u8 eyeIndex) {
     static void* sEyes[] = { gAdultRutoEyeOpenTex, gAdultRutoEyeHalfTex, gAdultRutoEyeClosedTex };
+    return sEyes[eyeIndex];
+}
+
+void EnViewer_DrawStaticAdultRuto(EnViewer* this, PlayState* play) {
+    void* eye = EnViewer_GetAdultRutoEye(this->staticState.eyeIndex);
 
     OPEN_DISPS(play->state.gfxCtx);
-    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
-    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(eye));
+    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(eye));
     gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(gAdultRutoMouthTex));
     gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
     gSPSegment(POLY_OPA_DISP++, 0x0C, &D_80116280[2]);
@@ -1385,12 +1413,12 @@ void EnViewer_DrawStaticAdultRuto(EnViewer* this, PlayState* play) {
 }
 
 void EnViewer_DrawStaticAdultRutoXlu(EnViewer* this, PlayState* play) {
-    static void* sEyes[] = { gAdultRutoEyeOpenTex, gAdultRutoEyeHalfTex, gAdultRutoEyeClosedTex };
+    void* eye = EnViewer_GetAdultRutoEye(this->staticState.eyeIndex);
 
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    gSPSegment(POLY_XLU_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
-    gSPSegment(POLY_XLU_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
+    gSPSegment(POLY_XLU_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(eye));
+    gSPSegment(POLY_XLU_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(eye));
     gSPSegment(POLY_XLU_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(gAdultRutoMouthTex));
     gDPSetEnvColor(POLY_XLU_DISP++, 0, 0, 0, this->staticState.rutoWater.alpha);
     gSPSegment(POLY_XLU_DISP++, 0x0C, &D_80116280[0]);
@@ -1613,6 +1641,42 @@ void EnViewer_DrawStaticNabooru(EnViewer* this, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+static s32 EnViewer_StaticGreatFairyOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
+                                                      Vec3s* rot, void* thisx) {
+    EnViewer* this = (EnViewer*)thisx;
+    StaticStoryTrackingMode trackingMode =
+        StaticStoryActor_GetTrackingMode(STATIC_STORY_ACTOR_GREAT_FAIRY, this->staticState.pose);
+    StaticStoryGreatFairyTrackingLimb trackingLimb = StaticStoryActor_GetGreatFairyTrackingLimb(limbIndex);
+
+    if (trackingMode == STATIC_TRACKING_MODE_FULL && trackingLimb == STATIC_GREAT_FAIRY_TRACKING_LIMB_TORSO) {
+        rot->x += this->staticState.interactInfo.torsoRot.y;
+    } else if (trackingMode != STATIC_TRACKING_MODE_NONE &&
+               trackingLimb == STATIC_GREAT_FAIRY_TRACKING_LIMB_HEAD) {
+        s16 headY = this->staticState.interactInfo.headRot.y;
+        s16 headZ = this->staticState.interactInfo.headRot.x;
+
+        if (trackingMode == STATIC_TRACKING_MODE_HEAD_ONLY) {
+            headY = StaticStoryActor_ClampGreatFairyHeadRotation(headY);
+            headZ = StaticStoryActor_ClampGreatFairyHeadRotation(headZ);
+        }
+        rot->x += headY;
+        rot->z += headZ;
+    }
+    return false;
+}
+
+void EnViewer_DrawStaticGreatFairy(EnViewer* this, PlayState* play) {
+    static void* sEyes[] = { gGreatFairyEyeOpenTex, gGreatFairyEyeHalfTex, gGreatFairyEyeClosedTex };
+
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
+    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
+    gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(gGreatFairyMouthClosedTex));
+    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, EnViewer_StaticGreatFairyOverrideLimbDraw, NULL, this);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 void EnViewerStatic_Draw(EnViewer* this, PlayState* play) {
     switch ((StaticStoryActorType)this->staticState.type) {
         case STATIC_STORY_ACTOR_IMPA:
@@ -1655,6 +1719,9 @@ void EnViewerStatic_Draw(EnViewer* this, PlayState* play) {
             break;
         case STATIC_STORY_ACTOR_NABOORU:
             EnViewer_DrawStaticNabooru(this, play);
+            break;
+        case STATIC_STORY_ACTOR_GREAT_FAIRY:
+            EnViewer_DrawStaticGreatFairy(this, play);
             break;
         default:
             break;
