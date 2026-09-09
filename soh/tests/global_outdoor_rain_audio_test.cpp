@@ -161,6 +161,21 @@ int main() {
     GlobalOutdoorRain_Reset();
     sOvercast = 1;
 
+    // The same opt-in overcast presentation applies to placed rain actors on
+    // compatible outdoor skies; it releases when the actor relinquishes rain.
+    WeatherSamplePlayer_Init();
+    GlobalOutdoorRain_Reset();
+    sEnabled = 0;
+    PlayState actorStormPlay = {};
+    actorStormPlay.skyboxId = SKYBOX_NORMAL_SKY;
+    GlobalOutdoorRain_NotifyNativeRainActive(1, 1);
+    GlobalOutdoorRain_Update(&actorStormPlay);
+    REQUIRE(actorStormPlay.envCtx.gloomySkyMode == 1);
+    GlobalOutdoorRain_NotifyNativeRainActive(0, 1);
+    GlobalOutdoorRain_Update(&actorStormPlay);
+    REQUIRE(actorStormPlay.envCtx.gloomySkyMode == 2);
+    GlobalOutdoorRain_Reset();
+
     // A normal scene handoff must not restart the authored rain loop. The next
     // outdoor PlayState adopts the existing global voice and cycle.
     WeatherSamplePlayer_Init();
