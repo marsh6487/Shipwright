@@ -31,7 +31,11 @@ if(BUILD_TESTING)
     target_include_directories(static_story_mm_actor_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
-    target_link_libraries(static_story_mm_actor_test PRIVATE m)
+    # MSVC's CRT provides the math functions directly; unlike Unix platforms,
+    # Windows has no separate libm (and attempting to link `m` requests m.lib).
+    if(NOT WIN32)
+        target_link_libraries(static_story_mm_actor_test PRIVATE m)
+    endif()
     add_test(NAME static_story_mm_actor_test COMMAND static_story_mm_actor_test)
 
     add_executable(static_story_ganon_test
