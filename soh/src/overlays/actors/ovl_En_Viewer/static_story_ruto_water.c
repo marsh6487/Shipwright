@@ -17,9 +17,10 @@ bool StaticRutoWater_CanTrack(const StaticRutoWaterState* state) {
 void StaticRutoWater_GetTreadLegRotations(int16_t treadOffset, int16_t* leftHip, int16_t* leftKnee,
                                           int16_t* rightHip, int16_t* rightKnee) {
     *leftHip = 0xA00 + treadOffset;
-    *leftKnee = -0x1800 - treadOffset;
+    /* Adult Ruto's knee Z axis is opposite the first En_Zora-inspired approximation. */
+    *leftKnee = 0x1800 + treadOffset;
     *rightHip = 0xA00 - treadOffset;
-    *rightKnee = -0x1800 + treadOffset;
+    *rightKnee = 0x1800 - treadOffset;
 }
 
 static uint8_t StaticRutoWater_AlphaForDepth(float currentY, float surfaceTarget) {
