@@ -1825,7 +1825,8 @@ static void EnViewer_StaticSkullKidPostLimbDraw(PlayState* play, s32 limbIndex, 
 
     if (limbIndex == 17) {
         OPEN_DISPS(play->state.gfxCtx);
-        MATRIX_FINALIZE_AND_LOAD(POLY_OPA_DISP++, play->state.gfxCtx);
+        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx),
+                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
         gSPDisplayList(POLY_OPA_DISP++, this->staticState.skullKidHeadDL);
         gSPDisplayList(POLY_OPA_DISP++, this->staticState.skullKidEyesDL);
         gSPDisplayList(POLY_OPA_DISP++, this->staticState.skullKidMaskDL);
@@ -1839,7 +1840,7 @@ static void EnViewer_DrawStaticTatl(EnViewer* this, PlayState* play) {
     float orbitZ = Math_CosS(this->staticState.tatlPulsePhase) * 4.0f;
     float scale = StaticStoryMm_GetTatlScale(this->staticState.tatlPulsePhase);
     uint8_t outerAlpha = StaticStoryMm_GetTatlOuterAlpha(this->staticState.tatlPulsePhase);
-    Gfx* fairySetup = GRAPH_ALLOC(play->state.gfxCtx, 4 * sizeof(Gfx));
+    Gfx* fairySetup = Graph_Alloc(play->state.gfxCtx, 4 * sizeof(Gfx));
 
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_27Xlu(play->state.gfxCtx);
@@ -1869,7 +1870,7 @@ static void EnViewer_DrawStaticSkullKid(EnViewer* this, PlayState* play) {
 }
 
 static void EnViewer_DrawStaticPhantomGanon(EnViewer* this, PlayState* play) {
-    Gfx* nullDList = GRAPH_ALLOC(play->state.gfxCtx, sizeof(Gfx));
+    Gfx* nullDList = Graph_Alloc(play->state.gfxCtx, sizeof(Gfx));
 
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
