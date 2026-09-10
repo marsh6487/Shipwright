@@ -44,6 +44,11 @@ s32 AudioLoad_RegisterMmFont(const char* path, s32 fontIndex);
 // leak into the custom/music/* randomizer's own use of those fields.
 void Audio_PrimeMmSideChannel(u8 playerIdx, u16 fullSeqId);
 
+// Queue an already-resolved 16-bit ID without another Audio Editor lookup.
+// The ID/bypass belong to this queue slot and do not use the MM side channel.
+// fadeTimer uses the same units as bits 16-23 of an ordinary op-0 command.
+void Audio_QueueResolvedSeqCmd(u8 playerIdx, u16 seqId, u8 fadeTimer);
+
 // PopulateMmFontMeta declaration lives below, after the SoundFont typedef.
 
 #define MAX_AUTHENTIC_SEQID 110

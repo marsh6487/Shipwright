@@ -6,6 +6,49 @@ project(soh LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "The C++ standard to use")
 set(CMAKE_C_STANDARD 23 CACHE STRING "The C standard to use")
 
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(static_story_actor_test
+        tests/static_story_actor_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+    )
+    target_include_directories(static_story_actor_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    add_test(NAME static_story_actor_test COMMAND static_story_actor_test)
+
+    add_executable(static_story_ruto_water_test
+        tests/static_story_ruto_water_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_ruto_water.c
+    )
+    add_test(NAME static_story_ruto_water_test COMMAND static_story_ruto_water_test)
+
+    add_executable(static_story_mm_actor_test
+        tests/static_story_mm_actor_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.c
+        src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+    )
+    target_include_directories(static_story_mm_actor_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    # MSVC's CRT provides the math functions directly; unlike Unix platforms,
+    # Windows has no separate libm (and attempting to link `m` requests m.lib).
+    if(NOT WIN32)
+        target_link_libraries(static_story_mm_actor_test PRIVATE m)
+    endif()
+    add_test(NAME static_story_mm_actor_test COMMAND static_story_mm_actor_test)
+
+    add_executable(static_story_ganon_test
+        tests/static_story_ganon_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_ganon.c
+        src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+    )
+    target_include_directories(static_story_ganon_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    add_test(NAME static_story_ganon_test COMMAND static_story_ganon_test)
+endif()
+
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     enable_language(OBJCXX)
     set(CMAKE_OBJC_FLAGS "${CMAKE_OBJC_FLAGS} -fobjc-arc")
