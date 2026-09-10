@@ -55,7 +55,8 @@ static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STO
         STATIC_POSE(STATIC_ANIM_SARIA_HANDS_BEHIND, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_SARIA),
         STATIC_POSE(STATIC_ANIM_SARIA_OCARINA, STATIC_POSE_FLAG_OCARINA | STATIC_POSE_FLAG_NO_TRACKING,
                     STATIC_SKELETON_SARIA),
-        STATIC_POSE(STATIC_ANIM_SARIA_SEATED, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_SARIA),
+        STATIC_POSE(STATIC_ANIM_SARIA_SEATED,
+                    STATIC_POSE_FLAG_NO_TRACKING | STATIC_POSE_FLAG_LOCK_ROOT_TRANSLATION, STATIC_SKELETON_SARIA),
     },
     [STATIC_STORY_ACTOR_ADULT_ZELDA] = {
         STATIC_POSE(STATIC_ANIM_ADULT_ZELDA_IDLE, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_ADULT_ZELDA),
@@ -266,6 +267,18 @@ uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticSt
         default:
             return 0;
     }
+}
+
+void StaticStoryActor_NormalizePlacementRotation(int16_t* pitch, int16_t* yaw, int16_t* roll) {
+    (void)yaw;
+    *pitch = 0;
+    *roll = 0;
+}
+
+int StaticStoryActor_LocksRootTranslation(StaticStoryActorType type, uint8_t pose) {
+    const StaticStoryPoseDescriptor* descriptor = StaticStoryActor_ResolvePose(type, pose);
+
+    return descriptor != NULL && (descriptor->flags & STATIC_POSE_FLAG_LOCK_ROOT_TRANSLATION) != 0;
 }
 
 int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose) {

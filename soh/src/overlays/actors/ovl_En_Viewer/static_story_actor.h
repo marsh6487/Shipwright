@@ -165,6 +165,8 @@ enum {
     STATIC_POSE_FLAG_NO_TRACKING = 1 << 3,
     STATIC_POSE_FLAG_HEAD_ONLY_TRACKING = 1 << 4,
     STATIC_POSE_FLAG_CLOSED_EYES = 1 << 5,
+    /* Ignore animation-authored root motion and honor the Prelude placement. */
+    STATIC_POSE_FLAG_LOCK_ROOT_TRANSLATION = 1 << 6,
 };
 
 /* A read-only snapshot: selectors never inspect or mutate save state directly. */
@@ -226,5 +228,7 @@ int16_t StaticStoryActor_ClampGreatFairyHeadRotation(int16_t rotation);
 float StaticStoryActor_GetGreatFairyHoverAmplitude(uint8_t pose);
 int8_t StaticStoryActor_GetFixedEyeIndex(StaticStoryActorType type, uint8_t pose);
 StaticStoryFaceProfile StaticStoryActor_GetFaceProfile(StaticStoryActorType type);
+void StaticStoryActor_NormalizePlacementRotation(int16_t* pitch, int16_t* yaw, int16_t* roll);
+int StaticStoryActor_LocksRootTranslation(StaticStoryActorType type, uint8_t pose);
 
 #endif

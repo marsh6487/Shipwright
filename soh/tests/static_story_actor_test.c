@@ -22,6 +22,9 @@ int main(void) {
         .waterComplete = true,
         .eponaComplete = true,
     };
+    int16_t placementPitch = 0x2000;
+    int16_t placementYaw = -0x3456;
+    int16_t placementRoll = 0x1000;
 
     assert(StaticStoryActor_IsParam((int16_t)0x7F01));
     assert(StaticStoryActor_GetType(0x7F01) == STATIC_STORY_ACTOR_IMPA);
@@ -57,6 +60,13 @@ int main(void) {
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_SARIA, 1)->animation == STATIC_ANIM_SARIA_HANDS_BEHIND);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_SARIA, 2)->animation == STATIC_ANIM_SARIA_OCARINA);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_SARIA, 3)->animation == STATIC_ANIM_SARIA_SEATED);
+    assert(StaticStoryActor_LocksRootTranslation(STATIC_STORY_ACTOR_SARIA, 3));
+    assert(!StaticStoryActor_LocksRootTranslation(STATIC_STORY_ACTOR_SARIA, 0));
+    assert(!StaticStoryActor_LocksRootTranslation(STATIC_STORY_ACTOR_KOKIRI_GIRL, 3));
+    StaticStoryActor_NormalizePlacementRotation(&placementPitch, &placementYaw, &placementRoll);
+    assert(placementPitch == 0);
+    assert(placementYaw == -0x3456);
+    assert(placementRoll == 0);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_IMPA, 0)->playbackSpeed == 1.0f);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_SHEIK)->objectId == OBJECT_XC);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_SHEIK, 2)->animation == STATIC_ANIM_SHEIK_HARP);
