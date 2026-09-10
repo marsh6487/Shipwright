@@ -11,15 +11,37 @@ typedef struct {
 typedef enum {
     CONCURRENT_WEATHER_THUNDER_LOW = 0,
     CONCURRENT_WEATHER_THUNDER_LAYERED = 1,
+    CONCURRENT_WEATHER_THUNDER_LIGHTNING = 2,
 } ConcurrentWeatherThunderStyle;
+
+typedef enum {
+    CONCURRENT_WEATHER_RAIN_NO_CHANGE,
+    CONCURRENT_WEATHER_RAIN_SET_LOOP,
+    CONCURRENT_WEATHER_RAIN_STOP_LOOP,
+} ConcurrentWeatherRainAction;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+ConcurrentWeatherRainAction ConcurrentWeatherAudio_SelectRainAction(uint8_t ownsFallbackLoop,
+                                                                    uint8_t weatherOwnsRain,
+                                                                    uint8_t natureRainEnabled, float gain);
+#ifdef __cplusplus
+}
+#endif
 
 static inline int32_t ConcurrentWeatherAudio_ClampPercent(int32_t percent) {
     return percent < 0 ? 0 : percent > 100 ? 100 : percent;
 }
 
 static inline ConcurrentWeatherThunderStyle ConcurrentWeatherAudio_ThunderStyle(int32_t style) {
-    return style == CONCURRENT_WEATHER_THUNDER_LAYERED ? CONCURRENT_WEATHER_THUNDER_LAYERED
-                                                       : CONCURRENT_WEATHER_THUNDER_LOW;
+    return (style == CONCURRENT_WEATHER_THUNDER_LAYERED || style == CONCURRENT_WEATHER_THUNDER_LIGHTNING)
+               ? (ConcurrentWeatherThunderStyle)style
+               : CONCURRENT_WEATHER_THUNDER_LOW;
+}
+
+static inline float ConcurrentWeatherAudio_ThunderFrequencyScale(int32_t percent) {
+    return ConcurrentWeatherAudio_ClampPercent(percent) / 50.0f;
 }
 
 static inline void ConcurrentWeatherAudio_TrackNatureChannel(ConcurrentWeatherAudioState* state,
