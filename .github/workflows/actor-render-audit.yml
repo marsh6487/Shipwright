@@ -1,0 +1,61 @@
+name: actor-render-audit
+
+on:
+  push:
+    branches: [codex/fix-static-actor-render-state]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-and-focused-tests:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact revision and pinned submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Export tracked source for offline analysis
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/actor-render-audit"
+          git rev-parse HEAD > "$RUNNER_TEMP/actor-render-audit/source-identity.txt"
+          git submodule status --recursive >> "$RUNNER_TEMP/actor-render-audit/source-identity.txt"
+          git ls-files --recurse-submodules -z | tar --null -T - -czf "$RUNNER_TEMP/actor-render-audit/source-snapshot.tar.gz"
+          sha256sum "$RUNNER_TEMP/actor-render-audit/source-snapshot.tar.gz"
+      - name: Run focused catalogue tests in debug and release modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          actor_dir=soh/src/overlays/actors/ovl_En_Viewer
+          out="$RUNNER_TEMP/actor-render-audit"
+          for mode in debug release; do
+            flags=(-std=c2x -Wall -Wextra -Wno-missing-field-initializers -Isoh/include)
+            if [ "$mode" = release ]; then flags+=(-O2 -DNDEBUG); else flags+=(-O0 -g); fi
+            for name in actor segment_contract ruto_water mm_actor ganon; do
+              sources=("$actor_dir/static_story_actor.c")
+              case "$name" in
+                ruto_water) sources=("$actor_dir/static_story_ruto_water.c") ;;
+                mm_actor) sources+=("$actor_dir/static_story_mm_actor.c") ;;
+                ganon) sources+=("$actor_dir/static_story_ganon.c") ;;
+              esac
+              cc "${flags[@]}" "soh/tests/static_story_${name}_test.c" "${sources[@]}" -lm -o "$out/${name}-${mode}"
+              "$out/${name}-${mode}"
+              printf 'PASS static_story_%s_test (%s)\n' "$name" "$mode" | tee -a "$out/focused-tests.txt"
+            done
+          done
+      - name: Upload source snapshot and focused-test evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: actor-render-source-and-tests
+          path: |
+            ${{ runner.temp }}/actor-render-audit/source-snapshot.tar.gz
+            ${{ runner.temp }}/actor-render-audit/source-identity.txt
+            ${{ runner.temp }}/actor-render-audit/focused-tests.txt
+          if-no-files-found: error
+          retention-days: 7
