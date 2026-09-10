@@ -193,15 +193,12 @@ enum {
     STATIC_POSE_FLAG_VOCAL = 1 << 0,
     STATIC_POSE_FLAG_OCARINA = 1 << 1,
     STATIC_POSE_FLAG_BASKET = 1 << 2,
-    /* Performance and seated poses preserve their authored silhouette. */
     STATIC_POSE_FLAG_NO_TRACKING = 1 << 3,
     STATIC_POSE_FLAG_HEAD_ONLY_TRACKING = 1 << 4,
     STATIC_POSE_FLAG_CLOSED_EYES = 1 << 5,
-    /* Ignore animation-authored root motion and honor the Prelude placement. */
     STATIC_POSE_FLAG_LOCK_ROOT_TRANSLATION = 1 << 6,
 };
 
-/* A read-only snapshot: selectors never inspect or mutate save state directly. */
 typedef struct {
     bool metZelda;
     bool forestComplete;
@@ -249,6 +246,7 @@ uint8_t StaticStoryActor_SanitizePose(StaticStoryActorType type, uint8_t pose);
 int StaticStoryActor_IsAvailable(StaticStoryActorType type);
 const StaticStoryActorDefinition* StaticStoryActor_GetDefinition(StaticStoryActorType type);
 int16_t StaticStoryActor_GetAnimationObjectId(StaticStoryActorType type);
+int16_t StaticStoryActor_GetDrawObjectId(StaticStoryActorType type);
 StaticStoryObjectRequirements StaticStoryActor_GetObjectRequirements(StaticStoryActorType type);
 const StaticStoryPoseDescriptor* StaticStoryActor_ResolvePose(StaticStoryActorType type, uint8_t pose);
 uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticStoryProgression* progression);
