@@ -67,10 +67,12 @@ int main(void) {
     assert(StaticRutoWater_CanTrack(&state));
     StaticRutoWater_GetTreadLegRotations(0, &leftHip, &leftKnee, &rightHip, &rightKnee);
     assert(leftHip >= 0x800 && rightHip >= 0x800);
-    assert(leftKnee <= -0x1400 && rightKnee <= -0x1400);
+    /* Adult Ruto's knee axis is opposite the old approximation: positive Z folds the shins behind her. */
+    assert(leftKnee >= 0x1400 && rightKnee >= 0x1400);
     StaticRutoWater_GetTreadLegRotations(0x300, &leftHip, &leftKnee, &rightHip, &rightKnee);
     assert(leftHip != rightHip);
     assert(leftKnee != rightKnee);
+    assert(leftKnee > 0 && rightKnee > 0);
 
     /* Dive-loop Ruto stays hidden at authored depth until Link approaches. */
     StaticRutoWater_Init(&state, STATIC_RUTO_DIVE_LOOP, true, 10.0f, 100.0f);
