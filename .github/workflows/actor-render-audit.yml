@@ -48,6 +48,13 @@ jobs:
               printf 'PASS static_story_%s_test (%s)\n' "$name" "$mode" | tee -a "$out/focused-tests.txt"
             done
           done
+      - name: Test safe renderer fault reporting
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/actor-render-audit"
+          c++ -std=c++20 -Wall -Wextra -Werror -O2 -DNDEBUG soh/tests/render_fault_report_test.cpp -o "$out/render-fault-report-test"
+          "$out/render-fault-report-test" | tee -a "$out/focused-tests.txt"
       - name: Upload source snapshot and focused-test evidence
         if: always()
         uses: actions/upload-artifact@v7
