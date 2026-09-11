@@ -57,10 +57,11 @@ int main() {
     REQUIRE(commands[0].w1 == fixture.nestedPointer);
     REQUIRE(commands[1].w0 == 0);
     REQUIRE(commands[1].w1 == 0);
-    REQUIRE(commands[2].w0 == UINT32_C(0x01001002));
+    /* The native 0x32 handler recognizes the patched w1 as a direct pointer. */
+    REQUIRE(commands[2].w0 == UINT32_C(0x32001002));
     REQUIRE(commands[2].w1 == fixture.vertexPointer + UINT32_C(0x20));
-    REQUIRE(commands[3].w0 == 0);
-    REQUIRE(commands[3].w1 == 0);
+    REQUIRE(commands[3].w0 == UINT32_C(0xFEDCBA98));
+    REQUIRE(commands[3].w1 == UINT32_C(0x76543210));
     REQUIRE(stats.nestedPatched == 1);
     REQUIRE(stats.verticesPatched == 1);
     REQUIRE(stats.unresolved == 0);
