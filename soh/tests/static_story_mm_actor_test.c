@@ -71,6 +71,8 @@ int main(void) {
     REQUIRE(StaticStoryMm_GetTatlDListPath(6) == NULL);
     REQUIRE(reclining->requiresSecondarySkeleton);
     REQUIRE(upright->requiresSecondarySkeleton);
+    REQUIRE(StaticStoryMm_UsesNativeFairyCompanion(STATIC_STORY_ACTOR_SKULL_KID));
+    REQUIRE(!StaticStoryMm_UsesNativeFairyCompanion(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL));
     REQUIRE(reclining->tracking == STATIC_STORY_MM_TRACKING_NONE);
     REQUIRE(upright->tracking == STATIC_STORY_MM_TRACKING_NONE);
     REQUIRE(StaticStoryMm_ResourcesComplete(reclining, true, true, true));

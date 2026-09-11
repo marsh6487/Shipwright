@@ -34,6 +34,7 @@
 #include "static_story_mm_actor.h"
 #include "static_story_ganon.h"
 #include "mods/transformation_masks/assets/mm_asset_loader.h"
+#include "soh/ResourceManagerHelpers.h"
 #include "soh/frame_interpolation.h"
 #include <assert.h>
 
@@ -552,24 +553,26 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
             }
         }
         if (presentation != NULL && presentation->requiresSecondarySkeleton) {
-            secondarySkeleton = (FlexSkeletonHeader*)MmAssets_LoadSkeleton(presentation->secondarySkeletonPath);
-            secondaryAnimation = (AnimationHeader*)MmAssets_LoadAnimation(presentation->secondaryAnimationPath);
             this->staticState.skullKidMaskDL = (Gfx*)MmAssets_LoadResource(presentation->maskDisplayListPath);
             this->staticState.skullKidHeadDL = (Gfx*)MmAssets_LoadResource(presentation->headDisplayListPath);
             this->staticState.skullKidEyesDL = (Gfx*)MmAssets_LoadResource(presentation->eyesDisplayListPath);
-            secondaryComplete = secondarySkeleton != NULL && secondaryAnimation != NULL &&
-                                this->staticState.skullKidMaskDL != NULL && this->staticState.skullKidHeadDL != NULL &&
+            secondaryComplete = this->staticState.skullKidMaskDL != NULL && this->staticState.skullKidHeadDL != NULL &&
                                 this->staticState.skullKidEyesDL != NULL;
-            for (int limb = 0; limb < 6 && secondaryComplete; ++limb) {
-                StandardLimb* sourceLimb =
-                    (StandardLimb*)MmAssets_LoadResource(StaticStoryMm_GetTatlLimbPath(limb));
-                Gfx* sourceDList = (Gfx*)MmAssets_LoadResource(StaticStoryMm_GetTatlDListPath(limb));
+            if (!StaticStoryMm_UsesNativeFairyCompanion((StaticStoryActorType)this->staticState.type)) {
+                secondarySkeleton = (FlexSkeletonHeader*)MmAssets_LoadSkeleton(presentation->secondarySkeletonPath);
+                secondaryAnimation = (AnimationHeader*)MmAssets_LoadAnimation(presentation->secondaryAnimationPath);
+                secondaryComplete = secondaryComplete && secondarySkeleton != NULL && secondaryAnimation != NULL;
+                for (int limb = 0; limb < 6 && secondaryComplete; ++limb) {
+                    StandardLimb* sourceLimb =
+                        (StandardLimb*)MmAssets_LoadResource(StaticStoryMm_GetTatlLimbPath(limb));
+                    Gfx* sourceDList = (Gfx*)MmAssets_LoadResource(StaticStoryMm_GetTatlDListPath(limb));
 
-                secondaryComplete = sourceLimb != NULL && sourceDList != NULL;
-                if (secondaryComplete) {
-                    this->staticState.tatlLimbs[limb] = *sourceLimb;
-                    this->staticState.tatlLimbs[limb].dList = sourceDList;
-                    this->staticState.tatlLimbPtrs[limb] = &this->staticState.tatlLimbs[limb];
+                    secondaryComplete = sourceLimb != NULL && sourceDList != NULL;
+                    if (secondaryComplete) {
+                        this->staticState.tatlLimbs[limb] = *sourceLimb;
+                        this->staticState.tatlLimbs[limb].dList = sourceDList;
+                        this->staticState.tatlLimbPtrs[limb] = &this->staticState.tatlLimbs[limb];
+                    }
                 }
             }
         }
@@ -584,11 +587,17 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         SkelAnime_InitFlex(play, &this->skin.skelAnime, skeleton, NULL, NULL, NULL, 0);
         Animation_PlayLoopSetSpeed(&this->skin.skelAnime, animation, poseDescriptor->playbackSpeed);
         if (presentation->requiresSecondarySkeleton) {
-            this->staticState.tatlSkeleton = *secondarySkeleton;
-            this->staticState.tatlSkeleton.sh.segment = this->staticState.tatlLimbPtrs;
-            this->staticState.tatlSkeleton.sh.limbCount = 6;
-            SkelAnime_Init(play, &this->staticState.tatlSkelAnime, &this->staticState.tatlSkeleton.sh,
-                           secondaryAnimation, NULL, NULL, 0);
+            if (StaticStoryMm_UsesNativeFairyCompanion((StaticStoryActorType)this->staticState.type)) {
+                /* Use SoH's retained fairy resources for the Tatl-colored companion. The custom MM
+                 * limb reconstruction emitted an invalid command stream in the renderer. */
+                SkelAnime_Init(play, &this->staticState.tatlSkelAnime, &gFairySkel, &gFairyAnim, NULL, NULL, 0);
+            } else {
+                this->staticState.tatlSkeleton = *secondarySkeleton;
+                this->staticState.tatlSkeleton.sh.segment = this->staticState.tatlLimbPtrs;
+                this->staticState.tatlSkeleton.sh.limbCount = 6;
+                SkelAnime_Init(play, &this->staticState.tatlSkelAnime, &this->staticState.tatlSkeleton.sh,
+                               secondaryAnimation, NULL, NULL, 0);
+            }
             this->staticState.tatlInitialized = true;
         }
     } else if (objectSlot < 0) {
@@ -1876,7 +1885,7 @@ static void EnViewer_DrawStaticTatl(EnViewer* this, PlayState* play) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_27Xlu(play->state.gfxCtx);
     gSPSegment(POLY_XLU_DISP++, 0x08, sStaticStoryTatlSetupDL);
-    gDPSetEnvColor(POLY_XLU_DISP++, 220, 160, 80, outerAlpha);
+    gDPSetEnvColor(POLY_XLU_DISP++, 0x5F, 0x25, 0x75, outerAlpha);
     Matrix_Push();
     Matrix_Translate((anchor.x + orbitX) * 100.0f, anchor.y * 100.0f, (anchor.z + orbitZ) * 100.0f,
                      MTXMODE_APPLY);
@@ -1977,6 +1986,9 @@ void EnViewer_Draw(Actor* thisx, PlayState* play) {
     EnViewer* this = (EnViewer*)thisx;
     s32 pad;
     s16 type;
+    bool logStaticDrawCompletion = false;
+    Gfx* staticOpaStart = NULL;
+    Gfx* staticXluStart = NULL;
 
     OPEN_DISPS(play->state.gfxCtx);
     if (this->isVisible) {
@@ -1996,10 +2008,24 @@ void EnViewer_Draw(Actor* thisx, PlayState* play) {
                     this->actor.objBankIndex, this->animObjBankIndex, this->skin.skelAnime.dListCount,
                     this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z,
                     this->actor.projectedPos.z, this->actor.flags);
+                logStaticDrawCompletion = true;
+                staticOpaStart = POLY_OPA_DISP;
+                staticXluStart = POLY_XLU_DISP;
                 this->staticState.diagnosticDrawLogged = true;
             }
             Gfx_SetupDL_25Opa(play->state.gfxCtx);
             EnViewerStatic_Draw(this, play);
+            if (logStaticDrawCompletion) {
+                StaticStoryObjectRequirements objects =
+                    StaticStoryActor_GetObjectRequirements((StaticStoryActorType)this->staticState.type);
+
+                ActorCatalogue_LogLifecycle("draw-complete", this->actor.params, this->staticState.type,
+                                            this->staticState.pose, objects.modelObjectId, this->actor.objBankIndex,
+                                            objects.animationObjectId, this->animObjBankIndex);
+                osSyncPrintf("[ActorCatalogueProbe] draw-complete params=%04X opaCommands=%td xluCommands=%td\n",
+                             (uint16_t)this->actor.params, POLY_OPA_DISP - staticOpaStart,
+                             POLY_XLU_DISP - staticXluStart);
+            }
         } else if (type <= ENVIEWER_TYPE_2_ZELDA) { // zelda's horse, impa and zelda
             if (play->csCtx.state != CS_STATE_IDLE && play->csCtx.npcActions[0] != NULL) {
                 Gfx_SetupDL_25Opa(play->state.gfxCtx);

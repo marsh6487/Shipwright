@@ -103,6 +103,10 @@ const char* StaticStoryMm_GetTatlDListPath(uint8_t limb) {
     return limb < 6 ? sTatlDListPaths[limb] : NULL;
 }
 
+bool StaticStoryMm_UsesNativeFairyCompanion(StaticStoryActorType type) {
+    return type == STATIC_STORY_ACTOR_SKULL_KID;
+}
+
 bool StaticStoryMm_ResourcesComplete(const StaticStoryMmPresentation* presentation, bool hasSkeleton,
                                      bool hasAnimation, bool hasSecondarySkeleton) {
     return presentation != NULL && hasSkeleton && hasAnimation &&

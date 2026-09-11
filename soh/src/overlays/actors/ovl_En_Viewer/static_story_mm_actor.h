@@ -41,5 +41,6 @@ uint8_t StaticStoryMm_GetTatlOuterAlpha(uint16_t phase);
 float StaticStoryMm_GetTatlScale(uint16_t phase);
 const char* StaticStoryMm_GetTatlLimbPath(uint8_t limb);
 const char* StaticStoryMm_GetTatlDListPath(uint8_t limb);
+bool StaticStoryMm_UsesNativeFairyCompanion(StaticStoryActorType type);
 
 #endif
