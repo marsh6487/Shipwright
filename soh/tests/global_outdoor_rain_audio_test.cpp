@@ -104,6 +104,12 @@ static void TestDenseFlameHubDoesNotStealNaviOrThunder() {
     RequireMixFrame(106);
 }
 
+static void TestNaviEmergenceSurvivesEnvironmentBankSaturation() {
+    WeatherSfxEngine_Reset();
+    WeatherSfxEngine_StartSaturatedEnvironment();
+    REQUIRE(WeatherSfxEngine_IsNaviPlaying());
+}
+
 static void TestPlacedWeatherRainUsesPrivateLoop() {
     WeatherSamplePlayer_Init();
     GlobalOutdoorRain_Reset();
@@ -137,6 +143,7 @@ int main() {
     REQUIRE(RegisterShipInitFunc::updatePathCount == 0);
     TestSimultaneousEngineAndWeatherVoices();
     TestDenseFlameHubDoesNotStealNaviOrThunder();
+    TestNaviEmergenceSurvivesEnvironmentBankSaturation();
     TestPlacedWeatherRainUsesPrivateLoop();
 
     // Overcast follows the enhanced rain lifecycle, stays off fixed skies,
@@ -160,6 +167,34 @@ int main() {
     REQUIRE(incomingOvercastPlay.envCtx.gloomySkyMode == 2);
     GlobalOutdoorRain_Reset();
     sOvercast = 1;
+
+    // A proximity weather actor belongs to its outgoing PlayState. Its private
+    // loop must not leak into a dry destination scene when that state is destroyed.
+    WeatherSamplePlayer_Init();
+    GlobalOutdoorRain_Reset();
+    WeatherSfxEngine_Reset();
+    WeatherSfxEngine_Start();
+    SetNatureRain(false);
+    GlobalOutdoorRain_NotifyNativeRainActive(1, 0);
+    RequireMixFrame(101);
+    GlobalOutdoorRain_OnPlayDestroy();
+    RequireMixFrame(100);
+
+    // Enabling intermittent weather should produce visible rain within five
+    // seconds instead of spending the first visit in the normal long clear phase.
+    WeatherSamplePlayer_Init();
+    GlobalOutdoorRain_Reset();
+    sEnabled = 1;
+    sMode = 0;
+    PlayState promptIntermittent = {};
+    GlobalOutdoorRain_Update(&promptIntermittent);
+    sMode = 1;
+    GlobalOutdoorRain_Update(&promptIntermittent);
+    for (int frame = 0; frame < 300 && promptIntermittent.envCtx.unk_EE[0] == 0; ++frame)
+        GlobalOutdoorRain_Update(&promptIntermittent);
+    REQUIRE(promptIntermittent.envCtx.unk_EE[0] > 0);
+    GlobalOutdoorRain_Reset();
+    sMode = 0;
 
     // The same opt-in overcast presentation applies to placed rain actors on
     // compatible outdoor skies; it releases when the actor relinquishes rain.

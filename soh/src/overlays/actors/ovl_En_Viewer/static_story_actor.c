@@ -423,6 +423,19 @@ StaticStoryFaceProfile StaticStoryActor_GetFaceProfile(StaticStoryActorType type
     return STATIC_FACE_PROFILE_STANDARD;
 }
 
+uint8_t StaticStoryActor_ResolveEyeIndex(StaticStoryActorType type, uint8_t requestedEyeIndex,
+                                        bool hasAlternateHead) {
+    if (requestedEyeIndex >= 3) {
+        return 0;
+    }
+    if (hasAlternateHead &&
+        (type == STATIC_STORY_ACTOR_IMPA || type == STATIC_STORY_ACTOR_ADULT_RUTO ||
+         type == STATIC_STORY_ACTOR_ADULT_RUTO_WATER)) {
+        return 0;
+    }
+    return requestedEyeIndex;
+}
+
 StaticStoryResourceSource StaticStoryActor_GetResourceSource(StaticStoryActorType type) {
     switch (type) {
         case STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL:

@@ -15,6 +15,11 @@ static u16 sStartedChannels;
 static Vec3f sFlamePos = { 10.0f, 0.0f, 0.0f };
 static Vec3f sDenseFlamePos[10];
 static Vec3f sEnemyPos = { 20.0f, 0.0f, 0.0f };
+static Vec3f sAmbiencePos[3] = {
+    { 10.0f, 0.0f, 0.0f },
+    { 20.0f, 0.0f, 0.0f },
+    { 30.0f, 0.0f, 0.0f },
+};
 static const u16 sEffects[] = {
     // En_Elf's actual emergence/movement sound, not a Navi voice line.
     NA_SE_EV_FAIRY_DASH,
@@ -97,6 +102,36 @@ void WeatherSfxEngine_StartDenseFlameHub(void) {
     Audio_ProcessSoundRequests();
     func_800F8F88();
     WeatherSfxEngine_RequirePlaying();
+}
+
+static int WeatherSfxEngine_IsPlaying(u16 sfxId) {
+    const u8 bank = SFX_BANK(sfxId);
+    for (u8 slot = 0; slot < gChannelsPerBank[0][bank]; ++slot) {
+        u8 index = gActiveSounds[bank][slot].entryIndex;
+        if (index == 0xFF)
+            continue;
+        SoundBankEntry* entry = &gSoundBanks[bank][index];
+        if (entry->sfxId == sfxId &&
+            (entry->state == SFX_STATE_PLAYING_1 || entry->state == SFX_STATE_PLAYING_2)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int WeatherSfxEngine_IsNaviPlaying(void) {
+    return WeatherSfxEngine_IsPlaying(NA_SE_EV_FAIRY_DASH);
+}
+
+void WeatherSfxEngine_StartSaturatedEnvironment(void) {
+    /* Gerudo Valley and the drawbridge can already occupy all three
+     * environment-bank voices before Navi's emergence one-shot arrives. */
+    Request(NA_SE_EV_RIVER_STREAM, &sAmbiencePos[0]);
+    Request(NA_SE_EV_WATER_WALL_BIG, &sAmbiencePos[1]);
+    Request(NA_SE_EV_ROCK_SLIDE, &sAmbiencePos[2]);
+    Request(NA_SE_EV_FAIRY_DASH, &gSfxDefaultPos);
+    Audio_ProcessSoundRequests();
+    func_800F8F88();
 }
 
 void WeatherSfxEngine_RequirePlaying(void) {

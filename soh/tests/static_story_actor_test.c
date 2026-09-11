@@ -238,6 +238,12 @@ int main(void) {
     assert(StaticStoryActor_GetFaceProfile(STATIC_STORY_ACTOR_IMPA) == STATIC_FACE_PROFILE_IMPA);
     assert(StaticStoryActor_GetFaceProfile(STATIC_STORY_ACTOR_ADULT_RUTO) == STATIC_FACE_PROFILE_ADULT_RUTO);
     assert(StaticStoryActor_GetFaceProfile(STATIC_STORY_ACTOR_ADULT_RUTO_WATER) == STATIC_FACE_PROFILE_ADULT_RUTO);
+    assert(StaticStoryActor_ResolveEyeIndex(STATIC_STORY_ACTOR_IMPA, 2, false) == 2);
+    assert(StaticStoryActor_ResolveEyeIndex(STATIC_STORY_ACTOR_IMPA, 2, true) == 0);
+    assert(StaticStoryActor_ResolveEyeIndex(STATIC_STORY_ACTOR_ADULT_RUTO, 1, true) == 0);
+    assert(StaticStoryActor_ResolveEyeIndex(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 2, true) == 0);
+    assert(StaticStoryActor_ResolveEyeIndex(STATIC_STORY_ACTOR_SARIA, 1, true) == 1);
+    assert(StaticStoryActor_ResolveEyeIndex(STATIC_STORY_ACTOR_IMPA, 9, false) == 0);
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_CHILD_MALON, 1));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SARIA, 2));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SARIA, 3));

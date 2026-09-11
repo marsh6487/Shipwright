@@ -238,11 +238,15 @@ static void UpdateOvercast(PlayState* play, bool enabled, bool outdoors) {
 }
 
 static int RandomDryFrames() {
-    return Rand_S16Offset(10 * kFramesPerSecond, 20 * kFramesPerSecond);
+    return Rand_S16Offset(20 * kFramesPerSecond, 6 * kFramesPerSecond);
+}
+
+static int RandomInitialDryFrames() {
+    return Rand_S16Offset(2 * kFramesPerSecond, 3 * kFramesPerSecond);
 }
 
 static int RandomSustainFrames() {
-    return Rand_S16Offset(8 * kFramesPerSecond, 15 * kFramesPerSecond);
+    return Rand_S16Offset(8 * kFramesPerSecond, 7 * kFramesPerSecond);
 }
 
 static void PlayRainLoop(float intensity) {
@@ -302,8 +306,8 @@ void GlobalOutdoorRain_Update(PlayState* play) {
     const GlobalOutdoorRainDecision decision = GlobalOutdoorRain_Select(state);
     if (modeValue != sLastMode) {
         sLastMode = modeValue;
-        sCycle = { GlobalOutdoorRainPhase::Dry, mode == GlobalOutdoorRainMode::Intermittent ? RandomDryFrames() : 0,
-                   0.0f };
+        sCycle = { GlobalOutdoorRainPhase::Dry,
+                   mode == GlobalOutdoorRainMode::Intermittent ? RandomInitialDryFrames() : 0, 0.0f };
         if (sRainSource == GlobalOutdoorRainSource::EnhancedOutdoor && play->envCtx.unk_EE[0] <= kRainDensity) {
             play->envCtx.unk_EE[0] = 0;
         }
@@ -328,7 +332,7 @@ void GlobalOutdoorRain_Update(PlayState* play) {
     }
 
     const GlobalOutdoorRainPhase previousPhase = sCycle.phase;
-    GlobalOutdoorRain_AdvanceCycle(sCycle, mode, enabled && outdoors, 10 * kFramesPerSecond, 15 * kFramesPerSecond,
+    GlobalOutdoorRain_AdvanceCycle(sCycle, mode, enabled && outdoors, 20 * kFramesPerSecond, 8 * kFramesPerSecond,
                                    kFadeStep);
     if (mode == GlobalOutdoorRainMode::Intermittent && previousPhase != sCycle.phase) {
         if (sCycle.phase == GlobalOutdoorRainPhase::Dry) {
@@ -348,9 +352,13 @@ void GlobalOutdoorRain_Update(PlayState* play) {
 }
 
 void GlobalOutdoorRain_OnPlayDestroy() {
-    // Rain is global rather than PlayState-owned. Keep its cycle and decoded
-    // loop voice alive across ordinary scene transitions; the next PlayState
-    // decides whether to maintain it outdoors or fade it out indoors.
+    // Enhanced rain is global and may continue across compatible outdoor
+    // scenes. Placed proximity rain belongs to the outgoing PlayState and must
+    // release its private loop before the destination scene is constructed.
+    if (sRainSource == GlobalOutdoorRainSource::NativePlaced) {
+        PlayRainLoop(0.0f);
+        sRainSource = GlobalOutdoorRainSource::None;
+    }
     // Sky state is PlayState-owned, so the incoming scene must claim its own
     // overcast transition even while the rain loop itself remains continuous.
     sOwnsOvercast = false;

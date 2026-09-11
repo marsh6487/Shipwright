@@ -26,6 +26,8 @@ int main(void) {
     REQUIRE(!phantom->spawnHorse);
     REQUIRE(!phantom->spawnDynamicCape);
     REQUIRE(!phantom->usesBossActions);
+    /* At 0.01 actor scale, this preserves authored Y and raises the rendered model by 10 world units. */
+    REQUIRE(phantom->shapeYOffset * 0.01f == 10.0f);
     REQUIRE(StaticStoryGanon_GetPresentation(STATIC_STORY_ACTOR_SKULL_KID) == NULL);
     return 0;
 }

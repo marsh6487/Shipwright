@@ -63,13 +63,14 @@ int main(void) {
     assert(rippleSeen);
     assert(StaticRutoWater_CanTrack(&state));
     StaticRutoWater_GetTreadLegPose(0, &legPose);
-    assert(legPose.leftHip.x <= -0x800 && legPose.rightHip.x <= -0x800);
-    assert(legPose.leftKnee.x >= 0x1400 && legPose.rightKnee.x >= 0x1400);
-    assert(legPose.leftHip.y == 0 && legPose.leftHip.z == 0);
-    assert(legPose.leftKnee.y == 0 && legPose.leftKnee.z == 0);
+    /* Adult Ruto's sagittal leg bend is on Z: flex the hips slightly and fold both shins behind her. */
+    assert(legPose.leftHip.z <= -0xA00 && legPose.rightHip.z <= -0xA00);
+    assert(legPose.leftKnee.z >= 0x1C00 && legPose.rightKnee.z >= 0x1C00);
+    assert(legPose.leftHip.x == 0 && legPose.leftHip.y == 0);
+    assert(legPose.leftKnee.x == 0 && legPose.leftKnee.y == 0);
     StaticRutoWater_GetTreadLegPose(0x300, &legPose);
-    assert(legPose.leftHip.x != legPose.rightHip.x);
-    assert(legPose.leftKnee.x != legPose.rightKnee.x);
+    assert(legPose.leftHip.z != legPose.rightHip.z);
+    assert(legPose.leftKnee.z != legPose.rightKnee.z);
     assert(StaticRutoWater_ShouldTurnBody(&state));
 
     /* Dive-loop Ruto stays hidden at authored depth until Link approaches. */
@@ -95,26 +96,25 @@ int main(void) {
     for (i = 0; i < 60; ++i) {
         events |= StaticRutoWater_Update(&state, true, 100.0f, false, false, 60);
     }
-    assert(state.phase == STATIC_RUTO_PHASE_PREPARING_DIVE);
-    assert(state.velocityY == 0.0f);
-    assert((events & STATIC_RUTO_WATER_EVENT_DIVE) == 0);
-    assert(!StaticRutoWater_CanTrack(&state));
-    assert(!StaticRutoWater_ShouldTurnBody(&state));
-    events = StaticRutoWater_Update(&state, true, 100.0f, false, false, 60);
-    assert(state.phase == STATIC_RUTO_PHASE_PREPARING_DIVE);
-    assert(state.currentY >= 54.5f && state.currentY <= 57.5f);
-    events = StaticRutoWater_Update(&state, true, 100.0f, false, true, 60);
     assert(state.phase == STATIC_RUTO_PHASE_DIVING);
     assert(state.velocityY == -4.0f);
-    assert(state.alpha == 255);
     assert((events & STATIC_RUTO_WATER_EVENT_DIVE) != 0);
+    assert(!StaticRutoWater_CanTrack(&state));
+    assert(!StaticRutoWater_ShouldTurnBody(&state));
+    /* The reverse swim and descent begin together; fading is visible throughout the downward motion. */
+    events = StaticRutoWater_Update(&state, true, 100.0f, false, false, 60);
+    assert(state.phase == STATIC_RUTO_PHASE_DIVING);
+    assert(state.currentY > state.homeY);
+    assert(state.velocityY == -4.0f);
+    assert(state.alpha < 255 && state.alpha > 0);
     while (state.phase == STATIC_RUTO_PHASE_DIVING && fadeFrames < 100) {
         StaticRutoWater_Update(&state, true, 100.0f, false, false, 60);
         fadeFrames++;
     }
     assert(state.phase == STATIC_RUTO_PHASE_SUBMERGED);
+    /* Once fully invisible, submerge returns the actor to its authored reset point. */
     assert(state.currentY == state.homeY);
-    assert(fadeFrames >= 26);
+    assert(fadeFrames >= 6);
 
     /* Losing a water box is recoverable and never changes the selected water mode. */
     StaticRutoWater_Update(&state, false, 0.0f, false, false, 60);

@@ -7,8 +7,6 @@ static const float sRiseVelocity = 4.0f;
 static const float sTreadExtent = 1.5f;
 static const float sTreadVelocity = 0.3f;
 static const float sFadeDepth = 32.0f;
-static const float sDiveFadeDelayDepth = 26.0f;
-static const uint8_t sDiveFadeStep = 10;
 
 bool StaticRutoWater_CanTrack(const StaticRutoWaterState* state) {
     return state->phase == STATIC_RUTO_PHASE_GROUNDED || state->phase == STATIC_RUTO_PHASE_SURFACED;
@@ -19,10 +17,10 @@ bool StaticRutoWater_ShouldTurnBody(const StaticRutoWaterState* state) {
 }
 
 void StaticRutoWater_GetTreadLegPose(int16_t treadOffset, StaticRutoWaterLegPose* pose) {
-    pose->leftHip = (StaticRutoWaterLimbRotation){ -0xA00 - treadOffset, 0, 0 };
-    pose->leftKnee = (StaticRutoWaterLimbRotation){ 0x1800 + treadOffset, 0, 0 };
-    pose->rightHip = (StaticRutoWaterLimbRotation){ -0xA00 + treadOffset, 0, 0 };
-    pose->rightKnee = (StaticRutoWaterLimbRotation){ 0x1800 - treadOffset, 0, 0 };
+    pose->leftHip = (StaticRutoWaterLimbRotation){ 0, 0, -0xC00 - treadOffset };
+    pose->leftKnee = (StaticRutoWaterLimbRotation){ 0, 0, 0x2000 + treadOffset };
+    pose->rightHip = (StaticRutoWaterLimbRotation){ 0, 0, -0xC00 + treadOffset };
+    pose->rightKnee = (StaticRutoWaterLimbRotation){ 0, 0, 0x2000 - treadOffset };
 }
 
 static uint8_t StaticRutoWater_AlphaForDepth(float currentY, float surfaceTarget) {
@@ -98,6 +96,8 @@ StaticRutoWaterEvents StaticRutoWater_Update(StaticRutoWaterState* state, bool h
     StaticRutoWaterEvents events = STATIC_RUTO_WATER_EVENT_NONE;
     float surfaceTarget;
 
+    (void)animationEnded;
+
     if (state->mode == STATIC_RUTO_GROUNDED) {
         StaticRutoWater_Ground(state);
         return events;
@@ -148,9 +148,10 @@ StaticRutoWaterEvents StaticRutoWater_Update(StaticRutoWaterState* state, bool h
                 } else if (state->phaseTimer == 0) {
                     state->phaseTimer = diveDelay;
                 } else if (--state->phaseTimer == 0) {
-                    state->phase = STATIC_RUTO_PHASE_PREPARING_DIVE;
-                    state->velocityY = 0.0f;
+                    state->phase = STATIC_RUTO_PHASE_DIVING;
+                    state->velocityY = sDiveVelocity;
                     state->rippleTimer = 0;
+                    events |= STATIC_RUTO_WATER_EVENT_DIVE;
                 }
             }
             break;
@@ -167,13 +168,7 @@ StaticRutoWaterEvents StaticRutoWater_Update(StaticRutoWaterState* state, bool h
 
         case STATIC_RUTO_PHASE_DIVING:
             state->currentY += state->velocityY;
-            if (state->currentY <= state->homeY) {
-                state->currentY = state->homeY;
-                state->velocityY = 0.0f;
-            }
-            if (state->currentY <= surfaceTarget - sDiveFadeDelayDepth || state->currentY <= state->homeY) {
-                state->alpha = state->alpha > sDiveFadeStep ? state->alpha - sDiveFadeStep : 0;
-            }
+            state->alpha = StaticRutoWater_AlphaForDepth(state->currentY, surfaceTarget);
             if (state->alpha == 0) {
                 StaticRutoWater_Submerge(state);
                 events |= STATIC_RUTO_WATER_EVENT_SUBMERGED;

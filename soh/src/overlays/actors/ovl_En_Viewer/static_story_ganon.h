@@ -24,6 +24,7 @@ typedef struct {
     bool spawnHorse;
     bool spawnDynamicCape;
     bool usesBossActions;
+    float shapeYOffset;
 } StaticStoryGanonPresentation;
 
 const StaticStoryGanonPresentation* StaticStoryGanon_GetPresentation(StaticStoryActorType type);

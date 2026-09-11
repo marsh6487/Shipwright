@@ -16,6 +16,7 @@ static const StaticStoryGanonPresentation sPhantomGanon = {
     false,
     false,
     false,
+    1000.0f,
 };
 
 const StaticStoryGanonPresentation* StaticStoryGanon_GetPresentation(StaticStoryActorType type) {

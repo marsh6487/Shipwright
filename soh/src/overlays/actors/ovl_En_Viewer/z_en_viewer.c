@@ -425,7 +425,8 @@ static void EnViewerStatic_SetRutoWaterAnimation(EnViewer* this, StaticRutoWater
                              -4.0f);
             break;
         case STATIC_RUTO_PHASE_DIVING:
-            this->skin.skelAnime.playSpeed = 0.0f;
+            Animation_Change(&this->skin.skelAnime, &gAdultRutoSwimmingUpAnim, -1.0f, lastFrame, 0.0f, ANIMMODE_LOOP,
+                             -4.0f);
             break;
         case STATIC_RUTO_PHASE_RISING:
             Animation_Change(&this->skin.skelAnime, &gAdultRutoSwimmingUpAnim, 1.0f, 0.0f, lastFrame, ANIMMODE_ONCE,
@@ -653,7 +654,10 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         Actor_SetObjectDependency(play, &this->actor);
     }
     Actor_SetScale(&this->actor, definition->scale);
-    ActorShape_Init(&this->actor.shape, 0.0f, ActorShadow_DrawCircle, definition->colliderRadius);
+    const StaticStoryGanonPresentation* ganonPresentation =
+        StaticStoryGanon_GetPresentation((StaticStoryActorType)this->staticState.type);
+    ActorShape_Init(&this->actor.shape, ganonPresentation != NULL ? ganonPresentation->shapeYOffset : 0.0f,
+                    ActorShadow_DrawCircle, definition->colliderRadius);
     if (!usesMmAssets) {
         gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[this->animObjBankIndex].segment);
     }
@@ -1363,7 +1367,10 @@ s32 EnViewer_ImpaOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, V
 
 void EnViewer_DrawImpa(EnViewer* this, PlayState* play) {
     static void* sEyes[] = { gImpaEyeOpenTex, gImpaEyeHalfTex, gImpaEyeClosedTex };
-    void* eye = this->staticState.type != STATIC_STORY_ACTOR_NONE ? sEyes[this->staticState.eyeIndex] : gImpaEyeOpenTex;
+    bool hasAlternateHead = ResourceMgr_IsAltAssetsEnabled() && ResourceMgr_FileAltExists(gImpaHeadUnmaskedDL);
+    u8 eyeIndex = StaticStoryActor_ResolveEyeIndex(STATIC_STORY_ACTOR_IMPA, this->staticState.eyeIndex,
+                                                   hasAlternateHead);
+    void* eye = this->staticState.type != STATIC_STORY_ACTOR_NONE ? sEyes[eyeIndex] : gImpaEyeOpenTex;
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(eye));
@@ -1432,7 +1439,8 @@ void EnViewer_DrawStaticSaria(EnViewer* this, PlayState* play) {
     OPEN_DISPS(play->state.gfxCtx);
     gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
     gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
-    gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(gSariaMouthClosedTex));
+    /* Closed2 is Saria's neutral native mouth; Closed reads as a frown. */
+    gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(gSariaMouthClosed2Tex));
     SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, EnViewer_StaticSariaOverrideLimbDraw, NULL, this);
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -1482,13 +1490,13 @@ static s32 EnViewer_StaticAdultRutoOverrideLimbDraw(PlayState* play, s32 limbInd
 
         StaticRutoWater_GetTreadLegPose(tread, &legPose);
         if (limbIndex == 2) {
-            rot->x += legPose.leftHip.x;
+            rot->z += legPose.leftHip.z;
         } else if (limbIndex == 3) {
-            rot->x += legPose.leftKnee.x;
+            rot->z += legPose.leftKnee.z;
         } else if (limbIndex == 6) {
-            rot->x += legPose.rightHip.x;
+            rot->z += legPose.rightHip.z;
         } else if (limbIndex == 7) {
-            rot->x += legPose.rightKnee.x;
+            rot->z += legPose.rightKnee.z;
         }
     }
 
@@ -1508,13 +1516,16 @@ static s32 EnViewer_StaticAdultRutoOverrideLimbDraw(PlayState* play, s32 limbInd
     return false;
 }
 
-static void* EnViewer_GetAdultRutoEye(u8 eyeIndex) {
+static void* EnViewer_GetAdultRutoEye(StaticStoryActorType type, u8 requestedEyeIndex) {
     static void* sEyes[] = { gAdultRutoEyeOpenTex, gAdultRutoEyeHalfTex, gAdultRutoEyeClosedTex };
+    bool hasAlternateHead = ResourceMgr_IsAltAssetsEnabled() && ResourceMgr_FileAltExists(gAdultRutoHeadDL);
+    u8 eyeIndex = StaticStoryActor_ResolveEyeIndex(type, requestedEyeIndex, hasAlternateHead);
+
     return sEyes[eyeIndex];
 }
 
 void EnViewer_DrawStaticAdultRuto(EnViewer* this, PlayState* play) {
-    void* eye = EnViewer_GetAdultRutoEye(this->staticState.eyeIndex);
+    void* eye = EnViewer_GetAdultRutoEye((StaticStoryActorType)this->staticState.type, this->staticState.eyeIndex);
 
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
@@ -1528,7 +1539,7 @@ void EnViewer_DrawStaticAdultRuto(EnViewer* this, PlayState* play) {
 }
 
 void EnViewer_DrawStaticAdultRutoXlu(EnViewer* this, PlayState* play) {
-    void* eye = EnViewer_GetAdultRutoEye(this->staticState.eyeIndex);
+    void* eye = EnViewer_GetAdultRutoEye((StaticStoryActorType)this->staticState.type, this->staticState.eyeIndex);
 
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
@@ -1845,21 +1856,26 @@ static void EnViewer_StaticSkullKidPostLimbDraw(PlayState* play, s32 limbIndex, 
     }
 }
 
+/* Tatl's limbs branch through segment 0x08. This setup contains no per-frame
+ * values, so it must remain at a stable address: frame interpolation can replay
+ * Skull Kid's command stream after the transient graphics pool is recycled. */
+static Gfx sStaticStoryTatlSetupDL[] = {
+    gsDPPipeSync(),
+    gsDPSetPrimColor(0, 1, 255, 255, 230, 255),
+    gsDPSetRenderMode(G_RM_PASS, G_RM_ZB_CLD_SURF2),
+    gsSPEndDisplayList(),
+};
+
 static void EnViewer_DrawStaticTatl(EnViewer* this, PlayState* play) {
     StaticStoryMmVec3f anchor = StaticStoryMm_GetTatlAnchor(this->staticState.pose);
     float orbitX = Math_SinS(this->staticState.tatlPulsePhase) * 4.0f;
     float orbitZ = Math_CosS(this->staticState.tatlPulsePhase) * 4.0f;
     float scale = StaticStoryMm_GetTatlScale(this->staticState.tatlPulsePhase);
     uint8_t outerAlpha = StaticStoryMm_GetTatlOuterAlpha(this->staticState.tatlPulsePhase);
-    Gfx* fairySetup = Graph_Alloc(play->state.gfxCtx, 4 * sizeof(Gfx));
 
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_27Xlu(play->state.gfxCtx);
-    gSPSegment(POLY_XLU_DISP++, 0x08, fairySetup);
-    gDPPipeSync(fairySetup++);
-    gDPSetPrimColor(fairySetup++, 0, 1, 255, 255, 230, 255);
-    gDPSetRenderMode(fairySetup++, G_RM_PASS, G_RM_ZB_CLD_SURF2);
-    gSPEndDisplayList(fairySetup);
+    gSPSegment(POLY_XLU_DISP++, 0x08, sStaticStoryTatlSetupDL);
     gDPSetEnvColor(POLY_XLU_DISP++, 220, 160, 80, outerAlpha);
     Matrix_Push();
     Matrix_Translate((anchor.x + orbitX) * 100.0f, anchor.y * 100.0f, (anchor.z + orbitZ) * 100.0f,
