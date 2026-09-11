@@ -58,6 +58,12 @@ bool HyruleFieldNightMusic_ShouldStopDaySequence(const HyruleFieldNightMusicStat
            !state.explicitAudioOverride && !state.fanfarePlaying;
 }
 
+bool HyruleFieldNightMusic_IsFieldLifecycleSequence(uint16_t sequence, uint16_t fieldLogic,
+                                                     uint16_t natureAmbience, uint16_t disabled) {
+    return sequence == disabled || (sequence & 0xFF) == (fieldLogic & 0xFF) ||
+           (sequence & 0xFF) == (natureAmbience & 0xFF);
+}
+
 #ifndef HYRULE_FIELD_NIGHT_MUSIC_TEST
 #include "AudioCollection.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
@@ -90,8 +96,8 @@ static bool HasExplicitAudioOverride(PlayState* play) {
 
     const uint16_t mainSeq = func_800FA0B4(SEQ_PLAYER_BGM_MAIN);
     const uint16_t subSeq = func_800FA0B4(SEQ_PLAYER_BGM_SUB);
-    const bool mainIsFieldLifecycle =
-        mainSeq == NA_BGM_NATURE_AMBIENCE || (mainSeq & 0xFF) == NA_BGM_FIELD_LOGIC || mainSeq == NA_BGM_DISABLED;
+    const bool mainIsFieldLifecycle = HyruleFieldNightMusic_IsFieldLifecycleSequence(
+        mainSeq, NA_BGM_FIELD_LOGIC, NA_BGM_NATURE_AMBIENCE, NA_BGM_DISABLED);
     const bool subIsNightTrack = sOwnsNightBgm && (subSeq & 0xFF) == (sNightPlaybackSeq & 0xFF);
     return !mainIsFieldLifecycle || (subSeq != NA_BGM_DISABLED && !subIsNightTrack);
 }

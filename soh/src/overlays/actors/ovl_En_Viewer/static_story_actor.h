@@ -262,6 +262,7 @@ int8_t StaticStoryActor_GetFixedEyeIndex(StaticStoryActorType type, uint8_t pose
 StaticStoryFaceProfile StaticStoryActor_GetFaceProfile(StaticStoryActorType type);
 uint8_t StaticStoryActor_ResolveEyeIndex(StaticStoryActorType type, uint8_t requestedEyeIndex,
                                         bool hasAlternateHead);
+bool StaticStoryActor_ShouldOverrideImpaHead(bool hasAlternateSkeleton);
 StaticStoryResourceSource StaticStoryActor_GetResourceSource(StaticStoryActorType type);
 void StaticStoryActor_NormalizePlacementRotation(int16_t* pitch, int16_t* yaw, int16_t* roll);
 int StaticStoryActor_LocksRootTranslation(StaticStoryActorType type, uint8_t pose);

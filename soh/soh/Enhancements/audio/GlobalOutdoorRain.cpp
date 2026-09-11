@@ -137,7 +137,9 @@ extern PlayState* gPlayState;
 }
 
 static constexpr int kRainDensity = 25;
-static constexpr int kFramesPerSecond = 60;
+// This feature advances from OnGameFrameUpdate at OOT's native 20 Hz logic
+// rate, independently of the renderer's interpolation rate.
+static constexpr int kFramesPerSecond = 20;
 static constexpr float kFadeStep = 1.0f / kFramesPerSecond;
 static GlobalOutdoorRainSource sRainSource = GlobalOutdoorRainSource::None;
 static int sLastMode = -1;

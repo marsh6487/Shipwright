@@ -108,6 +108,11 @@ static HyruleFieldNightMusicState BaseState() {
 }
 
 int main() {
+    // Sequence arguments live above the low ID byte. Nature ambience with
+    // those flags is still Hyrule Field's native lifecycle, not an override.
+    assert(HyruleFieldNightMusic_IsFieldLifecycleSequence(NA_BGM_NATURE_AMBIENCE | 0x0800, NA_BGM_FIELD_LOGIC,
+                                                           NA_BGM_NATURE_AMBIENCE, NA_BGM_DISABLED));
+
     auto state = BaseState();
     assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StartNight);
 

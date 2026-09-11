@@ -190,7 +190,7 @@ int main() {
     GlobalOutdoorRain_Update(&promptIntermittent);
     sMode = 1;
     GlobalOutdoorRain_Update(&promptIntermittent);
-    for (int frame = 0; frame < 300 && promptIntermittent.envCtx.unk_EE[0] == 0; ++frame)
+    for (int update = 0; update < 100 && promptIntermittent.envCtx.unk_EE[0] == 0; ++update)
         GlobalOutdoorRain_Update(&promptIntermittent);
     REQUIRE(promptIntermittent.envCtx.unk_EE[0] > 0);
     GlobalOutdoorRain_Reset();

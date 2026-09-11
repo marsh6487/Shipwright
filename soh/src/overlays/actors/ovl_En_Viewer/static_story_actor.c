@@ -436,6 +436,10 @@ uint8_t StaticStoryActor_ResolveEyeIndex(StaticStoryActorType type, uint8_t requ
     return requestedEyeIndex;
 }
 
+bool StaticStoryActor_ShouldOverrideImpaHead(bool hasAlternateSkeleton) {
+    return !hasAlternateSkeleton;
+}
+
 StaticStoryResourceSource StaticStoryActor_GetResourceSource(StaticStoryActorType type) {
     switch (type) {
         case STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL:

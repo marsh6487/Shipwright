@@ -244,6 +244,9 @@ int main(void) {
     assert(StaticStoryActor_ResolveEyeIndex(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 2, true) == 0);
     assert(StaticStoryActor_ResolveEyeIndex(STATIC_STORY_ACTOR_SARIA, 1, true) == 1);
     assert(StaticStoryActor_ResolveEyeIndex(STATIC_STORY_ACTOR_IMPA, 9, false) == 0);
+    /* An alternate Impa skeleton owns its complete head/material graph. */
+    assert(!StaticStoryActor_ShouldOverrideImpaHead(true));
+    assert(StaticStoryActor_ShouldOverrideImpaHead(false));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_CHILD_MALON, 1));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SARIA, 2));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SARIA, 3));

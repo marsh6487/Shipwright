@@ -1369,7 +1369,13 @@ s32 EnViewer_ImpaOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, V
     EnViewer* this = (EnViewer*)thisx;
 
     if (limbIndex == 16) {
-        *dList = this->staticState.type != STATIC_STORY_ACTOR_NONE ? gImpaHeadUnmaskedDL : gImpaHeadMaskedDL;
+        const bool isStaticImpa = this->staticState.type == STATIC_STORY_ACTOR_IMPA;
+        const bool hasAlternateSkeleton =
+            isStaticImpa && ResourceMgr_IsAltAssetsEnabled() && ResourceMgr_FileAltExists(gImpaSkel);
+
+        if (!isStaticImpa || StaticStoryActor_ShouldOverrideImpaHead(hasAlternateSkeleton)) {
+            *dList = isStaticImpa ? gImpaHeadUnmaskedDL : gImpaHeadMaskedDL;
+        }
     }
     if (this->staticState.type == STATIC_STORY_ACTOR_IMPA &&
         StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_IMPA, this->staticState.pose)) {
@@ -1387,7 +1393,7 @@ s32 EnViewer_ImpaOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, V
 
 void EnViewer_DrawImpa(EnViewer* this, PlayState* play) {
     static void* sEyes[] = { gImpaEyeOpenTex, gImpaEyeHalfTex, gImpaEyeClosedTex };
-    bool hasAlternateHead = ResourceMgr_IsAltAssetsEnabled() && ResourceMgr_FileAltExists(gImpaHeadUnmaskedDL);
+    bool hasAlternateHead = ResourceMgr_IsAltAssetsEnabled() && ResourceMgr_FileAltExists(gImpaSkel);
     u8 eyeIndex = StaticStoryActor_ResolveEyeIndex(STATIC_STORY_ACTOR_IMPA, this->staticState.eyeIndex,
                                                    hasAlternateHead);
     void* eye = this->staticState.type != STATIC_STORY_ACTOR_NONE ? sEyes[eyeIndex] : gImpaEyeOpenTex;
