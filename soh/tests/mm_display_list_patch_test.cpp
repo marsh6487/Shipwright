@@ -31,6 +31,15 @@ static uintptr_t ResolveResource(void* context, MmDisplayListReferenceKind kind,
 }
 
 int main() {
+    uint8_t arrayVertices[64] = {};
+    MmDisplayListVertexResourceView vertexView = {};
+
+    REQUIRE(MmDisplayList_SelectVertexResource(nullptr, 0, arrayVertices, sizeof(arrayVertices), true, &vertexView));
+    REQUIRE(vertexView.pointer == reinterpret_cast<uintptr_t>(arrayVertices));
+    REQUIRE(vertexView.size == sizeof(arrayVertices));
+    REQUIRE(!MmDisplayList_SelectVertexResource(nullptr, 0, arrayVertices, sizeof(arrayVertices), false,
+                                                &vertexView));
+
     constexpr uint64_t nestedHash = UINT64_C(0x0123456789ABCDEF);
     constexpr uint64_t vertexHash = UINT64_C(0xFEDCBA9876543210);
     ResolveFixture fixture = { nestedHash, UINT64_C(0x12345000), vertexHash, UINT64_C(0x20000000), 0x100 };

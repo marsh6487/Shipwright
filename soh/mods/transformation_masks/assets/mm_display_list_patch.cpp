@@ -20,6 +20,26 @@ uint64_t ReadHash(const MmDisplayListCommand& payload) {
 
 } // namespace
 
+bool MmDisplayList_SelectVertexResource(void* fastVertexPointer, size_t fastVertexSize, void* arrayPointer,
+                                        size_t arraySize, bool arrayContainsVertices,
+                                        MmDisplayListVertexResourceView* view) {
+    if (view == nullptr) {
+        return false;
+    }
+    *view = {};
+    if (fastVertexPointer != nullptr && fastVertexSize != 0) {
+        view->pointer = reinterpret_cast<uintptr_t>(fastVertexPointer);
+        view->size = fastVertexSize;
+        return true;
+    }
+    if (arrayContainsVertices && arrayPointer != nullptr && arraySize != 0) {
+        view->pointer = reinterpret_cast<uintptr_t>(arrayPointer);
+        view->size = arraySize;
+        return true;
+    }
+    return false;
+}
+
 bool MmDisplayList_PatchCommands(MmDisplayListCommand* commands, size_t commandCount,
                                  MmDisplayListResolveResource resolveResource, void* context,
                                  MmDisplayListPatchStats* stats) {

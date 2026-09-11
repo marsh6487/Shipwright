@@ -33,6 +33,7 @@
 #include "soh/OTRGlobals.h"
 #include "soh/GameVersions.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/resource/type/Array.h"
 #include "soh/resource/type/Text.h"
 #include "functions.h"           // For Audio_SetFontInstrument, AudioLoad_IsFontLoadComplete
 #include "message_data_static.h" // MessageTableEntry struct
@@ -602,12 +603,18 @@ static uintptr_t MmAssets_ResolveDisplayListReference(void* context, MmDisplayLi
 
     auto vertexResource = MmAssets_LoadResourceObjectFromMmArchive(pathIt->second.c_str());
     auto vertex = std::dynamic_pointer_cast<Fast::Vertex>(vertexResource);
-    if (vertex == nullptr || vertex->GetRawPointer() == nullptr || vertex->GetPointerSize() == 0) {
+    auto vertexArray = std::dynamic_pointer_cast<SOH::Array>(vertexResource);
+    MmDisplayListVertexResourceView vertexView = {};
+    if (!MmDisplayList_SelectVertexResource(
+            vertex != nullptr ? vertex->GetRawPointer() : nullptr, vertex != nullptr ? vertex->GetPointerSize() : 0,
+            vertexArray != nullptr ? vertexArray->GetRawPointer() : nullptr,
+            vertexArray != nullptr ? vertexArray->GetPointerSize() : 0,
+            vertexArray != nullptr && vertexArray->ArrayType == SOH::ArrayResourceType::Vertex, &vertexView)) {
         MMASSETS_LOG("[MM Assets] STRICT graph vertex type/miss: %s", pathIt->second.c_str());
         return 0;
     }
-    *resourceSize = vertex->GetPointerSize();
-    return reinterpret_cast<uintptr_t>(vertex->GetRawPointer());
+    *resourceSize = vertexView.size;
+    return vertexView.pointer;
 }
 
 static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayListGraphContext& graph, int depth) {

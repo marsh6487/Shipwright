@@ -21,6 +21,15 @@ struct MmDisplayListPatchStats {
     size_t malformed;
 };
 
+struct MmDisplayListVertexResourceView {
+    uintptr_t pointer;
+    size_t size;
+};
+
+bool MmDisplayList_SelectVertexResource(void* fastVertexPointer, size_t fastVertexSize, void* arrayPointer,
+                                        size_t arraySize, bool arrayContainsVertices,
+                                        MmDisplayListVertexResourceView* view);
+
 using MmDisplayListResolveResource = uintptr_t (*)(void* context, MmDisplayListReferenceKind kind, uint64_t hash,
                                                    size_t* resourceSize);
 
