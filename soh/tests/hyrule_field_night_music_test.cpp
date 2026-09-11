@@ -108,6 +108,30 @@ static HyruleFieldNightMusicState BaseState() {
 }
 
 int main() {
+    // Runtime diagnostics are transition-bounded: the first Hyrule Field
+    // snapshot and meaningful state changes log, identical frames do not.
+    HyruleFieldNightMusicDiagnosticSnapshot diagnostic = {
+        .state = BaseState(),
+        .decision = HyruleFieldNightMusicDecision::StartNight,
+        .mainSequence = 0x02,
+        .subSequence = 0xFFFF,
+        .fanfareSequence = 0xFFFF,
+        .nightPlaybackSequence = 0xFFFF,
+    };
+    assert(HyruleFieldNightMusic_ShouldLogDiagnostic(nullptr, diagnostic));
+    assert(!HyruleFieldNightMusic_ShouldLogDiagnostic(&diagnostic, diagnostic));
+    auto changedDiagnostic = diagnostic;
+    changedDiagnostic.state.isNight = false;
+    changedDiagnostic.decision = HyruleFieldNightMusicDecision::NoChange;
+    assert(HyruleFieldNightMusic_ShouldLogDiagnostic(&diagnostic, changedDiagnostic));
+    auto outsideDiagnostic = changedDiagnostic;
+    outsideDiagnostic.state.inHyruleField = false;
+    assert(HyruleFieldNightMusic_ShouldLogDiagnostic(&changedDiagnostic, outsideDiagnostic));
+    assert(!HyruleFieldNightMusic_ShouldLogDiagnostic(&outsideDiagnostic, outsideDiagnostic));
+    auto unrelatedSceneAudio = outsideDiagnostic;
+    unrelatedSceneAudio.mainSequence = 0x35;
+    assert(!HyruleFieldNightMusic_ShouldLogDiagnostic(&outsideDiagnostic, unrelatedSceneAudio));
+
     // Sequence arguments live above the low ID byte. Nature ambience with
     // those flags is still Hyrule Field's native lifecycle, not an override.
     assert(HyruleFieldNightMusic_IsFieldLifecycleSequence(NA_BGM_NATURE_AMBIENCE | 0x0800, NA_BGM_FIELD_LOGIC,

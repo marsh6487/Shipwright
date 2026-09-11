@@ -16,3 +16,15 @@ bool HyruleFieldNightMusic_ShouldRestoreDaySequence(const HyruleFieldNightMusicS
 bool HyruleFieldNightMusic_ShouldStopDaySequence(const HyruleFieldNightMusicState& state);
 bool HyruleFieldNightMusic_IsFieldLifecycleSequence(uint16_t sequence, uint16_t fieldLogic,
                                                      uint16_t natureAmbience, uint16_t disabled);
+
+struct HyruleFieldNightMusicDiagnosticSnapshot {
+    HyruleFieldNightMusicState state;
+    HyruleFieldNightMusicDecision decision;
+    uint16_t mainSequence;
+    uint16_t subSequence;
+    uint16_t fanfareSequence;
+    uint16_t nightPlaybackSequence;
+};
+
+bool HyruleFieldNightMusic_ShouldLogDiagnostic(const HyruleFieldNightMusicDiagnosticSnapshot* previous,
+                                               const HyruleFieldNightMusicDiagnosticSnapshot& current);
