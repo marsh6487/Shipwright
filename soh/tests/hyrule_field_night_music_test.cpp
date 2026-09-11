@@ -136,6 +136,12 @@ int main() {
     // those flags is still Hyrule Field's native lifecycle, not an override.
     assert(HyruleFieldNightMusic_IsFieldLifecycleSequence(NA_BGM_NATURE_AMBIENCE | 0x0800, NA_BGM_FIELD_LOGIC,
                                                            NA_BGM_NATURE_AMBIENCE, NA_BGM_DISABLED));
+    // Hyrule Field owns MAIN. SUB belongs to native enemy/proximity overlays,
+    // whose lifecycle repeatedly stops that player when an encounter ends.
+    assert(HyruleFieldNightMusic_GetPlaybackPlayer() == 0);
+    assert(HyruleFieldNightMusic_IsNightSequencePlaying(true, 0x8135, 0x35));
+    assert(!HyruleFieldNightMusic_IsNightSequencePlaying(false, 0x8135, 0x35));
+    assert(!HyruleFieldNightMusic_IsNightSequencePlaying(true, NA_BGM_FIELD_LOGIC, 0x35));
 
     auto state = BaseState();
     assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StartNight);
@@ -252,11 +258,12 @@ int main() {
     ResetPlaybackBoundary();
     const uint16_t chainedNight =
         HyruleFieldNightMusic_StartSequence(0x21, 0x21, IsKnownSequence, GetChainedReplacementSequence);
-    Audio_QueueResolvedSeqCmd(3, chainedNight, 0x1E);
+    Audio_QueueResolvedSeqCmd(HyruleFieldNightMusic_GetPlaybackPlayer(), chainedNight, 0x1E);
     Audio_ProcessSeqCmds();
     assert(sPlayedSequence == 0x35);
     assert(sReplacementCalls == 1);
-    Audio_QueueResolvedSeqCmd(3, HyruleFieldNightMusic_RestoreSequence(), 0x1E);
+    Audio_QueueResolvedSeqCmd(HyruleFieldNightMusic_GetPlaybackPlayer(), HyruleFieldNightMusic_RestoreSequence(),
+                              0x1E);
     Audio_ProcessSeqCmds();
     assert(sPlayedSequence == 0x35);
     assert(sReplacementCalls == 1);
@@ -276,7 +283,7 @@ int main() {
     ResetPlaybackBoundary();
     const uint16_t wideNight =
         HyruleFieldNightMusic_StartSequence(0x21, 0x21, IsKnownSequence, GetWideReplacementSequence);
-    Audio_QueueResolvedSeqCmd(3, wideNight, 0x1E);
+    Audio_QueueResolvedSeqCmd(HyruleFieldNightMusic_GetPlaybackPlayer(), wideNight, 0x1E);
     Audio_ProcessSeqCmds();
     assert(sPlayedSequence == 0x8135);
     assert(sReplacementCalls == 1);
@@ -300,8 +307,8 @@ int main() {
         assert(sLastStartCommand == (0x82030000U | expected));
         assert(sLastStartFade == 0xF0);
 
-        // The cached restore and mapped dawn use the same atomic path under
-        // the same delay, with SUB and MAIN respectively.
+        // Cached and mapped starts use the same atomic path under the same
+        // delay on either sequence player.
         sPlayedSequences.clear();
         Audio_QueueSeqCmd(0x031E0040);
         Audio_QueueResolvedSeqCmd(3, HyruleFieldNightMusic_RestoreSequence(), 0x1E);
