@@ -57,11 +57,13 @@ int main() {
     REQUIRE(commands[0].w1 == fixture.nestedPointer);
     REQUIRE(commands[1].w0 == 0);
     REQUIRE(commands[1].w1 == 0);
-    /* The native 0x32 handler recognizes the patched w1 as a direct pointer. */
-    REQUIRE(commands[2].w0 == UINT32_C(0x32001002));
-    REQUIRE(commands[2].w1 == fixture.vertexPointer + UINT32_C(0x20));
-    REQUIRE(commands[3].w0 == UINT32_C(0xFEDCBA98));
-    REQUIRE(commands[3].w1 == UINT32_C(0x76543210));
+    /* G_VTX_OTR_HASH's first w1 is vestigial, not a byte offset. Once the
+     * resource is resolved, emit an ordinary G_VTX with the resource base and
+     * consume its hash payload so Fast3D cannot reinterpret it as commands. */
+    REQUIRE(commands[2].w0 == UINT32_C(0x01001002));
+    REQUIRE(commands[2].w1 == fixture.vertexPointer);
+    REQUIRE(commands[3].w0 == 0);
+    REQUIRE(commands[3].w1 == 0);
     REQUIRE(stats.nestedPatched == 1);
     REQUIRE(stats.verticesPatched == 1);
     REQUIRE(stats.unresolved == 0);
@@ -78,23 +80,14 @@ int main() {
     REQUIRE(stats.unresolved == 1);
 
     MmDisplayListCommand outOfBounds[] = {
-        { UINT32_C(0x32002004), UINT32_C(0xF0) },
+        { UINT32_C(0x32011004), UINT32_C(0xF0) },
         { UINT32_C(0xFEDCBA98), UINT32_C(0x76543210) },
         { UINT32_C(0xDF000000), 0 },
     };
     stats = {};
     REQUIRE(!MmDisplayList_PatchCommands(outOfBounds, 3, ResolveResource, &fixture, &stats));
     REQUIRE(stats.malformed == 1);
-    REQUIRE(outOfBounds[0].w0 == UINT32_C(0x32002004));
-
-    MmDisplayListCommand misaligned[] = {
-        { UINT32_C(0x32001002), UINT32_C(0x21) },
-        { UINT32_C(0xFEDCBA98), UINT32_C(0x76543210) },
-        { UINT32_C(0xDF000000), 0 },
-    };
-    stats = {};
-    REQUIRE(!MmDisplayList_PatchCommands(misaligned, 3, ResolveResource, &fixture, &stats));
-    REQUIRE(stats.malformed == 1);
+    REQUIRE(outOfBounds[0].w0 == UINT32_C(0x32011004));
 
     MmDisplayListCommand malformed[] = { { UINT32_C(0x31000000), 0 } };
     stats = {};

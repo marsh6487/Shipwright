@@ -4,6 +4,7 @@ namespace {
 
 constexpr uint8_t kDisplayListHash = 0x31;
 constexpr uint8_t kVertexHash = 0x32;
+constexpr uint8_t kVertex = 0x01;
 constexpr uint8_t kDisplayList = 0xDE;
 constexpr uint8_t kEndDisplayList = 0xDF;
 constexpr size_t kVertexSize = 16;
@@ -84,20 +85,22 @@ bool MmDisplayList_PatchCommands(MmDisplayListCommand* commands, size_t commandC
             size_t resourceSize = 0;
             const uintptr_t vertexBase = resolveResource(context, MM_DISPLAY_LIST_REFERENCE_VERTEX,
                                                          ReadHash(payload), &resourceSize);
-            const size_t offset = command.w1;
             const size_t vertexCount = (command.w0 >> 12) & UINT32_C(0xFF);
             if (vertexBase == 0) {
                 ++result.unresolved;
-            } else if (offset % kVertexSize != 0 || offset > resourceSize ||
-                       vertexCount > (resourceSize - offset) / kVertexSize) {
+            } else if (vertexCount > resourceSize / kVertexSize) {
                 ++result.malformed;
                 return false;
             } else {
-                /* Keep the native hash opcode. libultraship treats a value above
-                 * 0xFFFFF in w1 as an already-resolved vertex pointer and sends it
-                 * directly to GfxSpVertex. Rewriting this as ordinary G_VTX routes
-                 * the host pointer through segmented-address translation instead. */
-                command.w1 = vertexBase + offset;
+                /* G_VTX_OTR_HASH stores the resource hash in the following
+                 * command; its first w1 is vestigial. Once resolved, use the
+                 * same ordinary G_VTX form as the renderer's hash handler and
+                 * consume the payload so it cannot be executed as display-list
+                 * commands by a copied graph. */
+                command.w0 = (command.w0 & UINT32_C(0x00FFFFFF)) |
+                             (static_cast<uint32_t>(kVertex) << 24);
+                command.w1 = vertexBase;
+                payload = {};
                 ++result.verticesPatched;
             }
             i += 2;
