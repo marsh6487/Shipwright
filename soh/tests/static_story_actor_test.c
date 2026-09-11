@@ -42,9 +42,9 @@ int main(void) {
     assert(StaticStoryActor_GetType((int16_t)0x7E02) == STATIC_STORY_ACTOR_NABOORU);
     assert(StaticStoryActor_GetType((int16_t)0x7E03) == STATIC_STORY_ACTOR_ADULT_RUTO_WATER);
     assert(StaticStoryActor_GetType((int16_t)0x7E04) == STATIC_STORY_ACTOR_GREAT_FAIRY);
-    assert(StaticStoryActor_GetType((int16_t)0x7E05) == STATIC_STORY_ACTOR_BOMB_SHOP_LADY);
-    assert(StaticStoryActor_GetType((int16_t)0x7E15) == STATIC_STORY_ACTOR_BOMB_SHOP_LADY);
-    assert(StaticStoryActor_GetType((int16_t)0x7E25) == STATIC_STORY_ACTOR_BOMB_SHOP_LADY);
+    assert(StaticStoryActor_GetType((int16_t)0x7E05) == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL);
+    assert(StaticStoryActor_GetType((int16_t)0x7E15) == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL);
+    assert(StaticStoryActor_GetType((int16_t)0x7E25) == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL);
     assert(StaticStoryActor_GetType((int16_t)0x7E06) == STATIC_STORY_ACTOR_ADULT_GANONDORF);
     assert(StaticStoryActor_GetType((int16_t)0x7E07) == STATIC_STORY_ACTOR_PHANTOM_GANON);
     assert(StaticStoryActor_GetType((int16_t)0x7E08) == STATIC_STORY_ACTOR_SKULL_KID);
@@ -103,7 +103,7 @@ int main(void) {
     assert(StaticStoryActor_ShouldCloseEventMessage(true, true));
     assert(!StaticStoryActor_ShouldCloseEventMessage(true, false));
     assert(!StaticStoryActor_ShouldCloseEventMessage(false, true));
-    assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_BOMB_SHOP_LADY) ==
+    assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) ==
            STATIC_STORY_RESOURCE_MM_ARCHIVE);
     assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_SKULL_KID) == STATIC_STORY_RESOURCE_MM_ARCHIVE);
     assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN) ==
@@ -113,15 +113,15 @@ int main(void) {
            STATIC_STORY_RESOURCE_OOT_OBJECT);
     assert(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_ADULT_GANONDORF));
     assert(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN));
-    assert(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_BOMB_SHOP_LADY));
+    assert(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL));
     assert(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_SKULL_KID));
     assert(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_PHANTOM_GANON));
-    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 0)->animation ==
-           STATIC_ANIM_BOMB_SHOP_LADY_IDLE);
-    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 1)->animation ==
-           STATIC_ANIM_BOMB_SHOP_LADY_HOLDING_BAG);
-    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 2)->animation ==
-           STATIC_ANIM_BOMB_SHOP_LADY_SWAY);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 0)->animation ==
+           STATIC_ANIM_TREASURE_CHEST_SHOP_GAL_IDLE);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 1)->animation ==
+           STATIC_ANIM_TREASURE_CHEST_SHOP_GAL_SWAY);
+    assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 2)->animation ==
+           STATIC_ANIM_TREASURE_CHEST_SHOP_GAL_IDLE);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_SKULL_KID, 0)->animation ==
            STATIC_ANIM_SKULL_KID_RECLINING_FLOAT);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_SKULL_KID, 1)->animation ==
@@ -136,9 +136,9 @@ int main(void) {
            STATIC_ANIM_HAPPY_MASK_SALESMAN_HANDS_CLASPED);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, 2)->animation ==
            STATIC_ANIM_HAPPY_MASK_SALESMAN_ARMS_OUT);
-    assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 0));
-    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 1));
-    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 2));
+    assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 0));
+    assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 1));
+    assert(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 2));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SKULL_KID, 0));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SKULL_KID, 1));
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_PHANTOM_GANON, 0));

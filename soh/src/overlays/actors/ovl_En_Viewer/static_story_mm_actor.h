@@ -31,6 +31,7 @@ typedef struct {
 } StaticStoryMmPresentation;
 
 const StaticStoryMmPresentation* StaticStoryMm_GetPresentation(StaticStoryActorType type, uint8_t pose);
+const char* StaticStoryMm_GetEyeTexturePath(StaticStoryActorType type, uint8_t eyeIndex);
 bool StaticStoryMm_ResourcesComplete(const StaticStoryMmPresentation* presentation, bool hasSkeleton,
                                      bool hasAnimation, bool hasSecondarySkeleton);
 float StaticStoryMm_GetHoverOffset(uint16_t phase);

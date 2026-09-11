@@ -536,11 +536,20 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         FlexSkeletonHeader* secondarySkeleton = NULL;
         AnimationHeader* secondaryAnimation = NULL;
         bool secondaryComplete = false;
+        bool eyeTexturesComplete = true;
 
         MmAssets_Init();
         skeleton = (FlexSkeletonHeader*)MmAssets_LoadSkeleton(presentation != NULL ? presentation->skeletonPath : "");
         animation =
             (AnimationHeader*)MmAssets_LoadAnimation(presentation != NULL ? presentation->animationPath : "");
+        if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
+            for (int eye = 0; eye < 3; ++eye) {
+                this->staticState.mmEyeTextures[eye] =
+                    MmAssets_LoadResource(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL,
+                                                                          eye));
+                eyeTexturesComplete = eyeTexturesComplete && this->staticState.mmEyeTextures[eye] != NULL;
+            }
+        }
         if (presentation != NULL && presentation->requiresSecondarySkeleton) {
             secondarySkeleton = (FlexSkeletonHeader*)MmAssets_LoadSkeleton(presentation->secondarySkeletonPath);
             secondaryAnimation = (AnimationHeader*)MmAssets_LoadAnimation(presentation->secondaryAnimationPath);
@@ -564,7 +573,8 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
             }
         }
         if (!StaticStoryMm_ResourcesComplete(presentation, skeleton != NULL, animation != NULL,
-                                              secondaryComplete)) {
+                                              secondaryComplete) ||
+            !eyeTexturesComplete) {
             osSyncPrintf("Static story actor: MM resources unavailable for type %d pose %d\n",
                          this->staticState.type, this->staticState.pose);
             Actor_Kill(&this->actor);
@@ -1782,18 +1792,15 @@ void EnViewer_DrawStaticGreatFairy(EnViewer* this, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-static s32 EnViewer_StaticBombShopLadyOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
-                                                       Vec3s* rot, void* thisx) {
+static s32 EnViewer_StaticTreasureChestShopGalOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList,
+                                                               Vec3f* pos, Vec3s* rot, void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
 
-    if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, this->staticState.pose)) {
-        /* object_bba enum order: head 7, torso 9. */
-        if (limbIndex == 7) {
+    if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, this->staticState.pose)) {
+        /* object_bg Treasure Chest Shop Gal enum order: head 5. */
+        if (limbIndex == 5) {
             rot->x += this->staticState.interactInfo.headRot.y;
             rot->z += this->staticState.interactInfo.headRot.x;
-        } else if (limbIndex == 9) {
-            rot->x += this->staticState.interactInfo.torsoRot.y;
-            rot->z += this->staticState.interactInfo.torsoRot.x;
         }
     }
     return false;
@@ -1802,11 +1809,15 @@ static s32 EnViewer_StaticBombShopLadyOverrideLimbDraw(PlayState* play, s32 limb
 static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
     OverrideLimbDraw overrideLimbDraw = NULL;
 
-    if (this->staticState.type == STATIC_STORY_ACTOR_BOMB_SHOP_LADY) {
-        overrideLimbDraw = EnViewer_StaticBombShopLadyOverrideLimbDraw;
+    if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
+        overrideLimbDraw = EnViewer_StaticTreasureChestShopGalOverrideLimbDraw;
     }
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
+        gSPSegment(POLY_OPA_DISP++, 0x08,
+                   (uintptr_t)this->staticState.mmEyeTextures[this->staticState.eyeIndex]);
+    }
     SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, overrideLimbDraw, NULL, this);
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -1927,7 +1938,7 @@ void EnViewerStatic_Draw(EnViewer* this, PlayState* play) {
         case STATIC_STORY_ACTOR_GREAT_FAIRY:
             EnViewer_DrawStaticGreatFairy(this, play);
             break;
-        case STATIC_STORY_ACTOR_BOMB_SHOP_LADY:
+        case STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL:
             EnViewer_DrawStaticMmActor(this, play);
             break;
         case STATIC_STORY_ACTOR_SKULL_KID:

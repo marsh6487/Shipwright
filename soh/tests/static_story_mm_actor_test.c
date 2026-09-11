@@ -13,24 +13,37 @@
 #include "../src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.h"
 
 int main(void) {
-    const StaticStoryMmPresentation* idle = StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 0);
-    const StaticStoryMmPresentation* bag = StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 1);
-    const StaticStoryMmPresentation* sway = StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 2);
+    const StaticStoryMmPresentation* idle =
+        StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 0);
+    const StaticStoryMmPresentation* sway =
+        StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 1);
+    const StaticStoryMmPresentation* fallback =
+        StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 2);
 
     REQUIRE(idle != NULL);
-    REQUIRE(strcmp(idle->skeletonPath, "objects/object_bba/gBombShopLadySkel") == 0);
-    REQUIRE(strcmp(idle->animationPath, "objects/object_bba/gBombShopLadyIdleAnim") == 0);
-    REQUIRE(strcmp(bag->animationPath, "objects/object_bba/gBombShopLadyIdleHoldingBagAnim") == 0);
-    REQUIRE(strcmp(sway->animationPath, "objects/object_bba/gBombShopLadySwayAnim") == 0);
-    REQUIRE(idle->limbCount == 18);
+    REQUIRE(strcmp(idle->skeletonPath, "objects/object_bg/gTreasureChestShopGalSkel") == 0);
+    REQUIRE(strcmp(idle->animationPath, "objects/object_bg/object_bg_Anim_009890") == 0);
+    REQUIRE(strcmp(sway->animationPath, "objects/object_bg/object_bg_Anim_001384") == 0);
+    REQUIRE(strcmp(fallback->animationPath, "objects/object_bg/object_bg_Anim_009890") == 0);
+    REQUIRE(idle->limbCount == 23);
     REQUIRE(idle->tracking == STATIC_STORY_MM_TRACKING_HEAD_TORSO);
-    REQUIRE(bag->tracking == STATIC_STORY_MM_TRACKING_NONE);
     REQUIRE(sway->tracking == STATIC_STORY_MM_TRACKING_NONE);
+    REQUIRE(fallback->tracking == STATIC_STORY_MM_TRACKING_HEAD_TORSO);
+    REQUIRE(strcmp(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 0),
+                   "objects/object_bg/gTreasureChestShopGalEyeOpenDownTex") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 1),
+                   "objects/object_bg/gTreasureChestShopGalEyeHalfDownTex") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 2),
+                   "objects/object_bg/gTreasureChestShopGalEyeClosedTex") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 3),
+                   "objects/object_bg/gTreasureChestShopGalEyeHalfDownTex") == 0);
+    REQUIRE(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 4) == NULL);
+    REQUIRE(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_SKULL_KID, 0) == NULL);
     REQUIRE(!idle->requiresSecondarySkeleton);
     REQUIRE(StaticStoryMm_ResourcesComplete(idle, true, true, false));
     REQUIRE(!StaticStoryMm_ResourcesComplete(idle, false, true, false));
     REQUIRE(!StaticStoryMm_ResourcesComplete(idle, true, false, false));
-    REQUIRE(StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_BOMB_SHOP_LADY, 3) == NULL);
+    REQUIRE(StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 3) == NULL);
     REQUIRE(StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_ADULT_GANONDORF, 0) == NULL);
 
     const StaticStoryMmPresentation* reclining = StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_SKULL_KID, 0);

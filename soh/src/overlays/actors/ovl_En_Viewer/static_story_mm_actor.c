@@ -5,14 +5,20 @@
 
 #define STATIC_STORY_MM_TAU 6.28318530717958647692f
 
-static const StaticStoryMmPresentation sBombShopLadyPresentations[] = {
-    { "objects/object_bba/gBombShopLadySkel", "objects/object_bba/gBombShopLadyIdleAnim", NULL, NULL, NULL, NULL,
-      NULL, 18, STATIC_STORY_MM_TRACKING_HEAD_TORSO, false },
-    { "objects/object_bba/gBombShopLadySkel", "objects/object_bba/gBombShopLadyIdleHoldingBagAnim", NULL, NULL,
-      NULL, NULL, NULL, 18,
-      STATIC_STORY_MM_TRACKING_NONE, false },
-    { "objects/object_bba/gBombShopLadySkel", "objects/object_bba/gBombShopLadySwayAnim", NULL, NULL, NULL, NULL,
-      NULL, 18, STATIC_STORY_MM_TRACKING_NONE, false },
+static const StaticStoryMmPresentation sTreasureChestShopGalPresentations[] = {
+    { "objects/object_bg/gTreasureChestShopGalSkel", "objects/object_bg/object_bg_Anim_009890", NULL, NULL, NULL,
+      NULL, NULL, 23, STATIC_STORY_MM_TRACKING_HEAD_TORSO, false },
+    { "objects/object_bg/gTreasureChestShopGalSkel", "objects/object_bg/object_bg_Anim_001384", NULL, NULL, NULL,
+      NULL, NULL, 23, STATIC_STORY_MM_TRACKING_NONE, false },
+    { "objects/object_bg/gTreasureChestShopGalSkel", "objects/object_bg/object_bg_Anim_009890", NULL, NULL, NULL,
+      NULL, NULL, 23, STATIC_STORY_MM_TRACKING_HEAD_TORSO, false },
+};
+
+static const char* sTreasureChestShopGalEyeTexturePaths[] = {
+    "objects/object_bg/gTreasureChestShopGalEyeOpenDownTex",
+    "objects/object_bg/gTreasureChestShopGalEyeHalfDownTex",
+    "objects/object_bg/gTreasureChestShopGalEyeClosedTex",
+    "objects/object_bg/gTreasureChestShopGalEyeHalfDownTex",
 };
 
 static const StaticStoryMmPresentation sSkullKidPresentations[] = {
@@ -45,13 +51,20 @@ static const char* sTatlDListPaths[] = {
 };
 
 const StaticStoryMmPresentation* StaticStoryMm_GetPresentation(StaticStoryActorType type, uint8_t pose) {
-    if (type == STATIC_STORY_ACTOR_BOMB_SHOP_LADY && pose < 3) {
-        return &sBombShopLadyPresentations[pose];
+    if (type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL && pose < 3) {
+        return &sTreasureChestShopGalPresentations[pose];
     }
     if (type == STATIC_STORY_ACTOR_SKULL_KID && pose < 2) {
         return &sSkullKidPresentations[pose];
     }
     return NULL;
+}
+
+const char* StaticStoryMm_GetEyeTexturePath(StaticStoryActorType type, uint8_t eyeIndex) {
+    if (type != STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL || eyeIndex >= 4) {
+        return NULL;
+    }
+    return sTreasureChestShopGalEyeTexturePaths[eyeIndex];
 }
 
 float StaticStoryMm_GetHoverOffset(uint16_t phase) {
