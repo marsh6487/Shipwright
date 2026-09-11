@@ -50,6 +50,12 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME static_story_mm_actor_test COMMAND static_story_mm_actor_test)
 
+    add_executable(mm_display_list_patch_test
+        tests/mm_display_list_patch_test.cpp
+        mods/transformation_masks/assets/mm_display_list_patch.cpp
+    )
+    add_test(NAME mm_display_list_patch_test COMMAND mm_display_list_patch_test)
+
     add_executable(static_story_ganon_test
         tests/static_story_ganon_test.c
         src/overlays/actors/ovl_En_Viewer/static_story_ganon.c

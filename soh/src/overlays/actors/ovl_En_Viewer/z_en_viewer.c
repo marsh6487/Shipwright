@@ -553,24 +553,19 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
             }
         }
         if (presentation != NULL && presentation->requiresSecondarySkeleton) {
-            const char* maskVertexPath = StaticStoryMm_GetSkullKidVertexPath(presentation->maskDisplayListPath);
-            const char* headVertexPath = StaticStoryMm_GetSkullKidVertexPath(presentation->headDisplayListPath);
-            const char* eyesVertexPath = StaticStoryMm_GetSkullKidVertexPath(presentation->eyesDisplayListPath);
-
             this->staticState.skullKidMaskDL =
-                MmAssets_LoadDisplayListStrict(presentation->maskDisplayListPath, maskVertexPath);
+                MmAssets_LoadDisplayListGraphStrict(presentation->maskDisplayListPath);
             this->staticState.skullKidHeadDL =
-                MmAssets_LoadDisplayListStrict(presentation->headDisplayListPath, headVertexPath);
+                MmAssets_LoadDisplayListGraphStrict(presentation->headDisplayListPath);
             this->staticState.skullKidEyesDL =
-                MmAssets_LoadDisplayListStrict(presentation->eyesDisplayListPath, eyesVertexPath);
+                MmAssets_LoadDisplayListGraphStrict(presentation->eyesDisplayListPath);
             secondaryComplete = this->staticState.skullKidMaskDL != NULL && this->staticState.skullKidHeadDL != NULL &&
                                 this->staticState.skullKidEyesDL != NULL;
             for (int limb = 0; limb < 22 && secondaryComplete; ++limb) {
                 const char* displayListPath = StaticStoryMm_GetSkullKidLimbDisplayListPath(limb);
 
                 if (displayListPath != NULL) {
-                    this->staticState.skullKidLimbDLs[limb] = MmAssets_LoadDisplayListStrict(
-                        displayListPath, StaticStoryMm_GetSkullKidVertexPath(displayListPath));
+                    this->staticState.skullKidLimbDLs[limb] = MmAssets_LoadDisplayListGraphStrict(displayListPath);
                     secondaryComplete = this->staticState.skullKidLimbDLs[limb] != NULL;
                 }
             }

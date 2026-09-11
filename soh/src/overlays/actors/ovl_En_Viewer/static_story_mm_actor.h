@@ -42,7 +42,6 @@ float StaticStoryMm_GetTatlScale(uint16_t phase);
 const char* StaticStoryMm_GetTatlLimbPath(uint8_t limb);
 const char* StaticStoryMm_GetTatlDListPath(uint8_t limb);
 const char* StaticStoryMm_GetSkullKidLimbDisplayListPath(uint8_t limb);
-const char* StaticStoryMm_GetSkullKidVertexPath(const char* displayListPath);
 bool StaticStoryMm_UsesNativeFairyCompanion(StaticStoryActorType type);
 
 #endif

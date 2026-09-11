@@ -86,27 +86,6 @@ const char* StaticStoryMm_GetSkullKidLimbDisplayListPath(uint8_t limb) {
                : NULL;
 }
 
-const char* StaticStoryMm_GetSkullKidVertexPath(const char* displayListPath) {
-    if (displayListPath == NULL) {
-        return NULL;
-    }
-    if (strcmp(displayListPath, "objects/object_stk/gSkullKidMajorasMask1DL") == 0) {
-        return "objects/object_stk/object_stkVtx_006120";
-    }
-    if (strcmp(displayListPath, "objects/object_stk/gSkullKidNormalHeadDL") == 0 ||
-        strcmp(displayListPath, "objects/object_stk/gSkullKidNormalEyesDL") == 0) {
-        return "objects/object_stk/object_stkVtx_009EF0";
-    }
-    for (uint8_t limb = 0; limb < sizeof(sSkullKidLimbDisplayListPaths) / sizeof(sSkullKidLimbDisplayListPaths[0]);
-         ++limb) {
-        const char* limbPath = sSkullKidLimbDisplayListPaths[limb];
-        if (limbPath != NULL && strcmp(displayListPath, limbPath) == 0) {
-            return "objects/object_stk/object_stkVtx_00CCB0";
-        }
-    }
-    return NULL;
-}
-
 const StaticStoryMmPresentation* StaticStoryMm_GetPresentation(StaticStoryActorType type, uint8_t pose) {
     if (type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL && pose < 3) {
         return &sTreasureChestShopGalPresentations[pose];

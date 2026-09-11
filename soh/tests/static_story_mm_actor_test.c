@@ -70,15 +70,6 @@ int main(void) {
     REQUIRE(strcmp(StaticStoryMm_GetSkullKidLimbDisplayListPath(21),
                    "objects/object_stk/gSkullKidHatTopDL") == 0);
     REQUIRE(StaticStoryMm_GetSkullKidLimbDisplayListPath(22) == NULL);
-    REQUIRE(strcmp(StaticStoryMm_GetSkullKidVertexPath("objects/object_stk/gSkullKidPelvisDL"),
-                   "objects/object_stk/object_stkVtx_00CCB0") == 0);
-    REQUIRE(strcmp(StaticStoryMm_GetSkullKidVertexPath(reclining->headDisplayListPath),
-                   "objects/object_stk/object_stkVtx_009EF0") == 0);
-    REQUIRE(strcmp(StaticStoryMm_GetSkullKidVertexPath(reclining->eyesDisplayListPath),
-                   "objects/object_stk/object_stkVtx_009EF0") == 0);
-    REQUIRE(strcmp(StaticStoryMm_GetSkullKidVertexPath(reclining->maskDisplayListPath),
-                   "objects/object_stk/object_stkVtx_006120") == 0);
-    REQUIRE(StaticStoryMm_GetSkullKidVertexPath("objects/object_stk/gSkullKidLinkMask1DL") == NULL);
     REQUIRE(strcmp(StaticStoryMm_GetTatlLimbPath(0),
                    "objects/gameplay_keep/gameplay_keep_Standardlimb_02AEF8") == 0);
     REQUIRE(strcmp(StaticStoryMm_GetTatlLimbPath(5),

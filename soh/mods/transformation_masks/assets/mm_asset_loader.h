@@ -79,12 +79,11 @@ void* MmAssets_LoadResource(const char* path);
 void* MmAssets_LoadResourceStrict(const char* path);
 
 /**
- * Load an MM display list and vertex array strictly from mm.o2r, then replace
- * the display list's deferred vertex offsets with direct pointers into that
- * same array. This prevents same-named resources in another archive from
- * being mixed into one render graph.
+ * Load a complete MM display-list graph strictly from mm.o2r. Nested display
+ * lists are recursively converted to direct calls and vertex hashes are
+ * converted to pointers into resources from that same archive.
  */
-Gfx* MmAssets_LoadDisplayListStrict(const char* displayListPath, const char* vertexPath);
+Gfx* MmAssets_LoadDisplayListGraphStrict(const char* displayListPath);
 
 /**
  * Load a resource from mm.o2r and get its size

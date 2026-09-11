@@ -2124,7 +2124,7 @@ static Gfx* Pegasus_GetRecoloredBootsDL() {
     if (!sDL.empty()) {
         return sDL.data();
     }
-    // Same two-word (expanded) command set as MmAssets_LoadDisplayListStrict.
+    // Same two-word (expanded) command set as MmAssets_LoadDisplayListGraphStrict.
     auto isTwoWord = [](uint8_t op) {
         return op == 0x20 || op == 0x24 || op == 0x25 || op == 0x27 || op == 0x31 || op == 0x32 || op == 0x33 ||
                op == 0x35 || op == 0x36 || op == 0x42;
@@ -2350,17 +2350,16 @@ void Randomizer_DrawClawshot(PlayState* play, GetItemEntry* getItemEntry) {
     // The one engine-level obstacle: BOTH archives own objects/object_gi_hookshot/, including the
     // single vertex array object_gi_hookshotVtx_000000. The DL asks for vertices by HASH, which
     // resolves hash -> name -> load from the DEFAULT archive, so they came back OoT's however the
-    // DL itself was loaded. MmAssets_LoadDisplayListStrict loads both strictly from mm.o2r and rewrites each
-    // vertex load to point straight at MM's array (gfx_vtx_hash_handler_custom treats word1 as a
-    // real pointer once it exceeds 0xFFFFF, and then never consults the hash).
+    // DL itself was loaded. MmAssets_LoadDisplayListGraphStrict loads the entire nested graph
+    // strictly from mm.o2r, converts nested list calls to direct pointers, and converts hashed
+    // vertex commands to ordinary G_VTX commands pointing straight at MM's array.
     //
     // Colour check, so this never needs guessing again: MM's DL sets PRIM 0xC3C300 (yellow), OoT's
     // sets 0x0A3CA0 / 0x3278D2 (blue). Yellow on screen = MM's. Skijer's NEI
     static Gfx* sBody = NULL;
     static u8 sTried = 0;
     if (!sTried && MmAssets_IsAvailable()) {
-        sBody = MmAssets_LoadDisplayListStrict("objects/object_gi_hookshot/gGiHookshotDL",
-                                               "objects/object_gi_hookshot/object_gi_hookshotVtx_000000");
+        sBody = MmAssets_LoadDisplayListGraphStrict("objects/object_gi_hookshot/gGiHookshotDL");
         if (sBody != NULL) {
             sTried = 1;
         }
