@@ -553,11 +553,27 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
             }
         }
         if (presentation != NULL && presentation->requiresSecondarySkeleton) {
-            this->staticState.skullKidMaskDL = (Gfx*)MmAssets_LoadResource(presentation->maskDisplayListPath);
-            this->staticState.skullKidHeadDL = (Gfx*)MmAssets_LoadResource(presentation->headDisplayListPath);
-            this->staticState.skullKidEyesDL = (Gfx*)MmAssets_LoadResource(presentation->eyesDisplayListPath);
+            const char* maskVertexPath = StaticStoryMm_GetSkullKidVertexPath(presentation->maskDisplayListPath);
+            const char* headVertexPath = StaticStoryMm_GetSkullKidVertexPath(presentation->headDisplayListPath);
+            const char* eyesVertexPath = StaticStoryMm_GetSkullKidVertexPath(presentation->eyesDisplayListPath);
+
+            this->staticState.skullKidMaskDL =
+                MmAssets_LoadDisplayListStrict(presentation->maskDisplayListPath, maskVertexPath);
+            this->staticState.skullKidHeadDL =
+                MmAssets_LoadDisplayListStrict(presentation->headDisplayListPath, headVertexPath);
+            this->staticState.skullKidEyesDL =
+                MmAssets_LoadDisplayListStrict(presentation->eyesDisplayListPath, eyesVertexPath);
             secondaryComplete = this->staticState.skullKidMaskDL != NULL && this->staticState.skullKidHeadDL != NULL &&
                                 this->staticState.skullKidEyesDL != NULL;
+            for (int limb = 0; limb < 22 && secondaryComplete; ++limb) {
+                const char* displayListPath = StaticStoryMm_GetSkullKidLimbDisplayListPath(limb);
+
+                if (displayListPath != NULL) {
+                    this->staticState.skullKidLimbDLs[limb] = MmAssets_LoadDisplayListStrict(
+                        displayListPath, StaticStoryMm_GetSkullKidVertexPath(displayListPath));
+                    secondaryComplete = this->staticState.skullKidLimbDLs[limb] != NULL;
+                }
+            }
             if (!StaticStoryMm_UsesNativeFairyCompanion((StaticStoryActorType)this->staticState.type)) {
                 secondarySkeleton = (FlexSkeletonHeader*)MmAssets_LoadSkeleton(presentation->secondarySkeletonPath);
                 secondaryAnimation = (AnimationHeader*)MmAssets_LoadAnimation(presentation->secondaryAnimationPath);
@@ -1844,8 +1860,12 @@ static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
 
 static s32 EnViewer_StaticSkullKidOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
                                                    Vec3s* rot, void* thisx) {
+    EnViewer* this = (EnViewer*)thisx;
+
     if (limbIndex == 17) {
         *dList = NULL;
+    } else if (limbIndex >= 0 && limbIndex < 22 && this->staticState.skullKidLimbDLs[limbIndex] != NULL) {
+        *dList = this->staticState.skullKidLimbDLs[limbIndex];
     }
     return false;
 }

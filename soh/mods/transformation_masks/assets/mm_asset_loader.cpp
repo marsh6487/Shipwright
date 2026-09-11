@@ -561,6 +561,77 @@ void* MmAssets_LoadResourceStrict(const char* path) {
     return nullptr;
 }
 
+Gfx* MmAssets_LoadDisplayListStrict(const char* displayListPath, const char* vertexPath) {
+    auto isTwoWord = [](uint8_t opcode) {
+        return opcode == 0x20 || opcode == 0x24 || opcode == 0x25 || opcode == 0x27 || opcode == 0x31 ||
+               opcode == 0x32 || opcode == 0x33 || opcode == 0x35 || opcode == 0x36 || opcode == 0x42;
+    };
+
+    if (displayListPath == nullptr || vertexPath == nullptr) {
+        return nullptr;
+    }
+
+    static std::unordered_map<std::string, Gfx*> sPatchedDisplayListCache;
+    const std::string cacheKey = std::string(displayListPath) + '\n' + vertexPath;
+    auto cached = sPatchedDisplayListCache.find(cacheKey);
+    if (cached != sPatchedDisplayListCache.end()) {
+        return cached->second;
+    }
+
+    Gfx* source = static_cast<Gfx*>(MmAssets_LoadResourceStrict(displayListPath));
+    char* vertices = static_cast<char*>(MmAssets_LoadResourceStrict(vertexPath));
+    if (source == nullptr || vertices == nullptr) {
+        MMASSETS_LOG("[MM Assets] STRICT DL failed: dl=%s (%s), vtx=%s (%s)", displayListPath,
+                     source != nullptr ? "ok" : "missing", vertexPath, vertices != nullptr ? "ok" : "missing");
+        return nullptr;
+    }
+
+    size_t count = 0;
+    while (count < 4096) {
+        uint8_t opcode = static_cast<uint8_t>((source[count].words.w0 >> 24) & 0xFF);
+        ++count;
+        if (opcode == 0xDF) {
+            break;
+        }
+        if (isTwoWord(opcode)) {
+            ++count;
+        }
+    }
+    if (count >= 4096) {
+        MMASSETS_LOG("[MM Assets] STRICT DL missing end command: %s", displayListPath);
+        return nullptr;
+    }
+
+    static std::vector<std::vector<Gfx>> sPatchedDisplayLists;
+    sPatchedDisplayLists.emplace_back(source, source + count);
+    Gfx* displayList = sPatchedDisplayLists.back().data();
+    size_t vertexCommands = 0;
+    size_t patchedCommands = 0;
+
+    for (size_t i = 0; i < count; ++i) {
+        uint8_t opcode = static_cast<uint8_t>((displayList[i].words.w0 >> 24) & 0xFF);
+        if (opcode == 0xDF) {
+            break;
+        }
+        if (opcode == 0x32) {
+            ++vertexCommands;
+            uintptr_t offset = static_cast<uintptr_t>(displayList[i].words.w1);
+            if (offset <= 0xFFFFF) {
+                displayList[i].words.w1 = reinterpret_cast<uintptr_t>(vertices + offset);
+                ++patchedCommands;
+            }
+            ++i;
+        } else if (isTwoWord(opcode)) {
+            ++i;
+        }
+    }
+
+    MMASSETS_LOG("[MM Assets] STRICT DL ready: %s (%zu vertex commands, %zu patched)", displayListPath,
+                 vertexCommands, patchedCommands);
+    sPatchedDisplayListCache[cacheKey] = displayList;
+    return displayList;
+}
+
 /**
  * Load a resource from mm.o2r and get its size, with mod override support.
  * @param path Resource path

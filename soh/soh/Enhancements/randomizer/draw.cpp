@@ -1,6 +1,6 @@
 #include "draw.h"
 #include "soh/OTRGlobals.h"
-#include <vector>          // MmDL_WithScopedVerts keeps patched DL copies alive
+#include <vector>
 #include <spdlog/spdlog.h> // SPDLOG_INFO (MmSoul debug instrumentation)
 #include "soh/cvar_prefixes.h"
 #include "randomizerTypes.h"
@@ -1816,78 +1816,6 @@ static Gfx* LoadMmDLOnce(const char* path, Gfx** cache, u8* tried) {
     return *cache;
 }
 
-// Private copy of an MM display list with its vertex loads re-pointed at mm.o2r's OWN vertex array.
-//
-// Needed when the vertex array's PATH exists in both archives (object_gi_hookshotVtx_000000 is the
-// case that forced this): a DL asks for vertices by hash, the handler turns that into a name and
-// loads it from the DEFAULT archive, and mm.o2r sits at the LOWEST priority on purpose, so OoT
-// always wins. Upstream 2Ship hit the mirror image of this and solved it the same way — its comment
-// on RI_HOOKSHOT says gGiHookshotDL "is shadowed by MM's same-path mesh", so it direct-loads off the
-// oot.o2r handle.
-//
-// The hook is gfx_vtx_hash_handler_custom: word1 of a G_VTX_OTR_HASH pair is normally a byte offset
-// into the array, but "an offset greater than one million is not a real offset, so it must be a real
-// pointer". Writing the resolved pointer there makes the handler use it and never consult the hash.
-// Textures are left alone — their names are MM-unique, so they already resolve to MM's. Skijer's NEI
-static Gfx* MmDL_WithScopedVerts(const char* dlPath, const char* vtxPath) {
-    // Two-word (expanded) commands: the second word is payload, never an opcode.
-    auto isTwoWord = [](uint8_t op) {
-        return op == 0x20 || op == 0x24 || op == 0x25 || op == 0x27 || op == 0x31 || op == 0x32 || op == 0x33 ||
-               op == 0x35 || op == 0x36 || op == 0x42;
-    };
-
-    Gfx* src = (Gfx*)MmAssets_LoadResourceStrict(dlPath);
-    char* vtx = (char*)MmAssets_LoadResourceStrict(vtxPath);
-    if (src == NULL || vtx == NULL) {
-        // Says WHICH one failed: a typo in either path is otherwise indistinguishable from
-        // "mm.o2r is not mounted", and that ambiguity cost several rounds on the Clawshot.
-        SPDLOG_ERROR("[NEI] MmDL_WithScopedVerts FAILED  dl='{}' -> {}   vtx='{}' -> {}", dlPath,
-                     src != NULL ? "ok" : "NULL", vtxPath, vtx != NULL ? "ok" : "NULL");
-        return NULL;
-    }
-
-    size_t count = 0;
-    while (count < 4096) {
-        uint8_t op = (uint8_t)((src[count].words.w0 >> 24) & 0xFF);
-        count++;
-        if (op == 0xDF) { // G_ENDDL
-            break;
-        }
-        if (isTwoWord(op)) {
-            count++;
-        }
-    }
-
-    // Kept alive for the process: the returned Gfx* is handed straight to the interpreter.
-    static std::vector<std::vector<Gfx>> sPatched;
-    sPatched.emplace_back(src, src + count);
-    Gfx* dl = sPatched.back().data();
-
-    int patched = 0, vtxOps = 0;
-    for (size_t i = 0; i < count; i++) {
-        uint8_t op = (uint8_t)((dl[i].words.w0 >> 24) & 0xFF);
-        if (op == 0xDF) {
-            break;
-        }
-        if (op == 0x32) { // G_VTX_OTR_HASH
-            vtxOps++;
-            uintptr_t offset = (uintptr_t)dl[i].words.w1;
-            if (offset <= 0xFFFFF) { // still an offset, not an already-resolved pointer
-                dl[i].words.w1 = (uintptr_t)(vtx + offset);
-                patched++;
-            }
-            i++; // skip the hash word
-        } else if (isTwoWord(op)) {
-            i++;
-        }
-    }
-    // patched == 0 would mean this DL does NOT reference its vertices by hash (segment addressing
-    // instead), i.e. the whole approach misses and the vertices still come from whatever segment 6
-    // points at — which during a get-item is the OoT object the engine loaded.
-    SPDLOG_ERROR("[NEI] MmDL_WithScopedVerts '{}': {} instr, {} vtx ops, {} patched", dlPath, count, vtxOps, patched);
-    return dl;
-}
-
 // MM's OWN get-item sword models (object_gi_sword_2/3/4), drawn with MM's own draw code:
 // z_draw.c's table gives Razor and Gilded GetItem_DrawOpa01 (both DLs opaque) and the Great
 // Fairy's Sword GetItem_DrawOpa0Xlu1 (blade opaque + hilt emblem translucent). Those routines —
@@ -2196,7 +2124,7 @@ static Gfx* Pegasus_GetRecoloredBootsDL() {
     if (!sDL.empty()) {
         return sDL.data();
     }
-    // Same two-word (expanded) command set as MmDL_WithScopedVerts below.
+    // Same two-word (expanded) command set as MmAssets_LoadDisplayListStrict.
     auto isTwoWord = [](uint8_t op) {
         return op == 0x20 || op == 0x24 || op == 0x25 || op == 0x27 || op == 0x31 || op == 0x32 || op == 0x33 ||
                op == 0x35 || op == 0x36 || op == 0x42;
@@ -2422,7 +2350,7 @@ void Randomizer_DrawClawshot(PlayState* play, GetItemEntry* getItemEntry) {
     // The one engine-level obstacle: BOTH archives own objects/object_gi_hookshot/, including the
     // single vertex array object_gi_hookshotVtx_000000. The DL asks for vertices by HASH, which
     // resolves hash -> name -> load from the DEFAULT archive, so they came back OoT's however the
-    // DL itself was loaded. MmDL_WithScopedVerts loads both strictly from mm.o2r and rewrites each
+    // DL itself was loaded. MmAssets_LoadDisplayListStrict loads both strictly from mm.o2r and rewrites each
     // vertex load to point straight at MM's array (gfx_vtx_hash_handler_custom treats word1 as a
     // real pointer once it exceeds 0xFFFFF, and then never consults the hash).
     //
@@ -2431,8 +2359,8 @@ void Randomizer_DrawClawshot(PlayState* play, GetItemEntry* getItemEntry) {
     static Gfx* sBody = NULL;
     static u8 sTried = 0;
     if (!sTried && MmAssets_IsAvailable()) {
-        sBody = MmDL_WithScopedVerts("objects/object_gi_hookshot/gGiHookshotDL",
-                                     "objects/object_gi_hookshot/object_gi_hookshotVtx_000000");
+        sBody = MmAssets_LoadDisplayListStrict("objects/object_gi_hookshot/gGiHookshotDL",
+                                               "objects/object_gi_hookshot/object_gi_hookshotVtx_000000");
         if (sBody != NULL) {
             sTried = 1;
         }

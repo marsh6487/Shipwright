@@ -79,6 +79,14 @@ void* MmAssets_LoadResource(const char* path);
 void* MmAssets_LoadResourceStrict(const char* path);
 
 /**
+ * Load an MM display list and vertex array strictly from mm.o2r, then replace
+ * the display list's deferred vertex offsets with direct pointers into that
+ * same array. This prevents same-named resources in another archive from
+ * being mixed into one render graph.
+ */
+Gfx* MmAssets_LoadDisplayListStrict(const char* displayListPath, const char* vertexPath);
+
+/**
  * Load a resource from mm.o2r and get its size
  * @param path Resource path (e.g., "objects/gameplay_keep/gPlayerAnim_...")
  * @param outSize Output: size in bytes of the resource data
