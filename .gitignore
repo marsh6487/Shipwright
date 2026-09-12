@@ -452,11 +452,13 @@ _deps
 _packages
 */extract_assets_cmake*
 /build*
+/.worktrees/
 
 soh/src/boot/build.c
 soh/properties.h
 
 # Tools
+.clangd
 /clang-format
 /clang-format.exe
 *.o2r

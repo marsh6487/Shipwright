@@ -1,20 +1,28 @@
 #include "ResourceManagerHelpers.h"
-#include <libultraship/libultraship.h>
 #include "soh/resource/type/Scene.h"
+#include <ship/Context.h>
+#include <ship/resource/ResourceManager.h>
 #include <ship/utils/StringHelper.h>
+#include <spdlog/spdlog.h>
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "global.h"
-#include "vt.h"
-#include <fast/resource/type/Vertex.h>
 
 extern "C" void Play_InitScene(PlayState* play, s32 spawn);
 extern "C" void Play_InitEnvironment(PlayState* play, s16 skyboxId);
 void OTRPlay_InitScene(PlayState* play, s32 spawn);
 s32 OTRScene_ExecuteCommands(PlayState* play, SOH::Scene* scene);
 
+extern "C" void ActorCatalogue_LogLifecycle(const char* stage, int params, int type, int pose, int modelObjectId,
+                                             int modelSlot, int animationObjectId, int animationSlot) {
+    SPDLOG_INFO(
+        "[ActorCatalogueProbe] stage={} params={:#06x} type={} pose={} modelObject={} modelSlot={} animationObject={} "
+        "animationSlot={}",
+        stage, params & 0xFFFF, type, pose, modelObjectId, modelSlot, animationObjectId, animationSlot);
+}
+
 // LUS::OTRResource* OTRPlay_LoadFile(PlayState* play, RomFile* file) {
 Ship::IResource* OTRPlay_LoadFile(PlayState* play, const char* fileName) {
-    auto res = Ship::Context::GetInstance()->GetResourceManager()->LoadResource(fileName);
+    auto res = Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(fileName);
     return res.get();
 }
 
@@ -81,7 +89,7 @@ void OTRPlay_InitScene(PlayState* play, s32 spawn) {
 
     GameInteractor_ExecuteAfterSceneCommands(play->sceneNum);
     Play_InitEnvironment(play, play->skyboxId);
-    /* auto data = static_cast<LUS::Vertex*>(Ship::Context::GetInstance()
+    /* auto data = static_cast<LUS::Vertex*>(Ship::Context::GetRawInstance()
                                                ->GetResourceManager()
                                                ->ResourceLoad("object_link_child\\object_link_childVtx_01FE08")
                                                .get());

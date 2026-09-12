@@ -1,5 +1,6 @@
 #include <libultraship/libultra.h>
 #include "global.h"
+#include "night_bgm_bridge.h"
 #include "soh/mixer.h"
 
 #include "soh/Enhancements/audio/AudioEditor.h"
@@ -14,10 +15,35 @@ typedef struct {
 Struct_8016E320 D_8016E320[4][5];
 u8 sNumSeqRequests[4];
 u32 sAudioSeqCmds[0x100];
+// All 16 sequence-command opcodes are occupied. Keep already-resolved IDs
+// alongside their ring slots instead of borrowing the shared MM side channel.
+static struct {
+    u16 seqId;
+    u8 isResolved;
+} sResolvedSeqCmds[0x100];
 ActiveSequence gActiveSeqs[4];
+static u16 sRegisteredNightBgm = NA_BGM_DISABLED;
+static u16 sResolvedMainBgm = NA_BGM_DISABLED;
+
+void Audio_RegisterNightBgm(uint16_t sequence) {
+    sRegisteredNightBgm = sequence;
+}
+
+uint8_t Audio_IsNightBgmActive(void) {
+    return sRegisteredNightBgm != NA_BGM_DISABLED &&
+           gActiveSeqs[SEQ_PLAYER_BGM_MAIN].seqId != NA_BGM_DISABLED &&
+           sResolvedMainBgm == sRegisteredNightBgm;
+}
 
 u8 sSeqCmdWrPos = 0;
 u8 sSeqCmdRdPos = 0;
+// One-shot per-player flag: MmBgm_Play* sets this via Audio_PrimeMmSideChannel
+// to tell Audio_QueueSeqCmd "the next cmd on this player already has
+// seqToPlay primed with a 16-bit MM seq id — skip AudioEditor lookup so we
+// don't overwrite it." Consumed (cleared) on the next QueueSeqCmd for that
+// player, so it can never leak into a later cmd and shadow the
+// custom/music/* randomizer (which also writes seqReplaced/seqToPlay).
+static u8 sMmSideChannelPrimed[4] = { 0 };
 u8 D_80133408 = 0;
 u8 D_8013340C = 1;
 u8 D_80133410[] = { 0, 1, 2, 3 };
@@ -36,18 +62,36 @@ u8 D_80133418 = 0;
 #define Audio_SetVolScaleNow(playerIdx, volFadeTimer, volScale) \
     Audio_ProcessSeqCmd(0x40000000 | ((u8)playerIdx << 24) | ((u8)volFadeTimer << 16) | ((u8)(volScale * 127.0f)));
 
-void func_800F9280(u8 playerIdx, u8 seqId, u8 arg2, u16 fadeTimer) {
+static void Audio_StartSequenceInternal(u8 playerIdx, u8 seqId, u8 arg2, u16 fadeTimer, u8 isResolved,
+                                        u16 resolvedSeqId) {
     u8 i;
     u16 dur;
     s32 pad;
 
     if (D_80133408 == 0 || playerIdx == SEQ_PLAYER_SFX) {
+        // Resolve here so the full 16-bit id rides in the command (bits 0-15) rather than the shared
+        // seqToPlay slot. seqReplaced is set out-of-band by preview/slow load.
+        // See AudioEditor_GetReplacementSeq().
+        // An already-resolved entry must not consume pending MM/preview state
+        // meant for ordinary starts.
+        if (!isResolved) {
+            if (gAudioContext.seqReplaced[playerIdx]) {
+                resolvedSeqId = gAudioContext.seqToPlay[playerIdx];
+                gAudioContext.seqReplaced[playerIdx] = 0;
+            } else {
+                resolvedSeqId = AudioEditor_GetReplacementSeq(seqId);
+            }
+        }
+
         arg2 &= 0x7F;
+        if (playerIdx == SEQ_PLAYER_BGM_MAIN) {
+            sResolvedMainBgm = resolvedSeqId;
+        }
         if (arg2 == 0x7F) {
             dur = (fadeTimer >> 3) * 60 * gAudioContext.audioBufferParameters.updatesPerFrame;
-            Audio_QueueCmdS32(0x85000000 | _SHIFTL(playerIdx, 16, 8) | _SHIFTL(seqId, 8, 8), dur);
+            Audio_QueueCmdS32(0x85000000 | _SHIFTL(playerIdx, 16, 8) | (resolvedSeqId & 0xFFFF), dur);
         } else {
-            Audio_QueueCmdS32(0x82000000 | _SHIFTL(playerIdx, 16, 8) | _SHIFTL(seqId, 8, 8),
+            Audio_QueueCmdS32(0x82000000 | _SHIFTL(playerIdx, 16, 8) | (resolvedSeqId & 0xFFFF),
                               (fadeTimer * (u16)gAudioContext.audioBufferParameters.updatesPerFrame) / 4);
         }
 
@@ -72,6 +116,10 @@ void func_800F9280(u8 playerIdx, u8 seqId, u8 arg2, u16 fadeTimer) {
         gActiveSeqs[playerIdx].freqScaleChannelFlags = 0;
         gActiveSeqs[playerIdx].volChannelFlags = 0;
     }
+}
+
+void Audio_StartSequence(u8 playerIdx, u8 seqId, u8 arg2, u16 fadeTimer) {
+    Audio_StartSequenceInternal(playerIdx, seqId, arg2, fadeTimer, false, 0);
 }
 
 void func_800F9474(u8 playerIdx, u16 arg1) {
@@ -99,7 +147,7 @@ typedef enum {
     CMDF
 } SeqCmdType;
 
-void Audio_ProcessSeqCmd(u32 cmd) {
+static void Audio_ProcessSeqCmdInternal(u32 cmd, u8 isResolved, u16 resolvedSeqId) {
     s32 pad[2];
     u16 fadeTimer;
     u16 channelMask;
@@ -134,7 +182,7 @@ void Audio_ProcessSeqCmd(u32 cmd) {
             seqArgs = (cmd & 0xFF00) >> 8;
             fadeTimer = (cmd & 0xFF0000) >> 13;
             if ((gActiveSeqs[playerIdx].isWaitingForFonts == 0) && (seqArgs < 0x80)) {
-                func_800F9280(playerIdx, seqId, seqArgs, fadeTimer);
+                Audio_StartSequenceInternal(playerIdx, seqId, seqArgs, fadeTimer, isResolved, resolvedSeqId);
             }
             break;
 
@@ -153,7 +201,7 @@ void Audio_ProcessSeqCmd(u32 cmd) {
             for (i = 0; i < sNumSeqRequests[playerIdx]; i++) {
                 if (D_8016E320[playerIdx][i].unk_0 == seqId) {
                     if (i == 0) {
-                        func_800F9280(playerIdx, seqId, seqArgs, fadeTimer);
+                        Audio_StartSequence(playerIdx, seqId, seqArgs, fadeTimer);
                     }
                     return;
                 }
@@ -178,7 +226,7 @@ void Audio_ProcessSeqCmd(u32 cmd) {
             D_8016E320[playerIdx][found].unk_0 = seqId;
 
             if (found == 0) {
-                func_800F9280(playerIdx, seqId, seqArgs, fadeTimer);
+                Audio_StartSequence(playerIdx, seqId, seqArgs, fadeTimer);
             }
             break;
 
@@ -206,7 +254,8 @@ void Audio_ProcessSeqCmd(u32 cmd) {
             if (found == 0) {
                 func_800F9474(playerIdx, fadeTimer);
                 if (sNumSeqRequests[playerIdx] != 0) {
-                    func_800F9280(playerIdx, D_8016E320[playerIdx][0].unk_0, D_8016E320[playerIdx][0].unk_1, fadeTimer);
+                    Audio_StartSequence(playerIdx, D_8016E320[playerIdx][0].unk_0, D_8016E320[playerIdx][0].unk_1,
+                                        fadeTimer);
                 }
             }
             break;
@@ -368,32 +417,63 @@ void Audio_ProcessSeqCmd(u32 cmd) {
     }
 }
 
+void Audio_ProcessSeqCmd(u32 cmd) {
+    Audio_ProcessSeqCmdInternal(cmd, false, 0);
+}
+
 extern f32 D_80130F24;
-extern f32 D_80130F28;
+extern f32 sRelativeOcarinaVolume;
+
+void Audio_PrimeMmSideChannel(u8 playerIdx, u16 fullSeqId) {
+    if (playerIdx >= 4)
+        return;
+    gAudioContext.seqToPlay[playerIdx] = fullSeqId;
+    gAudioContext.seqReplaced[playerIdx] = 1;
+    sMmSideChannelPrimed[playerIdx] = 1;
+}
 
 void Audio_QueueSeqCmd(u32 cmd) {
+    // NEI: consume the MM side-channel prime flag so it doesn't latch on. The primed
+    // seqToPlay/seqReplaced set by Audio_PrimeMmSideChannel is read per-command in
+    // func_800F9280(), which now packs the full 16-bit MM seqId into the play command.
     u8 op = cmd >> 28;
     if (op == 0 || op == 2 || op == 12) {
-        u8 seqId = cmd & 0xFF;
         u8 playerIdx = GET_PLAYER_IDX(cmd);
-        u16 newSeqId = AudioEditor_GetReplacementSeq(seqId);
-        gAudioContext.seqReplaced[playerIdx] = (seqId != newSeqId);
-        gAudioContext.seqToPlay[playerIdx] = newSeqId;
-        cmd |= (seqId & 0xFF);
+        if (sMmSideChannelPrimed[playerIdx]) {
+            sMmSideChannelPrimed[playerIdx] = 0;
+        }
     }
 
+    // Replacement is resolved per-command in func_800F9280().
+    sResolvedSeqCmds[sSeqCmdWrPos].isResolved = false;
     sAudioSeqCmds[sSeqCmdWrPos++] = cmd;
+}
+
+void Audio_QueueResolvedSeqCmd(u8 playerIdx, u16 seqId, u8 fadeTimer) {
+    if (playerIdx >= 4) {
+        return;
+    }
+    // Publish ID and bypass together with this entry. Keep the ordinary op-0
+    // layout for queue inspection; its argument byte is not part of the ID.
+    sResolvedSeqCmds[sSeqCmdWrPos].seqId = seqId;
+    sResolvedSeqCmds[sSeqCmdWrPos].isResolved = true;
+    sAudioSeqCmds[sSeqCmdWrPos++] = ((u32)playerIdx << 24) | ((u32)fadeTimer << 16) | (seqId & 0xFF);
 }
 
 void Audio_QueuePreviewSeqCmd(u16 seqId) {
     gAudioContext.seqReplaced[0] = 1;
     gAudioContext.seqToPlay[0] = seqId;
+    sResolvedSeqCmds[sSeqCmdWrPos].isResolved = false;
     sAudioSeqCmds[sSeqCmdWrPos++] = 1;
 }
 
 void Audio_ProcessSeqCmds(void) {
     while (sSeqCmdWrPos != sSeqCmdRdPos) {
-        Audio_ProcessSeqCmd(sAudioSeqCmds[sSeqCmdRdPos++]);
+        u8 slot = sSeqCmdRdPos++;
+        u8 isResolved = sResolvedSeqCmds[slot].isResolved;
+        u16 resolvedSeqId = sResolvedSeqCmds[slot].seqId;
+        sResolvedSeqCmds[slot].isResolved = false;
+        Audio_ProcessSeqCmdInternal(sAudioSeqCmds[slot], isResolved, resolvedSeqId);
     }
 }
 
@@ -700,6 +780,8 @@ u8 func_800FAD34(void) {
 }
 
 void Audio_ResetActiveSequences(void) {
+    Audio_RegisterNightBgm(NA_BGM_DISABLED);
+    sResolvedMainBgm = NA_BGM_DISABLED;
     u8 seqPlayerIndex;
     u8 scaleIndex;
 

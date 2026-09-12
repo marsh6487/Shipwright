@@ -2,9 +2,154 @@ cmake_minimum_required(VERSION 3.26.0 FATAL_ERROR)
 
 set(CMAKE_SYSTEM_VERSION 10.0 CACHE STRING "" FORCE)
 
-project(soh LANGUAGES C CXX)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    project(soh VERSION 9.2.3 LANGUAGES C CXX)
+else()
+    project(soh LANGUAGES C CXX)
+endif()
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "The C++ standard to use")
 set(CMAKE_C_STANDARD 23 CACHE STRING "The C standard to use")
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/../CMake/soh-cvars.cmake")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/../CMake/lus-cvars.cmake")
+    set(SPDLOG_LEVEL_TRACE 0)
+    set(SPDLOG_LEVEL_OFF 6)
+    set(SPDLOG_MIN_CUTOFF SPDLOG_LEVEL_TRACE CACHE STRING "cutoff at trace")
+endif()
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(static_story_actor_test
+        tests/static_story_actor_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+    )
+    target_include_directories(static_story_actor_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    add_test(NAME static_story_actor_test COMMAND static_story_actor_test)
+
+    add_executable(static_story_ruto_water_test
+        tests/static_story_ruto_water_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_ruto_water.c
+    )
+    add_test(NAME static_story_ruto_water_test COMMAND static_story_ruto_water_test)
+
+    add_executable(static_story_mm_actor_test
+        tests/static_story_mm_actor_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.c
+        src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+    )
+    target_include_directories(static_story_mm_actor_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    # MSVC's CRT provides the math functions directly; unlike Unix platforms,
+    # Windows has no separate libm (and attempting to link `m` requests m.lib).
+    if(NOT WIN32)
+        target_link_libraries(static_story_mm_actor_test PRIVATE m)
+    endif()
+    add_test(NAME static_story_mm_actor_test COMMAND static_story_mm_actor_test)
+
+    add_executable(mm_display_list_patch_test
+        tests/mm_display_list_patch_test.cpp
+        mods/transformation_masks/assets/mm_display_list_patch.cpp
+    )
+    add_test(NAME mm_display_list_patch_test COMMAND mm_display_list_patch_test)
+
+    add_executable(static_story_ganon_test
+        tests/static_story_ganon_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_ganon.c
+        src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+    )
+    target_include_directories(static_story_ganon_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    add_test(NAME static_story_ganon_test COMMAND static_story_ganon_test)
+
+    add_executable(hyrule_field_night_music_test
+        tests/hyrule_field_night_music_test.cpp
+        soh/Enhancements/audio/HyruleFieldNightMusic.cpp
+        src/code/code_800F9280.c
+    )
+    target_include_directories(hyrule_field_night_music_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_sequence_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(hyrule_field_night_music_test PRIVATE HYRULE_FIELD_NIGHT_MUSIC_TEST)
+    add_test(NAME hyrule_field_night_music_test COMMAND hyrule_field_night_music_test)
+
+    add_executable(hyrule_field_night_runtime_test
+        tests/hyrule_field_night_runtime_test.cpp
+        soh/Enhancements/audio/HyruleFieldNightMusic.cpp
+        src/code/code_800F9280.c
+    )
+    target_include_directories(hyrule_field_night_runtime_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/night_runtime_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_sequence_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(hyrule_field_night_runtime_test PRIVATE CVAR_PREFIX_AUDIO="gAudioEditor")
+    add_test(NAME hyrule_field_night_runtime_test COMMAND hyrule_field_night_runtime_test)
+
+    add_executable(audio_font_id_test tests/audio_font_id_test.c)
+    target_include_directories(audio_font_id_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_sequence_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    add_test(NAME audio_font_id_test COMMAND audio_font_id_test)
+
+    add_executable(global_outdoor_rain_test
+        tests/global_outdoor_rain_test.cpp
+        soh/Enhancements/audio/GlobalOutdoorRain.cpp
+    )
+    target_include_directories(global_outdoor_rain_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(global_outdoor_rain_test PRIVATE GLOBAL_OUTDOOR_RAIN_TEST)
+    add_test(NAME global_outdoor_rain_test COMMAND global_outdoor_rain_test)
+
+    add_executable(concurrent_weather_audio_test
+        tests/concurrent_weather_audio_test.c
+        src/code/concurrent_weather_audio.c
+    )
+    add_test(NAME concurrent_weather_audio_test COMMAND concurrent_weather_audio_test)
+
+    # Compile the actual mixer/updater; only resources, CVars and hook registration are stubbed.
+    add_executable(weather_sample_player_test
+        tests/weather_sample_player_test.cpp
+        soh/Enhancements/audio/WeatherSamplePlayer.cpp
+    )
+    target_include_directories(weather_sample_player_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/weather_audio_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(weather_sample_player_test PRIVATE
+        CVAR_PREFIX_SETTING="gSettings" CVAR_PREFIX_AUDIO="gAudioEditor"
+    )
+    add_test(NAME weather_sample_player_test COMMAND weather_sample_player_test)
+
+    add_executable(global_outdoor_rain_audio_test
+        tests/global_outdoor_rain_audio_test.cpp
+        tests/weather_sfx_engine_fixture.c
+        soh/Enhancements/audio/GlobalOutdoorRain.cpp
+        soh/Enhancements/audio/WeatherSamplePlayer.cpp
+        src/code/concurrent_weather_audio.c
+        src/code/code_800F7260.c
+        src/code/audio_sound_params.c
+    )
+    target_include_directories(global_outdoor_rain_audio_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/weather_audio_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(global_outdoor_rain_audio_test PRIVATE
+        CVAR_PREFIX_SETTING="gSettings" CVAR_PREFIX_AUDIO="gAudioEditor"
+    )
+    add_test(NAME global_outdoor_rain_audio_test COMMAND global_outdoor_rain_audio_test)
+endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     enable_language(OBJCXX)
@@ -22,10 +167,21 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     if(NOT CMAKE_VS_PLATFORM_NAME)
         set(CMAKE_VS_PLATFORM_NAME "x64")
     endif()
+    if("${CMAKE_VS_PLATFORM_NAME}" MATCHES "^[Aa][Rr][Mm]64$")
+        set(SOH_WINDOWS_ARM64 TRUE)
+    else()
+        set(SOH_WINDOWS_ARM64 FALSE)
+    endif()
+    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64" OR SOH_WINDOWS_ARM64)
+        set(SOH_WINDOWS_64BIT TRUE)
+    else()
+        set(SOH_WINDOWS_64BIT FALSE)
+    endif()
     message("${CMAKE_VS_PLATFORM_NAME} architecture in use")
 
     if(NOT ("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64"
-        OR "${CMAKE_VS_PLATFORM_NAME}" STREQUAL "Win32"))
+        OR "${CMAKE_VS_PLATFORM_NAME}" STREQUAL "Win32"
+        OR SOH_WINDOWS_ARM64))
         message(FATAL_ERROR "${CMAKE_VS_PLATFORM_NAME} arch is not supported!")
     endif()
 endif()
@@ -97,6 +253,10 @@ if (NOT TARGET ZAPDLib)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../ZAPDTR/ZAPD ${CMAKE_BINARY_DIR}/ZAPD)
 endif()
 
+if (NOT TARGET OTRExporter)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../OTRExporter ${CMAKE_BINARY_DIR}/OTRExporter)
+endif()
+
 set(PROJECT_NAME soh)
 
 ################################################################################
@@ -123,8 +283,15 @@ source_group("include" FILES ${Header_Files__include})
 # soh (root)
 file(GLOB_RECURSE soh__ RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "soh/*.c" "soh/*.cpp" "soh/*.h" "soh/*.hpp")
 
+# mods (only .cpp files - .c files are included via #include pattern)
+file(GLOB_RECURSE mods__ RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "mods/*.cpp" "mods/*.h" "mods/*.hpp")
+list(APPEND soh__ ${mods__})
+
+# expansions (only .cpp files - .c files are included via #include pattern)
+file(GLOB_RECURSE expansions__ RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "expansions/*.cpp" "expansions/*.h" "expansions/*.hpp")
+list(APPEND soh__ ${expansions__})
+
 # Add specific files that don't match the pattern
-list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/soh/Enhancements/savestates_extern.inc)
 list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/soh/Enhancements/speechsynthesizer/DarwinSpeechSynthesizer.mm)
 
 # Create source groups that match the real file directory paths
@@ -140,11 +307,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     set_source_files_properties(soh/Enhancements/tts/tts.cpp PROPERTIES COMPILE_FLAGS "/utf-8")
     set_source_files_properties(soh/Enhancements/custom-message/CustomMessageManager.cpp PROPERTIES COMPILE_FLAGS "/utf-8")
     set_source_files_properties(soh/Enhancements/custom-message/CustomMessageManager.h PROPERTIES COMPILE_FLAGS "/utf-8")
-endif()
-
-# handle Network removals
-if (!BUILD_REMOTE_CONTROL)
-    list(FILTER soh__ EXCLUDE REGEX "soh/Enhancements/crowd-control/")
 endif()
 
 # handle speechsynthesizer removals
@@ -235,7 +397,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(${PROJECT_NAME} PROPERTIES
         VS_GLOBAL_KEYWORD "Win32Proj"
     )
-    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64")
+    if(SOH_WINDOWS_64BIT)
         set_target_properties(${PROJECT_NAME} PROPERTIES
             INTERPROCEDURAL_OPTIMIZATION_RELEASE "TRUE"
         )
@@ -259,7 +421,7 @@ endif()
 ################################################################################
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     get_property(MSVC_RUNTIME_LIBRARY_DEFAULT TARGET ${PROJECT_NAME} PROPERTY MSVC_RUNTIME_LIBRARY)
-    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64")
+    if(SOH_WINDOWS_64BIT)
         string(CONCAT "MSVC_RUNTIME_LIBRARY_STR"
             $<$<CONFIG:Debug>:
                 MultiThreadedDebug
@@ -297,15 +459,12 @@ FetchContent_MakeAvailable(dr_libs)
 find_package(SDL2)
 set(SDL2-INCLUDE ${SDL2_INCLUDE_DIRS})
 
-if (BUILD_REMOTE_CONTROL)
-    find_package(SDL2_net)
+find_package(SDL2_net)
 
-    if(NOT SDL2_net_FOUND)
-        message(STATUS "SDL2_net not found (it's possible the version installed is too old). Disabling BUILD_REMOTE_CONTROL.")
-        set(BUILD_REMOTE_CONTROL 0)
-    else()
-        set(SDL2-NET-INCLUDE ${SDL_NET_INCLUDE_DIRS})
-    endif()
+if(NOT SDL2_net_FOUND)
+    message(STATUS "SDL2_net not found (it's possible the version installed is too old).")
+else()
+    set(SDL2-NET-INCLUDE ${SDL_NET_INCLUDE_DIRS})
 endif()
 
 if (ESPEAK)
@@ -319,6 +478,7 @@ endif()
 target_include_directories(${PROJECT_NAME} PRIVATE assets
     ${CMAKE_CURRENT_SOURCE_DIR}/include/
     ${CMAKE_CURRENT_SOURCE_DIR}/src/
+    ${CMAKE_CURRENT_SOURCE_DIR}/mods/
     ${CMAKE_CURRENT_SOURCE_DIR}/../libultraship/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../ZAPDTR/ZAPD/resource/type
     ${SDL2-INCLUDE}
@@ -329,7 +489,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE assets
 )
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64")
+    if(SOH_WINDOWS_64BIT)
         target_compile_definitions(${PROJECT_NAME} PRIVATE
             "$<$<CONFIG:Debug>:"
                 "_DEBUG;"
@@ -339,7 +499,6 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
             "$<$<CONFIG:Release>:"
                 "NDEBUG;"
             ">"
-            "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:ENABLE_REMOTE_CONTROL>"
             "INCLUDE_GAME_PRINTF;"
             "F3DEX_GBI_2"
             "UNICODE;"
@@ -396,7 +555,6 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU|Clang|AppleClang")
             "NDEBUG;"
         ">"
         "F3DEX_GBI_2;"
-        "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:ENABLE_REMOTE_CONTROL>;"
         "_CONSOLE;"
         "_CRT_SECURE_NO_WARNINGS;"
         "ENABLE_OPENGL;"
@@ -410,21 +568,24 @@ endif()
 # Compile and link options
 ################################################################################
 if(MSVC)
-    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64")
+    if(SOH_WINDOWS_64BIT)
         target_compile_options(${PROJECT_NAME} PRIVATE
             $<$<CONFIG:Debug>:
-                /w;
                 /Od
             >
             $<$<CONFIG:Release>:
                 /Oi;
                 /Gy;
-                /W3
             >
+            /W3;
+            # /WX (upstream) is deliberately off here: upstream's tree is warning-clean, this fork
+            # carries hundreds of extra files that are not, and turning every warning into an error
+            # buries the real build breaks under noise from unrelated code.
             /bigobj;
             /sdl-;
             /permissive-;
             /MP;
+            /guard:cf;
             ${DEFAULT_CXX_DEBUG_INFORMATION_FORMAT};
             ${DEFAULT_CXX_EXCEPTION_HANDLING}
         )
@@ -442,12 +603,13 @@ if(MSVC)
             /permissive-;
             /MP;
             /sdl-;
-            /w;
+            /W3;
+            /guard:cf;
             ${DEFAULT_CXX_DEBUG_INFORMATION_FORMAT};
             ${DEFAULT_CXX_EXCEPTION_HANDLING}
         )
     endif()
-    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64")
+    if(SOH_WINDOWS_64BIT)
         target_link_options(${PROJECT_NAME} PRIVATE
             $<$<CONFIG:Debug>:
                 /INCREMENTAL
@@ -460,7 +622,8 @@ if(MSVC)
             >
             /MANIFEST:NO;
             /DEBUG;
-            /SUBSYSTEM:WINDOWS
+            /SUBSYSTEM:WINDOWS;
+            /GUARD:CF
         )
     elseif("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "Win32")
         target_link_options(${PROJECT_NAME} PRIVATE
@@ -475,7 +638,8 @@ if(MSVC)
             >
             /MANIFEST:NO;
             /DEBUG;
-            /SUBSYSTEM:WINDOWS
+            /SUBSYSTEM:WINDOWS;
+            /GUARD:CF
         )
     endif()
 endif()
@@ -597,8 +761,8 @@ if (CMAKE_GENERATOR MATCHES "Visual Studio")
     add_custom_command(
     TARGET ${PROJECT_NAME}
     POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_SOURCE_DIR}/soh/assets/extractor ${CMAKE_BINARY_DIR}/soh/assets
-    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_SOURCE_DIR}/soh/assets/xml ${CMAKE_BINARY_DIR}/soh/assets/xml
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_CURRENT_SOURCE_DIR}/assets/extractor ${CMAKE_BINARY_DIR}/soh/assets
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_CURRENT_SOURCE_DIR}/assets/xml ${CMAKE_BINARY_DIR}/soh/assets/xml
     )
 endif()
 if(NOT CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")
@@ -606,8 +770,8 @@ if(NOT CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")
         TARGET ${PROJECT_NAME}
         POST_BUILD
         COMMENT "Copying asset xmls..."
-        COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_SOURCE_DIR}/soh/assets/extractor $<TARGET_FILE_DIR:soh>/assets
-        COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_SOURCE_DIR}/soh/assets/xml $<TARGET_FILE_DIR:soh>/assets/xml
+        COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_CURRENT_SOURCE_DIR}/assets/extractor $<TARGET_FILE_DIR:soh>/assets
+        COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_CURRENT_SOURCE_DIR}/assets/xml $<TARGET_FILE_DIR:soh>/assets/xml
         COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:soh>/assets/symbols
     #    COMMAND ${VS_COPY_ASSETS_CMD}
     )
@@ -635,14 +799,14 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     link_libraries(Opus::opus)
     find_package(OpusFile CONFIG REQUIRED)
     link_libraries(OpusFile::opusfile CONFIG REQUIRED)
-    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64")
+    if(SOH_WINDOWS_64BIT)
         set(ADDITIONAL_LIBRARY_DEPENDENCIES
             "libultraship;"
             "ZAPDLib;"
             "glu32;"
             "SDL2::SDL2;"
             "SDL2::SDL2main;"
-            "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:SDL2_net::SDL2_net-static>"
+            "SDL2_net::SDL2_net-static"
             "glfw;"
             "winmm;"
             "imm32;"
@@ -708,7 +872,7 @@ else()
         "Vorbis::vorbisfile"
         "Opus::opus"
         "Opusfile::Opusfile"
-        "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:SDL2_net::SDL2_net>"
+        "SDL2_net::SDL2_net"
         ${CMAKE_DL_LIBS}
         Threads::Threads
     )
