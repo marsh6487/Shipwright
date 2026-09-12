@@ -14,6 +14,7 @@ enum MmDisplayListReferenceKind {
     MM_DISPLAY_LIST_REFERENCE_VERTEX,
     // Value is the MM cull-list command index (0 = back, 2 = front), not a hash.
     MM_DISPLAY_LIST_REFERENCE_CULL,
+    MM_DISPLAY_LIST_REFERENCE_TEXTURE,
 };
 
 struct MmDisplayListPatchStats {
@@ -22,6 +23,7 @@ struct MmDisplayListPatchStats {
     size_t unresolved;
     size_t malformed;
     size_t cullPatched;
+    size_t texturesPatched;
 };
 
 struct MmDisplayListVertexResourceView {

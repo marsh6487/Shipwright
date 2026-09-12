@@ -10,6 +10,8 @@ struct ResolveFixture {
     uint64_t vertexHash;
     uintptr_t vertexPointer;
     size_t vertexSize;
+    uint64_t textureHash;
+    uintptr_t texturePointer;
 };
 
 static uintptr_t ResolveResource(void* context, MmDisplayListReferenceKind kind, uint64_t hash, size_t* resourceSize) {
@@ -26,6 +28,9 @@ static uintptr_t ResolveResource(void* context, MmDisplayListReferenceKind kind,
         *resourceSize = fixture->vertexSize;
         return fixture->vertexPointer;
     }
+    if (kind == MM_DISPLAY_LIST_REFERENCE_TEXTURE && hash == fixture->textureHash) {
+        return fixture->texturePointer;
+    }
     return 0;
 }
 
@@ -41,7 +46,9 @@ int main() {
 
     constexpr uint64_t nestedHash = UINT64_C(0x0123456789ABCDEF);
     constexpr uint64_t vertexHash = UINT64_C(0xFEDCBA9876543210);
-    ResolveFixture fixture = { nestedHash, UINT64_C(0x12345000), vertexHash, UINT64_C(0x20000000), 0x100 };
+    constexpr uint64_t textureHash = UINT64_C(0x54865CA6217340F0);
+    ResolveFixture fixture = { nestedHash, UINT64_C(0x12345000), vertexHash, UINT64_C(0x20000000), 0x100,
+                               textureHash, UINT64_C(0x40000000) };
     MmDisplayListCommand commands[] = {
         { UINT32_C(0x31010000), 0 },
         { UINT32_C(0x01234567), UINT32_C(0x89ABCDEF) },
@@ -67,6 +74,23 @@ int main() {
     REQUIRE(stats.verticesPatched == 1);
     REQUIRE(stats.unresolved == 0);
     REQUIRE(stats.malformed == 0);
+
+    // Exact texture-hash command shape used by gSkullKidTorsoDL. A strict MM
+    // graph must not leave this for the global archive resolver: mm.o2r is
+    // loaded through the MM archive path and the global lookup returns null.
+    MmDisplayListCommand texture[] = {
+        { UINT32_C(0x20000000), UINT32_C(0xBEEFBEEF) },
+        { UINT32_C(0x54865CA6), UINT32_C(0x217340F0) },
+        { UINT32_C(0xDF000000), 0 },
+    };
+    stats = {};
+    REQUIRE(MmDisplayList_PatchCommands(texture, 3, ResolveResource, &fixture, &stats));
+    // Keep texture selection in the ResourceManager so alternate assets can
+    // still override the canonical MM texture path.
+    REQUIRE(texture[0].w0 == UINT32_C(0x25000000));
+    REQUIRE(texture[0].w1 == fixture.texturePointer);
+    REQUIRE(texture[1].w0 == 0);
+    REQUIRE(texture[1].w1 == 0);
 
     MmDisplayListCommand unresolved[] = {
         { UINT32_C(0x31000000), 0 },

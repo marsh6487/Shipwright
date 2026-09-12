@@ -4,8 +4,10 @@ namespace {
 
 constexpr uint8_t kDisplayListHash = 0x31;
 constexpr uint8_t kVertexHash = 0x32;
+constexpr uint8_t kTextureHash = 0x20;
 constexpr uint8_t kVertex = 0x01;
 constexpr uint8_t kDisplayList = 0xDE;
+constexpr uint8_t kSetTextureImageFilepath = 0x25;
 constexpr uint8_t kEndDisplayList = 0xDF;
 constexpr size_t kVertexSize = 16;
 
@@ -98,6 +100,23 @@ bool MmDisplayList_PatchCommands(MmDisplayListCommand* commands, size_t commandC
                 command.w1 = nested;
                 payload = {};
                 ++result.nestedPatched;
+            }
+            i += 2;
+            continue;
+        }
+        if (opcode == kTextureHash) {
+            MmDisplayListCommand& payload = commands[i + 1];
+            size_t resourceSize = 0;
+            const uintptr_t texture = resolveResource(context, MM_DISPLAY_LIST_REFERENCE_TEXTURE,
+                                                      ReadHash(payload), &resourceSize);
+            if (texture == 0) {
+                ++result.unresolved;
+            } else {
+                command.w0 = (command.w0 & UINT32_C(0x00FFFFFF)) |
+                             (static_cast<uint32_t>(kSetTextureImageFilepath) << 24);
+                command.w1 = texture;
+                payload = {};
+                ++result.texturesPatched;
             }
             i += 2;
             continue;

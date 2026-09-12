@@ -26,6 +26,7 @@
 #include <unordered_map>
 #include <vector> // was transitively via OTRGlobals.h before upstream #6636 cleanup
 #include <fast/resource/type/DisplayList.h>
+#include <fast/resource/type/Texture.h>
 #include <fast/resource/type/Vertex.h>
 #include <libultraship/libultraship.h>
 #include <libultraship/log/luslog.h>
@@ -584,6 +585,7 @@ struct MmDisplayListResolveContext {
 
 static std::unordered_map<std::string, Gfx*> sStrictDisplayListGraphCache;
 static std::vector<std::shared_ptr<std::vector<Gfx>>> sStrictDisplayListGraphStorage;
+static std::unordered_map<uint64_t, std::string> sStrictTexturePaths;
 
 static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayListGraphContext& graph, int depth);
 
@@ -604,6 +606,16 @@ static uintptr_t MmAssets_ResolveDisplayListReference(void* context, MmDisplayLi
     if (kind == MM_DISPLAY_LIST_REFERENCE_NESTED) {
         return reinterpret_cast<uintptr_t>(
             MmAssets_PatchDisplayListGraph(pathIt->second, *resolve->graph, resolve->depth + 1));
+    }
+
+    if (kind == MM_DISPLAY_LIST_REFERENCE_TEXTURE) {
+        auto textureResource = MmAssets_LoadResourceObjectFromMmArchive(pathIt->second.c_str());
+        auto texture = std::dynamic_pointer_cast<Fast::Texture>(textureResource);
+        if (texture == nullptr || texture->ImageData == nullptr) {
+            return 0;
+        }
+        auto texturePath = sStrictTexturePaths.try_emplace(hash, "__OTR__" + pathIt->second).first;
+        return reinterpret_cast<uintptr_t>(texturePath->second.c_str());
     }
 
     auto vertexResource = MmAssets_LoadResourceObjectFromMmArchive(pathIt->second.c_str());
@@ -675,8 +687,8 @@ static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayLis
     sStrictDisplayListGraphStorage.push_back(std::move(output));
     sStrictDisplayListGraphCache[path] = result;
     graph.inProgress.erase(path);
-    MMASSETS_LOG("[MM Assets] STRICT graph ready: %s (nested=%zu vertices=%zu cull=%zu)", path.c_str(), stats.nestedPatched,
-                 stats.verticesPatched, stats.cullPatched);
+    MMASSETS_LOG("[MM Assets] STRICT graph ready: %s (nested=%zu vertices=%zu textures=%zu cull=%zu)", path.c_str(),
+                 stats.nestedPatched, stats.verticesPatched, stats.texturesPatched, stats.cullPatched);
     return result;
 }
 
