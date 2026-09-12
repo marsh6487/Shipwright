@@ -58,6 +58,7 @@ for test_binary in "$stabilization_build/"*_test; do
 done
 python3 -B -m unittest discover -s scripts/diagnostics -p 'test_audit_skull_kid.py' -v
 python3 -B scripts/diagnostics/run_audio_runtime_test.py "$stabilization_build" "$cc"
+python3 -B scripts/diagnostics/run_night_combat_test.py "$stabilization_build" "$cc" "$cxx"
 
 # Optional read-only real-archive check: pass the path to mm.o2r as argument 1.
 if [[ $# -gt 0 ]]; then

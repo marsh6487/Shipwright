@@ -7,6 +7,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/savestate_serialize.h"
 #include "concurrent_weather_audio.h"
+#include "night_bgm_bridge.h"
 
 // TODO: can these macros be shared between files? code_800F9280 seems to use
 // versions without any casts...
@@ -5290,8 +5291,12 @@ void Audio_SetSequenceMode(u8 seqMode) {
         }
 
         if ((seqId == NA_BGM_DISABLED) || (Audio_GetSeqFlags((u8)(seqId & 0xFF)) & 1) ||
+            Audio_IsNightBgmActive() ||
             ((sPrevSeqMode & 0x7F) == SEQ_MODE_ENEMY)) {
-            if (seqMode != (sPrevSeqMode & 0x7F)) {
+            // FIELD_LOGIC's untagged enemy mode has no SUB overlay. When
+            // night takes over mid-combat, enter the ordinary overlay once.
+            if (seqMode != (sPrevSeqMode & 0x7F) ||
+                (Audio_IsNightBgmActive() && sPrevSeqMode == SEQ_MODE_ENEMY && seqMode == SEQ_MODE_ENEMY)) {
                 if (seqMode == SEQ_MODE_ENEMY) {
                     // Start playing enemy bgm
                     if (gActiveSeqs[SEQ_PLAYER_BGM_SUB].volScales[1] - sAudioEnemyVol < 0) {

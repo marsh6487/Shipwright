@@ -1,5 +1,6 @@
 #include <libultraship/libultra.h>
 #include "global.h"
+#include "night_bgm_bridge.h"
 #include "soh/mixer.h"
 
 #include "soh/Enhancements/audio/AudioEditor.h"
@@ -21,6 +22,18 @@ static struct {
     u8 isResolved;
 } sResolvedSeqCmds[0x100];
 ActiveSequence gActiveSeqs[4];
+static u16 sRegisteredNightBgm = NA_BGM_DISABLED;
+static u16 sResolvedMainBgm = NA_BGM_DISABLED;
+
+void Audio_RegisterNightBgm(uint16_t sequence) {
+    sRegisteredNightBgm = sequence;
+}
+
+uint8_t Audio_IsNightBgmActive(void) {
+    return sRegisteredNightBgm != NA_BGM_DISABLED &&
+           gActiveSeqs[SEQ_PLAYER_BGM_MAIN].seqId != NA_BGM_DISABLED &&
+           sResolvedMainBgm == sRegisteredNightBgm;
+}
 
 u8 sSeqCmdWrPos = 0;
 u8 sSeqCmdRdPos = 0;
@@ -71,6 +84,9 @@ static void Audio_StartSequenceInternal(u8 playerIdx, u8 seqId, u8 arg2, u16 fad
         }
 
         arg2 &= 0x7F;
+        if (playerIdx == SEQ_PLAYER_BGM_MAIN) {
+            sResolvedMainBgm = resolvedSeqId;
+        }
         if (arg2 == 0x7F) {
             dur = (fadeTimer >> 3) * 60 * gAudioContext.audioBufferParameters.updatesPerFrame;
             Audio_QueueCmdS32(0x85000000 | _SHIFTL(playerIdx, 16, 8) | (resolvedSeqId & 0xFFFF), dur);
@@ -764,6 +780,8 @@ u8 func_800FAD34(void) {
 }
 
 void Audio_ResetActiveSequences(void) {
+    Audio_RegisterNightBgm(NA_BGM_DISABLED);
+    sResolvedMainBgm = NA_BGM_DISABLED;
     u8 seqPlayerIndex;
     u8 scaleIndex;
 

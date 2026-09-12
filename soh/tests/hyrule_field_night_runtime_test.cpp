@@ -78,6 +78,10 @@ static void StartNight(PlayState& play) {
     REQUIRE(commands.empty());
 }
 
+#ifdef NIGHT_COMBAT_RUNTIME_TEST
+#include "night_combat_fixture.h"
+#endif
+
 int main() {
     ShipInit::InitAll();
     PlayState play;
@@ -134,4 +138,7 @@ int main() {
 
     // A selected 16-bit ID ending in FF must not match disabled MAIN.
     REQUIRE(!HyruleFieldNightMusic_IsNightSequencePlaying(true, 0xFFFF, 0x1FF));
+#ifdef NIGHT_COMBAT_RUNTIME_TEST
+    TestCombat(play);
+#endif
 }

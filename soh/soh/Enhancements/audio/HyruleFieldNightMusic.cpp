@@ -94,6 +94,7 @@ bool HyruleFieldNightMusic_ShouldLogDiagnostic(const HyruleFieldNightMusicDiagno
 #include <spdlog/spdlog.h>
 
 #include "AudioCollection.h"
+#include "night_bgm_bridge.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ShipInit.hpp"
 #include "soh/cvar_prefixes.h"
@@ -199,6 +200,7 @@ void HyruleFieldNightMusic_Update(PlayState* play) {
             SPDLOG_INFO("[HyruleNight] queue-start selected=0x{:04X} resolved=0x{:04X}", selected,
                         playbackSequence);
             Audio_QueueResolvedSeqCmd(HyruleFieldNightMusic_GetPlaybackPlayer(), playbackSequence, 0x1E);
+            Audio_RegisterNightBgm(playbackSequence);
             sOwnsNightBgm = true;
             break;
         }
@@ -214,6 +216,7 @@ void HyruleFieldNightMusic_Update(PlayState* play) {
                 Audio_QueueResolvedSeqCmd(SEQ_PLAYER_BGM_MAIN, daySequence, 0x1E);
             }
             sOwnsNightBgm = false;
+            Audio_RegisterNightBgm(NA_BGM_DISABLED);
             HyruleFieldNightMusic_ClearSequence();
             break;
         }
@@ -223,6 +226,7 @@ void HyruleFieldNightMusic_Update(PlayState* play) {
 }
 
 void HyruleFieldNightMusic_Reset() {
+    Audio_RegisterNightBgm(NA_BGM_DISABLED);
     sOwnsNightBgm = false;
     HyruleFieldNightMusic_ClearSequence();
     sHasDiagnosticSnapshot = false;
