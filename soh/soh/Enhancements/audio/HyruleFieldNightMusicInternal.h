@@ -13,7 +13,6 @@ uint16_t HyruleFieldNightMusic_StartSequence(uint16_t selected, uint16_t fallbac
 uint16_t HyruleFieldNightMusic_RestoreSequence();
 void HyruleFieldNightMusic_ClearSequence();
 bool HyruleFieldNightMusic_ShouldRestoreDaySequence(const HyruleFieldNightMusicState& state);
-bool HyruleFieldNightMusic_ShouldStopDaySequence(const HyruleFieldNightMusicState& state);
 bool HyruleFieldNightMusic_IsFieldLifecycleSequence(uint16_t sequence, uint16_t fieldLogic,
                                                      uint16_t natureAmbience, uint16_t disabled);
 uint8_t HyruleFieldNightMusic_GetPlaybackPlayer();

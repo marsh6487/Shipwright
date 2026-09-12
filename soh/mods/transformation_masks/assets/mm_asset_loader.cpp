@@ -36,6 +36,7 @@
 #include "soh/resource/type/Array.h"
 #include "soh/resource/type/Text.h"
 #include "functions.h"           // For Audio_SetFontInstrument, AudioLoad_IsFontLoadComplete
+#include "variables.h"           // Native cull display lists; never assume adjacent arrays.
 #include "message_data_static.h" // MessageTableEntry struct
 
 // SoH globals that hold pointers into Text-resource std::string buffers. After
@@ -590,6 +591,10 @@ static uintptr_t MmAssets_ResolveDisplayListReference(void* context, MmDisplayLi
                                                       size_t* resourceSize) {
     auto* resolve = static_cast<MmDisplayListResolveContext*>(context);
     *resourceSize = 0;
+    if (kind == MM_DISPLAY_LIST_REFERENCE_CULL) {
+        return hash == 0 ? reinterpret_cast<uintptr_t>(gCullBackDList)
+                        : hash == 2 ? reinterpret_cast<uintptr_t>(gCullFrontDList) : 0;
+    }
     auto pathIt = resolve->graph->pathsByHash->find(hash);
     if (pathIt == resolve->graph->pathsByHash->end()) {
         MMASSETS_LOG("[MM Assets] STRICT graph hash miss: 0x%016llx", static_cast<unsigned long long>(hash));
@@ -670,8 +675,8 @@ static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayLis
     sStrictDisplayListGraphStorage.push_back(std::move(output));
     sStrictDisplayListGraphCache[path] = result;
     graph.inProgress.erase(path);
-    MMASSETS_LOG("[MM Assets] STRICT graph ready: %s (nested=%zu vertices=%zu)", path.c_str(), stats.nestedPatched,
-                 stats.verticesPatched);
+    MMASSETS_LOG("[MM Assets] STRICT graph ready: %s (nested=%zu vertices=%zu cull=%zu)", path.c_str(), stats.nestedPatched,
+                 stats.verticesPatched, stats.cullPatched);
     return result;
 }
 

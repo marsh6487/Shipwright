@@ -63,6 +63,28 @@ bool MmDisplayList_PatchCommands(MmDisplayListCommand* commands, size_t commandC
             ++result.malformed;
             return false;
         }
+        if (opcode == 0x3D && (command.w1 >> 24) == 0x0C) {
+            // MM exports cull lists as G_DL_INDEX(segment 0x0C, index 0/2).
+            // Resolve each C array explicitly: neither inherited segment state
+            // nor adjacency of gCullBackDList/gCullFrontDList is guaranteed.
+            const uint32_t index = command.w1 & UINT32_C(0x00FFFFFF);
+            size_t resourceSize = 0;
+            if (index != 0 && index != 2) {
+                ++result.malformed;
+                return false;
+            }
+            const uintptr_t target = resolveResource(context, MM_DISPLAY_LIST_REFERENCE_CULL, index, &resourceSize);
+            if (target == 0) {
+                ++result.unresolved;
+            } else {
+                command.w0 = (static_cast<uint32_t>(kDisplayList) << 24) |
+                             (command.w0 & UINT32_C(0x00010000));
+                command.w1 = target;
+                ++result.cullPatched;
+            }
+            ++i;
+            continue;
+        }
         if (opcode == kDisplayListHash) {
             MmDisplayListCommand& payload = commands[i + 1];
             size_t resourceSize = 0;

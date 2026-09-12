@@ -79,6 +79,27 @@ if(BUILD_TESTING)
     target_compile_definitions(hyrule_field_night_music_test PRIVATE HYRULE_FIELD_NIGHT_MUSIC_TEST)
     add_test(NAME hyrule_field_night_music_test COMMAND hyrule_field_night_music_test)
 
+    add_executable(hyrule_field_night_runtime_test
+        tests/hyrule_field_night_runtime_test.cpp
+        soh/Enhancements/audio/HyruleFieldNightMusic.cpp
+        src/code/code_800F9280.c
+    )
+    target_include_directories(hyrule_field_night_runtime_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/night_runtime_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_sequence_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(hyrule_field_night_runtime_test PRIVATE CVAR_PREFIX_AUDIO="gAudioEditor")
+    add_test(NAME hyrule_field_night_runtime_test COMMAND hyrule_field_night_runtime_test)
+
+    add_executable(audio_font_id_test tests/audio_font_id_test.c)
+    target_include_directories(audio_font_id_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_sequence_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    add_test(NAME audio_font_id_test COMMAND audio_font_id_test)
+
     add_executable(global_outdoor_rain_test
         tests/global_outdoor_rain_test.cpp
         soh/Enhancements/audio/GlobalOutdoorRain.cpp

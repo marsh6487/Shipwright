@@ -5207,23 +5207,25 @@ void func_800F5C2C(void) {
 void Audio_PlayFanfare(u16 seqId) {
     u16 curSeqId;
     u32 outNumFonts;
-    u8* curFontId;
-    u8* requestedFontId;
+    s32 curFontId;
+    s32* requestedFontId;
 
     curSeqId = func_800FA0B4(SEQ_PLAYER_FANFARE);
 
-    // Although seqIds are u16, there is no fanfare that is above 0xFF
-    // Sometimes the game will add 0x900 to a requested fanfare ID
-    // The `& 0xFF` here is to strip off this 0x900 and get the original fanfare ID
-    // when getting the sound font data for the sequence
-    curFontId = func_800E5E84(curSeqId & 0xFF, &outNumFonts);
-    requestedFontId = func_800E5E84(seqId & 0xFF, &outNumFonts);
+    // Native requests carry flags such as 0x900; MM/custom requests prime a
+    // full-width ID separately. Compare the actual current bank to the exact
+    // requested bank without consuming that pending start or resolving twice.
+    curFontId = gAudioContext.seqPlayers[SEQ_PLAYER_FANFARE].defaultFont;
+    u16 requestedSeqId = gAudioContext.seqReplaced[SEQ_PLAYER_FANFARE]
+                             ? gAudioContext.seqToPlay[SEQ_PLAYER_FANFARE]
+                             : AudioEditor_GetReplacementSeq(seqId & 0xFF);
+    requestedFontId = func_800E5E84(requestedSeqId, &outNumFonts);
 
-    if (!curFontId || !requestedFontId) {
+    if (!requestedFontId) {
         // disable BGM, we're about to null deref!
         sFanfareStartTimer = 1;
     } else {
-        if ((curSeqId == NA_BGM_DISABLED) || (*curFontId == *requestedFontId)) {
+        if ((curSeqId == NA_BGM_DISABLED) || (outNumFonts == 1 && curFontId == *requestedFontId)) {
             sFanfareStartTimer = 1;
         } else {
             sFanfareStartTimer = 5;

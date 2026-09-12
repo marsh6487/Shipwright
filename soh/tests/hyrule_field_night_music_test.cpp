@@ -1,4 +1,4 @@
-#include <cassert>
+#include "test_require.h"
 #include <vector>
 
 #include "audio_sequence_stubs/global.h"
@@ -118,54 +118,44 @@ int main() {
         .fanfareSequence = 0xFFFF,
         .nightPlaybackSequence = 0xFFFF,
     };
-    assert(HyruleFieldNightMusic_ShouldLogDiagnostic(nullptr, diagnostic));
-    assert(!HyruleFieldNightMusic_ShouldLogDiagnostic(&diagnostic, diagnostic));
+    REQUIRE(HyruleFieldNightMusic_ShouldLogDiagnostic(nullptr, diagnostic));
+    REQUIRE(!HyruleFieldNightMusic_ShouldLogDiagnostic(&diagnostic, diagnostic));
     auto changedDiagnostic = diagnostic;
     changedDiagnostic.state.isNight = false;
     changedDiagnostic.decision = HyruleFieldNightMusicDecision::NoChange;
-    assert(HyruleFieldNightMusic_ShouldLogDiagnostic(&diagnostic, changedDiagnostic));
+    REQUIRE(HyruleFieldNightMusic_ShouldLogDiagnostic(&diagnostic, changedDiagnostic));
     auto outsideDiagnostic = changedDiagnostic;
     outsideDiagnostic.state.inHyruleField = false;
-    assert(HyruleFieldNightMusic_ShouldLogDiagnostic(&changedDiagnostic, outsideDiagnostic));
-    assert(!HyruleFieldNightMusic_ShouldLogDiagnostic(&outsideDiagnostic, outsideDiagnostic));
+    REQUIRE(HyruleFieldNightMusic_ShouldLogDiagnostic(&changedDiagnostic, outsideDiagnostic));
+    REQUIRE(!HyruleFieldNightMusic_ShouldLogDiagnostic(&outsideDiagnostic, outsideDiagnostic));
     auto unrelatedSceneAudio = outsideDiagnostic;
     unrelatedSceneAudio.mainSequence = 0x35;
-    assert(!HyruleFieldNightMusic_ShouldLogDiagnostic(&outsideDiagnostic, unrelatedSceneAudio));
+    REQUIRE(!HyruleFieldNightMusic_ShouldLogDiagnostic(&outsideDiagnostic, unrelatedSceneAudio));
 
     // Sequence arguments live above the low ID byte. Nature ambience with
     // those flags is still Hyrule Field's native lifecycle, not an override.
-    assert(HyruleFieldNightMusic_IsFieldLifecycleSequence(NA_BGM_NATURE_AMBIENCE | 0x0800, NA_BGM_FIELD_LOGIC,
+    REQUIRE(HyruleFieldNightMusic_IsFieldLifecycleSequence(NA_BGM_NATURE_AMBIENCE | 0x0800, NA_BGM_FIELD_LOGIC,
                                                            NA_BGM_NATURE_AMBIENCE, NA_BGM_DISABLED));
     // Hyrule Field owns MAIN. SUB belongs to native enemy/proximity overlays,
     // whose lifecycle repeatedly stops that player when an encounter ends.
-    assert(HyruleFieldNightMusic_GetPlaybackPlayer() == 0);
-    assert(HyruleFieldNightMusic_IsNightSequencePlaying(true, 0x8135, 0x35));
-    assert(!HyruleFieldNightMusic_IsNightSequencePlaying(false, 0x8135, 0x35));
-    assert(!HyruleFieldNightMusic_IsNightSequencePlaying(true, NA_BGM_FIELD_LOGIC, 0x35));
+    REQUIRE(HyruleFieldNightMusic_GetPlaybackPlayer() == 0);
+    REQUIRE(HyruleFieldNightMusic_IsNightSequencePlaying(true, 0x8135, 0x35));
+    REQUIRE(!HyruleFieldNightMusic_IsNightSequencePlaying(false, 0x8135, 0x35));
+    REQUIRE(!HyruleFieldNightMusic_IsNightSequencePlaying(true, NA_BGM_FIELD_LOGIC, 0x35));
 
     auto state = BaseState();
-    assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StartNight);
+    REQUIRE(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StartNight);
 
     state.ownsNightBgm = true;
     state.nightBgmPlaying = true;
-    assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::NoChange);
+    REQUIRE(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::NoChange);
 
     state.nightBgmPlaying = false;
     state.fanfarePlaying = false;
-    assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::RestoreNight);
+    REQUIRE(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::RestoreNight);
 
     state.isNight = false;
-    assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StopNightRestoreDay);
-
-    state = BaseState();
-    assert(HyruleFieldNightMusic_ShouldStopDaySequence(state));
-    state.ownsNightBgm = true;
-    assert(!HyruleFieldNightMusic_ShouldStopDaySequence(state));
-    state.isNight = false;
-    assert(!HyruleFieldNightMusic_ShouldStopDaySequence(state));
-    state = BaseState();
-    state.explicitAudioOverride = true;
-    assert(!HyruleFieldNightMusic_ShouldStopDaySequence(state));
+    REQUIRE(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StopNightRestoreDay);
 
     // A second complete cycle must make the same transitions instead of
     // leaving the main player silent after the first dawn.
@@ -173,83 +163,85 @@ int main() {
     state.ownsNightBgm = false;
     state.nightBgmPlaying = false;
     state.isNight = true;
-    assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StartNight);
+    REQUIRE(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StartNight);
     state.ownsNightBgm = true;
     state.nightBgmPlaying = true;
-    assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::NoChange);
+    REQUIRE(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::NoChange);
     state.isNight = false;
-    assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StopNightRestoreDay);
+    REQUIRE(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StopNightRestoreDay);
 
     state = BaseState();
     state.ownsNightBgm = true;
     state.fanfarePlaying = true;
-    assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::NoChange);
+    REQUIRE(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::NoChange);
 
     state = BaseState();
     state.inHyruleField = false;
     state.ownsNightBgm = true;
     state.explicitAudioOverride = true;
-    assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StopNightRestoreDay);
+    REQUIRE(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StopNightRestoreDay);
 
     state = BaseState();
     state.enabled = false;
     state.ownsNightBgm = true;
     state.fanfarePlaying = true;
-    assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::StopNightRestoreDay);
+    REQUIRE(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::NoChange);
 
     state = BaseState();
     state.explicitAudioOverride = true;
-    assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::NoChange);
+    REQUIRE(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::NoChange);
 
     state.ownsNightBgm = true;
-    assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::NoChange);
+    REQUIRE(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::NoChange);
 
     state.isNight = false;
-    assert(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::NoChange);
+    REQUIRE(HyruleFieldNightMusic_Select(state) == HyruleFieldNightMusicDecision::NoChange);
 
-    assert(HyruleFieldNightMusic_ValidateSequence(0x02, true, 0x21) == 0x02);
-    assert(HyruleFieldNightMusic_ValidateSequence(0x7FFF, false, 0x21) == 0x21);
-    assert(HyruleFieldNightMusic_ResolveSequence(0x21, 0x35) == 0x35);
+    REQUIRE(HyruleFieldNightMusic_ValidateSequence(0x02, true, 0x21) == 0x02);
+    REQUIRE(HyruleFieldNightMusic_ValidateSequence(0x7FFF, false, 0x21) == 0x21);
+    REQUIRE(HyruleFieldNightMusic_ResolveSequence(0x21, 0x35) == 0x35);
 
     // A valid configured sequence enters the Audio Editor mapping exactly once,
     // and its valid replacement becomes the cached playback sequence.
     ResetReplacementStub(0x35);
-    assert(HyruleFieldNightMusic_StartSequence(0x21, 0x21, IsKnownSequence, GetReplacementSequence) == 0x35);
-    assert(sReplacementInput == 0x21);
-    assert(sReplacementCalls == 1);
+    REQUIRE(HyruleFieldNightMusic_StartSequence(0x21, 0x21, IsKnownSequence, GetReplacementSequence) == 0x35);
+    REQUIRE(sReplacementInput == 0x21);
+    REQUIRE(sReplacementCalls == 1);
 
     // Invalid configuration falls back before lookup, so the Audio Editor maps
     // the known default rather than receiving an invalid sequence ID.
     ResetReplacementStub(0x35);
-    assert(HyruleFieldNightMusic_StartSequence(0x7FFF, 0x21, IsKnownSequence, GetReplacementSequence) == 0x35);
-    assert(sReplacementInput == 0x21);
-    assert(sReplacementCalls == 1);
+    REQUIRE(HyruleFieldNightMusic_StartSequence(0x7FFF, 0x21, IsKnownSequence, GetReplacementSequence) == 0x35);
+    REQUIRE(sReplacementInput == 0x21);
+    REQUIRE(sReplacementCalls == 1);
 
     // A defensive validation failure from the replacement lookup keeps the
     // already-validated configured/default sequence.
     ResetReplacementStub(0x7FFF);
-    assert(HyruleFieldNightMusic_StartSequence(0x21, 0x21, IsKnownSequence, GetReplacementSequence) == 0x21);
+    REQUIRE(HyruleFieldNightMusic_StartSequence(0x21, 0x21, IsKnownSequence, GetReplacementSequence) == 0x21);
 
     // Fanfare recovery restores the cached result. A changed mapping must not
     // be consulted until a later StartNight lifecycle.
     ResetReplacementStub(0x35);
-    assert(HyruleFieldNightMusic_StartSequence(0x21, 0x21, IsKnownSequence, GetReplacementSequence) == 0x35);
+    REQUIRE(HyruleFieldNightMusic_StartSequence(0x21, 0x21, IsKnownSequence, GetReplacementSequence) == 0x35);
     sReplacementSequence = 0x36;
-    assert(HyruleFieldNightMusic_RestoreSequence() == 0x35);
-    assert(HyruleFieldNightMusic_RestoreSequence() == 0x35);
-    assert(sReplacementCalls == 1);
+    REQUIRE(HyruleFieldNightMusic_RestoreSequence() == 0x35);
+    REQUIRE(HyruleFieldNightMusic_RestoreSequence() == 0x35);
+    REQUIRE(sReplacementCalls == 1);
 
-    // Only an in-field dawn owns daytime restoration. Exit and feature-disable
-    // cleanup must leave the destination/explicit MAIN sequence untouched.
+    // Dawn and feature-disable while still in Hyrule Field restore Field Logic
+    // directly. Scene exit must leave the destination MAIN sequence untouched.
     state = BaseState();
     state.ownsNightBgm = true;
     state.isNight = false;
-    assert(HyruleFieldNightMusic_ShouldRestoreDaySequence(state));
+    REQUIRE(HyruleFieldNightMusic_ShouldRestoreDaySequence(state));
     state.inHyruleField = false;
-    assert(!HyruleFieldNightMusic_ShouldRestoreDaySequence(state));
+    REQUIRE(!HyruleFieldNightMusic_ShouldRestoreDaySequence(state));
     state.inHyruleField = true;
     state.enabled = false;
-    assert(!HyruleFieldNightMusic_ShouldRestoreDaySequence(state));
+    REQUIRE(HyruleFieldNightMusic_ShouldRestoreDaySequence(state));
+    state.explicitAudioOverride = true;
+    REQUIRE(!HyruleFieldNightMusic_ShouldRestoreDaySequence(state));
 
     // The resolved night ID crosses the command boundary without another
     // Audio Editor lookup, so a chained 0x21 -> 0x35 -> 0x36 mapping plays and
@@ -260,21 +252,21 @@ int main() {
         HyruleFieldNightMusic_StartSequence(0x21, 0x21, IsKnownSequence, GetChainedReplacementSequence);
     Audio_QueueResolvedSeqCmd(HyruleFieldNightMusic_GetPlaybackPlayer(), chainedNight, 0x1E);
     Audio_ProcessSeqCmds();
-    assert(sPlayedSequence == 0x35);
-    assert(sReplacementCalls == 1);
+    REQUIRE(sPlayedSequence == 0x35);
+    REQUIRE(sReplacementCalls == 1);
     Audio_QueueResolvedSeqCmd(HyruleFieldNightMusic_GetPlaybackPlayer(), HyruleFieldNightMusic_RestoreSequence(),
                               0x1E);
     Audio_ProcessSeqCmds();
-    assert(sPlayedSequence == 0x35);
-    assert(sReplacementCalls == 1);
+    REQUIRE(sPlayedSequence == 0x35);
+    REQUIRE(sReplacementCalls == 1);
 
     // Dawn playback uses the same no-remap boundary on MAIN.
     ResetPlaybackBoundary();
     const uint16_t chainedDay = GetChainedReplacementSequence(0x02);
     Audio_QueueResolvedSeqCmd(0, chainedDay, 0x1E);
     Audio_ProcessSeqCmds();
-    assert(sPlayedSequence == 0x35);
-    assert(sReplacementCalls == 2);
+    REQUIRE(sPlayedSequence == 0x35);
+    REQUIRE(sReplacementCalls == 2);
 
     // A full-width replacement is carried in queue-slot metadata while the ordinary
     // command retains zero sequence arguments; 0x8135 must not truncate to
@@ -285,8 +277,8 @@ int main() {
         HyruleFieldNightMusic_StartSequence(0x21, 0x21, IsKnownSequence, GetWideReplacementSequence);
     Audio_QueueResolvedSeqCmd(HyruleFieldNightMusic_GetPlaybackPlayer(), wideNight, 0x1E);
     Audio_ProcessSeqCmds();
-    assert(sPlayedSequence == 0x8135);
-    assert(sReplacementCalls == 1);
+    REQUIRE(sPlayedSequence == 0x8135);
+    REQUIRE(sReplacementCalls == 1);
 
     // An earlier same-player start must not steal the later resolved entry's
     // cached ID/bypass. Test both low and full-width IDs with real delayed
@@ -298,14 +290,14 @@ int main() {
             HyruleFieldNightMusic_StartSequence(0x21, 0x21, IsKnownSequence, GetReplacementSequence);
         Audio_QueueSeqCmd(0x031E0040);
         Audio_QueueResolvedSeqCmd(3, cached, 0x1E);
-        assert(sPlayedSequences.empty());
+        REQUIRE(sPlayedSequences.empty());
         Audio_ProcessSeqCmds();
-        assert(sPlayedSequences.size() == 2);
-        assert(sPlayedSequences[0] == 0x40);
-        assert(sPlayedSequences[1] == expected);
-        assert(sReplacementCalls == 2); // One initial lookup plus the ordinary start only.
-        assert(sLastStartCommand == (0x82030000U | expected));
-        assert(sLastStartFade == 0xF0);
+        REQUIRE(sPlayedSequences.size() == 2);
+        REQUIRE(sPlayedSequences[0] == 0x40);
+        REQUIRE(sPlayedSequences[1] == expected);
+        REQUIRE(sReplacementCalls == 2); // One initial lookup plus the ordinary start only.
+        REQUIRE(sLastStartCommand == (0x82030000U | expected));
+        REQUIRE(sLastStartFade == 0xF0);
 
         // Cached and mapped starts use the same atomic path under the same
         // delay on either sequence player.
@@ -313,17 +305,17 @@ int main() {
         Audio_QueueSeqCmd(0x031E0040);
         Audio_QueueResolvedSeqCmd(3, HyruleFieldNightMusic_RestoreSequence(), 0x1E);
         Audio_ProcessSeqCmds();
-        assert((sPlayedSequences == std::vector<uint16_t>{ 0x40, expected }));
-        assert(sReplacementCalls == 3);
+        REQUIRE((sPlayedSequences == std::vector<uint16_t>{ 0x40, expected }));
+        REQUIRE(sReplacementCalls == 3);
 
         sPlayedSequences.clear();
         const uint16_t day = GetReplacementSequence(0x02);
         Audio_QueueSeqCmd(0x001E0040);
         Audio_QueueResolvedSeqCmd(0, day, 0x1E);
         Audio_ProcessSeqCmds();
-        assert((sPlayedSequences == std::vector<uint16_t>{ 0x40, expected }));
-        assert(sReplacementCalls == 5);
-        assert(sLastStartCommand == (0x82000000U | expected));
+        REQUIRE((sPlayedSequences == std::vector<uint16_t>{ 0x40, expected }));
+        REQUIRE(sReplacementCalls == 5);
+        REQUIRE(sLastStartCommand == (0x82000000U | expected));
     }
 
     // Resolved entries neither consume nor overwrite existing MM state, even
@@ -340,15 +332,15 @@ int main() {
         }
         Audio_QueueSeqCmd(0x031E0040);
         Audio_ProcessSeqCmds();
-        assert((sPlayedSequences == std::vector<uint16_t>{ 0x8135, 0x8040 }));
-        assert(sReplacementCalls == 0);
+        REQUIRE((sPlayedSequences == std::vector<uint16_t>{ 0x8135, 0x8040 }));
+        REQUIRE(sReplacementCalls == 0);
     }
 
     ResetPlaybackBoundary();
     Audio_QueueResolvedSeqCmd(3, 0x35, 0x1E);
     Audio_QueueResolvedSeqCmd(3, 0x8135, 0x1E);
     Audio_ProcessSeqCmds();
-    assert((sPlayedSequences == std::vector<uint16_t>{ 0x35, 0x8135 }));
+    REQUIRE((sPlayedSequences == std::vector<uint16_t>{ 0x35, 0x8135 }));
 
     // Dropped starts (fonts pending or starts disabled) cannot leave a bypass
     // behind for the next ordinary start.
@@ -358,12 +350,12 @@ int main() {
         gActiveSeqs[3].isWaitingForFonts = waitingForFonts;
         Audio_QueueResolvedSeqCmd(3, 0x8135, 0x1E);
         Audio_ProcessSeqCmds();
-        assert(sPlayedSequences.empty());
+        REQUIRE(sPlayedSequences.empty());
         D_80133408 = 0;
         gActiveSeqs[3].isWaitingForFonts = 0;
         Audio_QueueSeqCmd(0x031E0040);
         Audio_ProcessSeqCmds();
-        assert((sPlayedSequences == std::vector<uint16_t>{ 0x40 }));
+        REQUIRE((sPlayedSequences == std::vector<uint16_t>{ 0x40 }));
     }
 
     // Reusing every ring slot must clear metadata for ordinary/preview writes.
@@ -375,7 +367,7 @@ int main() {
         Audio_ProcessSeqCmds();
         Audio_QueuePreviewSeqCmd(0x8040);
         Audio_ProcessSeqCmds();
-        assert((sPlayedSequences == std::vector<uint16_t>{ 0x8135, 0x35, 0x8040 }));
+        REQUIRE((sPlayedSequences == std::vector<uint16_t>{ 0x8135, 0x35, 0x8040 }));
     }
 
     // The legacy ring drops a full 256-entry batch when write catches read.
@@ -394,7 +386,7 @@ int main() {
             Audio_QueueSeqCmd(0x001E0021);
         }
         Audio_ProcessSeqCmds();
-        assert((sPlayedSequences == std::vector<uint16_t>{ static_cast<uint16_t>(preview ? 0x8040 : 0x35) }));
+        REQUIRE((sPlayedSequences == std::vector<uint16_t>{ static_cast<uint16_t>(preview ? 0x8040 : 0x35) }));
     }
 
     // Active-sequence reset does not flush the command ring; preserve the
@@ -404,6 +396,6 @@ int main() {
     Audio_ResetActiveSequences();
     Audio_QueueSeqCmd(0x031E0040);
     Audio_ProcessSeqCmds();
-    assert((sPlayedSequences == std::vector<uint16_t>{ 0x8135, 0x40 }));
+    REQUIRE((sPlayedSequences == std::vector<uint16_t>{ 0x8135, 0x40 }));
     return 0;
 }
