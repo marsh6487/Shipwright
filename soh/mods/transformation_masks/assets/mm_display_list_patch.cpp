@@ -7,7 +7,7 @@ constexpr uint8_t kVertexHash = 0x32;
 constexpr uint8_t kTextureHash = 0x20;
 constexpr uint8_t kVertex = 0x01;
 constexpr uint8_t kDisplayList = 0xDE;
-constexpr uint8_t kSetTextureImageFilepath = 0x25;
+constexpr uint8_t kSetTextureImage = 0xFD;
 constexpr uint8_t kEndDisplayList = 0xDF;
 constexpr size_t kVertexSize = 16;
 
@@ -113,7 +113,7 @@ bool MmDisplayList_PatchCommands(MmDisplayListCommand* commands, size_t commandC
                 ++result.unresolved;
             } else {
                 command.w0 = (command.w0 & UINT32_C(0x00FFFFFF)) |
-                             (static_cast<uint32_t>(kSetTextureImageFilepath) << 24);
+                             (static_cast<uint32_t>(kSetTextureImage) << 24);
                 command.w1 = texture;
                 payload = {};
                 ++result.texturesPatched;

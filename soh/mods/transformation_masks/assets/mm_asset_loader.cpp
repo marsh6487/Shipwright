@@ -585,7 +585,7 @@ struct MmDisplayListResolveContext {
 
 static std::unordered_map<std::string, Gfx*> sStrictDisplayListGraphCache;
 static std::vector<std::shared_ptr<std::vector<Gfx>>> sStrictDisplayListGraphStorage;
-static std::unordered_map<uint64_t, std::string> sStrictTexturePaths;
+static std::vector<std::shared_ptr<Ship::IResource>> sStrictDisplayListTextureStorage;
 
 static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayListGraphContext& graph, int depth);
 
@@ -614,8 +614,12 @@ static uintptr_t MmAssets_ResolveDisplayListReference(void* context, MmDisplayLi
         if (texture == nullptr || texture->ImageData == nullptr) {
             return 0;
         }
-        auto texturePath = sStrictTexturePaths.try_emplace(hash, "__OTR__" + pathIt->second).first;
-        return reinterpret_cast<uintptr_t>(texturePath->second.c_str());
+        // Keep the private-archive resource alive and bind its pixels directly.
+        // Returning a canonical __OTR__ filepath here would hand resolution back
+        // to the global mod stack, which cannot preserve the mm.o2r archive that
+        // this strict graph just selected and validated.
+        sStrictDisplayListTextureStorage.push_back(std::move(textureResource));
+        return reinterpret_cast<uintptr_t>(texture->ImageData);
     }
 
     auto vertexResource = MmAssets_LoadResourceObjectFromMmArchive(pathIt->second.c_str());

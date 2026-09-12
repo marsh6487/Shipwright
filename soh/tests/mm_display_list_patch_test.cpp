@@ -85,9 +85,10 @@ int main() {
     };
     stats = {};
     REQUIRE(MmDisplayList_PatchCommands(texture, 3, ResolveResource, &fixture, &stats));
-    // Keep texture selection in the ResourceManager so alternate assets can
-    // still override the canonical MM texture path.
-    REQUIRE(texture[0].w0 == UINT32_C(0x25000000));
+    // The strict archive resolver returns the MM texture's ImageData. Bind it
+    // directly so a globally mounted asset with the same canonical path cannot
+    // replace the texture after the strict graph has already validated it.
+    REQUIRE(texture[0].w0 == UINT32_C(0xFD000000));
     REQUIRE(texture[0].w1 == fixture.texturePointer);
     REQUIRE(texture[1].w0 == 0);
     REQUIRE(texture[1].w1 == 0);

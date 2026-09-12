@@ -23,7 +23,7 @@ class Stats(c.Structure):
 
 Resolver = c.CFUNCTYPE(c.c_size_t, c.c_void_p, c.c_int, c.c_uint64, c.POINTER(c.c_size_t))
 TWO_WORD = {0x20, 0x24, 0x25, 0x27, 0x31, 0x32, 0x33, 0x35, 0x36, 0x42}
-TEXTURE_PATH = c.create_string_buffer(b'__OTR__objects/object_stk/testTex')
+TEXTURE_IMAGE = c.create_string_buffer(b'test texture pixels')
 
 
 @Resolver
@@ -32,7 +32,7 @@ def resolve(context, kind, value, size):
     if kind == 2:
         return {0: 0x30000000, 2: 0x30000080}.get(value, 0)
     if kind == 3:
-        return c.addressof(TEXTURE_PATH)
+        return c.addressof(TEXTURE_IMAGE)
     return 0x20000000  # Deliberately not a real vertex/nested resource.
 
 
@@ -65,7 +65,7 @@ def main(library, archive):
                     target = {0: 0x30000000, 2: 0x30000080}[w1 & 0xFFFFFF]
                     expected.append((i, 0xDE000000 | (w0 & 0x10000), target))
                 elif opcode == 0x20:
-                    expected_textures.append((i, 0x25000000 | (w0 & 0xFFFFFF)))
+                    expected_textures.append((i, 0xFD000000 | (w0 & 0xFFFFFF)))
                 i += 2 if opcode in TWO_WORD else 1
             stats = Stats()
             if not patch(commands, len(words), resolve, None, c.byref(stats)):
@@ -77,7 +77,7 @@ def main(library, archive):
                 if (commands[index].w0, commands[index].w1) != (w0, w1):
                     raise RuntimeError(f'{path}: wrong cull rewrite at command {index}')
             for index, w0 in expected_textures:
-                if ((commands[index].w0, commands[index].w1) != (w0, c.addressof(TEXTURE_PATH)) or
+                if ((commands[index].w0, commands[index].w1) != (w0, c.addressof(TEXTURE_IMAGE)) or
                         (commands[index + 1].w0, commands[index + 1].w1) != (0, 0)):
                     raise RuntimeError(f'{path}: wrong texture rewrite at command {index}')
             total += stats.cull
