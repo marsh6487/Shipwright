@@ -12,6 +12,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/Graphics/PreludeNativeMaterialScroll.h"
 #include "soh/SaveManager.h"
 #include "soh/framebuffer_effects.h"
 #include "mods/items/custom_items.h"
@@ -1705,6 +1706,7 @@ void Play_Draw(PlayState* play) {
         // Draw Enhancements that need to be placed in the world. This happens before the PostWorldDraw
         // so that they aren't drawn when the pause menu is up (e.g. collision viewer, actor name tags)
         GameInteractor_ExecuteOnPlayDrawEnd();
+        PreludeNativeMaterialScroll_Update(play->state.gfxCtx, play->state.frames, play->gameplayFrames);
 
     Play_Draw_DrawOverlayElements:
         if ((HREG(80) != 10) || (HREG(89) != 0)) {
