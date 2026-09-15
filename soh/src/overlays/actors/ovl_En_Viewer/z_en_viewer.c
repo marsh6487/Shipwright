@@ -1981,6 +1981,9 @@ static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
     }
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    if (this->staticState.type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN) {
+        gSPSegment(POLY_OPA_DISP++, 0x0C, MmAssets_GetOpaqueRenderMode());
+    }
     if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
         gSPSegment(POLY_OPA_DISP++, 0x08,
                    (uintptr_t)this->staticState.mmEyeTextures[this->staticState.eyeIndex]);
@@ -2088,6 +2091,8 @@ static void EnViewer_DrawStaticSkullKid(EnViewer* this, PlayState* play) {
     MmAssets_EnsureStrictTextureBindings();
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gDPPipeSync(POLY_OPA_DISP++);
+    gDPSetEnvColor(POLY_OPA_DISP++, 255, 255, 255, 255);
     SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, EnViewer_StaticSkullKidOverrideLimbDraw,
                               EnViewer_StaticSkullKidPostLimbDraw, this);
     CLOSE_DISPS(play->state.gfxCtx);

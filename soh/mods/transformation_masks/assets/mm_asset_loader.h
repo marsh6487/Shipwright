@@ -85,6 +85,7 @@ void* MmAssets_LoadResourceStrict(const char* path);
  */
 Gfx* MmAssets_LoadDisplayListGraphStrict(const char* displayListPath);
 void MmAssets_EnsureStrictTextureBindings(void);
+Gfx* MmAssets_GetOpaqueRenderMode(void);
 
 /**
  * Load a resource from mm.o2r and get its size

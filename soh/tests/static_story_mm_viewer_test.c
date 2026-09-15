@@ -102,22 +102,44 @@ void Matrix_RotateX(f32 x,u8 mode) { REQUIRE(mode==MTXMODE_APPLY);rotateX=x; }
 void Gfx_SetupDL_25Opa(GraphicsContext* gfx) {}
 void Graph_OpenDisps(Gfx** dList,GraphicsContext* gfx,const char* file,s32 line) {}
 void Graph_CloseDisps(Gfx** dList,GraphicsContext* gfx,const char* file,s32 line) {}
+void MmAssets_EnsureStrictTextureBindings(void) {}
+static s32 EnViewer_StaticSkullKidOverrideLimbDraw(PlayState* p,s32 i,Gfx** d,Vec3f* v,Vec3s* r,void* a) { return false; }
+static void EnViewer_StaticSkullKidPostLimbDraw(PlayState* p,s32 i,Gfx** d,Vec3s* r,void* a) {}
+static void EnViewer_DrawStaticTatl(EnViewer* a,PlayState* p) {}
 void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawOpa override,PostLimbDrawOpa post,void* arg) {
-    ++drawCalls;REQUIRE(arg==drawing);REQUIRE(post==NULL);
+    ++drawCalls;REQUIRE(arg==drawing);
+    if (drawing->staticState.type == STATIC_STORY_ACTOR_SKULL_KID) {
+        REQUIRE(post == EnViewer_StaticSkullKidPostLimbDraw);
+        REQUIRE(play->state.gfxCtx->polyOpa.p == commands + 2);
+        REQUIRE((commands[0].words.w0 >> 24) == G_RDPPIPESYNC);
+        REQUIRE((commands[1].words.w0 >> 24) == G_SETENVCOLOR);
+        REQUIRE(commands[1].words.w1 == 0xffffffffU);
+        return;
+    }
+    REQUIRE(post==NULL);
     // Segment commands must already be emitted before the skeleton draw boundary.
     REQUIRE(play->state.gfxCtx->polyOpa.p > commands);
     faceCommands=play->state.gfxCtx->polyOpa.p-commands-1;
     REQUIRE((commands[faceCommands].words.w0 >> 24) == G_SETENVCOLOR);
     REQUIRE(commands[faceCommands].words.w1 == 0xffffffffU);
     const StaticStoryMmPresentation* p=StaticStoryMm_GetPresentation(drawing->staticState.type,drawing->staticState.pose);
-    REQUIRE(faceCommands==(p->eyeCount!=0)+(p->mouthCount!=0));
-    if(faceCommands) {
+    unsigned firstFace = drawing->staticState.type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN;
+    REQUIRE(faceCommands==firstFace+(p->eyeCount!=0)+(p->mouthCount!=0));
+    if (firstFace) {
+        REQUIRE((commands[0].words.w0 & 0xffff) == 0x0C * 4);
+        REQUIRE(commands[0].words.w1 == (uintptr_t)MmAssets_GetOpaqueRenderMode());
+        for (unsigned index = 0; index < 4; ++index) {
+            REQUIRE((MmAssets_GetOpaqueRenderMode()[index].words.w0 >> 24) == G_ENDDL);
+            REQUIRE(MmAssets_GetOpaqueRenderMode()[index].words.w1 == 0);
+        }
+    }
+    if(p->eyeCount || p->mouthCount) {
         StaticStoryMmFace face=StaticStoryMm_ResolveFace(drawing->staticState.type,drawing->staticState.pose,
              skel->curFrame,drawing->staticState.eyeIndex,drawing->staticState.tracking);
-        REQUIRE(commands[0].words.w1==(uintptr_t)eyes[face.eye]);
-        REQUIRE(commands[1].words.w1==(uintptr_t)mouths[face.mouth]);
-        REQUIRE((commands[0].words.w0 & 0xffff)==p->eyeSegment*4);
-        REQUIRE((commands[1].words.w0 & 0xffff)==p->mouthSegment*4);
+        REQUIRE(commands[firstFace].words.w1==(uintptr_t)eyes[face.eye]);
+        REQUIRE(commands[firstFace+1].words.w1==(uintptr_t)mouths[face.mouth]);
+        REQUIRE((commands[firstFace].words.w0 & 0xffff)==p->eyeSegment*4);
+        REQUIRE((commands[firstFace+1].words.w0 & 0xffff)==p->mouthSegment*4);
     }
     Vec3s rot={0};Vec3f pos={0};Gfx* dl=NULL;
     REQUIRE(override!=NULL);
@@ -142,6 +164,7 @@ void SkelAnime_DrawFlexLod(PlayState* play,void** skeleton,Vec3s* joints,s32 cou
     REQUIRE(dl==(Gfx*)0x1234 && rot.x==1 && rot.y==2 && rot.z==3);
     pos=(Vec3f){17,34,-17};override(play,2,&dl,&pos,&rot,arg);REQUIRE(pos.x==17 && pos.y==34);
 }
+/* PRODUCTION_OPAQUE_RENDER_MODE */
 /* PRODUCTION_VIEWER_FUNCTIONS */
 
 static void prepare(EnViewer* viewer,int type,int pose) {
@@ -157,6 +180,9 @@ static void draw(EnViewer* viewer,PlayState* play) {
 }
 int main(void) {
     static PlayState play;static GraphicsContext gfx;play.state.gfxCtx=&gfx;
+    EnViewer skull = {0};skull.staticState.type=STATIC_STORY_ACTOR_SKULL_KID;
+    drawing=&skull;gfx.polyOpa.p=commands;
+    EnViewer_DrawStaticSkullKid(&skull,&play);
     gSegments[6]=0x12345678;
     const int actors[]={STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN,STATIC_STORY_ACTOR_KEATON,STATIC_STORY_ACTOR_LULU};
     for(unsigned a=0;a<3;++a) for(unsigned pose=0;pose<(a==2?4:3);++pose) {

@@ -56,8 +56,11 @@ if os.environ.get("MM_VERIFY_STAGE") != "viewer":
 if os.environ.get("MM_VERIFY_STAGE") != "resource":
     viewer=(ROOT/'soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.c').read_text()
     fixture=(ROOT/'soh/tests/static_story_mm_viewer_test.c').read_text()
+    loader=(ROOT/'soh/mods/transformation_masks/assets/mm_asset_loader.cpp').read_text()
+    table=re.search(r'static Gfx sMmOpaqueRenderModeDL\[\] = \{.*?\n\};',loader,re.S).group(0)
+    fixture=fixture.replace('/* PRODUCTION_OPAQUE_RENDER_MODE */',table+'\n'+function(loader,'MmAssets_GetOpaqueRenderMode'))
     functions=['EnViewer_Update','EnViewer_Destroy','EnViewerStatic_WaitForObjects','EnViewerStatic_Update',
-               'EnViewer_StaticTreasureChestShopGalOverrideLimbDraw','EnViewer_StaticOrdinaryMmOverrideLimbDraw','EnViewer_DrawStaticMmActor']
+               'EnViewer_StaticTreasureChestShopGalOverrideLimbDraw','EnViewer_StaticOrdinaryMmOverrideLimbDraw','EnViewer_DrawStaticMmActor','EnViewer_DrawStaticSkullKid']
     fixture=fixture.replace('/* PRODUCTION_VIEWER_FUNCTIONS */','\n'.join(function(viewer,n) for n in functions))
     p=WORK/'viewer_fixture.c';p.write_text(fixture)
     objects=[compile(p)]

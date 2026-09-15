@@ -66,23 +66,22 @@ bool MmDisplayList_PatchCommands(MmDisplayListCommand* commands, size_t commandC
             return false;
         }
         if (opcode == 0x3D && (command.w1 >> 24) == 0x0C) {
-            // MM exports cull lists as G_DL_INDEX(segment 0x0C, index 0/2).
-            // Resolve each C array explicitly: neither inherited segment state
-            // nor adjacency of gCullBackDList/gCullFrontDList is guaranteed.
+            // Opaque MM actors use Scene_SetRenderModeXlu(play, 0, 1):
+            // indices 0 and 2 both terminate without changing geometry state.
             const uint32_t index = command.w1 & UINT32_C(0x00FFFFFF);
             size_t resourceSize = 0;
             if (index != 0 && index != 2) {
                 ++result.malformed;
                 return false;
             }
-            const uintptr_t target = resolveResource(context, MM_DISPLAY_LIST_REFERENCE_CULL, index, &resourceSize);
+            const uintptr_t target = resolveResource(context, MM_DISPLAY_LIST_REFERENCE_RENDER_MODE, index, &resourceSize);
             if (target == 0) {
                 ++result.unresolved;
             } else {
                 command.w0 = (static_cast<uint32_t>(kDisplayList) << 24) |
                              (command.w0 & UINT32_C(0x00010000));
                 command.w1 = target;
-                ++result.cullPatched;
+                ++result.renderModePatched;
             }
             ++i;
             continue;
@@ -127,20 +126,20 @@ bool MmDisplayList_PatchCommands(MmDisplayListCommand* commands, size_t commandC
             const uintptr_t vertexBase = resolveResource(context, MM_DISPLAY_LIST_REFERENCE_VERTEX,
                                                          ReadHash(payload), &resourceSize);
             const size_t vertexCount = (command.w0 >> 12) & UINT32_C(0xFF);
+            const uintptr_t byteOffset = command.w1;
             if (vertexBase == 0) {
                 ++result.unresolved;
-            } else if (vertexCount > resourceSize / kVertexSize) {
+            } else if (byteOffset > resourceSize || byteOffset % kVertexSize != 0 ||
+                       vertexCount > (resourceSize - byteOffset) / kVertexSize ||
+                       byteOffset > UINTPTR_MAX - vertexBase) {
                 ++result.malformed;
                 return false;
             } else {
-                /* G_VTX_OTR_HASH stores the resource hash in the following
-                 * command; its first w1 is vestigial. Once resolved, use the
-                 * same ordinary G_VTX form as the renderer's hash handler and
-                 * consume the payload so it cannot be executed as display-list
-                 * commands by a copied graph. */
+                /* Match gfx_vtx_hash_handler_custom: w1 is a byte offset into
+                 * the resolved resource, not a vertex index or unused word. */
                 command.w0 = (command.w0 & UINT32_C(0x00FFFFFF)) |
                              (static_cast<uint32_t>(kVertex) << 24);
-                command.w1 = vertexBase;
+                command.w1 = vertexBase + byteOffset;
                 payload = {};
                 ++result.verticesPatched;
             }

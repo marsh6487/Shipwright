@@ -593,15 +593,20 @@ static std::unordered_map<std::string, Gfx*> sStrictDisplayListGraphCache;
 static std::vector<std::shared_ptr<std::vector<Gfx>>> sStrictDisplayListGraphStorage;
 static MmStrictTextureBindings sStrictDisplayListTextures;
 
+// Matches MM Scene_SetRenderModeXlu's opaque index-0 table. Keep all four
+// entries: G_DL_INDEX addresses both command 0 and command 2.
+static Gfx sMmOpaqueRenderModeDL[] = {
+    gsSPEndDisplayList(), gsSPEndDisplayList(), gsSPEndDisplayList(), gsSPEndDisplayList(),
+};
+
 static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayListGraphContext& graph, int depth);
 
 static uintptr_t MmAssets_ResolveDisplayListReference(void* context, MmDisplayListReferenceKind kind, uint64_t hash,
                                                       size_t* resourceSize) {
     auto* resolve = static_cast<MmDisplayListResolveContext*>(context);
     *resourceSize = 0;
-    if (kind == MM_DISPLAY_LIST_REFERENCE_CULL) {
-        return hash == 0 ? reinterpret_cast<uintptr_t>(gCullBackDList)
-                        : hash == 2 ? reinterpret_cast<uintptr_t>(gCullFrontDList) : 0;
+    if (kind == MM_DISPLAY_LIST_REFERENCE_RENDER_MODE) {
+        return (hash == 0 || hash == 2) ? reinterpret_cast<uintptr_t>(&sMmOpaqueRenderModeDL[hash]) : 0;
     }
     auto pathIt = resolve->graph->pathsByHash->find(hash);
     if (pathIt == resolve->graph->pathsByHash->end()) {
@@ -690,8 +695,8 @@ static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayLis
     sStrictDisplayListGraphStorage.push_back(std::move(output));
     sStrictDisplayListGraphCache[path] = result;
     graph.inProgress.erase(path);
-    MMASSETS_LOG("[MM Assets] STRICT graph ready: %s (nested=%zu vertices=%zu textures=%zu cull=%zu)", path.c_str(),
-                 stats.nestedPatched, stats.verticesPatched, stats.texturesPatched, stats.cullPatched);
+    MMASSETS_LOG("[MM Assets] STRICT graph ready: %s (nested=%zu vertices=%zu textures=%zu renderMode=%zu)", path.c_str(),
+                 stats.nestedPatched, stats.verticesPatched, stats.texturesPatched, stats.renderModePatched);
     return result;
 }
 
@@ -714,6 +719,10 @@ Gfx* MmAssets_LoadDisplayListGraphStrict(const char* displayListPath) {
     }
     MmDisplayListGraphContext graph = { &sPathsByHash, {} };
     return MmAssets_PatchDisplayListGraph(MmAssets_StripOtrPrefix(displayListPath), graph, 0);
+}
+
+Gfx* MmAssets_GetOpaqueRenderMode(void) {
+    return sMmOpaqueRenderModeDL;
 }
 
 void MmAssets_EnsureStrictTextureBindings(void) {

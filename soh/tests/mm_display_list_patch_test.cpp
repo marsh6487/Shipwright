@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <initializer_list>
 
 #include "test_require.h"
 
@@ -17,8 +18,8 @@ struct ResolveFixture {
 static uintptr_t ResolveResource(void* context, MmDisplayListReferenceKind kind, uint64_t hash, size_t* resourceSize) {
     ResolveFixture* fixture = static_cast<ResolveFixture*>(context);
 
-    if (kind == MM_DISPLAY_LIST_REFERENCE_CULL) {
-        return hash == 0 ? UINT64_C(0x30000000) : hash == 2 ? UINT64_C(0x30000080) : 0;
+    if (kind == MM_DISPLAY_LIST_REFERENCE_RENDER_MODE) {
+        return hash == 0 ? UINT64_C(0x30000000) : hash == 2 ? UINT64_C(0x30000020) : 0;
     }
 
     if (kind == MM_DISPLAY_LIST_REFERENCE_NESTED && hash == fixture->nestedHash) {
@@ -63,11 +64,9 @@ int main() {
     REQUIRE(commands[0].w1 == fixture.nestedPointer);
     REQUIRE(commands[1].w0 == 0);
     REQUIRE(commands[1].w1 == 0);
-    /* G_VTX_OTR_HASH's first w1 is vestigial, not a byte offset. Once the
-     * resource is resolved, emit an ordinary G_VTX with the resource base and
-     * consume its hash payload so Fast3D cannot reinterpret it as commands. */
+    // The renderer adds first-word w1 as a BYTE offset into the resolved array.
     REQUIRE(commands[2].w0 == UINT32_C(0x01001002));
-    REQUIRE(commands[2].w1 == fixture.vertexPointer);
+    REQUIRE(commands[2].w1 == fixture.vertexPointer + 0x20);
     REQUIRE(commands[3].w0 == 0);
     REQUIRE(commands[3].w1 == 0);
     REQUIRE(stats.nestedPatched == 1);
@@ -85,9 +84,7 @@ int main() {
     };
     stats = {};
     REQUIRE(MmDisplayList_PatchCommands(texture, 3, ResolveResource, &fixture, &stats));
-    // The strict archive resolver returns the MM texture's ImageData. Bind it
-    // directly so a globally mounted asset with the same canonical path cannot
-    // replace the texture after the strict graph has already validated it.
+    // The strict resolver returns a retained filepath alias for full metadata.
     REQUIRE(texture[0].w0 == UINT32_C(0x25000000));
     REQUIRE(texture[0].w1 == fixture.texturePointer);
     REQUIRE(texture[1].w0 == 0);
@@ -113,13 +110,28 @@ int main() {
     REQUIRE(stats.malformed == 1);
     REQUIRE(outOfBounds[0].w0 == UINT32_C(0x32011004));
 
+    for (uintptr_t offset : {uintptr_t(0x100), uintptr_t(0x101), UINTPTR_MAX}) {
+        MmDisplayListCommand overrun[] = {
+            { UINT32_C(0x32001002), offset },
+            { UINT32_C(0xFEDCBA98), UINT32_C(0x76543210) },
+            { UINT32_C(0xDF000000), 0 },
+        };
+        REQUIRE(!MmDisplayList_PatchCommands(overrun, 3, ResolveResource, &fixture, &stats));
+    }
+    MmDisplayListCommand lastVertex[] = {
+        { UINT32_C(0x32001002), 0xF0 },
+        { UINT32_C(0xFEDCBA98), UINT32_C(0x76543210) },
+        { UINT32_C(0xDF000000), 0 },
+    };
+    REQUIRE(MmDisplayList_PatchCommands(lastVertex, 3, ResolveResource, &fixture, &stats));
+    REQUIRE(lastVertex[0].w1 == fixture.vertexPointer + 0xF0);
+
     MmDisplayListCommand malformed[] = { { UINT32_C(0x31000000), 0 } };
     stats = {};
     REQUIRE(!MmDisplayList_PatchCommands(malformed, 1, ResolveResource, &fixture, &stats));
     REQUIRE(stats.malformed == 1);
-    // Exact command from mm.o2r gSkullKidTorsoDL: a front-cull call via
-    // segment 0x0C, index 2. EnViewer does not own that segment, and separate
-    // C arrays are not guaranteed adjacent even when a caller binds index 0.
+    // Exact MM segment-0x0C render-mode call; opaque indices must resolve
+    // explicitly, independently of inherited segment state.
     MmDisplayListCommand cull[] = {
         { UINT32_C(0x3D000000), UINT32_C(0x0C000002) },
         { UINT32_C(0xDF000000), 0 },
@@ -127,8 +139,8 @@ int main() {
     stats = {};
     REQUIRE(MmDisplayList_PatchCommands(cull, 2, ResolveResource, &fixture, &stats));
     REQUIRE(cull[0].w0 == UINT32_C(0xDE000000));
-    REQUIRE(cull[0].w1 == UINT64_C(0x30000080));
-    REQUIRE(stats.cullPatched == 1);
+    REQUIRE(cull[0].w1 == UINT64_C(0x30000020));
+    REQUIRE(stats.renderModePatched == 1);
     MmDisplayListCommand backCull[] = {
         { UINT32_C(0x3D010000), UINT32_C(0x0C000000) },
         { UINT32_C(0xDF000000), 0 },
@@ -150,6 +162,6 @@ int main() {
     };
     REQUIRE(MmDisplayList_PatchCommands(payload, 3, ResolveResource, &fixture, &stats));
     REQUIRE(payload[1].w0 == UINT32_C(0x3D000000));
-    REQUIRE(stats.cullPatched == 0);
+    REQUIRE(stats.renderModePatched == 0);
     return 0;
 }

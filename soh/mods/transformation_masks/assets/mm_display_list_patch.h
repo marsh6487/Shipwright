@@ -12,8 +12,8 @@ struct MmDisplayListCommand {
 enum MmDisplayListReferenceKind {
     MM_DISPLAY_LIST_REFERENCE_NESTED,
     MM_DISPLAY_LIST_REFERENCE_VERTEX,
-    // Value is the MM cull-list command index (0 = back, 2 = front), not a hash.
-    MM_DISPLAY_LIST_REFERENCE_CULL,
+    // MM segment-0x0C render-mode command index (0 or 2), not a hash.
+    MM_DISPLAY_LIST_REFERENCE_RENDER_MODE,
     MM_DISPLAY_LIST_REFERENCE_TEXTURE,
 };
 
@@ -22,7 +22,7 @@ struct MmDisplayListPatchStats {
     size_t verticesPatched;
     size_t unresolved;
     size_t malformed;
-    size_t cullPatched;
+    size_t renderModePatched;
     size_t texturesPatched;
 };
 
