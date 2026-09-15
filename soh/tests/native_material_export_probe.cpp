@@ -17,7 +17,7 @@ int main(int argc, char** argv) {
         for (const auto& pair : item["commands"]) {
             commands.push_back({ pair[0].get<uintptr_t>(), pair[1].get<uintptr_t>() });
         }
-        auto insertion = item["ucode"] == 4 ? Prelude::FindNativeScrollInsertion(commands) : std::nullopt;
+        auto insertion = item["ucode"] == 4 ? Prelude::FindNativeScrollInsertion(commands, profile) : std::nullopt;
         result.push_back({ { "path", item["path"] },
                            { "profile", static_cast<int>(profile) },
                            { "insertion", insertion ? nlohmann::json(*insertion) : nlohmann::json(nullptr) } });

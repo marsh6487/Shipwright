@@ -22,9 +22,16 @@ def run(args):
     subprocess.run([str(x) for x in args], cwd=ROOT, check=True)
 
 
-def fixture(path):
+def fixture(path, bind_fountain=False):
     with zipfile.ZipFile(path) as archive:
         project = json.loads(archive.read('prelude/project/edits.json'))
+        if bind_fountain:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('mm_fountain_binder', ROOT / 'scripts/bind_mm_fountain_animation.py')
+            binder = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(binder)
+            project, report = binder.analyze(archive)
+            print('Verified fountain metadata bindings:', len(report['bindings']), flush=True)
         items = []
         for edits in project['edits'].values():
             if not isinstance(edits, list):
@@ -48,6 +55,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--json-include', required=True)
     parser.add_argument('--spdlog-include', required=True)
+    parser.add_argument('--bind-mm-fountain', action='store_true', help='Analyze fountain metadata in memory; archive stays read-only')
     parser.add_argument('--cxx', default='c++')
     parser.add_argument('archives', nargs='*', type=Path)
     args = parser.parse_args()
@@ -72,7 +80,7 @@ def main():
         run([temp / 'native_material_runtime_test'])
         for path in args.archives:
             data = temp / 'fixture.json'
-            data.write_text(json.dumps(fixture(path.resolve())))
+            data.write_text(json.dumps(fixture(path.resolve(), args.bind_mm_fountain)))
             print(f'EXPORT {path.name}', flush=True)
             run([temp / 'native_material_export_probe', data])
 

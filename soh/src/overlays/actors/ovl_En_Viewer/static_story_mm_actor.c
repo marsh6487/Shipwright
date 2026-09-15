@@ -54,6 +54,12 @@ static const StaticStoryMmPresentation sLuluPresentations[] = {
     ORDINARY("object_zov", "gLuluSkel", "gLuluLookAroundAnim", 22, 21, 87, STATIC_STORY_MM_TRACKING_NONE, 3, 2, 9, 8),
 };
 #undef ORDINARY
+static const StaticStoryMmPresentation sKafeiPresentations[] = {
+    { "objects/object_test3/gKafeiSkel", "objects/gameplay_keep/gPlayerAnim_link_normal_wait_free", NULL, NULL, NULL, NULL, NULL,
+      21, STATIC_STORY_MM_TRACKING_NONE, false, STATIC_STORY_MM_SCOPED_PLAYER_LOD, 18, 89, 8, 4, 8, 9 },
+    { "objects/object_test3/gKafeiSkel", "objects/gameplay_keep/gPlayerAnim_al_yareyare", NULL, NULL, NULL, NULL, NULL,
+      21, STATIC_STORY_MM_TRACKING_NONE, false, STATIC_STORY_MM_SCOPED_PLAYER_LOD, 18, 48, 8, 4, 8, 9 },
+};
 
 static const char* sTatlLimbPaths[] = {
     "objects/gameplay_keep/gameplay_keep_Standardlimb_02AEF8",
@@ -118,10 +124,13 @@ const StaticStoryMmPresentation* StaticStoryMm_GetPresentation(StaticStoryActorT
     if (type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN && pose < 3) return &sHappyMaskSalesmanPresentations[pose];
     if (type == STATIC_STORY_ACTOR_KEATON && pose < 3) return &sKeatonPresentations[pose];
     if (type == STATIC_STORY_ACTOR_LULU && pose < 4) return &sLuluPresentations[pose];
+    if (type == STATIC_STORY_ACTOR_CHILD_KAFEI && pose < 2) return &sKafeiPresentations[pose];
     return NULL;
 }
 
 const char* StaticStoryMm_GetEyeTexturePath(StaticStoryActorType type, uint8_t eyeIndex) {
+    static const char* kafei[] = { "objects/object_test3/gKafeiEyesOpenTex", "objects/object_test3/gKafeiEyesHalfTex", "objects/object_test3/gKafeiEyesClosedTex", "objects/object_test3/gKafeiEyesRightTex", "objects/object_test3/gKafeiEyesLeftTex", "objects/object_test3/gKafeiEyesUpTex", "objects/object_test3/gKafeiEyesDownTex", "objects/object_test3/gKafeiEyesWincingTex" };
+    if (type == STATIC_STORY_ACTOR_CHILD_KAFEI) return eyeIndex < 8 ? kafei[eyeIndex] : NULL;
     static const char* lulu[] = { "objects/object_zov/gLuluEyeOpenTex", "objects/object_zov/gLuluEyeHalfTex",
                                   "objects/object_zov/gLuluEyeClosedTex" };
     if (type == STATIC_STORY_ACTOR_LULU) return eyeIndex < 3 ? lulu[eyeIndex] : NULL;
@@ -180,6 +189,8 @@ bool StaticStoryMm_ResourcesComplete(const StaticStoryMmPresentation* presentati
 }
 
 const char* StaticStoryMm_GetMouthTexturePath(StaticStoryActorType type, uint8_t mouthIndex) {
+    static const char* kafei[] = { "objects/object_test3/gKafeiMouthClosedTex", "objects/object_test3/gKafeiMouthHalfTex", "objects/object_test3/gKafeiMouthOpenTex", "objects/object_test3/gKafeiMouthSmileTex" };
+    if (type == STATIC_STORY_ACTOR_CHILD_KAFEI) return mouthIndex < 4 ? kafei[mouthIndex] : NULL;
     static const char* lulu[] = { "objects/object_zov/gLuluMouthClosedTex", "objects/object_zov/gLuluMouthOpenTex" };
     if (type == STATIC_STORY_ACTOR_LULU) return mouthIndex < 2 ? lulu[mouthIndex] : NULL;
     if (type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN)
@@ -203,4 +214,27 @@ StaticStoryMmFace StaticStoryMm_ResolveFace(StaticStoryActorType type, uint8_t p
         }
     }
     return face;
+}
+
+/* Isolated full-loop sampling: the 67th word is appearance, never a joint. */
+bool StaticStoryMm_SampleKafei(const int16_t* data, uint16_t frames, float* cursor, float step,
+                             void* joints, uint16_t* appearance) {
+    if (!data || !cursor || !joints || !appearance || (frames != 89 && frames != 48)) return false;
+    float next = *cursor + step;
+    if (!isfinite(next)) return false;
+    next = fmodf(next, (float)frames);
+    if (next < 0) next += frames;
+    /* Float rounding can turn a tiny negative remainder into exactly frameCount. */
+    if (next >= frames) next = 0;
+    const int16_t* frame = data + (unsigned)next * 67;
+    memcpy(joints, frame, 66 * sizeof(int16_t));
+    *appearance = (uint16_t)frame[66];
+    *cursor = next;
+    return true;
+}
+StaticStoryMmFace StaticStoryMm_KafeiFace(uint16_t appearance) {
+    int eye = (appearance & 15) - 1;
+    int mouth = ((appearance >> 4) & 15) - 1;
+    StaticStoryMmFace result = { eye >= 0 && eye < 8 ? eye : 0, mouth >= 0 && mouth < 4 ? mouth : 0 };
+    return result;
 }

@@ -182,6 +182,7 @@ void EnViewer_Destroy(Actor* thisx, PlayState* play) {
         if (this->staticState.mmResourceOwner != NULL) {
             MmAssets_ReleaseNormalActor(this->staticState.mmResourceOwner);
             this->staticState.mmResourceOwner = NULL;
+            this->staticState.mmPlayerFrames = NULL;
         }
         return;
     }
@@ -550,13 +551,17 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         MmAssets_Init();
         if (presentation != NULL && presentation->frameCount != 0) {
             MmNormalActorResources resources;
-            if (!MmAssets_LoadNormalActor(this->staticState.type, this->staticState.pose, &resources)) {
+            if (!(presentation->kind == STATIC_STORY_MM_SCOPED_PLAYER_LOD ?
+                  MmAssets_LoadKafei(this->staticState.pose, &resources) :
+                  MmAssets_LoadNormalActor(this->staticState.type, this->staticState.pose, &resources))) {
                 Actor_Kill(&this->actor);
                 return;
             }
             this->staticState.mmResourceOwner = resources.owner;
             skeleton = resources.skeleton;
             animation = resources.animation;
+            this->staticState.mmPlayerFrames = resources.playerFrames;
+            this->staticState.mmPlayerFrameCount = presentation->frameCount;
             memcpy(this->staticState.mmEyeTextures, resources.eyes, sizeof(resources.eyes));
             memcpy(this->staticState.mmMouthTextures, resources.mouths, sizeof(resources.mouths));
         } else {
@@ -607,7 +612,7 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
                 }
             }
         }
-        if (!StaticStoryMm_ResourcesComplete(presentation, skeleton != NULL, animation != NULL,
+        if (!StaticStoryMm_ResourcesComplete(presentation, skeleton != NULL, animation != NULL || this->staticState.mmPlayerFrames != NULL,
                                               secondaryComplete) ||
             !eyeTexturesComplete) {
             osSyncPrintf("Static story actor: MM resources unavailable for type %d pose %d\n",
@@ -622,10 +627,27 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
             this->skin.skelAnime.morphTable = NULL;
             MmAssets_ReleaseNormalActor(this->staticState.mmResourceOwner);
             this->staticState.mmResourceOwner = NULL;
+            this->staticState.mmPlayerFrames = NULL;
             Actor_Kill(&this->actor);
             return;
         }
-        Animation_PlayLoopSetSpeed(&this->skin.skelAnime, animation, poseDescriptor->playbackSpeed);
+        if (presentation->kind == STATIC_STORY_MM_SCOPED_PLAYER_LOD) {
+            if (this->skin.skelAnime.limbCount != 22 || this->skin.skelAnime.dListCount != 18) {
+                SkelAnime_Free(&this->skin.skelAnime, play);
+                this->skin.skelAnime.jointTable = this->skin.skelAnime.morphTable = NULL;
+                MmAssets_ReleaseNormalActor(this->staticState.mmResourceOwner);
+                this->staticState.mmResourceOwner = NULL;
+                this->staticState.mmPlayerFrames = NULL;
+                Actor_Kill(&this->actor);
+                return;
+            }
+            this->skin.skelAnime.curFrame = 0;
+            this->skin.skelAnime.playSpeed = poseDescriptor->playbackSpeed;
+            StaticStoryMm_SampleKafei(this->staticState.mmPlayerFrames, this->staticState.mmPlayerFrameCount,
+                &this->skin.skelAnime.curFrame, 0, this->skin.skelAnime.jointTable, &this->staticState.mmAppearance);
+        } else {
+            Animation_PlayLoopSetSpeed(&this->skin.skelAnime, animation, poseDescriptor->playbackSpeed);
+        }
         if (presentation->requiresSecondarySkeleton) {
             if (StaticStoryMm_UsesNativeFairyCompanion((StaticStoryActorType)this->staticState.type)) {
                 /* Use SoH's retained fairy resources for the Tatl-colored companion. The custom MM
@@ -757,7 +779,7 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
     const StaticStoryPoseDescriptor* poseDescriptor =
         StaticStoryActor_ResolvePose((StaticStoryActorType)this->staticState.type, this->staticState.pose);
 
-    if (definition == NULL || poseDescriptor == NULL) {
+    if (definition == NULL || poseDescriptor == NULL || !this->staticState.initialized) {
         return;
     }
     bool animationEnded = false;
@@ -765,7 +787,13 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
 
     if (poseDescriptor->skeletonFamily != STATIC_SKELETON_NONE &&
         poseDescriptor->animation != STATIC_ANIM_ADULT_ZELDA_NEUTRAL) {
-        animationEnded = SkelAnime_Update(&this->skin.skelAnime);
+        if (this->staticState.type == STATIC_STORY_ACTOR_CHILD_KAFEI) {
+            StaticStoryMm_SampleKafei(this->staticState.mmPlayerFrames, this->staticState.mmPlayerFrameCount,
+                &this->skin.skelAnime.curFrame, this->skin.skelAnime.playSpeed * (R_UPDATE_RATE * 0.5f),
+                this->skin.skelAnime.jointTable, &this->staticState.mmAppearance);
+        } else {
+            animationEnded = SkelAnime_Update(&this->skin.skelAnime);
+        }
         if (StaticStoryActor_LocksRootTranslation((StaticStoryActorType)this->staticState.type,
                                                    this->staticState.pose)) {
             this->skin.skelAnime.jointTable[0].x = 0;
@@ -1922,6 +1950,10 @@ static s32 EnViewer_StaticOrdinaryMmOverrideLimbDraw(PlayState* play, s32 limbIn
                                                      Vec3f* pos, Vec3s* rot, void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
     StaticStoryActorType type = (StaticStoryActorType)this->staticState.type;
+    if (type == STATIC_STORY_ACTOR_CHILD_KAFEI) {
+        if (limbIndex == 1) { pos->x *= 11.0f/17.0f; pos->y *= 11.0f/17.0f; pos->z *= 11.0f/17.0f; }
+        return false;
+    }
     if (!StaticStoryActor_CanTrack(type, this->staticState.pose) || !this->staticState.tracking) return false;
     if (type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN && limbIndex == 11) {
         /* MM En_Osn applies a matrix X rotation before the authored head rotation. */
@@ -1937,6 +1969,7 @@ static s32 EnViewer_StaticOrdinaryMmOverrideLimbDraw(PlayState* play, s32 limbIn
 }
 
 static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
+    if (!this->staticState.initialized) return;
     OverrideLimbDrawOpa overrideLimbDraw = NULL;
     const StaticStoryMmPresentation* presentation =
         StaticStoryMm_GetPresentation((StaticStoryActorType)this->staticState.type, this->staticState.pose);
@@ -1956,6 +1989,8 @@ static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
         StaticStoryMmFace face = StaticStoryMm_ResolveFace((StaticStoryActorType)this->staticState.type,
             this->staticState.pose, this->skin.skelAnime.curFrame, this->staticState.eyeIndex,
             this->staticState.tracking);
+        if (presentation->kind == STATIC_STORY_MM_SCOPED_PLAYER_LOD)
+            face = StaticStoryMm_KafeiFace(this->staticState.mmAppearance);
         if (presentation->eyeCount != 0)
             gSPSegment(POLY_OPA_DISP++, presentation->eyeSegment,
                        (uintptr_t)this->staticState.mmEyeTextures[face.eye]);
@@ -1964,7 +1999,12 @@ static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
                        (uintptr_t)this->staticState.mmMouthTextures[face.mouth]);
         gDPSetEnvColor(POLY_OPA_DISP++, 255, 255, 255, 255);
     }
-    SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, overrideLimbDraw, NULL, this);
+    if (presentation != NULL && presentation->kind == STATIC_STORY_MM_SCOPED_PLAYER_LOD) {
+        SkelAnime_DrawFlexLod(play, this->skin.skelAnime.skeleton, this->skin.skelAnime.jointTable, 18,
+                             overrideLimbDraw, NULL, this, 0);
+    } else {
+        SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, overrideLimbDraw, NULL, this);
+    }
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
@@ -2005,6 +2045,24 @@ static Gfx sStaticStoryTatlSetupDL[] = {
     gsSPEndDisplayList(),
 };
 
+/* Native fairy body reset: preserve its transformed origin, but remove the
+ * inherited limb rotation/scale before the glow DL applies its billboard. */
+static s32 EnViewer_StaticTatlOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
+                                              Vec3s* rot, void* thisx, Gfx** gfx) {
+    EnViewer* this = (EnViewer*)thisx;
+    if (limbIndex == 8) {
+        Vec3f zero = { 0.0f, 0.0f, 0.0f };
+        Vec3f origin;
+        f32 bodyScale = 0.012f * (1.0f + 0.1f * Math_SinS(this->staticState.tatlPulsePhase)) *
+                        (this->actor.scale.x * 124.99999f) *
+                        StaticStoryMm_GetTatlScale(this->staticState.tatlPulsePhase);
+        Matrix_MultVec3f(&zero, &origin);
+        Matrix_Translate(origin.x, origin.y, origin.z, MTXMODE_NEW);
+        Matrix_Scale(bodyScale, bodyScale, bodyScale, MTXMODE_APPLY);
+    }
+    return false;
+}
+
 static void EnViewer_DrawStaticTatl(EnViewer* this, PlayState* play) {
     StaticStoryMmVec3f anchor = StaticStoryMm_GetTatlAnchor(this->staticState.pose);
     float orbitX = Math_SinS(this->staticState.tatlPulsePhase) * 4.0f;
@@ -2021,12 +2079,13 @@ static void EnViewer_DrawStaticTatl(EnViewer* this, PlayState* play) {
                      MTXMODE_APPLY);
     Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
     POLY_XLU_DISP = SkelAnime_Draw(play, this->staticState.tatlSkelAnime.skeleton,
-                                   this->staticState.tatlSkelAnime.jointTable, NULL, NULL, this, POLY_XLU_DISP);
+                                   this->staticState.tatlSkelAnime.jointTable, EnViewer_StaticTatlOverrideLimbDraw, NULL, this, POLY_XLU_DISP);
     Matrix_Pop();
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
 static void EnViewer_DrawStaticSkullKid(EnViewer* this, PlayState* play) {
+    MmAssets_EnsureStrictTextureBindings();
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, EnViewer_StaticSkullKidOverrideLimbDraw,

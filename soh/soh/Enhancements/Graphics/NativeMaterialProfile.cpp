@@ -4,6 +4,25 @@ NativeMaterialProfile ResolveNativeMaterial(const nlohmann::json& item, bool pas
     if (!item.is_object()) {
         return NativeMaterialProfile::None;
     }
+    if (item.contains("nativeAnimation")) {
+        const auto& a = item["nativeAnimation"];
+        if (!a.is_object() || a.size() != 5 || !a.contains("version") || !a["version"].is_number_integer() ||
+            a["version"] != 1 || !a.contains("binding") || a["binding"] != "material-motion" ||
+            !a.contains("source") || !a["source"].is_string() || !a.contains("logicalWidth") ||
+            !a["logicalWidth"].is_number_integer() || !a.contains("logicalHeight") ||
+            !a["logicalHeight"].is_number_integer() || a["logicalWidth"] != a["logicalHeight"]) {
+            return NativeMaterialProfile::None;
+        }
+        const bool small = a["logicalWidth"] == 32;
+        if (!small && a["logicalWidth"] != 64) return NativeMaterialProfile::None;
+        if (a["source"] == "mm.bg_keikoku_spr.lower_a")
+            return small ? NativeMaterialProfile::FountainLowerA32 : NativeMaterialProfile::FountainLowerA64;
+        if (a["source"] == "mm.bg_keikoku_spr.lower_b")
+            return small ? NativeMaterialProfile::FountainLowerB32 : NativeMaterialProfile::FountainLowerB64;
+        if (a["source"] == "mm.bg_keikoku_spr.central")
+            return small ? NativeMaterialProfile::FountainCentral32 : NativeMaterialProfile::FountainCentral64;
+        return NativeMaterialProfile::None;
+    }
     if (pasted) {
         auto chain = item.find("chain");
         if (chain == item.end() || !chain->is_array() || chain->size() != 1 || !(*chain)[0].is_object()) {
@@ -13,6 +32,9 @@ NativeMaterialProfile ResolveNativeMaterial(const nlohmann::json& item, bool pas
         if (path == (*chain)[0].end() || !path->is_string()) {
             return NativeMaterialProfile::None;
         }
+        if (*path == "objects/object_keikoku_obj/object_keikoku_obj_DL_000100") return NativeMaterialProfile::FountainLowerA64;
+        if (*path == "objects/object_keikoku_obj/object_keikoku_obj_DL_000300") return NativeMaterialProfile::FountainLowerB64;
+        if (*path == "objects/object_keikoku_obj/object_keikoku_obj_DL_000500") return NativeMaterialProfile::FountainCentral64;
         if (*path == "objects/object_spot06_objects/gLakeHyliaHighWaterDL") {
             return NativeMaterialProfile::LakeHylia;
         }
@@ -44,13 +66,18 @@ NativeMaterialProfile ResolveNativeMaterial(const nlohmann::json& item, bool pas
     return NativeMaterialProfile::None;
 }
 
-std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterialCommand>& commands) {
+std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterialCommand>& commands, NativeMaterialProfile profile) {
+    const bool fountain = profile >= NativeMaterialProfile::FountainLowerA32 && profile < NativeMaterialProfile::Count;
+    const unsigned dimension = profile >= NativeMaterialProfile::FountainLowerA64 ? 64 : 32;
+    const unsigned mask = dimension == 64 ? 6 : 5;
+    unsigned descriptors = 0;
     std::optional<size_t> firstPrimitive;
     unsigned tiles = 0;
     for (size_t i = 0; i < commands.size(); ++i) {
         auto opcode = static_cast<uint8_t>(commands[i].w0 >> 24);
         if (opcode == 0xdf) { // F3DEX2 ENDDL
-            return i + 1 == commands.size() && tiles == 3 ? firstPrimitive : std::nullopt;
+            return i + 1 == commands.size() && tiles == 3 && (!fountain ||
+                (descriptors == 3 && commands[i].w0 == 0xdf000000 && commands[i].w1 == 0)) ? firstPrimitive : std::nullopt;
         }
         if (opcode == 0x05 || opcode == 0x06 || opcode == 0x07 || opcode == 0x49) {
             if (!firstPrimitive) {
@@ -78,7 +105,21 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
                 if (tile > 1) {
                     return std::nullopt;
                 }
+                if (fountain && ((tiles & (1u << tile)) || commands[i].w0 != 0xf2000000 ||
+                    commands[i].w1 != ((tile << 24) | (((dimension - 1) * 4) << 12) | ((dimension - 1) * 4))))
+                    return std::nullopt;
                 tiles |= 1u << tile;
+                break;
+            }
+            case 0xf5: {
+                if (!fountain) break;
+                const auto word = commands[i].w1;
+                const unsigned tile = (word >> 24) & 7;
+                if (tile == 7) break; // separate load tile
+                if (tile > 1 || (descriptors & (1u << tile)) || ((word >> 18) & 3) ||
+                    ((word >> 8) & 3) || ((word >> 14) & 15) != mask || ((word >> 4) & 15) != mask)
+                    return std::nullopt;
+                descriptors |= 1u << tile;
                 break;
             }
             case 0xe7:
@@ -88,7 +129,6 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
             case 0xe2:
             case 0xd7:
             case 0xd9: // modes/texture/geometry
-            case 0xf5:
             case 0xf3:
             case 0xfc:
             case 0xfa:
@@ -104,6 +144,12 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
 }
 
 ScrollParameters NativeScrollParameters(NativeMaterialProfile profile, uint32_t stateFrames, uint32_t gameplayFrames) {
+    if (profile >= NativeMaterialProfile::FountainLowerA32 && profile < NativeMaterialProfile::Count) {
+        const int index = static_cast<int>(profile) - static_cast<int>(NativeMaterialProfile::FountainLowerA32);
+        const int dimension = index < 3 ? 32 : 64;
+        const int rate = (index % 3 == 0 ? -20 : index % 3 == 1 ? 20 : 10) * (dimension / 32);
+        return { 0, 0, 0, gameplayFrames * static_cast<uint32_t>(rate), dimension, dimension, 0, 0, 0, rate };
+    }
     switch (profile) {
         case NativeMaterialProfile::LakeHylia:
             // BgSpot06Objects_DrawLakeHyliaWater, segment 08 (not its segment 09).

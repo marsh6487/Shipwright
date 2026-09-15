@@ -65,4 +65,8 @@ const char* StaticStoryMm_GetTatlDListPath(uint8_t limb);
 const char* StaticStoryMm_GetSkullKidLimbDisplayListPath(uint8_t limb);
 bool StaticStoryMm_UsesNativeFairyCompanion(StaticStoryActorType type);
 
+bool StaticStoryMm_SampleKafei(const int16_t* data, uint16_t frames, float* cursor, float step,
+                             void* joints, uint16_t* appearance);
+StaticStoryMmFace StaticStoryMm_KafeiFace(uint16_t appearance);
+
 #endif

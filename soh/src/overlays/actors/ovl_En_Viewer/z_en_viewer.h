@@ -99,6 +99,9 @@ typedef struct {
     void* mmEyeTextures[8];
     void* mmMouthTextures[4];
     void* mmResourceOwner;
+    const int16_t* mmPlayerFrames;
+    uint16_t mmPlayerFrameCount;
+    uint16_t mmAppearance;
 } EnViewerStaticState;
 
 typedef struct EnViewer {

@@ -18,6 +18,7 @@
 #include "mm_asset_loader.h"
 #include "mm_display_list_patch.h"
 #include "mm_normal_actor_resource.h"
+#include "mm_kafei_resource.h"
 extern "C" {
 #include "src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.h"
 }
@@ -31,6 +32,7 @@ extern "C" {
 #include <vector> // was transitively via OTRGlobals.h before upstream #6636 cleanup
 #include <fast/resource/type/DisplayList.h>
 #include <fast/resource/type/Texture.h>
+#include "mm_strict_texture_binding.h"
 #include <fast/resource/type/Vertex.h>
 #include <libultraship/libultraship.h>
 #include <libultraship/log/luslog.h>
@@ -589,7 +591,7 @@ struct MmDisplayListResolveContext {
 
 static std::unordered_map<std::string, Gfx*> sStrictDisplayListGraphCache;
 static std::vector<std::shared_ptr<std::vector<Gfx>>> sStrictDisplayListGraphStorage;
-static std::vector<std::shared_ptr<Ship::IResource>> sStrictDisplayListTextureStorage;
+static MmStrictTextureBindings sStrictDisplayListTextures;
 
 static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayListGraphContext& graph, int depth);
 
@@ -614,16 +616,9 @@ static uintptr_t MmAssets_ResolveDisplayListReference(void* context, MmDisplayLi
 
     if (kind == MM_DISPLAY_LIST_REFERENCE_TEXTURE) {
         auto textureResource = MmAssets_LoadResourceObjectFromMmArchive(pathIt->second.c_str());
-        auto texture = std::dynamic_pointer_cast<Fast::Texture>(textureResource);
-        if (texture == nullptr || texture->ImageData == nullptr) {
-            return 0;
-        }
-        // Keep the private-archive resource alive and bind its pixels directly.
-        // Returning a canonical __OTR__ filepath here would hand resolution back
-        // to the global mod stack, which cannot preserve the mm.o2r archive that
-        // this strict graph just selected and validated.
-        sStrictDisplayListTextureStorage.push_back(std::move(textureResource));
-        return reinterpret_cast<uintptr_t>(texture->ImageData);
+        auto manager = Ship::Context::GetRawInstance()->GetResourceManager();
+        return reinterpret_cast<uintptr_t>(
+            sStrictDisplayListTextures.Bind(*manager, pathIt->second, textureResource));
     }
 
     auto vertexResource = MmAssets_LoadResourceObjectFromMmArchive(pathIt->second.c_str());
@@ -719,6 +714,10 @@ Gfx* MmAssets_LoadDisplayListGraphStrict(const char* displayListPath) {
     }
     MmDisplayListGraphContext graph = { &sPathsByHash, {} };
     return MmAssets_PatchDisplayListGraph(MmAssets_StripOtrPrefix(displayListPath), graph, 0);
+}
+
+void MmAssets_EnsureStrictTextureBindings(void) {
+    sStrictDisplayListTextures.EnsurePublished(*Ship::Context::GetRawInstance()->GetResourceManager());
 }
 
 /**
@@ -906,6 +905,65 @@ void* MmAssets_LoadSkeleton(const char* path) {
  */
 void* MmAssets_LoadAnimation(const char* path) {
     return MmAssets_LoadFromMmArchive(MmAssets_StripOtrPrefix(path), nullptr);
+}
+
+/* Kafei's misleading Standard header is accepted only by this finite, private LOD route.
+ * No global skeleton or Link animation factory is used. */
+bool MmAssets_LoadKafei(unsigned char pose, MmNormalActorResources* output) {
+    if (!output) return false;
+    *output = {};
+    const auto* presentation = StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_CHILD_KAFEI, pose);
+    if (!presentation || !sMmArchive) return false;
+    try {
+        auto loader = OTRGlobals::Instance->context->GetResourceManager()->GetResourceLoader();
+        auto wrapper = sMmArchive->LoadFile(presentation->animationPath);
+        auto file = sMmArchive->LoadFile(MmKafei::ClipPath(pose)+7);
+        auto header = sMmArchive->LoadFile(presentation->skeletonPath);
+        if (!wrapper || !wrapper->Buffer || !MmKafei::Wrapper(*wrapper->Buffer,pose) ||
+            !file || !file->Buffer || !MmKafei::Payload(*file->Buffer,pose) ||
+            !header || !header->Buffer || !MmKafei::SkeletonBytes(*header->Buffer)) return false;
+        auto clip = std::dynamic_pointer_cast<SOH::PlayerAnimation>(loader->LoadResource(MmKafei::ClipPath(pose)+7,file));
+        if (!clip || clip->limbRotData.size() != presentation->frameCount*67U ||
+            clip->GetRawPointer() != clip->limbRotData.data() || clip->GetPointerSize() != clip->limbRotData.size()*2) return false;
+        auto retained = std::make_unique<std::vector<MmNormalActor::Resource>>();
+        auto skeleton = std::make_shared<SOH::Skeleton>();
+        skeleton->type = SOH::SkeletonType::Flex;
+        skeleton->limbType = skeleton->limbTableType = SOH::LimbType::LOD;
+        skeleton->limbCount = skeleton->limbTableCount = 21;
+        skeleton->dListCount = 18;
+        retained->push_back(skeleton);
+        for (unsigned i=0;i<21;++i) {
+            std::string path = MmKafei::Path(MmKafei::Limbs[i].name);
+            auto childFile = sMmArchive->LoadFile(path);
+            if (!childFile || !childFile->Buffer || !MmKafei::LimbBytes(*childFile->Buffer,i)) return false;
+            auto child = std::dynamic_pointer_cast<SOH::SkeletonLimb>(loader->LoadResource(path,childFile));
+            if (!MmKafei::Limb(child,i)) return false;
+            skeleton->limbTable.push_back(path);
+            skeleton->skeletonHeaderSegments.push_back(child->GetRawPointer());
+            retained->push_back(child);
+        }
+        auto& flex = skeleton->skeletonData.flexSkeletonHeader;
+        flex.sh.segment = skeleton->skeletonHeaderSegments.data();
+        flex.sh.limbCount = 21; flex.sh.skeletonType = (uint8_t)SOH::SkeletonType::Flex; flex.dListCount = 18;
+        retained->push_back(clip);
+        MmNormalActorResources result = {};
+        for (unsigned i=0;i<12;++i) {
+            const char* path = i<8 ? StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_CHILD_KAFEI,i) :
+                                    StaticStoryMm_GetMouthTexturePath(STATIC_STORY_ACTOR_CHILD_KAFEI,i-8);
+            auto texture = MmAssets_LoadResourceObjectFromMmArchive(path);
+            if (!MmNormalActor::ValidateTexture(texture)) return false;
+            (i<8 ? result.eyes : result.mouths)[i<8 ? i : i-8] = texture->GetRawPointer();
+            retained->push_back(texture);
+        }
+        result.skeleton = static_cast<FlexSkeletonHeader*>(skeleton->GetRawPointer());
+        result.playerFrames = clip->limbRotData.data();
+        result.owner = retained.release();
+        *output = result;
+        return true;
+    } catch (const std::exception& error) {
+        MMASSETS_LOG("[Kafei] resource validation failed: %s",error.what());
+        return false;
+    }
 }
 
 bool MmAssets_LoadNormalActor(int actorType, unsigned char pose, MmNormalActorResources* output) {

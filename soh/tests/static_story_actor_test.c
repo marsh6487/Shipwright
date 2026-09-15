@@ -78,13 +78,13 @@ int main(void) {
     REQUIRE(STATIC_STORY_ACTOR_CHILD_KAFEI == 21);
     REQUIRE(STATIC_STORY_ACTOR_LULU == 22);
     REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_KEATON));
-    REQUIRE(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_CHILD_KAFEI));
+    REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_CHILD_KAFEI));
     REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_LULU));
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_KEATON)->objectId == OBJECT_INVALID);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_KAFEI)->objectId == OBJECT_INVALID);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_LULU)->objectId == OBJECT_INVALID);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_KEATON)->adapter == STATIC_ADAPTER_MM_KEATON);
-    REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_KAFEI)->adapter == STATIC_ADAPTER_NONE);
+    REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_KAFEI)->adapter == STATIC_ADAPTER_MM_KAFEI);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_LULU)->adapter == STATIC_ADAPTER_MM_LULU);
     REQUIRE(StaticStoryActor_GetType((int16_t)0x7E0A) == STATIC_STORY_ACTOR_KEATON);
 

@@ -1,6 +1,7 @@
 /* Runner inserts unmodified production function bodies, compiled with the real viewer types. */
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "tests/test_require.h"
 #include "src/overlays/actors/ovl_En_Viewer/z_en_viewer.h"
 #include "src/overlays/actors/ovl_En_Viewer/static_story_actor.h"
@@ -18,13 +19,17 @@ void gSPSegment(void* value,int segment,uintptr_t target) { __gSPSegment((Gfx*)v
 static unsigned initCalls,freeCalls,releaseCalls,drawCalls,killCalls,objectCalls,colliderFrees,loopCalls;
 static bool loadSuccess=true,allocationSuccess=true;
 static float rotateX;
-static unsigned char eyes[3][16], mouths[2][16];
+static unsigned char eyes[8][16], mouths[4][16];
 static FlexSkeletonHeader skeleton;
 static AnimationHeader animation;
 static EnViewer* drawing;
 static Gfx commands[16];
 static unsigned faceCommands;
 uintptr_t gSegments[16];
+static GameInfo gameInfo;
+GameInfo* gGameInfo = &gameInfo;
+static int16_t playerData[89*67];
+static unsigned lodDraws;
 static ColliderCylinderInit sStaticCylinderInit;
 void EnViewerStatic_Update(EnViewer*,PlayState*);
 static void EnViewerStatic_UpdateTracking(EnViewer* self,PlayState* play) { (void)self;(void)play; }
@@ -46,6 +51,11 @@ bool MmAssets_LoadNormalActor(int type,unsigned char pose,MmNormalActorResources
     for (unsigned i=0;i<p->eyeCount;++i) output->eyes[i]=eyes[i];
     for (unsigned i=0;i<p->mouthCount;++i) output->mouths[i]=mouths[i];
     return true;
+}
+bool MmAssets_LoadKafei(unsigned char pose,MmNormalActorResources* output) {
+    bool loaded=MmAssets_LoadNormalActor(STATIC_STORY_ACTOR_CHILD_KAFEI,pose,output);
+    output->animation=NULL;output->playerFrames=loaded?playerData:NULL;
+    return loaded;
 }
 void MmAssets_ReleaseNormalActor(void* owner) { if(owner) { ++releaseCalls;free(owner); } }
 void* MmAssets_LoadSkeleton(const char* path) { REQUIRE(false);return NULL; }
@@ -116,6 +126,22 @@ void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawO
         REQUIRE(rot.x==200);
     override(play,12,&dl,&pos,&rot,arg);
 }
+void SkelAnime_DrawFlexLod(PlayState* play,void** skeleton,Vec3s* joints,s32 count,
+                         OverrideLimbDrawOpa override,PostLimbDrawOpa post,void* arg,s32 lod) {
+    ++lodDraws;REQUIRE(count==18 && lod==0 && post==NULL && arg==drawing);
+    REQUIRE(joints==drawing->skin.skelAnime.jointTable);
+    REQUIRE(play->state.gfxCtx->polyOpa.p==commands+3);
+    StaticStoryMmFace face=StaticStoryMm_KafeiFace(drawing->staticState.mmAppearance);
+    REQUIRE(commands[0].words.w1==(uintptr_t)eyes[face.eye]);
+    REQUIRE(commands[1].words.w1==(uintptr_t)mouths[face.mouth]);
+    REQUIRE((commands[0].words.w0&0xffff)==8*4 && (commands[1].words.w0&0xffff)==9*4);
+    REQUIRE(commands[2].words.w1==0xffffffffU);
+    Vec3f pos={17,34,-17};Vec3s rot={1,2,3};Gfx* dl=(Gfx*)0x1234;
+    REQUIRE(!override(play,1,&dl,&pos,&rot,arg));
+    REQUIRE(fabsf(pos.x-11)<0.0001f && fabsf(pos.y-22)<0.0001f && fabsf(pos.z+11)<0.0001f);
+    REQUIRE(dl==(Gfx*)0x1234 && rot.x==1 && rot.y==2 && rot.z==3);
+    pos=(Vec3f){17,34,-17};override(play,2,&dl,&pos,&rot,arg);REQUIRE(pos.x==17 && pos.y==34);
+}
 /* PRODUCTION_VIEWER_FUNCTIONS */
 
 static void prepare(EnViewer* viewer,int type,int pose) {
@@ -167,6 +193,35 @@ int main(void) {
     EnViewerStatic_WaitForObjects(&failed,&play);EnViewer_Destroy(&failed.actor,&play);
     REQUIRE(freeCalls==frees+1 && releaseCalls==releases+1 && loopCalls==loops);
     REQUIRE(killCalls==2 && colliderFrees==20 && objectCalls==0);
+    allocationSuccess=true;R_UPDATE_RATE=2;
+    for(unsigned f=0;f<89;++f) { for(unsigned j=0;j<66;++j) playerData[f*67+j]=f*100+j;playerData[f*67+66]=0; }
+    for(unsigned pose=0;pose<2;++pose) {
+        EnViewer a,b;prepare(&a,STATIC_STORY_ACTOR_CHILD_KAFEI,pose);prepare(&b,STATIC_STORY_ACTOR_CHILD_KAFEI,pose);
+        unsigned loopsBefore=loopCalls;
+        EnViewerStatic_WaitForObjects(&a,&play);EnViewerStatic_WaitForObjects(&b,&play);
+        REQUIRE(a.staticState.initialized && b.staticState.initialized && loopCalls==loopsBefore);
+        REQUIRE(a.skin.skelAnime.limbCount==22 && a.skin.skelAnime.jointTable[0].x==0);
+        EnViewer_Update(&a.actor,&play);
+        REQUIRE(a.skin.skelAnime.curFrame==1 && a.skin.skelAnime.jointTable[0].x==100);
+        REQUIRE(b.skin.skelAnime.curFrame==0 && b.skin.skelAnime.jointTable[0].x==0);
+        REQUIRE(gSegments[6]==0x12345678 && a.actor.world.pos.y==345 && a.actor.home.pos.y==345);
+        a.staticState.mmAppearance=0x48;draw(&a,&play);draw(&a,&play);
+        REQUIRE(a.skin.skelAnime.jointTable[0].x==100);
+        unsigned freesBefore=freeCalls,releaseBefore=releaseCalls,drawBefore=lodDraws;
+        EnViewer_Destroy(&a.actor,&play);EnViewer_Destroy(&a.actor,&play);
+        EnViewerStatic_Update(&a,&play);draw(&a,&play);
+        REQUIRE(freeCalls==freesBefore+1 && releaseCalls==releaseBefore+1 && lodDraws==drawBefore);
+        draw(&b,&play);EnViewer_Destroy(&b.actor,&play);
+    }
+    for(bool failLoad=false;;failLoad=true) {
+        prepare(&failed,STATIC_STORY_ACTOR_CHILD_KAFEI,0);loadSuccess=!failLoad;allocationSuccess=false;
+        unsigned freesBefore=freeCalls,releaseBefore=releaseCalls;
+        EnViewerStatic_WaitForObjects(&failed,&play);EnViewer_Destroy(&failed.actor,&play);
+        REQUIRE(!failed.staticState.initialized);
+        REQUIRE(freeCalls==freesBefore+!failLoad && releaseCalls==releaseBefore+!failLoad);
+        if(failLoad) break;
+    }
+    puts("PASS Kafei production viewer: no Player calls; private sampling, LOD draw/root/face commands and failure lifecycle");
     puts("PASS compiled production viewer init/update/draw/free: 10 poses, independent state, root preservation, face order, typed-load and partial-allocation failure");
     return 0;
 }

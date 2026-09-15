@@ -13,7 +13,7 @@
 #include "../src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.h"
 
 int main(void) {
-    /* New ordinary catalogue must be available without enabling Kafei. */
+    /* Ordinary and scoped-player catalogue identities remain independent. */
     const StaticStoryActorType ordinary[] = { STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN,
         STATIC_STORY_ACTOR_KEATON, STATIC_STORY_ACTOR_LULU };
     const unsigned counts[] = { 3, 3, 4 };
@@ -29,8 +29,21 @@ int main(void) {
         }
         REQUIRE(StaticStoryMm_GetPresentation(ordinary[actor], counts[actor]) == NULL);
     }
-    REQUIRE(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_CHILD_KAFEI));
-    REQUIRE(StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_CHILD_KAFEI, 0) == NULL);
+    REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_CHILD_KAFEI));
+    REQUIRE(StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_CHILD_KAFEI, 0) != NULL);
+
+    REQUIRE(StaticStoryActor_GetType(0x7E0B)==STATIC_STORY_ACTOR_CHILD_KAFEI);
+    REQUIRE(StaticStoryActor_GetType(0x7E1B)==STATIC_STORY_ACTOR_CHILD_KAFEI);
+    REQUIRE(StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_CHILD_KAFEI,2)==NULL);
+    for(unsigned pose=0;pose<2;++pose) {
+        const StaticStoryMmPresentation* p=StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_CHILD_KAFEI,pose);
+        REQUIRE(p->kind==STATIC_STORY_MM_SCOPED_PLAYER_LOD && p->limbCount==21 && p->matrixCount==18);
+        REQUIRE(p->frameCount==(pose==0?89:48) && p->eyeCount==8 && p->mouthCount==4);
+        REQUIRE(!StaticStoryActor_LocksRootTranslation(STATIC_STORY_ACTOR_CHILD_KAFEI,pose));
+        REQUIRE(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_CHILD_KAFEI,pose));
+    }
+    const StaticStoryActorDefinition* kd=StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_KAFEI);
+    REQUIRE(kd->colliderRadius==18 && kd->colliderHeight==60 && kd->colliderYShift==0 && kd->scale==0.01f);
 
     const unsigned limbs[] = {18,20,22}, matrices[] = {17,20,21};
     const unsigned frames[3][4] = {{29,29,29,0},{36,36,30,0},{30,30,72,87}};

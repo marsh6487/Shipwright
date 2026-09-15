@@ -65,7 +65,7 @@ def main(library, archive):
                     target = {0: 0x30000000, 2: 0x30000080}[w1 & 0xFFFFFF]
                     expected.append((i, 0xDE000000 | (w0 & 0x10000), target))
                 elif opcode == 0x20:
-                    expected_textures.append((i, 0xFD000000 | (w0 & 0xFFFFFF)))
+                    expected_textures.append((i, 0x25000000 | (w0 & 0xFFFFFF)))
                 i += 2 if opcode in TWO_WORD else 1
             stats = Stats()
             if not patch(commands, len(words), resolve, None, c.byref(stats)):

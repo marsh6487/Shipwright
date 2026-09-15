@@ -72,11 +72,16 @@ int main() {
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/any/paste0") == Prelude::NativeMaterialProfile::LakeHylia);
     archive->project["edits"]["any_scene"][0]["data"]["pastes"][0]["chain"][0]["path"] = "unrelated";
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/any/paste0") == Prelude::NativeMaterialProfile::None);
+    auto& items=archive->project["edits"]["any_scene"][0]["data"]["pastes"];
+    auto a=items[0];a["chain"][0]["path"]="objects/object_spot06_objects/gLakeHyliaHighWaterDL";
+    auto b=a;b["chain"][0]["path"]="objects/object_spot01_objects/gKakarikoWellWaterDL";
+    items=nlohmann::json::array({a,b,a});
+    REQUIRE(Prelude::ProfileFor(archive,"custom/prelude/any/paste0")==Prelude::NativeMaterialProfile::None);
     GraphicsContext ctx;
     auto& lists = Prelude::Lists().lists;
     auto lakePointer = lists[1].data();
     REQUIRE(lakePointer != lists[2].data() && lakePointer != lists[3].data());
-    for (uint32_t f : { 0u, 1u, 127u, 128u, 2047u, 2048u, 0xffffffffu }) {
+    for (uint32_t f : { 0u, 1u, 31u, 32u, 63u, 64u, 127u, 128u, 2047u, 2048u, 0xffffffffu }) {
         const uint32_t game = f + 53u; // Verify different native clock sources.
         PreludeNativeMaterialScroll_Update(&ctx, f, game);
         CheckCommands(lists[1], Gfx_TwoTexScrollEx(&ctx, 0, 0u - f, f, 32, 32, 1, f, f, 32, 32, -1, 1, 1, 1));
@@ -84,6 +89,13 @@ int main() {
                                                    -1, 1, 1, 1));
         CheckCommands(lists[3],
                       Gfx_TwoTexScrollEx(&ctx, 0, game % 128, 0, 32, 16, 1, game % 128, 0, 32, 16, 1, 0, 1, 0));
+        for (size_t i=4;i<lists.size();++i) {
+            const int size=i<7?32:64;
+            const int rate=((i-4)%3==0?-20:(i-4)%3==1?20:10)*(size/32);
+            CheckCommands(lists[i],Gfx_TwoTexScrollEx(&ctx,0,0,0,size,size,1,0,
+                game*static_cast<uint32_t>(rate),size,size,0,0,0,rate));
+            for (size_t j=1;j<i;++j) REQUIRE(lists[i].data()!=lists[j].data());
+        }
         auto before = lists;
         sFrameAllocation = {}; // Simulate transient allocation reuse after draw.
         for (size_t i = 1; i < lists.size(); ++i) {

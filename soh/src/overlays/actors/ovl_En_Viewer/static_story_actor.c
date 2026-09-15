@@ -54,8 +54,8 @@ static const StaticStoryActorDefinition sDefinitions[STATIC_STORY_ACTOR_MAX] = {
                                                  STATIC_TRACKING_HAPPY_MASK_SALESMAN, 12, 0.0f },
     [STATIC_STORY_ACTOR_KEATON] = { 2, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_KEATON, 0.01f, 35.0f, 18, 50, 0,
                                     30, 30, 70.0f, STATIC_TRACKING_NONE, 0, 0.0f },
-    [STATIC_STORY_ACTOR_CHILD_KAFEI] = { 0, 0, OBJECT_INVALID, STATIC_ADAPTER_NONE, 0.01f, 40.0f, 20, 60, 0,
-                                         30, 30, 90.0f, STATIC_TRACKING_NONE, 0, 0.0f },
+    [STATIC_STORY_ACTOR_CHILD_KAFEI] = { 1, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_KAFEI, 0.01f, 45.0f, 18, 60, 0,
+                                         30, 30, 80.0f, STATIC_TRACKING_NONE, 0, 0.0f },
     [STATIC_STORY_ACTOR_LULU] = { 3, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_LULU, 0.01f, 60.0f, 22, 70, 0,
                                   30, 30, 100.0f, STATIC_TRACKING_LULU, 12, 0.0f },
 };
@@ -180,6 +180,10 @@ static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STO
         STATIC_POSE(STATIC_ANIM_KEATON_CHUCKLE, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_KEATON),
         STATIC_POSE(STATIC_ANIM_KEATON_CELEBRATE, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_KEATON),
     },
+    [STATIC_STORY_ACTOR_CHILD_KAFEI] = {
+        STATIC_POSE(STATIC_ANIM_KAFEI_IDLE, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_KAFEI),
+        STATIC_POSE(STATIC_ANIM_KAFEI_GESTURE, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_KAFEI),
+    },
     [STATIC_STORY_ACTOR_LULU] = {
         STATIC_POSE(STATIC_ANIM_LULU_LOOK_DOWN, STATIC_POSE_FLAG_NONE, STATIC_SKELETON_LULU),
         STATIC_POSE(STATIC_ANIM_LULU_LOOK_LEFT, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_LULU),
@@ -231,6 +235,8 @@ StaticStoryActorType StaticStoryActor_GetType(int16_t params) {
                 return STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN;
             case 10:
                 return STATIC_STORY_ACTOR_KEATON;
+            case 11:
+                return STATIC_STORY_ACTOR_CHILD_KAFEI;
             case 12:
                 return STATIC_STORY_ACTOR_LULU;
             default:
@@ -483,6 +489,7 @@ StaticStoryResourceSource StaticStoryActor_GetResourceSource(StaticStoryActorTyp
         case STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN:
         case STATIC_STORY_ACTOR_KEATON:
         case STATIC_STORY_ACTOR_LULU:
+        case STATIC_STORY_ACTOR_CHILD_KAFEI:
             return STATIC_STORY_RESOURCE_MM_ARCHIVE;
         default:
             return STATIC_STORY_RESOURCE_OOT_OBJECT;

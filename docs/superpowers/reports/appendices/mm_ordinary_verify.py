@@ -39,10 +39,10 @@ if os.environ.get("MM_VERIFY_STAGE") != "viewer":
     loader = (ROOT/'soh/mods/transformation_masks/assets/mm_asset_loader.cpp').read_text()
     resource_source = (ROOT/'soh/tests/static_story_mm_resource_test.cpp').read_text()
     resource_source=resource_source.replace('/* PRODUCTION_RESOURCE_FUNCTIONS */', '\n'.join(function(loader,n) for n in [
-        'MmAssets_LoadResourceObjectFromMmArchive', 'MmAssets_LoadNormalActor', 'MmAssets_ReleaseNormalActor']))
+        'MmAssets_LoadResourceObjectFromMmArchive', 'MmAssets_LoadNormalActor', 'MmAssets_LoadKafei', 'MmAssets_ReleaseNormalActor']))
     p=WORK/'resource_fixture.cpp';p.write_text(resource_source)
     objects=[compile(p,True)]
-    for name in ['Skeleton','SkeletonLimb','Animation']:
+    for name in ['Skeleton','SkeletonLimb','Animation','PlayerAnimation']:
         objects += [compile(ROOT/f'soh/soh/resource/type/{name}.cpp',True),compile(ROOT/f'soh/soh/resource/importer/{name}Factory.cpp',True)]
     objects += [compile(ROOT/'soh/src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.c')]
     libs = ['libultraship/src/libultraship.a','_deps/stormlib-build/libstorm.a','libultraship/libImGui.a',

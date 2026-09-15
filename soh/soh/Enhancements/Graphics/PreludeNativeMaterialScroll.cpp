@@ -11,6 +11,7 @@
 #include <array>
 #include <map>
 #include <mutex>
+#include <set>
 #include "soh/cvar_prefixes.h"
 
 extern "C" Gfx* Gfx_TwoTexScrollEx(GraphicsContext*, s32, u32, u32, s32, s32, s32, u32, u32, s32, s32, s32, s32, s32,
@@ -22,7 +23,7 @@ namespace {
 // Graph_Update finishes Play_Draw before Graph_ProcessGfxCommands runs; the
 // buffers remain unchanged throughout that frame's interpolated render passes.
 struct ScrollLists {
-    std::array<std::array<Gfx, 12>, 4> lists{};
+    std::array<std::array<Gfx, 12>, static_cast<size_t>(NativeMaterialProfile::Count)> lists{};
     ScrollLists() {
         for (auto& list : lists) {
             gSPEndDisplayList(list.data());
@@ -44,6 +45,7 @@ std::map<std::weak_ptr<Ship::Archive>, MetadataSnapshot, std::owner_less<std::we
 
 ProfileMap ReadProfiles(const std::vector<char>& bytes) {
     ProfileMap profiles;
+    std::set<std::string> conflicts;
     const auto root = nlohmann::json::parse(bytes.begin(), bytes.end(), nullptr, false);
     if (root.is_discarded() || !root.is_object() || !root.contains("edits") || !root["edits"].is_object()) {
         return profiles;
@@ -72,7 +74,8 @@ ProfileMap ReadProfiles(const std::vector<char>& bytes) {
                     }
                     auto profile = ResolveNativeMaterial(item, std::string_view(kind) == "pastes");
                     auto [it, inserted] = profiles.emplace(path, profile);
-                    if (!inserted && it->second != profile) {
+                    if (conflicts.contains(path) || (!inserted && it->second != profile)) {
+                        conflicts.insert(path);
                         it->second = NativeMaterialProfile::None;
                     }
                 }
@@ -133,7 +136,7 @@ NativeMaterialDisplayListFactory::ReadResource(std::shared_ptr<Ship::File> file,
     for (const auto& command : dl->Instructions) {
         commands.push_back({ command.words.w0, command.words.w1 });
     }
-    auto insertion = FindNativeScrollInsertion(commands);
+    auto insertion = FindNativeScrollInsertion(commands, profile);
     if (!insertion) {
         SPDLOG_INFO("PreludeNativeMaterialScroll skipped unsupported or already-bound list {} profile={}",
                     initData->Path, static_cast<int>(profile));

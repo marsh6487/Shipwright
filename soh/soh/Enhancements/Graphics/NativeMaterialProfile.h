@@ -5,7 +5,12 @@
 #include <nlohmann/json.hpp>
 
 namespace Prelude {
-enum class NativeMaterialProfile { None, LakeHylia, Pool, LostWoodsLightSheet };
+enum class NativeMaterialProfile {
+    None, LakeHylia, Pool, LostWoodsLightSheet,
+    FountainLowerA32, FountainLowerB32, FountainCentral32,
+    FountainLowerA64, FountainLowerB64, FountainCentral64,
+    Count
+};
 struct NativeMaterialCommand {
     uintptr_t w0;
     uintptr_t w1;
@@ -15,6 +20,7 @@ struct ScrollParameters {
     int width, height, dx1, dy1, dx2, dy2;
 };
 NativeMaterialProfile ResolveNativeMaterial(const nlohmann::json& item, bool pasted);
-std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterialCommand>& commands);
+std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterialCommand>& commands,
+    NativeMaterialProfile profile = NativeMaterialProfile::None);
 ScrollParameters NativeScrollParameters(NativeMaterialProfile profile, uint32_t stateFrames, uint32_t gameplayFrames);
 } // namespace Prelude

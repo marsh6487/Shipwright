@@ -7,7 +7,7 @@ constexpr uint8_t kVertexHash = 0x32;
 constexpr uint8_t kTextureHash = 0x20;
 constexpr uint8_t kVertex = 0x01;
 constexpr uint8_t kDisplayList = 0xDE;
-constexpr uint8_t kSetTextureImage = 0xFD;
+constexpr uint8_t kSetTextureImage = 0x25; // retained filepath alias, full texture metadata
 constexpr uint8_t kEndDisplayList = 0xDF;
 constexpr size_t kVertexSize = 16;
 

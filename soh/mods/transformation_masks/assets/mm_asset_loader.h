@@ -84,6 +84,7 @@ void* MmAssets_LoadResourceStrict(const char* path);
  * converted to pointers into resources from that same archive.
  */
 Gfx* MmAssets_LoadDisplayListGraphStrict(const char* displayListPath);
+void MmAssets_EnsureStrictTextureBindings(void);
 
 /**
  * Load a resource from mm.o2r and get its size
@@ -134,7 +135,9 @@ typedef struct {
     AnimationHeader* animation;
     void* eyes[8];
     void* mouths[4];
+    const int16_t* playerFrames;
 } MmNormalActorResources;
+bool MmAssets_LoadKafei(unsigned char pose, MmNormalActorResources* output);
 bool MmAssets_LoadNormalActor(int actorType, unsigned char pose, MmNormalActorResources* output);
 void MmAssets_ReleaseNormalActor(void* owner);
 

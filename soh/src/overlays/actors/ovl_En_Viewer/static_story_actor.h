@@ -60,6 +60,7 @@ typedef enum {
     STATIC_ADAPTER_MM_HAPPY_MASK_SALESMAN,
     STATIC_ADAPTER_MM_KEATON,
     STATIC_ADAPTER_MM_LULU,
+    STATIC_ADAPTER_MM_KAFEI,
 } StaticStoryActorAdapter;
 
 typedef enum {
@@ -83,6 +84,7 @@ typedef enum {
     STATIC_SKELETON_HAPPY_MASK_SALESMAN,
     STATIC_SKELETON_KEATON,
     STATIC_SKELETON_LULU,
+    STATIC_SKELETON_KAFEI,
 } StaticStorySkeletonFamily;
 
 typedef enum {
@@ -200,6 +202,8 @@ typedef enum {
     STATIC_ANIM_LULU_LOOK_LEFT,
     STATIC_ANIM_LULU_SING,
     STATIC_ANIM_LULU_LOOK_AROUND,
+    STATIC_ANIM_KAFEI_IDLE,
+    STATIC_ANIM_KAFEI_GESTURE,
 } StaticStoryAnimation;
 
 enum {

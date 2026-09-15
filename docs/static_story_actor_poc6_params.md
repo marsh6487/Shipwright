@@ -98,5 +98,11 @@ All three use scale `0.01`. Happy Mask Salesman and Lulu use collider radius/hei
 `22/70`, focus height `60`, and talk distance `100`; Keaton uses `18/50`, `35`, and
 `70`. These are static placement defaults. Collider Y shift is zero.
 
-Child Kafei (identity 21) remains unavailable; `0x7E0B` and `0x7E1B` are reserved
-and rejected until its separate animation adapter is implemented.
+Child Kafei (identity 21) uses `0x7E0B` for the 89-frame idle and `0x7E1B` for
+its 48-frame gesture. Both are private, native-rate full loops with no tracking,
+player animation hooks, quest behavior, pendant or audio. Open eyes and closed
+mouth follow these clips' neutral appearance words. Its placement defaults are
+scale `0.01`, collider `18/60/0`, focus `45`, and talk distance `80`.
+The native MM root translation adjustment applies only inside the draw callback;
+placement, collider, and sampled joints are unchanged. Dialogue is
+“I've made a promise to Anju.”

@@ -2,6 +2,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
+#include <limits>
 #include <unordered_map>
 #include <ship/Context.h>
 #include <ship/resource/ResourceManager.h>
@@ -12,6 +14,8 @@
 #include "soh/resource/importer/SkeletonLimbFactory.h"
 #include "soh/resource/importer/AnimationFactory.h"
 #include "mods/transformation_masks/assets/mm_normal_actor_resource.h"
+#include "mods/transformation_masks/assets/mm_kafei_resource.h"
+#include "soh/resource/importer/PlayerAnimationFactory.h"
 #include "mods/transformation_masks/assets/mm_asset_loader.h"
 extern "C" {
 #include "src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.h"
@@ -47,6 +51,8 @@ int main(int argc, char** argv) {
         RESOURCE_FORMAT_BINARY, "Animation", 0x4F414E4D, 0));
     REQUIRE(loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryTextureV0>(),
         RESOURCE_FORMAT_BINARY, "Texture", static_cast<uint32_t>(Fast::ResourceType::Texture), 0));
+    REQUIRE(loader->RegisterResourceFactory(std::make_shared<SOH::ResourceFactoryBinaryPlayerAnimationV0>(),
+        RESOURCE_FORMAT_BINARY, "PlayerAnimation", 0x4F50414D, 0));
     sMmArchive = manager->GetArchiveManager()->GetArchives()->at(0);
     auto resolve = [manager](const std::string& path) { return manager->LoadResourceProcess(path); };
     unsigned loads = 0;
@@ -124,8 +130,7 @@ int main(int argc, char** argv) {
     REQUIRE(!MmNormalActor::ValidateSkeleton(kafei,21,18,resolve,retained));
     // MM Link wrappers are deliberately unsupported by the global SoH factory.
     // Type rejection is also exercised above on a real SOH::Animation instance.
-    auto link=MmAssets_LoadResourceObjectFromMmArchive("objects/gameplay_keep/gPlayerAnim_link_normal_wait_free");
-    REQUIRE(!MmNormalActor::ValidateAnimation(link,21,89));
+    REQUIRE(!MmNormalActor::ValidateAnimation(kafei,21,89));
     auto texture=MmAssets_LoadResourceObjectFromMmArchive("objects/object_zov/gLuluEyeOpenTex");
     REQUIRE(MmNormalActor::ValidateTexture(texture));
     auto tex=std::dynamic_pointer_cast<Fast::Texture>(texture);
@@ -135,6 +140,72 @@ int main(int argc, char** argv) {
     REQUIRE(!MmNormalActor::ValidateTexture(texture));tex->ImageDataSize=dataSize;
     REQUIRE(!MmAssets_LoadNormalActor(STATIC_STORY_ACTOR_LULU,4,&disabled));
     std::printf("PASS actual archive loader: %u presentations (10 x Alt off/on), 7 unique faces; type/bounds/identity/retention negatives\n",loads);
+
+    for (bool alt : {false,true}) for (unsigned pose=0;pose<2;++pose) {
+        manager->SetAltAssetsEnabled(alt);
+        const auto* p=StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_CHILD_KAFEI,pose);
+        auto wrapper=*sMmArchive->LoadFile(p->animationPath)->Buffer;
+        auto payload=*sMmArchive->LoadFile(MmKafei::ClipPath(pose)+7)->Buffer;
+        auto header=*sMmArchive->LoadFile(p->skeletonPath)->Buffer;
+        REQUIRE(MmKafei::Wrapper(wrapper,pose) && MmKafei::Payload(payload,pose) && MmKafei::SkeletonBytes(header));
+        for (size_t at : {0U,4U,8U,64U,68U,69U,70U,74U}) {
+            auto bad=wrapper;bad[at]^=1;REQUIRE(!MmKafei::Wrapper(bad,pose));
+        }
+        for (size_t at : {0U,4U,8U,64U,65U,67U}) {
+            auto bad=payload;bad[at]^=1;REQUIRE(!MmKafei::Payload(bad,pose));
+        }
+        for (size_t size : {0U,63U,64U,68U,73U}) {
+            auto bad=wrapper;bad.resize(size);REQUIRE(!MmKafei::Wrapper(bad,pose));
+            bad=payload;bad.resize(size);REQUIRE(!MmKafei::Payload(bad,pose));
+        }
+        auto bad=wrapper;bad.push_back(0);REQUIRE(!MmKafei::Wrapper(bad,pose));
+        bad=payload;bad.pop_back();REQUIRE(!MmKafei::Payload(bad,pose));
+        bad=header;bad[83]^=1;REQUIRE(!MmKafei::SkeletonBytes(bad));
+        for (unsigned i=0;i<21;++i) {
+            auto bytes=*sMmArchive->LoadFile(MmKafei::Path(MmKafei::Limbs[i].name))->Buffer;
+            REQUIRE(MmKafei::LimbBytes(bytes,i));
+            bytes[64]=1;REQUIRE(!MmKafei::LimbBytes(bytes,i));bytes[64]=2;
+            bytes.back()^=1;REQUIRE(!MmKafei::LimbBytes(bytes,i));
+        }
+        // Poison every globally selected child. The private header must ignore them.
+        for (const auto& row:MmKafei::Limbs) manager->CacheExternalResource(MmKafei::Path(row.name),texture);
+        MmNormalActorResources first{},second{};
+        REQUIRE(MmAssets_LoadKafei(pose,&first) && MmAssets_LoadKafei(pose,&second));
+        REQUIRE(first.skeleton != second.skeleton && first.playerFrames != second.playerFrames);
+        REQUIRE(!first.animation && first.skeleton->sh.limbCount==21 && first.skeleton->dListCount==18);
+        auto owner=static_cast<std::vector<MmNormalActor::Resource>*>(first.owner);
+        REQUIRE(owner->size()==35);
+        for(unsigned i=0;i<21;++i) REQUIRE(MmKafei::Limb(std::dynamic_pointer_cast<SOH::SkeletonLimb>(owner->at(i+1)),i));
+        for(unsigned i=0;i<8;++i) REQUIRE(first.eyes[i]);
+        for(unsigned i=0;i<4;++i) REQUIRE(first.mouths[i]);
+        struct { uint32_t before; int16_t joints[66]; uint32_t after; } sample;
+        sample.before=0xabcddcba;sample.after=0x12345678;
+        uint16_t appearance=0xffff;float cursor=0;
+        for(unsigned frame=0;frame<p->frameCount;++frame) {
+            cursor=(float)frame;
+            REQUIRE(StaticStoryMm_SampleKafei(first.playerFrames,p->frameCount,&cursor,0,sample.joints,&appearance));
+            REQUIRE(memcmp(sample.joints,first.playerFrames+frame*67,132)==0 && appearance==0);
+            REQUIRE(sample.before==0xabcddcba && sample.after==0x12345678);
+        }
+        cursor=p->frameCount-1;
+        REQUIRE(StaticStoryMm_SampleKafei(first.playerFrames,p->frameCount,&cursor,1,sample.joints,&appearance) && cursor==0);
+        REQUIRE(StaticStoryMm_SampleKafei(first.playerFrames,p->frameCount,&cursor,p->frameCount*3+0.5f,sample.joints,&appearance) && cursor==0.5f);
+        REQUIRE(StaticStoryMm_SampleKafei(first.playerFrames,p->frameCount,&cursor,-1,sample.joints,&appearance) && cursor==p->frameCount-0.5f);
+        cursor=0;
+        REQUIRE(StaticStoryMm_SampleKafei(first.playerFrames,p->frameCount,&cursor,-1e-30f,sample.joints,&appearance) && cursor<p->frameCount);
+        float saved=cursor;
+        REQUIRE(!StaticStoryMm_SampleKafei(first.playerFrames,p->frameCount,&cursor,INFINITY,sample.joints,&appearance) && cursor==saved);
+        for(unsigned eye=0;eye<16;++eye) for(unsigned mouth=0;mouth<16;++mouth) {
+            auto face=StaticStoryMm_KafeiFace(0xff00|(mouth<<4)|eye);
+            REQUIRE(face.eye==(eye>=1 && eye<=8?eye-1:0));
+            REQUIRE(face.mouth==(mouth>=1 && mouth<=4?mouth-1:0));
+        }
+        MmAssets_ReleaseNormalActor(first.owner);sMmResourceCache.clear();
+        cursor=0;REQUIRE(StaticStoryMm_SampleKafei(second.playerFrames,p->frameCount,&cursor,1,sample.joints,&appearance));
+        MmAssets_ReleaseNormalActor(second.owner);
+    }
+    REQUIRE(!MmAssets_LoadKafei(2,&disabled));
+    puts("PASS Kafei archive: finite private 21 LOD/18 matrix skeleton, two bounded clips, 12 faces, all-frame canaries and lifecycle");
     // Headless Context destructor requires a Window. Explicit resource lifetime checks
     // precede this exit; application shutdown is intentionally outside this fixture.
     sMmResourceCache.clear();retained.clear();sMmArchive.reset();
