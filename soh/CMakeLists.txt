@@ -29,6 +29,44 @@ if(BUILD_TESTING)
     )
     add_test(NAME static_story_actor_test COMMAND static_story_actor_test)
 
+    add_executable(static_story_dialogue_test
+        tests/static_story_dialogue_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_dialogue.c
+    )
+    add_test(NAME static_story_dialogue_test COMMAND static_story_dialogue_test)
+
+    add_executable(static_story_talk_test
+        tests/static_story_talk_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_talk.c
+        src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+        src/overlays/actors/ovl_En_Viewer/static_story_dialogue.c
+    )
+    target_include_directories(static_story_talk_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    add_test(NAME static_story_talk_test COMMAND static_story_talk_test)
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(static_story_viewer_talk_test
+            tests/static_story_viewer_talk_test.c
+            src/overlays/actors/ovl_En_Viewer/z_en_viewer.c
+            src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+            src/overlays/actors/ovl_En_Viewer/static_story_dialogue.c
+            src/overlays/actors/ovl_En_Viewer/static_story_talk.c
+        )
+        target_include_directories(static_story_viewer_talk_test PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets
+            ${CMAKE_CURRENT_SOURCE_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/../libultraship/include
+        )
+        target_compile_definitions(static_story_viewer_talk_test PRIVATE LOG_LEVEL_GAME_PRINTS=0)
+        target_compile_options(static_story_viewer_talk_test PRIVATE -ffunction-sections -fdata-sections)
+        target_link_options(static_story_viewer_talk_test PRIVATE -Wl,--gc-sections)
+        add_test(NAME static_story_viewer_talk_test COMMAND static_story_viewer_talk_test)
+    endif()
+
     add_executable(static_story_ruto_water_test
         tests/static_story_ruto_water_test.c
         src/overlays/actors/ovl_En_Viewer/static_story_ruto_water.c

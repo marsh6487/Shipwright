@@ -1,4 +1,5 @@
 #include "static_story_actor.h"
+#include "static_story_dialogue.h"
 
 #include <stddef.h>
 
@@ -51,6 +52,12 @@ static const StaticStoryActorDefinition sDefinitions[STATIC_STORY_ACTOR_MAX] = {
     [STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN] = { 2, 0, OBJECT_INVALID, STATIC_ADAPTER_MM_HAPPY_MASK_SALESMAN,
                                                  0.01f, 60.0f, 22, 70, 0, 30, 30, 100.0f,
                                                  STATIC_TRACKING_HAPPY_MASK_SALESMAN, 12, 0.0f },
+    [STATIC_STORY_ACTOR_KEATON] = { 0, 0, OBJECT_INVALID, STATIC_ADAPTER_NONE, 0.01f, 40.0f, 20, 60, 0,
+                                    30, 30, 90.0f, STATIC_TRACKING_NONE, 0, 0.0f },
+    [STATIC_STORY_ACTOR_CHILD_KAFEI] = { 0, 0, OBJECT_INVALID, STATIC_ADAPTER_NONE, 0.01f, 40.0f, 20, 60, 0,
+                                         30, 30, 90.0f, STATIC_TRACKING_NONE, 0, 0.0f },
+    [STATIC_STORY_ACTOR_LULU] = { 0, 0, OBJECT_INVALID, STATIC_ADAPTER_NONE, 0.01f, 50.0f, 20, 60, 0,
+                                  30, 30, 90.0f, STATIC_TRACKING_NONE, 0, 0.0f },
 };
 
 static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STORY_ACTOR_POSE_COUNT] = {
@@ -174,7 +181,7 @@ _Static_assert(sizeof(sDefinitions) / sizeof(sDefinitions[0]) == STATIC_STORY_AC
                "Every static story actor type needs a definition");
 _Static_assert(sizeof(sPoses) / sizeof(sPoses[0]) == STATIC_STORY_ACTOR_MAX,
                "Every static story actor type needs a pose row");
-enum { STATIC_STORY_DEFINITION_COUNT = 19, STATIC_STORY_POSE_ROW_COUNT = 19 };
+enum { STATIC_STORY_DEFINITION_COUNT = 22, STATIC_STORY_POSE_ROW_COUNT = 22 };
 _Static_assert(STATIC_STORY_DEFINITION_COUNT == STATIC_STORY_ACTOR_MAX - 1,
                "Definition count must change with the actor registry");
 _Static_assert(STATIC_STORY_POSE_ROW_COUNT == STATIC_STORY_ACTOR_MAX - 1,
@@ -294,13 +301,13 @@ uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticSt
 
     switch (type) {
         case STATIC_STORY_ACTOR_IMPA:
-            return progression->metZelda ? 0x708E : 0x702A;
+            return progression->metZelda ? 0x708E : 0x708D;
         case STATIC_STORY_ACTOR_CHILD_MALON:
             return progression->eponaComplete ? 0x204A : 0x2041;
         case STATIC_STORY_ACTOR_SARIA:
             return progression->forestComplete ? 0x10AD : 0x1001;
         case STATIC_STORY_ACTOR_ADULT_ZELDA:
-            return progression->metZelda ? 0x703D : 0x703C;
+            return progression->metZelda ? 0x70FE : 0x70FF;
         case STATIC_STORY_ACTOR_SHEIK:
             return progression->waterComplete ? 0x7010 : 0x700F;
         case STATIC_STORY_ACTOR_ADULT_RUTO:
@@ -323,14 +330,28 @@ uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticSt
         case STATIC_STORY_ACTOR_GREAT_FAIRY:
             return 0x00DB;
         case STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL:
-        case STATIC_STORY_ACTOR_ADULT_GANONDORF:
-        case STATIC_STORY_ACTOR_PHANTOM_GANON:
+            return STATIC_STORY_TEXT_TREASURE_CHEST_SHOP_GAL;
         case STATIC_STORY_ACTOR_SKULL_KID:
+            return STATIC_STORY_TEXT_SKULL_KID;
+        case STATIC_STORY_ACTOR_KEATON:
+            return STATIC_STORY_TEXT_KEATON;
         case STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN:
+            return STATIC_STORY_TEXT_HAPPY_MASK_SALESMAN;
+        case STATIC_STORY_ACTOR_CHILD_KAFEI:
+            return STATIC_STORY_TEXT_CHILD_KAFEI;
+        case STATIC_STORY_ACTOR_LULU:
+            return STATIC_STORY_TEXT_LULU;
+        case STATIC_STORY_ACTOR_ADULT_GANONDORF:
             return 0x00DB;
+        case STATIC_STORY_ACTOR_PHANTOM_GANON:
+            return 0;
         default:
             return 0;
     }
+}
+
+bool StaticStoryActor_CanTalk(StaticStoryActorType type) {
+    return StaticStoryActor_GetDefinition(type) != NULL && type != STATIC_STORY_ACTOR_PHANTOM_GANON;
 }
 
 void StaticStoryActor_NormalizePlacementRotation(int16_t* pitch, int16_t* yaw, int16_t* roll) {

@@ -32,6 +32,9 @@ typedef enum {
     STATIC_STORY_ACTOR_PHANTOM_GANON,
     STATIC_STORY_ACTOR_SKULL_KID,
     STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN,
+    STATIC_STORY_ACTOR_KEATON,
+    STATIC_STORY_ACTOR_CHILD_KAFEI,
+    STATIC_STORY_ACTOR_LULU,
     STATIC_STORY_ACTOR_MAX,
 } StaticStoryActorType;
 
@@ -251,6 +254,7 @@ int16_t StaticStoryActor_GetAnimationObjectId(StaticStoryActorType type);
 StaticStoryObjectRequirements StaticStoryActor_GetObjectRequirements(StaticStoryActorType type);
 const StaticStoryPoseDescriptor* StaticStoryActor_ResolvePose(StaticStoryActorType type, uint8_t pose);
 uint16_t StaticStoryActor_SelectTextId(StaticStoryActorType type, const StaticStoryProgression* progression);
+bool StaticStoryActor_CanTalk(StaticStoryActorType type);
 bool StaticStoryActor_ShouldCloseEventMessage(bool isEventState, bool shouldAdvance);
 int StaticStoryActor_CanTrack(StaticStoryActorType type, uint8_t pose);
 StaticStoryTrackingMode StaticStoryActor_GetTrackingMode(StaticStoryActorType type, uint8_t pose);

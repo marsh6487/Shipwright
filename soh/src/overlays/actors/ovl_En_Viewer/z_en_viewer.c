@@ -30,6 +30,7 @@
 #include "objects/object_dy_obj/object_dy_obj.h"
 #include "objects/object_os_anime/object_os_anime.h"
 #include "static_story_actor.h"
+#include "static_story_talk.h"
 #include "static_story_kokiri.h"
 #include "static_story_mm_actor.h"
 #include "static_story_ganon.h"
@@ -855,35 +856,79 @@ static void EnViewerStatic_RestorePlacementPose(EnViewer* this) {
     this->staticState.interactInfo.talkState = NPC_TALK_STATE_IDLE;
 }
 
-void EnViewerStatic_OfferTalk(EnViewer* this, PlayState* play) {
-    const StaticStoryActorDefinition* definition =
-        StaticStoryActor_GetDefinition((StaticStoryActorType)this->staticState.type);
-    StaticStoryProgression progression;
+typedef struct {
+    EnViewer* viewer;
+    PlayState* play;
+} EnViewerStaticTalkContext;
 
-    if (this->staticState.talking) {
-        this->staticState.tracking = true;
-        if (Message_GetState(&play->msgCtx) == TEXT_STATE_EVENT &&
-            StaticStoryActor_ShouldCloseEventMessage(true, Message_ShouldAdvance(play))) {
-            Message_CloseTextbox(play);
-            EnViewerStatic_RestorePlacementPose(this);
-        } else if (Message_GetState(&play->msgCtx) == TEXT_STATE_CLOSING) {
-            EnViewerStatic_RestorePlacementPose(this);
-        }
+static StaticStoryTalkMessageState EnViewerStatic_GetTalkMessageState(void* context) {
+    EnViewerStaticTalkContext* talkContext = context;
+    TextState state = Message_GetState(&talkContext->play->msgCtx);
+
+    if (state == TEXT_STATE_EVENT) {
+        return STATIC_STORY_TALK_MESSAGE_EVENT;
+    }
+    if (state == TEXT_STATE_CLOSING) {
+        return STATIC_STORY_TALK_MESSAGE_CLOSING;
+    }
+    return STATIC_STORY_TALK_MESSAGE_OTHER;
+}
+
+static bool EnViewerStatic_ShouldAdvanceTalk(void* context) {
+    return Message_ShouldAdvance(((EnViewerStaticTalkContext*)context)->play);
+}
+
+static void EnViewerStatic_CloseTalk(void* context) {
+    Message_CloseTextbox(((EnViewerStaticTalkContext*)context)->play);
+}
+
+static bool EnViewerStatic_ProcessTalkRequest(void* context) {
+    EnViewerStaticTalkContext* talkContext = context;
+    return Actor_ProcessTalkRequest(&talkContext->viewer->actor, talkContext->play);
+}
+
+static bool EnViewerStatic_OfferTalkAtDistance(float distance, void* context) {
+    EnViewerStaticTalkContext* talkContext = context;
+    return Actor_OfferTalk(&talkContext->viewer->actor, talkContext->play, distance);
+}
+
+void EnViewerStatic_OfferTalk(EnViewer* this, PlayState* play) {
+    StaticStoryActorType type = (StaticStoryActorType)this->staticState.type;
+    const StaticStoryActorDefinition* definition;
+    StaticStoryProgression progression;
+    StaticStoryTalkSession session;
+    EnViewerStaticTalkContext context;
+
+    /* Model-only catalogue entries remain visible, collidable, and targetable without entering talk state. */
+    if (!StaticStoryActor_CanTalk(type)) {
+        this->actor.textId = 0;
+        EnViewerStatic_RestorePlacementPose(this);
         return;
     }
 
-    progression = EnViewerStatic_ReadProgression();
-    this->actor.textId = StaticStoryActor_SelectTextId((StaticStoryActorType)this->staticState.type, &progression);
+    definition = StaticStoryActor_GetDefinition(type);
     if (definition == NULL) {
         return;
     }
-    if (Actor_ProcessTalkRequest(&this->actor, play)) {
-        this->staticState.talking = true;
-        this->staticState.tracking = true;
-        this->staticState.interactInfo.talkState = NPC_TALK_STATE_TALKING;
-    } else {
-        this->staticState.tracking = Actor_OfferTalk(&this->actor, play, definition->talkDistance);
-    }
+    progression = EnViewerStatic_ReadProgression();
+    session = (StaticStoryTalkSession){
+        .talking = this->staticState.talking,
+        .tracking = this->staticState.tracking,
+        .textId = this->actor.textId,
+    };
+    context = (EnViewerStaticTalkContext){ this, play };
+    static const StaticStoryTalkOperations operations = {
+        EnViewerStatic_GetTalkMessageState,
+        EnViewerStatic_ShouldAdvanceTalk,
+        EnViewerStatic_CloseTalk,
+        EnViewerStatic_ProcessTalkRequest,
+        EnViewerStatic_OfferTalkAtDistance,
+    };
+    StaticStoryTalk_Update(type, &progression, definition->talkDistance, &session, &operations, &context);
+    this->actor.textId = session.textId;
+    this->staticState.talking = session.talking;
+    this->staticState.tracking = session.tracking;
+    this->staticState.interactInfo.talkState = session.talking ? NPC_TALK_STATE_TALKING : NPC_TALK_STATE_IDLE;
 }
 
 void EnViewer_UpdateImpl(EnViewer* this, PlayState* play) {
