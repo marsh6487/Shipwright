@@ -77,16 +77,16 @@ int main(void) {
     REQUIRE(STATIC_STORY_ACTOR_KEATON == 20);
     REQUIRE(STATIC_STORY_ACTOR_CHILD_KAFEI == 21);
     REQUIRE(STATIC_STORY_ACTOR_LULU == 22);
-    REQUIRE(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_KEATON));
+    REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_KEATON));
     REQUIRE(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_CHILD_KAFEI));
-    REQUIRE(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_LULU));
+    REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_LULU));
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_KEATON)->objectId == OBJECT_INVALID);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_KAFEI)->objectId == OBJECT_INVALID);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_LULU)->objectId == OBJECT_INVALID);
-    REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_KEATON)->adapter == STATIC_ADAPTER_NONE);
+    REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_KEATON)->adapter == STATIC_ADAPTER_MM_KEATON);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_KAFEI)->adapter == STATIC_ADAPTER_NONE);
-    REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_LULU)->adapter == STATIC_ADAPTER_NONE);
-    REQUIRE(StaticStoryActor_GetType((int16_t)0x7E0A) == STATIC_STORY_ACTOR_NONE);
+    REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_LULU)->adapter == STATIC_ADAPTER_MM_LULU);
+    REQUIRE(StaticStoryActor_GetType((int16_t)0x7E0A) == STATIC_STORY_ACTOR_KEATON);
 
     REQUIRE(StaticStoryActor_IsParam((int16_t)0x7F01));
     REQUIRE(StaticStoryActor_GetType(0x7F01) == STATIC_STORY_ACTOR_IMPA);
@@ -117,7 +117,7 @@ int main(void) {
     REQUIRE(StaticStoryActor_GetPose((int16_t)0x7E11) == 1);
     REQUIRE(StaticStoryActor_GetPose((int16_t)0x7E23) == 2);
     REQUIRE(StaticStoryActor_GetType((int16_t)0x7E00) == STATIC_STORY_ACTOR_NONE);
-    REQUIRE(StaticStoryActor_GetType((int16_t)0x7E0A) == STATIC_STORY_ACTOR_NONE);
+    REQUIRE(StaticStoryActor_GetType((int16_t)0x7E0A) == STATIC_STORY_ACTOR_KEATON);
     REQUIRE(StaticStoryActor_GetType((int16_t)0x7D01) == STATIC_STORY_ACTOR_NONE);
     REQUIRE(StaticStoryActor_GetType((int16_t)0x7F06) == STATIC_STORY_ACTOR_ADULT_RUTO);
     REQUIRE(StaticStoryActor_GetType(0x7F00) == 0);
@@ -174,7 +174,7 @@ int main(void) {
     REQUIRE(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_ADULT_GANONDORF) ==
            STATIC_STORY_RESOURCE_OOT_OBJECT);
     REQUIRE(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_ADULT_GANONDORF));
-    REQUIRE(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN));
+    REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN));
     REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL));
     REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_SKULL_KID));
     REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_PHANTOM_GANON));

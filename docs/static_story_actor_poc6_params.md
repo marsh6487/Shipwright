@@ -69,3 +69,34 @@ Prelude Y placement instead of running story logic or searching indefinitely.
 4. Test Adult Zelda under vanilla assets and alternate assets.
 5. Unsupported `0x7Exx` values are intentionally rejected rather than aliased
    to an existing actor.
+
+## MM ordinary actors
+
+These entries require their complete resources from `mm.o2r`. Missing or incompatible
+resources reject the placement before skeleton initialization.
+
+| Param | Actor | Pose | Frames | Tracking |
+|---|---|---|---:|---|
+| `0x7E09` | Happy Mask Salesman | Idle | 29 | Head, while conversational |
+| `0x7E19` | Happy Mask Salesman | Hands clasped | 29 | No |
+| `0x7E29` | Happy Mask Salesman | Arms out | 29 | No |
+| `0x7E0A` | Keaton | Idle | 36 | No |
+| `0x7E1A` | Keaton | Chuckle | 36 | No |
+| `0x7E2A` | Keaton | Celebrate | 30 | No |
+| `0x7E0C` | Lulu | Look down | 30 | Torso and head, while conversational |
+| `0x7E1C` | Lulu | Look left | 30 | No |
+| `0x7E2C` | Lulu | Sing | 72 | No |
+| `0x7E3C` | Lulu | Look around | 87 | No |
+
+All ten animations loop at their ordinary speed with authored root translation.
+Lulu's singing is animation only, with open eyes and mouth; it does not start audio,
+ocarina, or quest actions. The unmodified 87-frame look-around clip remains a raw
+loop pending an observed visual seam check. Happy Mask Salesman uses his happy
+closed eyes and smile. Keaton does not bind face segments.
+
+All three use scale `0.01`. Happy Mask Salesman and Lulu use collider radius/height
+`22/70`, focus height `60`, and talk distance `100`; Keaton uses `18/50`, `35`, and
+`70`. These are static placement defaults. Collider Y shift is zero.
+
+Child Kafei (identity 21) remains unavailable; `0x7E0B` and `0x7E1B` are reserved
+and rejected until its separate animation adapter is implemented.

@@ -17,6 +17,10 @@
 
 #include "mm_asset_loader.h"
 #include "mm_display_list_patch.h"
+#include "mm_normal_actor_resource.h"
+extern "C" {
+#include "src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.h"
+}
 #include "mods/sound_translator/mm_audio_sfx.h" // MM SFX engine (Tier C vanilla port)
 #include <filesystem>
 #include <cstring>
@@ -902,6 +906,49 @@ void* MmAssets_LoadSkeleton(const char* path) {
  */
 void* MmAssets_LoadAnimation(const char* path) {
     return MmAssets_LoadFromMmArchive(MmAssets_StripOtrPrefix(path), nullptr);
+}
+
+bool MmAssets_LoadNormalActor(int actorType, unsigned char pose, MmNormalActorResources* output) {
+    if (!output) return false;
+    *output = {};
+    auto type = static_cast<StaticStoryActorType>(actorType);
+    const auto* presentation = StaticStoryMm_GetPresentation(type, pose);
+    if (!presentation || presentation->kind != STATIC_STORY_MM_NORMAL_FLEX || !presentation->frameCount ||
+        presentation->eyeCount > 8 || presentation->mouthCount > 4) return false;
+    try {
+        auto retained = std::make_unique<std::vector<MmNormalActor::Resource>>();
+        auto skeleton = MmAssets_LoadResourceObjectFromMmArchive(presentation->skeletonPath);
+        auto animation = MmAssets_LoadResourceObjectFromMmArchive(presentation->animationPath);
+        auto manager = OTRGlobals::Instance->context->GetResourceManager();
+        if (!MmNormalActor::ValidateSkeleton(skeleton, presentation->limbCount, presentation->matrixCount,
+                [manager](const std::string& path) { return manager->LoadResourceProcess(path); }, *retained) ||
+            !MmNormalActor::ValidateAnimation(animation, presentation->limbCount, presentation->frameCount)) return false;
+        retained->push_back(animation);
+        MmNormalActorResources result = {};
+        for (unsigned i = 0; i < presentation->eyeCount + presentation->mouthCount; ++i) {
+            bool eye = i < presentation->eyeCount;
+            unsigned index = eye ? i : i - presentation->eyeCount;
+            const char* path = eye ? StaticStoryMm_GetEyeTexturePath(type, index)
+                                   : StaticStoryMm_GetMouthTexturePath(type, index);
+            auto texture = MmAssets_LoadResourceObjectFromMmArchive(path);
+            if (!MmNormalActor::ValidateTexture(texture)) return false;
+            (eye ? result.eyes : result.mouths)[index] = texture->GetRawPointer();
+            retained->push_back(texture);
+        }
+        /* Raw casts occur only after actual resource and child type validation. */
+        result.skeleton = static_cast<FlexSkeletonHeader*>(skeleton->GetRawPointer());
+        result.animation = static_cast<AnimationHeader*>(animation->GetRawPointer());
+        result.owner = retained.release();
+        *output = result;
+        return true;
+    } catch (const std::exception& error) {
+        MMASSETS_LOG("[MM actor] resource validation failed: %s", error.what());
+        return false;
+    }
+}
+
+void MmAssets_ReleaseNormalActor(void* owner) {
+    delete static_cast<std::vector<MmNormalActor::Resource>*>(owner);
 }
 
 /**

@@ -13,6 +13,66 @@
 #include "../src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.h"
 
 int main(void) {
+    /* New ordinary catalogue must be available without enabling Kafei. */
+    const StaticStoryActorType ordinary[] = { STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN,
+        STATIC_STORY_ACTOR_KEATON, STATIC_STORY_ACTOR_LULU };
+    const unsigned counts[] = { 3, 3, 4 };
+    const unsigned ids[] = { 9, 10, 12 };
+    for (unsigned actor = 0; actor < 3; ++actor) {
+        REQUIRE(StaticStoryActor_IsAvailable(ordinary[actor]));
+        for (unsigned pose = 0; pose < counts[actor]; ++pose) {
+            REQUIRE(StaticStoryActor_GetType(0x7E00 | (pose << 4) | ids[actor]) == ordinary[actor]);
+            REQUIRE(StaticStoryMm_GetPresentation(ordinary[actor], pose) != NULL);
+            REQUIRE(!StaticStoryActor_LocksRootTranslation(ordinary[actor], pose));
+            REQUIRE((StaticStoryActor_ResolvePose(ordinary[actor], pose)->flags &
+                     (STATIC_POSE_FLAG_VOCAL | STATIC_POSE_FLAG_OCARINA)) == 0);
+        }
+        REQUIRE(StaticStoryMm_GetPresentation(ordinary[actor], counts[actor]) == NULL);
+    }
+    REQUIRE(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_CHILD_KAFEI));
+    REQUIRE(StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_CHILD_KAFEI, 0) == NULL);
+
+    const unsigned limbs[] = {18,20,22}, matrices[] = {17,20,21};
+    const unsigned frames[3][4] = {{29,29,29,0},{36,36,30,0},{30,30,72,87}};
+    const int radius[] = {22,18,22}, height[] = {70,50,70};
+    for(unsigned a=0;a<3;++a) {
+        const StaticStoryActorDefinition* definition=StaticStoryActor_GetDefinition(ordinary[a]);
+        REQUIRE(definition->scale==0.01f);
+        REQUIRE(definition->colliderRadius==radius[a] && definition->colliderHeight==height[a]);
+        REQUIRE(definition->colliderYShift==0 && definition->blinkMin==30 && definition->blinkRange==30);
+        for(unsigned pose=0;pose<counts[a];++pose) {
+            const StaticStoryMmPresentation* p=StaticStoryMm_GetPresentation(ordinary[a],pose);
+            REQUIRE(p->kind==STATIC_STORY_MM_NORMAL_FLEX);
+            REQUIRE(p->limbCount==limbs[a] && p->matrixCount==matrices[a] && p->frameCount==frames[a][pose]);
+            REQUIRE(StaticStoryActor_CanTrack(ordinary[a],pose)==(a!=1 && pose==0));
+            REQUIRE(StaticStoryActor_ResolvePose(ordinary[a],pose)->playbackSpeed==1.0f);
+            REQUIRE(p->eyeCount==(a==0?1:a==1?0:3));
+            REQUIRE(p->mouthCount==(a==0?1:a==1?0:2));
+            for(unsigned f=0;f<frames[a][pose];++f) for(unsigned blink=0;blink<3;++blink) {
+                StaticStoryMmFace face=StaticStoryMm_ResolveFace(ordinary[a],pose,f,blink,false);
+                unsigned eye=blink,mouth=0;
+                if(a==0) eye=0;
+                if(a==2) {
+                    if(pose==0 && blink==0) eye=1;
+                    if(pose==2) { eye=0;mouth=1; }
+                    if(pose==3) {
+                        const unsigned sequence[]={1,2,1,0,1,2,1,0};
+                        if(f<43) eye=0; else if(f<=50) eye=sequence[f-43];
+                        mouth=1;
+                    }
+                }
+                REQUIRE(face.eye==eye && face.mouth==mouth);
+            }
+        }
+    }
+    REQUIRE(StaticStoryMm_ResolveFace(STATIC_STORY_ACTOR_LULU,0,0,0,true).eye==0);
+    REQUIRE(strcmp(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN,0),
+                   "objects/object_osn/gHappyMaskSalesmanEyeClosedHappyTex")==0);
+    REQUIRE(strcmp(StaticStoryMm_GetMouthTexturePath(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN,0),
+                   "objects/object_osn/gHappyMaskSalesmanSmileTex")==0);
+    REQUIRE(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN,1)==NULL);
+    REQUIRE(StaticStoryMm_GetMouthTexturePath(STATIC_STORY_ACTOR_LULU,2)==NULL);
+    REQUIRE(StaticStoryMm_GetMouthTexturePath(STATIC_STORY_ACTOR_KEATON,0)==NULL);
     const StaticStoryMmPresentation* idle =
         StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 0);
     const StaticStoryMmPresentation* sway =

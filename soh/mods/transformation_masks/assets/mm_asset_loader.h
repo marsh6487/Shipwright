@@ -127,6 +127,17 @@ void* MmAssets_LoadSkeleton(const char* path);
  */
 void* MmAssets_LoadAnimation(const char* path);
 
+/* Exact normal-flex catalogue load. Ownership is per viewer; release after SkelAnime_Free. */
+typedef struct {
+    void* owner;
+    FlexSkeletonHeader* skeleton;
+    AnimationHeader* animation;
+    void* eyes[8];
+    void* mouths[4];
+} MmNormalActorResources;
+bool MmAssets_LoadNormalActor(int actorType, unsigned char pose, MmNormalActorResources* output);
+void MmAssets_ReleaseNormalActor(void* owner);
+
 /**
  * List files matching a pattern from mm.o2r
  * @param searchMask Pattern (e.g., "audio/fonts*")

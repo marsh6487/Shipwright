@@ -177,6 +177,11 @@ void EnViewer_Destroy(Actor* thisx, PlayState* play) {
                 SkelAnime_Free(&this->skin.skelAnime, play);
             }
             Collider_DestroyCylinder(play, &this->staticState.collider);
+            this->staticState.initialized = false;
+        }
+        if (this->staticState.mmResourceOwner != NULL) {
+            MmAssets_ReleaseNormalActor(this->staticState.mmResourceOwner);
+            this->staticState.mmResourceOwner = NULL;
         }
         return;
     }
@@ -531,7 +536,8 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         Actor_Kill(&this->actor);
         return;
     }
-    if (usesMmAssets && !this->staticState.initialized) {
+    if (this->staticState.initialized) return;
+    if (usesMmAssets) {
         const StaticStoryMmPresentation* presentation =
             StaticStoryMm_GetPresentation((StaticStoryActorType)this->staticState.type, this->staticState.pose);
         FlexSkeletonHeader* skeleton;
@@ -542,9 +548,22 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         bool eyeTexturesComplete = true;
 
         MmAssets_Init();
-        skeleton = (FlexSkeletonHeader*)MmAssets_LoadSkeleton(presentation != NULL ? presentation->skeletonPath : "");
-        animation =
-            (AnimationHeader*)MmAssets_LoadAnimation(presentation != NULL ? presentation->animationPath : "");
+        if (presentation != NULL && presentation->frameCount != 0) {
+            MmNormalActorResources resources;
+            if (!MmAssets_LoadNormalActor(this->staticState.type, this->staticState.pose, &resources)) {
+                Actor_Kill(&this->actor);
+                return;
+            }
+            this->staticState.mmResourceOwner = resources.owner;
+            skeleton = resources.skeleton;
+            animation = resources.animation;
+            memcpy(this->staticState.mmEyeTextures, resources.eyes, sizeof(resources.eyes));
+            memcpy(this->staticState.mmMouthTextures, resources.mouths, sizeof(resources.mouths));
+        } else {
+            /* Preserve the legacy MM actors' established resource contract. */
+            skeleton = (FlexSkeletonHeader*)MmAssets_LoadSkeleton(presentation != NULL ? presentation->skeletonPath : "");
+            animation = (AnimationHeader*)MmAssets_LoadAnimation(presentation != NULL ? presentation->animationPath : "");
+        }
         if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
             for (int eye = 0; eye < 3; ++eye) {
                 this->staticState.mmEyeTextures[eye] =
@@ -597,6 +616,15 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
             return;
         }
         SkelAnime_InitFlex(play, &this->skin.skelAnime, skeleton, NULL, NULL, NULL, 0);
+        if (this->skin.skelAnime.jointTable == NULL || this->skin.skelAnime.morphTable == NULL) {
+            SkelAnime_Free(&this->skin.skelAnime, play);
+            this->skin.skelAnime.jointTable = NULL;
+            this->skin.skelAnime.morphTable = NULL;
+            MmAssets_ReleaseNormalActor(this->staticState.mmResourceOwner);
+            this->staticState.mmResourceOwner = NULL;
+            Actor_Kill(&this->actor);
+            return;
+        }
         Animation_PlayLoopSetSpeed(&this->skin.skelAnime, animation, poseDescriptor->playbackSpeed);
         if (presentation->requiresSecondarySkeleton) {
             if (StaticStoryMm_UsesNativeFairyCompanion((StaticStoryActorType)this->staticState.type)) {
@@ -1226,7 +1254,9 @@ void EnViewer_Update(Actor* thisx, PlayState* play) {
     EnViewer* this = (EnViewer*)thisx;
 
     if (this->staticState.staticMode) {
-        if (this->staticState.initialized) {
+        if (this->staticState.initialized &&
+            StaticStoryActor_GetResourceSource((StaticStoryActorType)this->staticState.type) ==
+                STATIC_STORY_RESOURCE_OOT_OBJECT) {
             gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[this->animObjBankIndex].segment);
         }
         this->actionFunc(this, play);
@@ -1888,17 +1918,51 @@ static s32 EnViewer_StaticTreasureChestShopGalOverrideLimbDraw(PlayState* play, 
     return false;
 }
 
+static s32 EnViewer_StaticOrdinaryMmOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList,
+                                                     Vec3f* pos, Vec3s* rot, void* thisx) {
+    EnViewer* this = (EnViewer*)thisx;
+    StaticStoryActorType type = (StaticStoryActorType)this->staticState.type;
+    if (!StaticStoryActor_CanTrack(type, this->staticState.pose) || !this->staticState.tracking) return false;
+    if (type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN && limbIndex == 11) {
+        /* MM En_Osn applies a matrix X rotation before the authored head rotation. */
+        Matrix_RotateX(this->staticState.interactInfo.headRot.y * (M_PI / 32768.0f), MTXMODE_APPLY);
+    } else if (type == STATIC_STORY_ACTOR_LULU) {
+        if (limbIndex == 11) rot->x += this->staticState.interactInfo.torsoRot.y;
+        if (limbIndex == 12) {
+            rot->x += this->staticState.interactInfo.headRot.y;
+            rot->z += this->staticState.interactInfo.headRot.x;
+        }
+    }
+    return false;
+}
+
 static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
-    OverrideLimbDraw overrideLimbDraw = NULL;
+    OverrideLimbDrawOpa overrideLimbDraw = NULL;
+    const StaticStoryMmPresentation* presentation =
+        StaticStoryMm_GetPresentation((StaticStoryActorType)this->staticState.type, this->staticState.pose);
 
     if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
         overrideLimbDraw = EnViewer_StaticTreasureChestShopGalOverrideLimbDraw;
+    } else if (presentation != NULL && presentation->frameCount != 0) {
+        overrideLimbDraw = EnViewer_StaticOrdinaryMmOverrideLimbDraw;
     }
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
         gSPSegment(POLY_OPA_DISP++, 0x08,
                    (uintptr_t)this->staticState.mmEyeTextures[this->staticState.eyeIndex]);
+    }
+    if (presentation != NULL && presentation->frameCount != 0) {
+        StaticStoryMmFace face = StaticStoryMm_ResolveFace((StaticStoryActorType)this->staticState.type,
+            this->staticState.pose, this->skin.skelAnime.curFrame, this->staticState.eyeIndex,
+            this->staticState.tracking);
+        if (presentation->eyeCount != 0)
+            gSPSegment(POLY_OPA_DISP++, presentation->eyeSegment,
+                       (uintptr_t)this->staticState.mmEyeTextures[face.eye]);
+        if (presentation->mouthCount != 0)
+            gSPSegment(POLY_OPA_DISP++, presentation->mouthSegment,
+                       (uintptr_t)this->staticState.mmMouthTextures[face.mouth]);
+        gDPSetEnvColor(POLY_OPA_DISP++, 255, 255, 255, 255);
     }
     SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, overrideLimbDraw, NULL, this);
     CLOSE_DISPS(play->state.gfxCtx);
@@ -2030,6 +2094,9 @@ void EnViewerStatic_Draw(EnViewer* this, PlayState* play) {
             EnViewer_DrawStaticGreatFairy(this, play);
             break;
         case STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL:
+        case STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN:
+        case STATIC_STORY_ACTOR_KEATON:
+        case STATIC_STORY_ACTOR_LULU:
             EnViewer_DrawStaticMmActor(this, play);
             break;
         case STATIC_STORY_ACTOR_SKULL_KID:

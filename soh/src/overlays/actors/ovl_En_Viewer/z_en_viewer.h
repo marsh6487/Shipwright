@@ -96,7 +96,9 @@ typedef struct {
     Gfx* skullKidEyesDL;
     Gfx* skullKidMaskDL;
     Gfx* skullKidLimbDLs[22];
-    void* mmEyeTextures[3];
+    void* mmEyeTextures[8];
+    void* mmMouthTextures[4];
+    void* mmResourceOwner;
 } EnViewerStaticState;
 
 typedef struct EnViewer {

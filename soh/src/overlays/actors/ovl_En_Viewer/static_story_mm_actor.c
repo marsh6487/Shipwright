@@ -33,6 +33,28 @@ static const StaticStoryMmPresentation sSkullKidPresentations[] = {
       "objects/object_stk/gSkullKidNormalEyesDL", 21, STATIC_STORY_MM_TRACKING_NONE, true },
 };
 
+/* Counts and clip lengths verified against the unmodified MM donor archive. */
+#define ORDINARY(object, skel, anim, limbs, matrices, frames, track, eyes, mouths, eyeSeg, mouthSeg) \
+    { "objects/" object "/" skel, "objects/" object "/" anim, NULL, NULL, NULL, NULL, NULL, \
+      limbs, track, false, STATIC_STORY_MM_NORMAL_FLEX, matrices, frames, eyes, mouths, eyeSeg, mouthSeg }
+static const StaticStoryMmPresentation sHappyMaskSalesmanPresentations[] = {
+    ORDINARY("object_osn", "gHappyMaskSalesmanSkel", "gHappyMaskSalesmanIdleAnim", 18, 17, 29, STATIC_STORY_MM_TRACKING_HEAD_TORSO, 1, 1, 8, 9),
+    ORDINARY("object_osn", "gHappyMaskSalesmanSkel", "gHappyMaskSalesmanHandsClaspedAnim", 18, 17, 29, STATIC_STORY_MM_TRACKING_NONE, 1, 1, 8, 9),
+    ORDINARY("object_osn", "gHappyMaskSalesmanSkel", "gHappyMaskSalesmanArmsOutAnim", 18, 17, 29, STATIC_STORY_MM_TRACKING_NONE, 1, 1, 8, 9),
+};
+static const StaticStoryMmPresentation sKeatonPresentations[] = {
+    ORDINARY("object_kitan", "gKeatonSkel", "gKeatonIdleAnim", 20, 20, 36, STATIC_STORY_MM_TRACKING_NONE, 0, 0, 0, 0),
+    ORDINARY("object_kitan", "gKeatonSkel", "gKeatonChuckleAnim", 20, 20, 36, STATIC_STORY_MM_TRACKING_NONE, 0, 0, 0, 0),
+    ORDINARY("object_kitan", "gKeatonSkel", "gKeatonCelebrateAnim", 20, 20, 30, STATIC_STORY_MM_TRACKING_NONE, 0, 0, 0, 0),
+};
+static const StaticStoryMmPresentation sLuluPresentations[] = {
+    ORDINARY("object_zov", "gLuluSkel", "gLuluLookDownAnim", 22, 21, 30, STATIC_STORY_MM_TRACKING_HEAD_TORSO, 3, 2, 9, 8),
+    ORDINARY("object_zov", "gLuluSkel", "gLuluLookLeftLoopAnim", 22, 21, 30, STATIC_STORY_MM_TRACKING_NONE, 3, 2, 9, 8),
+    ORDINARY("object_zov", "gLuluSkel", "gLuluSingLoopAnim", 22, 21, 72, STATIC_STORY_MM_TRACKING_NONE, 3, 2, 9, 8),
+    ORDINARY("object_zov", "gLuluSkel", "gLuluLookAroundAnim", 22, 21, 87, STATIC_STORY_MM_TRACKING_NONE, 3, 2, 9, 8),
+};
+#undef ORDINARY
+
 static const char* sTatlLimbPaths[] = {
     "objects/gameplay_keep/gameplay_keep_Standardlimb_02AEF8",
     "objects/gameplay_keep/gameplay_keep_Standardlimb_02AF04",
@@ -93,10 +115,18 @@ const StaticStoryMmPresentation* StaticStoryMm_GetPresentation(StaticStoryActorT
     if (type == STATIC_STORY_ACTOR_SKULL_KID && pose < 2) {
         return &sSkullKidPresentations[pose];
     }
+    if (type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN && pose < 3) return &sHappyMaskSalesmanPresentations[pose];
+    if (type == STATIC_STORY_ACTOR_KEATON && pose < 3) return &sKeatonPresentations[pose];
+    if (type == STATIC_STORY_ACTOR_LULU && pose < 4) return &sLuluPresentations[pose];
     return NULL;
 }
 
 const char* StaticStoryMm_GetEyeTexturePath(StaticStoryActorType type, uint8_t eyeIndex) {
+    static const char* lulu[] = { "objects/object_zov/gLuluEyeOpenTex", "objects/object_zov/gLuluEyeHalfTex",
+                                  "objects/object_zov/gLuluEyeClosedTex" };
+    if (type == STATIC_STORY_ACTOR_LULU) return eyeIndex < 3 ? lulu[eyeIndex] : NULL;
+    if (type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN)
+        return eyeIndex == 0 ? "objects/object_osn/gHappyMaskSalesmanEyeClosedHappyTex" : NULL;
     if (type != STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL || eyeIndex >= 4) {
         return NULL;
     }
@@ -147,4 +177,30 @@ bool StaticStoryMm_ResourcesComplete(const StaticStoryMmPresentation* presentati
                                      bool hasAnimation, bool hasSecondarySkeleton) {
     return presentation != NULL && hasSkeleton && hasAnimation &&
            (!presentation->requiresSecondarySkeleton || hasSecondarySkeleton);
+}
+
+const char* StaticStoryMm_GetMouthTexturePath(StaticStoryActorType type, uint8_t mouthIndex) {
+    static const char* lulu[] = { "objects/object_zov/gLuluMouthClosedTex", "objects/object_zov/gLuluMouthOpenTex" };
+    if (type == STATIC_STORY_ACTOR_LULU) return mouthIndex < 2 ? lulu[mouthIndex] : NULL;
+    if (type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN)
+        return mouthIndex == 0 ? "objects/object_osn/gHappyMaskSalesmanSmileTex" : NULL;
+    return NULL;
+}
+
+StaticStoryMmFace StaticStoryMm_ResolveFace(StaticStoryActorType type, uint8_t pose, float frame,
+                                           uint8_t blinkEye, bool tracking) {
+    StaticStoryMmFace face = { blinkEye < 3 ? blinkEye : 0, 0 };
+    if (type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN) face.eye = 0;
+    if (type == STATIC_STORY_ACTOR_LULU) {
+        if (pose == 0 && face.eye == 0 && !tracking) face.eye = 1;
+        if (pose == 2) { face.eye = 0; face.mouth = 1; }
+        if (pose == 3) {
+            /* En_Zov selects these four values twice, then resumes ordinary blinking. */
+            static const uint8_t sequence[] = { 1, 2, 1, 0 };
+            if (frame < 43.0f) face.eye = 0;
+            else if (frame < 51.0f) face.eye = sequence[((unsigned)frame - 43) & 3];
+            face.mouth = 1;
+        }
+    }
+    return face;
 }
