@@ -1,7 +1,7 @@
 # MM static actor catalogue and fountain material design
 
 Date: 2026-09-15
-Status: Design for user review; no implementation or runtime verification claimed.
+Status: Design approved by cor on 2026-09-15; implementation planning authorized. No implementation or runtime verification claimed.
 
 ## Baseline and release boundary
 
