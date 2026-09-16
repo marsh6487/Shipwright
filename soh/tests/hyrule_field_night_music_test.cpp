@@ -254,8 +254,7 @@ int main() {
     Audio_ProcessSeqCmds();
     REQUIRE(sPlayedSequence == 0x35);
     REQUIRE(sReplacementCalls == 1);
-    Audio_QueueResolvedSeqCmd(HyruleFieldNightMusic_GetPlaybackPlayer(), HyruleFieldNightMusic_RestoreSequence(),
-                              0x1E);
+    Audio_QueueResolvedSeqCmd(HyruleFieldNightMusic_GetPlaybackPlayer(), HyruleFieldNightMusic_RestoreSequence(), 0x1E);
     Audio_ProcessSeqCmds();
     REQUIRE(sPlayedSequence == 0x35);
     REQUIRE(sReplacementCalls == 1);

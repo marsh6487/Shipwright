@@ -1,11 +1,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define REQUIRE(condition)                                                                                              \
-    do {                                                                                                                \
-        if (!(condition)) {                                                                                             \
-            return 1;                                                                                                   \
-        }                                                                                                               \
+#define REQUIRE(condition)  \
+    do {                    \
+        if (!(condition)) { \
+            return 1;       \
+        }                   \
     } while (0)
 #include "z64object.h"
 #include "../src/overlays/actors/ovl_En_Viewer/static_story_actor.h"
@@ -144,9 +144,9 @@ int main(void) {
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_SHEIK, 2)->animation == STATIC_ANIM_SHEIK_HARP);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_RUTO)->objectId == OBJECT_RU2);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO, 1)->animation ==
-           STATIC_ANIM_ADULT_RUTO_HANDS_HIPS);
+            STATIC_ANIM_ADULT_RUTO_HANDS_HIPS);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 0)->animation ==
-           STATIC_ANIM_ADULT_RUTO_IDLE);
+            STATIC_ANIM_ADULT_RUTO_IDLE);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 0)->waterMode == STATIC_RUTO_GROUNDED);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 1)->waterMode == STATIC_RUTO_SURFACE);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_RUTO_WATER, 2)->waterMode == STATIC_RUTO_DIVE_LOOP);
@@ -156,48 +156,47 @@ int main(void) {
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_GREAT_FAIRY)->scale == 0.035f);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_GREAT_FAIRY)->focusHeight == 262.5f);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_GREAT_FAIRY, 0)->animation ==
-           STATIC_ANIM_GREAT_FAIRY_SITTING);
+            STATIC_ANIM_GREAT_FAIRY_SITTING);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_GREAT_FAIRY, 1)->animation ==
-           STATIC_ANIM_GREAT_FAIRY_LAYING);
+            STATIC_ANIM_GREAT_FAIRY_LAYING);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_GREAT_FAIRY, 2)->animation ==
-           STATIC_ANIM_GREAT_FAIRY_AFTER_SPELL);
+            STATIC_ANIM_GREAT_FAIRY_AFTER_SPELL);
     REQUIRE(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_GREAT_FAIRY, &early) == 0x00DB);
     REQUIRE(StaticStoryActor_ShouldCloseEventMessage(true, true));
     REQUIRE(!StaticStoryActor_ShouldCloseEventMessage(true, false));
     REQUIRE(!StaticStoryActor_ShouldCloseEventMessage(false, true));
     REQUIRE(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) ==
-           STATIC_STORY_RESOURCE_MM_ARCHIVE);
+            STATIC_STORY_RESOURCE_MM_ARCHIVE);
     REQUIRE(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_SKULL_KID) == STATIC_STORY_RESOURCE_MM_ARCHIVE);
     REQUIRE(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN) ==
-           STATIC_STORY_RESOURCE_MM_ARCHIVE);
+            STATIC_STORY_RESOURCE_MM_ARCHIVE);
     REQUIRE(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_PHANTOM_GANON) == STATIC_STORY_RESOURCE_OOT_OBJECT);
-    REQUIRE(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_ADULT_GANONDORF) ==
-           STATIC_STORY_RESOURCE_OOT_OBJECT);
+    REQUIRE(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_ADULT_GANONDORF) == STATIC_STORY_RESOURCE_OOT_OBJECT);
     REQUIRE(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_ADULT_GANONDORF));
     REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN));
     REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL));
     REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_SKULL_KID));
     REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_PHANTOM_GANON));
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 0)->animation ==
-           STATIC_ANIM_TREASURE_CHEST_SHOP_GAL_IDLE);
+            STATIC_ANIM_TREASURE_CHEST_SHOP_GAL_IDLE);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 1)->animation ==
-           STATIC_ANIM_TREASURE_CHEST_SHOP_GAL_SWAY);
+            STATIC_ANIM_TREASURE_CHEST_SHOP_GAL_SWAY);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 2)->animation ==
-           STATIC_ANIM_TREASURE_CHEST_SHOP_GAL_IDLE);
+            STATIC_ANIM_TREASURE_CHEST_SHOP_GAL_IDLE);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_SKULL_KID, 0)->animation ==
-           STATIC_ANIM_SKULL_KID_RECLINING_FLOAT);
+            STATIC_ANIM_SKULL_KID_RECLINING_FLOAT);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_SKULL_KID, 1)->animation ==
-           STATIC_ANIM_SKULL_KID_ARMS_CROSSED_FLOAT);
+            STATIC_ANIM_SKULL_KID_ARMS_CROSSED_FLOAT);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_PHANTOM_GANON, 0)->animation ==
-           STATIC_ANIM_PHANTOM_GANON_NEUTRAL);
+            STATIC_ANIM_PHANTOM_GANON_NEUTRAL);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_GANONDORF, 0)->animation ==
-           STATIC_ANIM_ADULT_GANONDORF_STAND);
+            STATIC_ANIM_ADULT_GANONDORF_STAND);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, 0)->animation ==
-           STATIC_ANIM_HAPPY_MASK_SALESMAN_IDLE);
+            STATIC_ANIM_HAPPY_MASK_SALESMAN_IDLE);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, 1)->animation ==
-           STATIC_ANIM_HAPPY_MASK_SALESMAN_HANDS_CLASPED);
+            STATIC_ANIM_HAPPY_MASK_SALESMAN_HANDS_CLASPED);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, 2)->animation ==
-           STATIC_ANIM_HAPPY_MASK_SALESMAN_ARMS_OUT);
+            STATIC_ANIM_HAPPY_MASK_SALESMAN_ARMS_OUT);
     REQUIRE(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 0));
     REQUIRE(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 1));
     REQUIRE(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 2));
@@ -213,8 +212,7 @@ int main(void) {
     REQUIRE(StaticStoryActor_GetTrackingMode(STATIC_STORY_ACTOR_GREAT_FAIRY, 2) == STATIC_TRACKING_MODE_HEAD_ONLY);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->objectId == OBJECT_DU);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->adapter == STATIC_ADAPTER_DARUNIA);
-    REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->drawContract ==
-           STATIC_DRAW_CONTRACT_NPC_FLEX);
+    REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->drawContract == STATIC_DRAW_CONTRACT_NPC_FLEX);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_DARUNIA, 0)->animation == STATIC_ANIM_DARUNIA_IDLE);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_DARUNIA, 1)->animation == STATIC_ANIM_DARUNIA_DANCE_1);
     REQUIRE(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_DARUNIA, 1));
@@ -222,17 +220,18 @@ int main(void) {
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_NABOORU)->objectId == OBJECT_NB);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_NABOORU)->adapter == STATIC_ADAPTER_NABOORU);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_NABOORU)->drawContract ==
-           STATIC_DRAW_CONTRACT_STANDARD_OPA);
+            STATIC_DRAW_CONTRACT_STANDARD_OPA);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_NABOORU, 0)->animation == STATIC_ANIM_NABOORU_IDLE);
     REQUIRE(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_NABOORU, 0));
     REQUIRE(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_NABOORU, &complete) != 0);
     REQUIRE(StaticStoryActor_GetAnimationObjectId(STATIC_STORY_ACTOR_ADULT_ZELDA) == OBJECT_ZL2_ANIME2);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_ZELDA, 0)->animation == STATIC_ANIM_ADULT_ZELDA_IDLE);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->objectId == OBJECT_RU1);
-    REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_CHILD_RUTO, 2)->animation == STATIC_ANIM_CHILD_RUTO_SITTING);
+    REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_CHILD_RUTO, 2)->animation ==
+            STATIC_ANIM_CHILD_RUTO_SITTING);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_ZELDA)->objectId == OBJECT_ZL2);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_ZELDA)->drawContract ==
-           STATIC_DRAW_CONTRACT_FACE_FLEX);
+            STATIC_DRAW_CONTRACT_FACE_FLEX);
     objects = StaticStoryActor_GetObjectRequirements(STATIC_STORY_ACTOR_ADULT_RUTO_WATER);
     REQUIRE(objects.modelObjectId == OBJECT_RU2);
     REQUIRE(objects.animationObjectId == OBJECT_RU2);
@@ -248,7 +247,7 @@ int main(void) {
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_ZELDA, 0) != NULL);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_ZELDA, 1) != NULL);
     REQUIRE(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_ADULT_ZELDA, 1)->skeletonFamily ==
-           STATIC_SKELETON_ADULT_ZELDA);
+            STATIC_SKELETON_ADULT_ZELDA);
 
     for (int type = STATIC_STORY_ACTOR_IMPA; type < STATIC_STORY_ACTOR_MAX; ++type) {
         definition = StaticStoryActor_GetDefinition(type);
@@ -267,8 +266,8 @@ int main(void) {
                 REQUIRE(poseDescriptor->animation != STATIC_ANIM_NONE);
                 REQUIRE(poseDescriptor->skeletonFamily != STATIC_SKELETON_NONE);
                 REQUIRE(StaticStoryActor_CanTrack((StaticStoryActorType)type, pose) ==
-                       ((definition->trackingAdapter != STATIC_TRACKING_NONE) &&
-                        !(poseDescriptor->flags & STATIC_POSE_FLAG_NO_TRACKING)));
+                        ((definition->trackingAdapter != STATIC_TRACKING_NONE) &&
+                         !(poseDescriptor->flags & STATIC_POSE_FLAG_NO_TRACKING)));
             }
         }
         REQUIRE(StaticStoryActor_SelectTextId((StaticStoryActorType)type, &early) != 0 ||
@@ -319,19 +318,19 @@ int main(void) {
     REQUIRE(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ADULT_MALON, 2));
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_IMPA)->trackingAdapter == STATIC_TRACKING_IMPA);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_MALON)->trackingAdapter ==
-           STATIC_TRACKING_CHILD_MALON);
+            STATIC_TRACKING_CHILD_MALON);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_SARIA)->trackingAdapter == STATIC_TRACKING_SARIA);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_SHEIK)->trackingAdapter == STATIC_TRACKING_SHEIK);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->trackingAdapter ==
-           STATIC_TRACKING_CHILD_RUTO);
+            STATIC_TRACKING_CHILD_RUTO);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_KOKIRI_GIRL)->trackingAdapter == STATIC_TRACKING_KOKIRI);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_FADO)->trackingAdapter == STATIC_TRACKING_KOKIRI);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_MALON)->trackingAdapter ==
-           STATIC_TRACKING_ADULT_MALON);
+            STATIC_TRACKING_ADULT_MALON);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_ZELDA)->trackingAdapter ==
-           STATIC_TRACKING_ADULT_ZELDA);
+            STATIC_TRACKING_ADULT_ZELDA);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_RUTO)->trackingAdapter ==
-           STATIC_TRACKING_ADULT_RUTO);
+            STATIC_TRACKING_ADULT_RUTO);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_IMPA)->trackingPreset == 12);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_MALON)->trackingPreset == 0);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_SARIA)->trackingPreset == 2);
@@ -342,33 +341,33 @@ int main(void) {
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_MALON)->trackingYOffset == 0.0f);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_MALON)->trackingTargetYOffset == 10.0f);
     REQUIRE(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_MALON, &early) !=
-           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_MALON, &complete));
+            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_MALON, &complete));
     REQUIRE(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_SARIA, &early) !=
-           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_SARIA, &complete));
+            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_SARIA, &complete));
     REQUIRE(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_IMPA, &early) !=
-           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_IMPA, &complete));
+            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_IMPA, &complete));
     REQUIRE(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_ZELDA, &early) !=
-           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_ZELDA, &complete));
+            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_ZELDA, &complete));
     REQUIRE(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_SHEIK, &early) !=
-           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_SHEIK, &complete));
+            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_SHEIK, &complete));
     REQUIRE(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_RUTO, &early) !=
-           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_RUTO, &complete));
+            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_RUTO, &complete));
     /* Static Child Ruto must never enter the 0x404C-0x404E Jabu dialogue chain. */
     REQUIRE(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &early) == 0x402C);
     REQUIRE(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_CHILD_RUTO, &complete) == 0x402C);
     REQUIRE(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_KOKIRI_GIRL, &early) !=
-           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_KOKIRI_GIRL, &complete));
+            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_KOKIRI_GIRL, &complete));
     REQUIRE(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_FADO, &early) !=
-           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_FADO, &complete));
+            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_FADO, &complete));
     REQUIRE(StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_MALON, &early) !=
-           StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_MALON, &complete));
+            StaticStoryActor_SelectTextId(STATIC_STORY_ACTOR_ADULT_MALON, &complete));
 
     REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_ADULT_ZELDA));
     REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_ADULT_MALON));
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_RUTO)->colliderRadius >
-           StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->colliderRadius);
+            StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->colliderRadius);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_RUTO)->colliderHeight >
-           StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->colliderHeight);
+            StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->colliderHeight);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_RUTO)->blinkMin == 60);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_RUTO)->blinkRange == 60);
     REQUIRE(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_RUTO)->blinkMin == 60);

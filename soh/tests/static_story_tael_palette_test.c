@@ -18,30 +18,41 @@ static const Gfx* stableSetup;
 static Gfx savedSetup[4];
 static u8 expectedAlpha;
 
-void FrameInterpolation_RecordOpenChild(const void* file, int line) {}
-void FrameInterpolation_RecordCloseChild(void) {}
+void FrameInterpolation_RecordOpenChild(const void* file, int line) {
+}
+void FrameInterpolation_RecordCloseChild(void) {
+}
 void gSPSegment(void* value, int segment, uintptr_t target) {
     __gSPSegment((Gfx*)value, segment, target);
 }
-void Gfx_SetupDL_27Xlu(GraphicsContext* gfx) {}
-void Matrix_Push(void) {}
-void Matrix_Pop(void) {}
-void Matrix_Translate(f32 x, f32 y, f32 z, u8 mode) {}
-void Matrix_Scale(f32 x, f32 y, f32 z, u8 mode) {}
-f32 Math_SinS(s16 angle) { return sinf((float)angle * (3.14159265358979323846f / 32768.0f)); }
-f32 Math_CosS(s16 angle) { return cosf((float)angle * (3.14159265358979323846f / 32768.0f)); }
+void Gfx_SetupDL_27Xlu(GraphicsContext* gfx) {
+}
+void Matrix_Push(void) {
+}
+void Matrix_Pop(void) {
+}
+void Matrix_Translate(f32 x, f32 y, f32 z, u8 mode) {
+}
+void Matrix_Scale(f32 x, f32 y, f32 z, u8 mode) {
+}
+f32 Math_SinS(s16 angle) {
+    return sinf((float)angle * (3.14159265358979323846f / 32768.0f));
+}
+f32 Math_CosS(s16 angle) {
+    return cosf((float)angle * (3.14159265358979323846f / 32768.0f));
+}
 void* Graph_Alloc(GraphicsContext* gfx, size_t size) {
     REQUIRE(size <= sizeof(transient[0]));
     return transient[frame % 2];
 }
-static s32 EnViewer_StaticTatlOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
-                                             Vec3s* rot, void* actor, Gfx** gfx) {
+static s32 EnViewer_StaticTatlOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
+                                               void* actor, Gfx** gfx) {
     REQUIRE(false); /* The skeleton boundary must not execute callbacks. */
     return false;
 }
 
-Gfx* SkelAnime_Draw(PlayState* play, void** skeleton, Vec3s* joints, OverrideLimbDraw override,
-                    PostLimbDraw post, void* actor, Gfx* output) {
+Gfx* SkelAnime_Draw(PlayState* play, void** skeleton, Vec3s* joints, OverrideLimbDraw override, PostLimbDraw post,
+                    void* actor, Gfx* output) {
     Gfx* emitted = commands[frame % 2];
     const Gfx* setup;
     ++drawCalls;

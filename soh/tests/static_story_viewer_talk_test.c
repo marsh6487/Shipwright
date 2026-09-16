@@ -8,12 +8,38 @@ void EnViewerStatic_OfferTalk(EnViewer* viewer, PlayState* play);
 SaveContext gSaveContext;
 u32 gBitFlags[32];
 static unsigned processCalls, offerCalls, stateCalls, advanceCalls, closeCalls, flagCalls;
-u32 Actor_ProcessTalkRequest(Actor* actor, PlayState* play) { (void)actor; (void)play; processCalls++; return 0; }
-s32 Actor_OfferTalk(Actor* actor, PlayState* play, f32 distance) { (void)actor; (void)play; (void)distance; offerCalls++; return 0; }
-u8 Message_GetState(MessageContext* msgCtx) { (void)msgCtx; stateCalls++; return TEXT_STATE_NONE; }
-u8 Message_ShouldAdvance(PlayState* play) { (void)play; advanceCalls++; return 0; }
-void Message_CloseTextbox(PlayState* play) { (void)play; closeCalls++; }
-s32 Flags_GetEventChkInf(s32 flag) { (void)flag; flagCalls++; return 0; }
+u32 Actor_ProcessTalkRequest(Actor* actor, PlayState* play) {
+    (void)actor;
+    (void)play;
+    processCalls++;
+    return 0;
+}
+s32 Actor_OfferTalk(Actor* actor, PlayState* play, f32 distance) {
+    (void)actor;
+    (void)play;
+    (void)distance;
+    offerCalls++;
+    return 0;
+}
+u8 Message_GetState(MessageContext* msgCtx) {
+    (void)msgCtx;
+    stateCalls++;
+    return TEXT_STATE_NONE;
+}
+u8 Message_ShouldAdvance(PlayState* play) {
+    (void)play;
+    advanceCalls++;
+    return 0;
+}
+void Message_CloseTextbox(PlayState* play) {
+    (void)play;
+    closeCalls++;
+}
+s32 Flags_GetEventChkInf(s32 flag) {
+    (void)flag;
+    flagCalls++;
+    return 0;
+}
 int main(void) {
     EnViewer viewer;
     PlayState play;

@@ -27,8 +27,10 @@ extern "C" {
 #include "tests/test_require.h"
 
 OTRGlobals* OTRGlobals::Instance = nullptr;
-OTRGlobals::OTRGlobals() {}
-OTRGlobals::~OTRGlobals() {}
+OTRGlobals::OTRGlobals() {
+}
+OTRGlobals::~OTRGlobals() {
+}
 static std::shared_ptr<Ship::Archive> sMmArchive;
 static std::unordered_map<std::string, std::shared_ptr<Ship::IResource>> sMmResourceCache;
 #define MMASSETS_LOG(...) ((void)0)
@@ -39,12 +41,18 @@ static void CheckSet(const MmSkullKidDisplayLists* set, unsigned value,
     REQUIRE(set && set->head && set->eyes && set->mask);
     unsigned roots = 0;
     for (unsigned limb = 0; limb < 22; ++limb) {
-        if (limb == 0 || limb == 1 || limb == 17) REQUIRE(set->limbs[limb] == nullptr);
-        else { REQUIRE(set->limbs[limb]); ++roots; }
+        if (limb == 0 || limb == 1 || limb == 17)
+            REQUIRE(set->limbs[limb] == nullptr);
+        else {
+            REQUIRE(set->limbs[limb]);
+            ++roots;
+        }
     }
     REQUIRE(roots == 19);
-    std::vector<Gfx*> lists{set->head, set->eyes, set->mask};
-    for (auto* limb : set->limbs) if (limb) lists.push_back(limb);
+    std::vector<Gfx*> lists{ set->head, set->eyes, set->mask };
+    for (auto* limb : set->limbs)
+        if (limb)
+            lists.push_back(limb);
     for (auto* root : lists) {
         REQUIRE(root[0].words.w0 == 0xDE000000);
         auto* nested = reinterpret_cast<Gfx*>(root[0].words.w1);
@@ -73,8 +81,12 @@ static void CheckActualPack(const std::shared_ptr<Ship::ResourceManager>& manage
     REQUIRE(model && model != native && model->head && model->eyes && model->mask);
     unsigned rootCount = 3;
     for (unsigned limb = 0; limb < 22; ++limb) {
-        if (limb == 0 || limb == 1 || limb == 17) REQUIRE(!model->limbs[limb]);
-        else { REQUIRE(model->limbs[limb]); ++rootCount; }
+        if (limb == 0 || limb == 1 || limb == 17)
+            REQUIRE(!model->limbs[limb]);
+        else {
+            REQUIRE(model->limbs[limb]);
+            ++rootCount;
+        }
     }
     REQUIRE(rootCount == 22);
     auto* graph = MmAssets_GetDisplayListGraph(archive);
@@ -91,35 +103,41 @@ static void CheckActualPack(const std::shared_ptr<Ship::ResourceManager>& manage
     REQUIRE(!vertexRanges.empty());
     std::vector<std::string> aliases;
     unsigned vertexCommands = 0, triangles = 0;
-    for (const auto& item : graph->displayLists) for (size_t index = 0; index < item.second->size(); ++index) {
-        const Gfx& command = item.second->at(index);
-        const auto opcode = command.words.w0 >> 24;
-        if (opcode == 0x33) { ++index; continue; } // Marker payload is a hash, not an opcode.
-        REQUIRE(opcode != 0x20 && opcode != 0x31 && opcode != 0x32);
-        if (opcode == 0x01) {
-            const uintptr_t pointer = command.words.w1;
-            const size_t bytes = ((command.words.w0 >> 12) & 0xff) * sizeof(Vtx);
-            bool owned = false;
-            for (const auto& range : vertexRanges)
-                owned |= pointer >= range.first && pointer - range.first <= range.second &&
-                         bytes <= range.second - (pointer - range.first);
-            REQUIRE(owned);
-            ++vertexCommands;
-        } else if (opcode == 0x25) {
-            const char* alias = reinterpret_cast<const char*>(command.words.w1);
-            auto texture = std::dynamic_pointer_cast<Fast::Texture>(manager->LoadResourceProcess(alias));
-            REQUIRE(texture && texture->Type == Fast::TextureType::RGBA32bpp && texture->Flags == TEX_FLAG_LOAD_AS_RAW);
-            REQUIRE(texture->GetInitData()->Parent == archive);
-            const std::string& path = texture->GetInitData()->Path;
-            auto source = std::dynamic_pointer_cast<Fast::Texture>(graph->resources.at(path));
-            REQUIRE(source && source->ImageDataSize == texture->ImageDataSize);
-            REQUIRE(source->ImageData != texture->ImageData);
-            REQUIRE(memcmp(source->ImageData, texture->ImageData, texture->ImageDataSize) == 0);
-            REQUIRE(source->Width == texture->Width && source->Height == texture->Height);
-            REQUIRE(source->HByteScale == texture->HByteScale && source->VPixelScale == texture->VPixelScale);
-            aliases.emplace_back(alias);
-        } else if (opcode == 0x05) ++triangles;
-    }
+    for (const auto& item : graph->displayLists)
+        for (size_t index = 0; index < item.second->size(); ++index) {
+            const Gfx& command = item.second->at(index);
+            const auto opcode = command.words.w0 >> 24;
+            if (opcode == 0x33) {
+                ++index;
+                continue;
+            } // Marker payload is a hash, not an opcode.
+            REQUIRE(opcode != 0x20 && opcode != 0x31 && opcode != 0x32);
+            if (opcode == 0x01) {
+                const uintptr_t pointer = command.words.w1;
+                const size_t bytes = ((command.words.w0 >> 12) & 0xff) * sizeof(Vtx);
+                bool owned = false;
+                for (const auto& range : vertexRanges)
+                    owned |= pointer >= range.first && pointer - range.first <= range.second &&
+                             bytes <= range.second - (pointer - range.first);
+                REQUIRE(owned);
+                ++vertexCommands;
+            } else if (opcode == 0x25) {
+                const char* alias = reinterpret_cast<const char*>(command.words.w1);
+                auto texture = std::dynamic_pointer_cast<Fast::Texture>(manager->LoadResourceProcess(alias));
+                REQUIRE(texture && texture->Type == Fast::TextureType::RGBA32bpp &&
+                        texture->Flags == TEX_FLAG_LOAD_AS_RAW);
+                REQUIRE(texture->GetInitData()->Parent == archive);
+                const std::string& path = texture->GetInitData()->Path;
+                auto source = std::dynamic_pointer_cast<Fast::Texture>(graph->resources.at(path));
+                REQUIRE(source && source->ImageDataSize == texture->ImageDataSize);
+                REQUIRE(source->ImageData != texture->ImageData);
+                REQUIRE(memcmp(source->ImageData, texture->ImageData, texture->ImageDataSize) == 0);
+                REQUIRE(source->Width == texture->Width && source->Height == texture->Height);
+                REQUIRE(source->HByteScale == texture->HByteScale && source->VPixelScale == texture->VPixelScale);
+                aliases.emplace_back(alias);
+            } else if (opcode == 0x05)
+                ++triangles;
+        }
     REQUIRE(vertexCommands && triangles && !aliases.empty());
     for (int argument = 4; argument < argc; ++argument) {
         auto broken = manager->GetArchiveManager()->AddArchive(argv[argument]);
@@ -137,11 +155,14 @@ static void CheckActualPack(const std::shared_ptr<Ship::ResourceManager>& manage
         manager->SetAltAssetsEnabled(scene % 2 != 0);
         REQUIRE(MmAssets_GetSkullKidDisplayLists() == (scene % 2 ? model : native));
         MmAssets_EnsureStrictTextureBindings();
-        for (const auto& owner : owners) REQUIRE(!owner.expired());
-        for (const auto& alias : aliases) REQUIRE(manager->LoadResourceProcess(alias));
+        for (const auto& owner : owners)
+            REQUIRE(!owner.expired());
+        for (const auto& alias : aliases)
+            REQUIRE(manager->LoadResourceProcess(alias));
     }
     printf("PASS real mm.o2r + 3DS pack: %u roots, %u triangles, %u owned vertex loads, %zu texture commands, "
-           "corrupt-pack fallback and 8 Alt/cache-reentry cycles\n", rootCount, triangles, vertexCommands, aliases.size());
+           "corrupt-pack fallback and 8 Alt/cache-reentry cycles\n",
+           rootCount, triangles, vertexCommands, aliases.size());
 }
 
 int main(int argc, char** argv) {
@@ -151,7 +172,7 @@ int main(int argc, char** argv) {
     REQUIRE(context->InitLogging());
     REQUIRE(context->InitConfiguration());
     REQUIRE(context->InitConsoleVariables());
-    REQUIRE(context->InitResourceManager({argv[actualPack ? 2 : 1]}, {}, 1));
+    REQUIRE(context->InitResourceManager({ argv[actualPack ? 2 : 1] }, {}, 1));
     OTRGlobals globals;
     OTRGlobals::Instance = &globals;
     globals.context = context;
@@ -159,15 +180,20 @@ int main(int argc, char** argv) {
     auto archiveManager = manager->GetArchiveManager();
     auto loader = manager->GetResourceLoader();
     REQUIRE(loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryDisplayListV0>(),
-        RESOURCE_FORMAT_BINARY, "DisplayList", static_cast<uint32_t>(Fast::ResourceType::DisplayList), 0));
+                                            RESOURCE_FORMAT_BINARY, "DisplayList",
+                                            static_cast<uint32_t>(Fast::ResourceType::DisplayList), 0));
     REQUIRE(loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryTextureV1>(),
-        RESOURCE_FORMAT_BINARY, "Texture", static_cast<uint32_t>(Fast::ResourceType::Texture), 1));
+                                            RESOURCE_FORMAT_BINARY, "Texture",
+                                            static_cast<uint32_t>(Fast::ResourceType::Texture), 1));
     REQUIRE(loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryTextureV0>(),
-        RESOURCE_FORMAT_BINARY, "Texture", static_cast<uint32_t>(Fast::ResourceType::Texture), 0));
+                                            RESOURCE_FORMAT_BINARY, "Texture",
+                                            static_cast<uint32_t>(Fast::ResourceType::Texture), 0));
     REQUIRE(loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryVertexV0>(),
-        RESOURCE_FORMAT_BINARY, "Vertex", static_cast<uint32_t>(Fast::ResourceType::Vertex), 0));
+                                            RESOURCE_FORMAT_BINARY, "Vertex",
+                                            static_cast<uint32_t>(Fast::ResourceType::Vertex), 0));
     REQUIRE(loader->RegisterResourceFactory(std::make_shared<SOH::ResourceFactoryBinaryArrayV0>(),
-        RESOURCE_FORMAT_BINARY, "Array", static_cast<uint32_t>(SOH::ResourceType::SOH_Array), 0));
+                                            RESOURCE_FORMAT_BINARY, "Array",
+                                            static_cast<uint32_t>(SOH::ResourceType::SOH_Array), 0));
     sMmArchive = archiveManager->GetArchives()->at(0);
     if (actualPack) {
         CheckActualPack(manager, argc, argv);

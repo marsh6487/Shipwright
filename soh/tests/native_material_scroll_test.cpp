@@ -61,57 +61,80 @@ int main() {
         REQUIRE(c.width == 32 && c.height == 16 && c.dx1 == 1 && c.dy1 == 0);
     }
     auto declared = pool;
-    declared["nativeAnimation"] = {{"version",1},{"source","mm.bg_keikoku_spr.lower_a"},
-        {"binding","material-motion"},{"logicalWidth",32},{"logicalHeight",32}};
+    declared["nativeAnimation"] = { { "version", 1 },
+                                    { "source", "mm.bg_keikoku_spr.lower_a" },
+                                    { "binding", "material-motion" },
+                                    { "logicalWidth", 32 },
+                                    { "logicalHeight", 32 } };
     REQUIRE(ResolveNativeMaterial(declared, true) == NativeMaterialProfile::FountainLowerA32);
-    for (auto bad : {json(nullptr),json(true),json(1),json("x")}) {
-        auto copy = declared; copy["nativeAnimation"] = bad;
-        REQUIRE(ResolveNativeMaterial(copy,true) == NativeMaterialProfile::None);
+    for (auto bad : { json(nullptr), json(true), json(1), json("x") }) {
+        auto copy = declared;
+        copy["nativeAnimation"] = bad;
+        REQUIRE(ResolveNativeMaterial(copy, true) == NativeMaterialProfile::None);
     }
-    for (const char* field : {"version","source","binding","logicalWidth","logicalHeight"}) {
-        auto copy = declared; copy["nativeAnimation"].erase(field);
-        REQUIRE(ResolveNativeMaterial(copy,true) == NativeMaterialProfile::None);
-        for (auto bad : {json(nullptr),json(true),json(1.0),json("bad")}) {
-            copy = declared; copy["nativeAnimation"][field]=bad;
-            REQUIRE(ResolveNativeMaterial(copy,true) == NativeMaterialProfile::None);
+    for (const char* field : { "version", "source", "binding", "logicalWidth", "logicalHeight" }) {
+        auto copy = declared;
+        copy["nativeAnimation"].erase(field);
+        REQUIRE(ResolveNativeMaterial(copy, true) == NativeMaterialProfile::None);
+        for (auto bad : { json(nullptr), json(true), json(1.0), json("bad") }) {
+            copy = declared;
+            copy["nativeAnimation"][field] = bad;
+            REQUIRE(ResolveNativeMaterial(copy, true) == NativeMaterialProfile::None);
         }
     }
-    for (int role=0; role<3; ++role) {
-        auto direct=pool;
-        direct["chain"][0]["path"] = "objects/object_keikoku_obj/object_keikoku_obj_DL_000" +
-            std::to_string(1+role*2)+"00";
-        REQUIRE(static_cast<int>(ResolveNativeMaterial(direct,true)) == 7+role);
+    for (int role = 0; role < 3; ++role) {
+        auto direct = pool;
+        direct["chain"][0]["path"] =
+            "objects/object_keikoku_obj/object_keikoku_obj_DL_000" + std::to_string(1 + role * 2) + "00";
+        REQUIRE(static_cast<int>(ResolveNativeMaterial(direct, true)) == 7 + role);
         direct["chain"].push_back(direct["chain"][0]);
-        REQUIRE(ResolveNativeMaterial(direct,true) == NativeMaterialProfile::None);
-        for (uint32_t f : {0u,1u,31u,32u,63u,64u,127u,128u,2047u,2048u,0xffffffffu}) {
-            auto a=NativeScrollParameters(static_cast<NativeMaterialProfile>(4+role),999,f);
-            auto b=NativeScrollParameters(static_cast<NativeMaterialProfile>(7+role),999,f);
-            REQUIRE((a.y2%128)*2 == b.y2%256);
-            REQUIRE(a.dy2*2 == b.dy2 && a.x1==0 && a.y1==0 && a.x2==0);
+        REQUIRE(ResolveNativeMaterial(direct, true) == NativeMaterialProfile::None);
+        for (uint32_t f : { 0u, 1u, 31u, 32u, 63u, 64u, 127u, 128u, 2047u, 2048u, 0xffffffffu }) {
+            auto a = NativeScrollParameters(static_cast<NativeMaterialProfile>(4 + role), 999, f);
+            auto b = NativeScrollParameters(static_cast<NativeMaterialProfile>(7 + role), 999, f);
+            REQUIRE((a.y2 % 128) * 2 == b.y2 % 256);
+            REQUIRE(a.dy2 * 2 == b.dy2 && a.x1 == 0 && a.y1 == 0 && a.x2 == 0);
         }
     }
-    std::vector<NativeMaterialCommand> fountain = {{0xf5101000,0x00014050},{0xf5101100,0x01014451},
-        {0xf2000000,0x0007c07c},{0xf2000000,0x0107c07c},{0x32004008,0},{0xdf000000,55},
-        {0x06000204,0x00000406},{0xdf000000,0}};
-    const auto fp=NativeMaterialProfile::FountainLowerA32;
-    REQUIRE(FindNativeScrollInsertion(fountain,fp)==6);
-    fountain[1].w1=0x01017c5e; // Actual raised authored shifts, not zero-shift stand-ins.
-    REQUIRE(FindNativeScrollInsertion(fountain,fp)==6);
-    auto large=fountain;
-    for (size_t i=0;i<2;++i) large[i].w1 ^= (3u<<14)|(3u<<4); // mask5 -> mask6, preserve shifts
-    large[2].w1=0x000fc0fc;large[3].w1=0x010fc0fc;
-    REQUIRE(FindNativeScrollInsertion(large,NativeMaterialProfile::FountainCentral64)==6);
-    REQUIRE(!FindNativeScrollInsertion(large,fp));
-    for (size_t i=0;i<4;++i) {
-        auto bad=fountain; bad.erase(bad.begin()+i); REQUIRE(!FindNativeScrollInsertion(bad,fp));
-        bad=fountain;bad.insert(bad.begin()+i,bad[i]); REQUIRE(!FindNativeScrollInsertion(bad,fp));
+    std::vector<NativeMaterialCommand> fountain = { { 0xf5101000, 0x00014050 }, { 0xf5101100, 0x01014451 },
+                                                    { 0xf2000000, 0x0007c07c }, { 0xf2000000, 0x0107c07c },
+                                                    { 0x32004008, 0 },          { 0xdf000000, 55 },
+                                                    { 0x06000204, 0x00000406 }, { 0xdf000000, 0 } };
+    const auto fp = NativeMaterialProfile::FountainLowerA32;
+    REQUIRE(FindNativeScrollInsertion(fountain, fp) == 6);
+    fountain[1].w1 = 0x01017c5e; // Actual raised authored shifts, not zero-shift stand-ins.
+    REQUIRE(FindNativeScrollInsertion(fountain, fp) == 6);
+    auto large = fountain;
+    for (size_t i = 0; i < 2; ++i)
+        large[i].w1 ^= (3u << 14) | (3u << 4); // mask5 -> mask6, preserve shifts
+    large[2].w1 = 0x000fc0fc;
+    large[3].w1 = 0x010fc0fc;
+    REQUIRE(FindNativeScrollInsertion(large, NativeMaterialProfile::FountainCentral64) == 6);
+    REQUIRE(!FindNativeScrollInsertion(large, fp));
+    for (size_t i = 0; i < 4; ++i) {
+        auto bad = fountain;
+        bad.erase(bad.begin() + i);
+        REQUIRE(!FindNativeScrollInsertion(bad, fp));
+        bad = fountain;
+        bad.insert(bad.begin() + i, bad[i]);
+        REQUIRE(!FindNativeScrollInsertion(bad, fp));
     }
-    for (uintptr_t bits : {1u<<18,1u<<19,1u<<8,1u<<9,1u<<14,1u<<4}) {
-        auto bad=fountain;bad[0].w1 ^= bits; REQUIRE(!FindNativeScrollInsertion(bad,fp));
+    for (uintptr_t bits : { 1u << 18, 1u << 19, 1u << 8, 1u << 9, 1u << 14, 1u << 4 }) {
+        auto bad = fountain;
+        bad[0].w1 ^= bits;
+        REQUIRE(!FindNativeScrollInsertion(bad, fp));
     }
-    auto bad=fountain;bad[2].w1^=4;REQUIRE(!FindNativeScrollInsertion(bad,fp));
-    bad=fountain;bad.insert(bad.begin()+6,{0xde000000,0x08000000});REQUIRE(!FindNativeScrollInsertion(bad,fp));
-    bad=fountain;bad.insert(bad.end()-1,{0xf5101000,0x00014050});REQUIRE(!FindNativeScrollInsertion(bad,fp));
-    bad=fountain;bad.back().w1=1;REQUIRE(!FindNativeScrollInsertion(bad,fp));
+    auto bad = fountain;
+    bad[2].w1 ^= 4;
+    REQUIRE(!FindNativeScrollInsertion(bad, fp));
+    bad = fountain;
+    bad.insert(bad.begin() + 6, { 0xde000000, 0x08000000 });
+    REQUIRE(!FindNativeScrollInsertion(bad, fp));
+    bad = fountain;
+    bad.insert(bad.end() - 1, { 0xf5101000, 0x00014050 });
+    REQUIRE(!FindNativeScrollInsertion(bad, fp));
+    bad = fountain;
+    bad.back().w1 = 1;
+    REQUIRE(!FindNativeScrollInsertion(bad, fp));
     std::cout << "PASS native material identity, command safety, and native scroll parameters\n";
 }

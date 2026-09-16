@@ -6,9 +6,16 @@
 
 namespace Prelude {
 enum class NativeMaterialProfile {
-    None, LakeHylia, Pool, LostWoodsLightSheet,
-    FountainLowerA32, FountainLowerB32, FountainCentral32,
-    FountainLowerA64, FountainLowerB64, FountainCentral64,
+    None,
+    LakeHylia,
+    Pool,
+    LostWoodsLightSheet,
+    FountainLowerA32,
+    FountainLowerB32,
+    FountainCentral32,
+    FountainLowerA64,
+    FountainLowerB64,
+    FountainCentral64,
     Count
 };
 struct NativeMaterialCommand {
@@ -21,6 +28,6 @@ struct ScrollParameters {
 };
 NativeMaterialProfile ResolveNativeMaterial(const nlohmann::json& item, bool pasted);
 std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterialCommand>& commands,
-    NativeMaterialProfile profile = NativeMaterialProfile::None);
+                                                NativeMaterialProfile profile = NativeMaterialProfile::None);
 ScrollParameters NativeScrollParameters(NativeMaterialProfile profile, uint32_t stateFrames, uint32_t gameplayFrames);
 } // namespace Prelude

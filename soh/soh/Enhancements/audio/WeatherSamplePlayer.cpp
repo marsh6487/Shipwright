@@ -172,10 +172,9 @@ extern "C" bool WeatherSamplePlayer_Play(const char* resourcePath, float gain) {
             if (DiagnosticsEnabled()) {
                 std::fprintf(stderr, "[weather-audio] transient start path=%s gain=%.3f occupied=%zu/%zu\n",
                              resourcePath, voice.gain,
-                             static_cast<size_t>(std::count_if(sVoices.begin(), sVoices.end(),
-                                                               [](const Voice& candidate) {
-                                                                   return candidate.sample != nullptr;
-                                                               })),
+                             static_cast<size_t>(
+                                 std::count_if(sVoices.begin(), sVoices.end(),
+                                               [](const Voice& candidate) { return candidate.sample != nullptr; })),
                              kMaximumVoices);
             }
             return true;
@@ -217,8 +216,8 @@ extern "C" void WeatherSamplePlayer_Mix(int16_t* interleavedStereo, size_t frame
             const size_t available = sLoopVoice.sample->loopEnd - sLoopVoice.position;
             const size_t mixedFrames = std::min(framesRemaining, available);
             clampCount += WeatherSamplePlayer_TestMixMonoCountClamps(
-                interleavedStereo + destinationOffset * 2,
-                sLoopVoice.sample->samples.data() + sLoopVoice.position, mixedFrames, sLoopVoice.gain * sfxVolume);
+                interleavedStereo + destinationOffset * 2, sLoopVoice.sample->samples.data() + sLoopVoice.position,
+                mixedFrames, sLoopVoice.gain * sfxVolume);
             sLoopVoice.position = WeatherSamplePlayer_AdvanceLoopPosition(
                 sLoopVoice.position, sLoopVoice.sample->loopStart, sLoopVoice.sample->loopEnd, mixedFrames);
             destinationOffset += mixedFrames;
@@ -230,9 +229,8 @@ extern "C" void WeatherSamplePlayer_Mix(int16_t* interleavedStereo, size_t frame
         if (clampCount != 0 || reportCountdown++ >= 120) {
             std::fprintf(stderr, "[weather-audio] mix frames=%zu prePeak=%d postPeak=%d clamps=%zu shots=%zu loop=%d\n",
                          frameCount, preWeatherPeak, Peak(interleavedStereo, frameCount * 2), clampCount,
-                         static_cast<size_t>(std::count_if(sVoices.begin(), sVoices.end(), [](const Voice& voice) {
-                             return voice.sample != nullptr;
-                         })),
+                         static_cast<size_t>(std::count_if(sVoices.begin(), sVoices.end(),
+                                                           [](const Voice& voice) { return voice.sample != nullptr; })),
                          sLoopVoice.sample != nullptr);
             reportCountdown = 0;
         }

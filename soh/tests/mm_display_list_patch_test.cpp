@@ -42,14 +42,13 @@ int main() {
     REQUIRE(MmDisplayList_SelectVertexResource(nullptr, 0, arrayVertices, sizeof(arrayVertices), true, &vertexView));
     REQUIRE(vertexView.pointer == reinterpret_cast<uintptr_t>(arrayVertices));
     REQUIRE(vertexView.size == sizeof(arrayVertices));
-    REQUIRE(!MmDisplayList_SelectVertexResource(nullptr, 0, arrayVertices, sizeof(arrayVertices), false,
-                                                &vertexView));
+    REQUIRE(!MmDisplayList_SelectVertexResource(nullptr, 0, arrayVertices, sizeof(arrayVertices), false, &vertexView));
 
     constexpr uint64_t nestedHash = UINT64_C(0x0123456789ABCDEF);
     constexpr uint64_t vertexHash = UINT64_C(0xFEDCBA9876543210);
     constexpr uint64_t textureHash = UINT64_C(0x54865CA6217340F0);
-    ResolveFixture fixture = { nestedHash, UINT64_C(0x12345000), vertexHash, UINT64_C(0x20000000), 0x100,
-                               textureHash, UINT64_C(0x40000000) };
+    ResolveFixture fixture = { nestedHash, UINT64_C(0x12345000), vertexHash,          UINT64_C(0x20000000),
+                               0x100,      textureHash,          UINT64_C(0x40000000) };
     MmDisplayListCommand commands[] = {
         { UINT32_C(0x31010000), 0 },
         { UINT32_C(0x01234567), UINT32_C(0x89ABCDEF) },
@@ -110,7 +109,7 @@ int main() {
     REQUIRE(stats.malformed == 1);
     REQUIRE(outOfBounds[0].w0 == UINT32_C(0x32011004));
 
-    for (uintptr_t offset : {uintptr_t(0x100), uintptr_t(0x101), UINTPTR_MAX}) {
+    for (uintptr_t offset : { uintptr_t(0x100), uintptr_t(0x101), UINTPTR_MAX }) {
         MmDisplayListCommand overrun[] = {
             { UINT32_C(0x32001002), offset },
             { UINT32_C(0xFEDCBA98), UINT32_C(0x76543210) },

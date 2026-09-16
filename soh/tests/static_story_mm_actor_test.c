@@ -3,19 +3,19 @@
 #include <stdint.h>
 #include <string.h>
 
-#define REQUIRE(condition)                                                                                              \
-    do {                                                                                                                \
-        if (!(condition)) {                                                                                             \
-            return 1;                                                                                                   \
-        }                                                                                                               \
+#define REQUIRE(condition)  \
+    do {                    \
+        if (!(condition)) { \
+            return 1;       \
+        }                   \
     } while (0)
 
 #include "../src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.h"
 
 int main(void) {
     /* Ordinary and scoped-player catalogue identities remain independent. */
-    const StaticStoryActorType ordinary[] = { STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN,
-        STATIC_STORY_ACTOR_KEATON, STATIC_STORY_ACTOR_LULU };
+    const StaticStoryActorType ordinary[] = { STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, STATIC_STORY_ACTOR_KEATON,
+                                              STATIC_STORY_ACTOR_LULU };
     const unsigned counts[] = { 3, 3, 4 };
     const unsigned ids[] = { 9, 10, 12 };
     for (unsigned actor = 0; actor < 3; ++actor) {
@@ -32,60 +32,69 @@ int main(void) {
     REQUIRE(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_CHILD_KAFEI));
     REQUIRE(StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_CHILD_KAFEI, 0) != NULL);
 
-    REQUIRE(StaticStoryActor_GetType(0x7E0B)==STATIC_STORY_ACTOR_CHILD_KAFEI);
-    REQUIRE(StaticStoryActor_GetType(0x7E1B)==STATIC_STORY_ACTOR_CHILD_KAFEI);
-    REQUIRE(StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_CHILD_KAFEI,2)==NULL);
-    for(unsigned pose=0;pose<2;++pose) {
-        const StaticStoryMmPresentation* p=StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_CHILD_KAFEI,pose);
-        REQUIRE(p->kind==STATIC_STORY_MM_SCOPED_PLAYER_LOD && p->limbCount==21 && p->matrixCount==18);
-        REQUIRE(p->frameCount==(pose==0?89:48) && p->eyeCount==8 && p->mouthCount==4);
-        REQUIRE(!StaticStoryActor_LocksRootTranslation(STATIC_STORY_ACTOR_CHILD_KAFEI,pose));
-        REQUIRE(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_CHILD_KAFEI,pose));
+    REQUIRE(StaticStoryActor_GetType(0x7E0B) == STATIC_STORY_ACTOR_CHILD_KAFEI);
+    REQUIRE(StaticStoryActor_GetType(0x7E1B) == STATIC_STORY_ACTOR_CHILD_KAFEI);
+    REQUIRE(StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_CHILD_KAFEI, 2) == NULL);
+    for (unsigned pose = 0; pose < 2; ++pose) {
+        const StaticStoryMmPresentation* p = StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_CHILD_KAFEI, pose);
+        REQUIRE(p->kind == STATIC_STORY_MM_SCOPED_PLAYER_LOD && p->limbCount == 21 && p->matrixCount == 18);
+        REQUIRE(p->frameCount == (pose == 0 ? 89 : 48) && p->eyeCount == 8 && p->mouthCount == 4);
+        REQUIRE(!StaticStoryActor_LocksRootTranslation(STATIC_STORY_ACTOR_CHILD_KAFEI, pose));
+        REQUIRE(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_CHILD_KAFEI, pose));
     }
-    const StaticStoryActorDefinition* kd=StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_KAFEI);
-    REQUIRE(kd->colliderRadius==18 && kd->colliderHeight==60 && kd->colliderYShift==0 && kd->scale==0.01f);
+    const StaticStoryActorDefinition* kd = StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_CHILD_KAFEI);
+    REQUIRE(kd->colliderRadius == 18 && kd->colliderHeight == 60 && kd->colliderYShift == 0 && kd->scale == 0.01f);
 
-    const unsigned limbs[] = {18,20,22}, matrices[] = {17,20,21};
-    const unsigned frames[3][4] = {{29,29,29,0},{36,36,30,0},{30,30,72,87}};
-    const int radius[] = {22,18,22}, height[] = {70,50,70};
-    for(unsigned a=0;a<3;++a) {
-        const StaticStoryActorDefinition* definition=StaticStoryActor_GetDefinition(ordinary[a]);
-        REQUIRE(definition->scale==0.01f);
-        REQUIRE(definition->colliderRadius==radius[a] && definition->colliderHeight==height[a]);
-        REQUIRE(definition->colliderYShift==0 && definition->blinkMin==30 && definition->blinkRange==30);
-        for(unsigned pose=0;pose<counts[a];++pose) {
-            const StaticStoryMmPresentation* p=StaticStoryMm_GetPresentation(ordinary[a],pose);
-            REQUIRE(p->kind==STATIC_STORY_MM_NORMAL_FLEX);
-            REQUIRE(p->limbCount==limbs[a] && p->matrixCount==matrices[a] && p->frameCount==frames[a][pose]);
-            REQUIRE(StaticStoryActor_CanTrack(ordinary[a],pose)==(a!=1 && pose==0));
-            REQUIRE(StaticStoryActor_ResolvePose(ordinary[a],pose)->playbackSpeed==1.0f);
-            REQUIRE(p->eyeCount==(a==0?1:a==1?0:3));
-            REQUIRE(p->mouthCount==(a==0?1:a==1?0:2));
-            for(unsigned f=0;f<frames[a][pose];++f) for(unsigned blink=0;blink<3;++blink) {
-                StaticStoryMmFace face=StaticStoryMm_ResolveFace(ordinary[a],pose,f,blink,false);
-                unsigned eye=blink,mouth=0;
-                if(a==0) eye=0;
-                if(a==2) {
-                    if(pose==0 && blink==0) eye=1;
-                    if(pose==2) { eye=0;mouth=1; }
-                    if(pose==3) {
-                        const unsigned sequence[]={1,2,1,0,1,2,1,0};
-                        if(f<43) eye=0; else if(f<=50) eye=sequence[f-43];
-                        mouth=1;
+    const unsigned limbs[] = { 18, 20, 22 }, matrices[] = { 17, 20, 21 };
+    const unsigned frames[3][4] = { { 29, 29, 29, 0 }, { 36, 36, 30, 0 }, { 30, 30, 72, 87 } };
+    const int radius[] = { 22, 18, 22 }, height[] = { 70, 50, 70 };
+    for (unsigned a = 0; a < 3; ++a) {
+        const StaticStoryActorDefinition* definition = StaticStoryActor_GetDefinition(ordinary[a]);
+        REQUIRE(definition->scale == 0.01f);
+        REQUIRE(definition->colliderRadius == radius[a] && definition->colliderHeight == height[a]);
+        REQUIRE(definition->colliderYShift == 0 && definition->blinkMin == 30 && definition->blinkRange == 30);
+        for (unsigned pose = 0; pose < counts[a]; ++pose) {
+            const StaticStoryMmPresentation* p = StaticStoryMm_GetPresentation(ordinary[a], pose);
+            REQUIRE(p->kind == STATIC_STORY_MM_NORMAL_FLEX);
+            REQUIRE(p->limbCount == limbs[a] && p->matrixCount == matrices[a] && p->frameCount == frames[a][pose]);
+            REQUIRE(StaticStoryActor_CanTrack(ordinary[a], pose) == (a != 1 && pose == 0));
+            REQUIRE(StaticStoryActor_ResolvePose(ordinary[a], pose)->playbackSpeed == 1.0f);
+            REQUIRE(p->eyeCount == (a == 0 ? 1 : a == 1 ? 0 : 3));
+            REQUIRE(p->mouthCount == (a == 0 ? 1 : a == 1 ? 0 : 2));
+            for (unsigned f = 0; f < frames[a][pose]; ++f)
+                for (unsigned blink = 0; blink < 3; ++blink) {
+                    StaticStoryMmFace face = StaticStoryMm_ResolveFace(ordinary[a], pose, f, blink, false);
+                    unsigned eye = blink, mouth = 0;
+                    if (a == 0)
+                        eye = 0;
+                    if (a == 2) {
+                        if (pose == 0 && blink == 0)
+                            eye = 1;
+                        if (pose == 2) {
+                            eye = 0;
+                            mouth = 1;
+                        }
+                        if (pose == 3) {
+                            const unsigned sequence[] = { 1, 2, 1, 0, 1, 2, 1, 0 };
+                            if (f < 43)
+                                eye = 0;
+                            else if (f <= 50)
+                                eye = sequence[f - 43];
+                            mouth = 1;
+                        }
                     }
+                    REQUIRE(face.eye == eye && face.mouth == mouth);
                 }
-                REQUIRE(face.eye==eye && face.mouth==mouth);
-            }
         }
     }
-    REQUIRE(StaticStoryMm_ResolveFace(STATIC_STORY_ACTOR_LULU,0,0,0,true).eye==0);
-    REQUIRE(strcmp(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN,0),
-                   "objects/object_osn/gHappyMaskSalesmanEyeClosedHappyTex")==0);
-    REQUIRE(strcmp(StaticStoryMm_GetMouthTexturePath(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN,0),
-                   "objects/object_osn/gHappyMaskSalesmanSmileTex")==0);
-    REQUIRE(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN,1)==NULL);
-    REQUIRE(StaticStoryMm_GetMouthTexturePath(STATIC_STORY_ACTOR_LULU,2)==NULL);
-    REQUIRE(StaticStoryMm_GetMouthTexturePath(STATIC_STORY_ACTOR_KEATON,0)==NULL);
+    REQUIRE(StaticStoryMm_ResolveFace(STATIC_STORY_ACTOR_LULU, 0, 0, 0, true).eye == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, 0),
+                   "objects/object_osn/gHappyMaskSalesmanEyeClosedHappyTex") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetMouthTexturePath(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, 0),
+                   "objects/object_osn/gHappyMaskSalesmanSmileTex") == 0);
+    REQUIRE(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, 1) == NULL);
+    REQUIRE(StaticStoryMm_GetMouthTexturePath(STATIC_STORY_ACTOR_LULU, 2) == NULL);
+    REQUIRE(StaticStoryMm_GetMouthTexturePath(STATIC_STORY_ACTOR_KEATON, 0) == NULL);
     const StaticStoryMmPresentation* idle =
         StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, 0);
     const StaticStoryMmPresentation* sway =
@@ -135,18 +144,13 @@ int main(void) {
     REQUIRE(strcmp(reclining->headDisplayListPath, "objects/object_stk/gSkullKidNormalHeadDL") == 0);
     REQUIRE(strcmp(reclining->eyesDisplayListPath, "objects/object_stk/gSkullKidNormalEyesDL") == 0);
     REQUIRE(StaticStoryMm_GetSkullKidLimbDisplayListPath(1) == NULL);
-    REQUIRE(strcmp(StaticStoryMm_GetSkullKidLimbDisplayListPath(2),
-                   "objects/object_stk/gSkullKidPelvisDL") == 0);
-    REQUIRE(strcmp(StaticStoryMm_GetSkullKidLimbDisplayListPath(9),
-                   "objects/object_stk/gSkullKidTorsoDL") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetSkullKidLimbDisplayListPath(2), "objects/object_stk/gSkullKidPelvisDL") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetSkullKidLimbDisplayListPath(9), "objects/object_stk/gSkullKidTorsoDL") == 0);
     REQUIRE(StaticStoryMm_GetSkullKidLimbDisplayListPath(17) == NULL);
-    REQUIRE(strcmp(StaticStoryMm_GetSkullKidLimbDisplayListPath(21),
-                   "objects/object_stk/gSkullKidHatTopDL") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetSkullKidLimbDisplayListPath(21), "objects/object_stk/gSkullKidHatTopDL") == 0);
     REQUIRE(StaticStoryMm_GetSkullKidLimbDisplayListPath(22) == NULL);
-    REQUIRE(strcmp(StaticStoryMm_GetTatlLimbPath(0),
-                   "objects/gameplay_keep/gameplay_keep_Standardlimb_02AEF8") == 0);
-    REQUIRE(strcmp(StaticStoryMm_GetTatlLimbPath(5),
-                   "objects/gameplay_keep/gameplay_keep_Standardlimb_02AF34") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetTatlLimbPath(0), "objects/gameplay_keep/gameplay_keep_Standardlimb_02AEF8") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetTatlLimbPath(5), "objects/gameplay_keep/gameplay_keep_Standardlimb_02AF34") == 0);
     REQUIRE(strcmp(StaticStoryMm_GetTatlDListPath(0), "objects/gameplay_keep/gameplay_keep_DL_029990") == 0);
     REQUIRE(strcmp(StaticStoryMm_GetTatlDListPath(5), "objects/gameplay_keep/gameplay_keep_DL_029CF0") == 0);
     REQUIRE(StaticStoryMm_GetTatlLimbPath(6) == NULL);

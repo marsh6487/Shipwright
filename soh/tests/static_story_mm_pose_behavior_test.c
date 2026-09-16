@@ -12,32 +12,56 @@
 
 static unsigned headTrackingCalls;
 void Npc_TrackPoint(Actor* actor, NpcInteractInfo* info, s16 preset, s16 mode) {
-    if (mode != NPC_TRACKING_NONE) ++headTrackingCalls;
+    if (mode != NPC_TRACKING_NONE)
+        ++headTrackingCalls;
 }
 
 static float matrixYaw, savedMatrixYaw, drawYaw;
 static unsigned matrixDepth, drawCount;
-void FrameInterpolation_RecordOpenChild(const void* actor, int id) {}
-void FrameInterpolation_RecordCloseChild(void) {}
-void Matrix_Push(void) { REQUIRE(matrixDepth++ == 0); savedMatrixYaw = matrixYaw; }
-void Matrix_Pop(void) { REQUIRE(matrixDepth-- == 1); matrixYaw = savedMatrixYaw; }
-void Matrix_RotateY(f32 yaw, u8 mode) { REQUIRE(mode == MTXMODE_APPLY); matrixYaw += yaw; }
-void Gfx_SetupDL_25Opa(GraphicsContext* context) {}
-void Graph_OpenDisps(Gfx** displayList, GraphicsContext* context, const char* file, s32 line) {}
-void Graph_CloseDisps(Gfx** displayList, GraphicsContext* context, const char* file, s32 line) {}
+void FrameInterpolation_RecordOpenChild(const void* actor, int id) {
+}
+void FrameInterpolation_RecordCloseChild(void) {
+}
+void Matrix_Push(void) {
+    REQUIRE(matrixDepth++ == 0);
+    savedMatrixYaw = matrixYaw;
+}
+void Matrix_Pop(void) {
+    REQUIRE(matrixDepth-- == 1);
+    matrixYaw = savedMatrixYaw;
+}
+void Matrix_RotateY(f32 yaw, u8 mode) {
+    REQUIRE(mode == MTXMODE_APPLY);
+    matrixYaw += yaw;
+}
+void Gfx_SetupDL_25Opa(GraphicsContext* context) {
+}
+void Graph_OpenDisps(Gfx** displayList, GraphicsContext* context, const char* file, s32 line) {
+}
+void Graph_CloseDisps(Gfx** displayList, GraphicsContext* context, const char* file, s32 line) {
+}
 #define gSPSegment(command, segment, target) __gSPSegment((Gfx*)(command), (segment), (uintptr_t)(target))
-Gfx* MmAssets_GetOpaqueRenderMode(void) { REQUIRE(false); return NULL; }
-static s32 EnViewer_StaticTreasureChestShopGalOverrideLimbDraw(PlayState* play, s32 limb, Gfx** displayList,
-                                                              Vec3f* pos, Vec3s* rot, void* actor) { return false; }
-static s32 EnViewer_StaticOrdinaryMmOverrideLimbDraw(PlayState* play, s32 limb, Gfx** displayList,
-                                                    Vec3f* pos, Vec3s* rot, void* actor) { return false; }
-void SkelAnime_DrawSkeletonOpa(PlayState* play, SkelAnime* skeleton, OverrideLimbDrawOpa override,
-                              PostLimbDrawOpa post, void* actor) {
+Gfx* MmAssets_GetOpaqueRenderMode(void) {
+    REQUIRE(false);
+    return NULL;
+}
+static s32 EnViewer_StaticTreasureChestShopGalOverrideLimbDraw(PlayState* play, s32 limb, Gfx** displayList, Vec3f* pos,
+                                                               Vec3s* rot, void* actor) {
+    return false;
+}
+static s32 EnViewer_StaticOrdinaryMmOverrideLimbDraw(PlayState* play, s32 limb, Gfx** displayList, Vec3f* pos,
+                                                     Vec3s* rot, void* actor) {
+    return false;
+}
+void SkelAnime_DrawSkeletonOpa(PlayState* play, SkelAnime* skeleton, OverrideLimbDrawOpa override, PostLimbDrawOpa post,
+                               void* actor) {
     drawYaw = matrixYaw;
     ++drawCount;
 }
-void SkelAnime_DrawFlexLod(PlayState* play, void** skeleton, Vec3s* joints, s32 count,
-                          OverrideLimbDrawOpa override, PostLimbDrawOpa post, void* actor, s32 lod) { REQUIRE(false); }
+void SkelAnime_DrawFlexLod(PlayState* play, void** skeleton, Vec3s* joints, s32 count, OverrideLimbDrawOpa override,
+                           PostLimbDrawOpa post, void* actor, s32 lod) {
+    REQUIRE(false);
+}
 
 /* PRODUCTION_POSE_FUNCTIONS */
 
@@ -74,7 +98,8 @@ static void testBodyTurning(PlayState* play) {
         actor.staticState.tracking = false;
         EnViewerStatic_UpdateTracking(&actor, play);
         REQUIRE(actor.actor.shape.rot.y == 0x5C00);
-        for (unsigned tick = 0; tick < 160; ++tick) EnViewerStatic_UpdateTracking(&actor, play);
+        for (unsigned tick = 0; tick < 160; ++tick)
+            EnViewerStatic_UpdateTracking(&actor, play);
         REQUIRE(actor.actor.shape.rot.y == 0x2000 && actor.actor.home.rot.y == 0x2000);
 
         /* Crossing the signed-angle boundary takes the short path. */
@@ -83,7 +108,8 @@ static void testBodyTurning(PlayState* play) {
         actor.actor.yawTowardsPlayer = -32700;
         EnViewerStatic_UpdateTracking(&actor, play);
         REQUIRE(actor.actor.shape.rot.y == 32734);
-        for (unsigned tick = 0; tick < 80; ++tick) EnViewerStatic_UpdateTracking(&actor, play);
+        for (unsigned tick = 0; tick < 80; ++tick)
+            EnViewerStatic_UpdateTracking(&actor, play);
         REQUIRE(actor.actor.shape.rot.y == -32700 && actor.actor.world.rot.y == -32700);
     }
     REQUIRE(headTrackingCalls == 0);
@@ -132,7 +158,8 @@ int main(void) {
     play.actorCtx.actorLists[ACTORCAT_PLAYER].head = &player.actor;
     testBodyTurning(&play);
     testLuluPresentation(&play);
-    puts("PASS Skull Kid body turning: both poses, smooth approach/return, angle wrap, placement and limb preservation");
+    puts(
+        "PASS Skull Kid body turning: both poses, smooth approach/return, angle wrap, placement and limb preservation");
     puts("PASS Lulu facing: local pose correction, placement yaw, gesture joints, and render matrix restoration");
     return 0;
 }

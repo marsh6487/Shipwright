@@ -13,13 +13,18 @@
 #include "objects/object_dy_obj/object_dy_obj.h"
 #include "soh/ResourceManagerHelpers.h"
 
-void osSyncPrintfUnused(const char* format,...) {}
-void FrameInterpolation_RecordOpenChild(const void* a,int b) {}
-void FrameInterpolation_RecordCloseChild(void) {}
-void gSPSegment(void* value,int segment,uintptr_t target) { __gSPSegment((Gfx*)value,segment,target); }
+void osSyncPrintfUnused(const char* format, ...) {
+}
+void FrameInterpolation_RecordOpenChild(const void* a, int b) {
+}
+void FrameInterpolation_RecordCloseChild(void) {
+}
+void gSPSegment(void* value, int segment, uintptr_t target) {
+    __gSPSegment((Gfx*)value, segment, target);
+}
 
-static unsigned initCalls,freeCalls,releaseCalls,drawCalls,killCalls,objectCalls,colliderFrees,loopCalls;
-static bool loadSuccess=true,allocationSuccess=true;
+static unsigned initCalls, freeCalls, releaseCalls, drawCalls, killCalls, objectCalls, colliderFrees, loopCalls;
+static bool loadSuccess = true, allocationSuccess = true;
 static float rotateX;
 static unsigned char eyes[8][16], mouths[4][16];
 static FlexSkeletonHeader skeleton;
@@ -39,9 +44,12 @@ static Gfx originalHead[1], hdHeads[2][4][1], shopGalHeads[3][1], greatFairyHead
 static unsigned greatFairyExpectedEye;
 static Gfx* expectedHead = originalHead;
 static unsigned hdLoads;
-bool ResourceMgr_IsAltAssetsEnabled(void) { return altAssets; }
+bool ResourceMgr_IsAltAssetsEnabled(void) {
+    return altAssets;
+}
 uint8_t ResourceMgr_FileExists(const char* path) {
-    if (strstr(path, "ShopGalMMDLevel") != NULL) return footAnimExists;
+    if (strstr(path, "ShopGalMMDLevel") != NULL)
+        return footAnimExists;
     REQUIRE(strncmp(path, "alt/objects/object_zov/Lulu3DSHDBlinkHead", 39) == 0 ||
             strncmp(path, "alt/objects/object_bg/ShopGalMMDBlinkHead", 39) == 0 ||
             strstr(path, "alt/objects/object_dy_obj/HWGreatFairyCharcoalBlinkHead") == path);
@@ -57,18 +65,22 @@ char* ResourceMgr_GetResourceDataByNameHandlingMQ(const char* path) {
     }
     ++hdLoads;
     REQUIRE(altAssets && hdHeadExists);
-    for (unsigned mouth = 0; mouth < 2; ++mouth) for (unsigned eye = 0; eye < 4; ++eye) {
-        char expected[96];
-        snprintf(expected, sizeof(expected), "alt/objects/object_zov/Lulu3DSHDBlinkHead%u%sDL",
-                 eye, mouth ? "" : "MouthClosed");
-        if (strcmp(path, expected) == 0) return hdHeadLoads ? (char*)hdHeads[mouth][eye] : NULL;
-    }
+    for (unsigned mouth = 0; mouth < 2; ++mouth)
+        for (unsigned eye = 0; eye < 4; ++eye) {
+            char expected[96];
+            snprintf(expected, sizeof(expected), "alt/objects/object_zov/Lulu3DSHDBlinkHead%u%sDL", eye,
+                     mouth ? "" : "MouthClosed");
+            if (strcmp(path, expected) == 0)
+                return hdHeadLoads ? (char*)hdHeads[mouth][eye] : NULL;
+        }
     for (unsigned eye = 0; eye < 3; ++eye) {
         char expected[96];
         snprintf(expected, sizeof(expected), "alt/objects/object_bg/ShopGalMMDBlinkHead%uDL", eye);
-        if (strcmp(path, expected) == 0) return hdHeadLoads ? (char*)shopGalHeads[eye] : NULL;
+        if (strcmp(path, expected) == 0)
+            return hdHeadLoads ? (char*)shopGalHeads[eye] : NULL;
         snprintf(expected, sizeof(expected), "alt/objects/object_dy_obj/HWGreatFairyCharcoalBlinkHead%uDL", eye);
-        if (strcmp(path, expected) == 0) return hdHeadLoads ? (char*)greatFairyHeads[eye] : NULL;
+        if (strcmp(path, expected) == 0)
+            return hdHeadLoads ? (char*)greatFairyHeads[eye] : NULL;
     }
     REQUIRE(false);
     return NULL;
@@ -76,39 +88,71 @@ char* ResourceMgr_GetResourceDataByNameHandlingMQ(const char* path) {
 uintptr_t gSegments[16];
 static GameInfo gameInfo;
 GameInfo* gGameInfo = &gameInfo;
-static int16_t playerData[89*67];
+static int16_t playerData[89 * 67];
 static unsigned lodDraws;
 static ColliderCylinderInit sStaticCylinderInit;
-void EnViewerStatic_Update(EnViewer*,PlayState*);
-static void EnViewerStatic_UpdateTracking(EnViewer* self,PlayState* play) { (void)self;(void)play; }
-void EnViewerStatic_OfferTalk(EnViewer* self,PlayState* play) { (void)self;(void)play; }
-static void EnViewerStatic_InitRutoWater(EnViewer* a,PlayState* p,const StaticStoryPoseDescriptor* d) { REQUIRE(false); }
-static bool EnViewerStatic_UpdateRutoWater(EnViewer* a,PlayState* p,bool ended) { REQUIRE(false);return false; }
-static void EnViewerStatic_InitSkeleton(EnViewer* a,PlayState* p,const StaticStoryPoseDescriptor* d) { REQUIRE(false); }
-static void EnViewerStatic_SetDaruniaDanceStep(EnViewer* a,u8 step) { REQUIRE(false); }
-void EnViewer_SetupAction(EnViewer* self,EnViewerActionFunc action) { self->actionFunc=action; }
-void ActorCatalogue_LogLifecycle(const char* s,int a,int b,int c,int d,int e,int f,int g) {}
-void MmAssets_Init(void) {}
-bool MmAssets_LoadNormalActor(int type,unsigned char pose,MmNormalActorResources* output) {
-    memset(output,0,sizeof(*output));
-    if (!loadSuccess) return false;
-    const StaticStoryMmPresentation* p=StaticStoryMm_GetPresentation(type,pose);
-    skeleton.sh.limbCount=p->limbCount;skeleton.dListCount=p->matrixCount;
-    animation.common.frameCount=p->frameCount;
-    output->owner=malloc(1);output->skeleton=&skeleton;output->animation=&animation;
-    for (unsigned i=0;i<p->eyeCount;++i) output->eyes[i]=eyes[i];
-    for (unsigned i=0;i<p->mouthCount;++i) output->mouths[i]=mouths[i];
+void EnViewerStatic_Update(EnViewer*, PlayState*);
+static void EnViewerStatic_UpdateTracking(EnViewer* self, PlayState* play) {
+    (void)self;
+    (void)play;
+}
+void EnViewerStatic_OfferTalk(EnViewer* self, PlayState* play) {
+    (void)self;
+    (void)play;
+}
+static void EnViewerStatic_InitRutoWater(EnViewer* a, PlayState* p, const StaticStoryPoseDescriptor* d) {
+    REQUIRE(false);
+}
+static bool EnViewerStatic_UpdateRutoWater(EnViewer* a, PlayState* p, bool ended) {
+    REQUIRE(false);
+    return false;
+}
+static void EnViewerStatic_InitSkeleton(EnViewer* a, PlayState* p, const StaticStoryPoseDescriptor* d) {
+    REQUIRE(false);
+}
+static void EnViewerStatic_SetDaruniaDanceStep(EnViewer* a, u8 step) {
+    REQUIRE(false);
+}
+void EnViewer_SetupAction(EnViewer* self, EnViewerActionFunc action) {
+    self->actionFunc = action;
+}
+void ActorCatalogue_LogLifecycle(const char* s, int a, int b, int c, int d, int e, int f, int g) {
+}
+void MmAssets_Init(void) {
+}
+bool MmAssets_LoadNormalActor(int type, unsigned char pose, MmNormalActorResources* output) {
+    memset(output, 0, sizeof(*output));
+    if (!loadSuccess)
+        return false;
+    const StaticStoryMmPresentation* p = StaticStoryMm_GetPresentation(type, pose);
+    skeleton.sh.limbCount = p->limbCount;
+    skeleton.dListCount = p->matrixCount;
+    animation.common.frameCount = p->frameCount;
+    output->owner = malloc(1);
+    output->skeleton = &skeleton;
+    output->animation = &animation;
+    for (unsigned i = 0; i < p->eyeCount; ++i)
+        output->eyes[i] = eyes[i];
+    for (unsigned i = 0; i < p->mouthCount; ++i)
+        output->mouths[i] = mouths[i];
     return true;
 }
-bool MmAssets_LoadKafei(unsigned char pose,MmNormalActorResources* output) {
-    bool loaded=MmAssets_LoadNormalActor(STATIC_STORY_ACTOR_CHILD_KAFEI,pose,output);
-    output->animation=NULL;output->playerFrames=loaded?playerData:NULL;
+bool MmAssets_LoadKafei(unsigned char pose, MmNormalActorResources* output) {
+    bool loaded = MmAssets_LoadNormalActor(STATIC_STORY_ACTOR_CHILD_KAFEI, pose, output);
+    output->animation = NULL;
+    output->playerFrames = loaded ? playerData : NULL;
     return loaded;
 }
-void MmAssets_ReleaseNormalActor(void* owner) { if(owner) { ++releaseCalls;free(owner); } }
+void MmAssets_ReleaseNormalActor(void* owner) {
+    if (owner) {
+        ++releaseCalls;
+        free(owner);
+    }
+}
 void* MmAssets_LoadSkeleton(const char* path) {
     REQUIRE(strcmp(path, "objects/object_bg/gTreasureChestShopGalSkel") == 0);
-    skeleton.sh.limbCount = 23; skeleton.dListCount = 16;
+    skeleton.sh.limbCount = 23;
+    skeleton.dListCount = 16;
     return &skeleton;
 }
 void* MmAssets_LoadAnimation(const char* path) {
@@ -121,58 +165,143 @@ void* MmAssets_LoadResource(const char* path) {
     for (unsigned eye = 0; eye < 3; ++eye)
         if (strcmp(path, StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, eye)) == 0)
             return eyes[eye];
-    REQUIRE(false); return NULL;
+    REQUIRE(false);
+    return NULL;
 }
-Gfx* MmAssets_LoadDisplayListGraphStrict(const char* path) { REQUIRE(false);return NULL; }
-void Actor_Kill(Actor* a) { ++killCalls; }
-s32 Object_GetIndex(ObjectContext* c,s16 id) { ++objectCalls;return -1; }
-s32 Object_Spawn(ObjectContext* c,s16 id) { ++objectCalls;return -1; }
-s32 Object_IsLoaded(ObjectContext* c,s32 slot) { ++objectCalls;return 0; }
-void Actor_SetObjectDependency(PlayState* p,Actor* a) { ++objectCalls; }
-int StaticStoryKokiri_RequestObjects(EnViewer* a,PlayState* p) { REQUIRE(false);return false; }
-void StaticStoryKokiri_Init(EnViewer* a,PlayState* p) { REQUIRE(false); }
-s32 SkelAnime_InitFlex(PlayState* p,SkelAnime* s,FlexSkeletonHeader* h,AnimationHeader* a,Vec3s* j,Vec3s* m,s32 n) {
-    ++initCalls;REQUIRE(a==NULL && j==NULL && m==NULL);
-    s->limbCount=h->sh.limbCount+1;s->dListCount=h->dListCount;
-    s->jointTable=calloc(s->limbCount,sizeof(Vec3s));
-    s->morphTable=allocationSuccess ? calloc(s->limbCount,sizeof(Vec3s)) : NULL;
+Gfx* MmAssets_LoadDisplayListGraphStrict(const char* path) {
+    REQUIRE(false);
+    return NULL;
+}
+void Actor_Kill(Actor* a) {
+    ++killCalls;
+}
+s32 Object_GetIndex(ObjectContext* c, s16 id) {
+    ++objectCalls;
+    return -1;
+}
+s32 Object_Spawn(ObjectContext* c, s16 id) {
+    ++objectCalls;
+    return -1;
+}
+s32 Object_IsLoaded(ObjectContext* c, s32 slot) {
+    ++objectCalls;
+    return 0;
+}
+void Actor_SetObjectDependency(PlayState* p, Actor* a) {
+    ++objectCalls;
+}
+int StaticStoryKokiri_RequestObjects(EnViewer* a, PlayState* p) {
+    REQUIRE(false);
+    return false;
+}
+void StaticStoryKokiri_Init(EnViewer* a, PlayState* p) {
+    REQUIRE(false);
+}
+s32 SkelAnime_InitFlex(PlayState* p, SkelAnime* s, FlexSkeletonHeader* h, AnimationHeader* a, Vec3s* j, Vec3s* m,
+                       s32 n) {
+    ++initCalls;
+    REQUIRE(a == NULL && j == NULL && m == NULL);
+    s->limbCount = h->sh.limbCount + 1;
+    s->dListCount = h->dListCount;
+    s->jointTable = calloc(s->limbCount, sizeof(Vec3s));
+    s->morphTable = allocationSuccess ? calloc(s->limbCount, sizeof(Vec3s)) : NULL;
     return 0; // The production function's return value is undefined; caller must inspect allocations.
 }
-s32 SkelAnime_Init(PlayState* p,SkelAnime* s,SkeletonHeader* h,AnimationHeader* a,Vec3s* j,Vec3s* m,s32 n) { REQUIRE(false);return 0; }
-void Animation_PlayLoopSetSpeed(SkelAnime* s,AnimationHeader* a,f32 speed) {
-    ++loopCalls;REQUIRE(s->jointTable && s->morphTable);REQUIRE(speed==1.0f);
-    s->animation=a;s->curFrame=0;s->endFrame=a->common.frameCount-1;
-    s->jointTable[0]=(Vec3s){123,456,789};
+s32 SkelAnime_Init(PlayState* p, SkelAnime* s, SkeletonHeader* h, AnimationHeader* a, Vec3s* j, Vec3s* m, s32 n) {
+    REQUIRE(false);
+    return 0;
 }
-s32 SkelAnime_Update(SkelAnime* s) { s->curFrame+=1;s->jointTable[0].x+=7;return 0; }
-void SkelAnime_Free(SkelAnime* s,PlayState* p) { ++freeCalls;free(s->jointTable);free(s->morphTable); }
-void Skin_Free(PlayState* p,Skin* s) { REQUIRE(false); }
-void Actor_SetScale(Actor* a,f32 scale) { a->scale=(Vec3f){scale,scale,scale}; }
-void ActorShape_Init(ActorShape* shape,f32 y,ActorShadowFunc draw,f32 radius) { shape->yOffset=y; }
-void ActorShadow_DrawCircle(Actor* a,Lights* l,PlayState* p) {}
-s32 Collider_InitCylinder(PlayState* p,ColliderCylinder* c) { return 1; }
-s32 Collider_SetCylinder(PlayState* p,ColliderCylinder* c,Actor* a,ColliderCylinderInit* i) { return 1; }
-s32 Collider_DestroyCylinder(PlayState* p,ColliderCylinder* c) { ++colliderFrees;return 1; }
-void Collider_UpdateCylinder(Actor* a,ColliderCylinder* c) {}
-s32 CollisionCheck_SetOC(PlayState* p,CollisionCheckContext* c,Collider* a) { return 0; }
-void Actor_SetFocus(Actor* a,f32 y) { a->focus.pos=a->world.pos;a->focus.pos.y+=y; }
-s16 Rand_S16Offset(s16 base,s16 range) { return base; }
-f32 Math_SinS(s16 angle) { return 0; }
-s16 Math_SmoothStepToS(s16* value,s16 target,s16 scale,s16 step,s16 min) { return 0; }
-bool StaticRutoWater_ShouldTurnBody(const StaticRutoWaterState* state) { return false; }
-void Matrix_RotateX(f32 x,u8 mode) { REQUIRE(mode==MTXMODE_APPLY);rotateX=x; }
-void Matrix_Push(void) {}
-void Matrix_Pop(void) {}
-void Matrix_RotateY(f32 y,u8 mode) { REQUIRE(mode==MTXMODE_APPLY); }
-void Gfx_SetupDL_25Opa(GraphicsContext* gfx) {}
-void Graph_OpenDisps(Gfx** dList,GraphicsContext* gfx,const char* file,s32 line) {}
-void Graph_CloseDisps(Gfx** dList,GraphicsContext* gfx,const char* file,s32 line) {}
-void MmAssets_EnsureStrictTextureBindings(void) {}
-static s32 EnViewer_StaticSkullKidOverrideLimbDraw(PlayState* p,s32 i,Gfx** d,Vec3f* v,Vec3s* r,void* a) { return false; }
-static void EnViewer_StaticSkullKidPostLimbDraw(PlayState* p,s32 i,Gfx** d,Vec3s* r,void* a) {}
-static void EnViewer_DrawStaticTatl(EnViewer* a,PlayState* p) {}
-void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawOpa override,PostLimbDrawOpa post,void* arg) {
-    ++drawCalls;REQUIRE(arg==drawing);
+void Animation_PlayLoopSetSpeed(SkelAnime* s, AnimationHeader* a, f32 speed) {
+    ++loopCalls;
+    REQUIRE(s->jointTable && s->morphTable);
+    REQUIRE(speed == 1.0f);
+    s->animation = a;
+    s->curFrame = 0;
+    s->endFrame = a->common.frameCount - 1;
+    s->jointTable[0] = (Vec3s){ 123, 456, 789 };
+}
+s32 SkelAnime_Update(SkelAnime* s) {
+    s->curFrame += 1;
+    s->jointTable[0].x += 7;
+    return 0;
+}
+void SkelAnime_Free(SkelAnime* s, PlayState* p) {
+    ++freeCalls;
+    free(s->jointTable);
+    free(s->morphTable);
+}
+void Skin_Free(PlayState* p, Skin* s) {
+    REQUIRE(false);
+}
+void Actor_SetScale(Actor* a, f32 scale) {
+    a->scale = (Vec3f){ scale, scale, scale };
+}
+void ActorShape_Init(ActorShape* shape, f32 y, ActorShadowFunc draw, f32 radius) {
+    shape->yOffset = y;
+}
+void ActorShadow_DrawCircle(Actor* a, Lights* l, PlayState* p) {
+}
+s32 Collider_InitCylinder(PlayState* p, ColliderCylinder* c) {
+    return 1;
+}
+s32 Collider_SetCylinder(PlayState* p, ColliderCylinder* c, Actor* a, ColliderCylinderInit* i) {
+    return 1;
+}
+s32 Collider_DestroyCylinder(PlayState* p, ColliderCylinder* c) {
+    ++colliderFrees;
+    return 1;
+}
+void Collider_UpdateCylinder(Actor* a, ColliderCylinder* c) {
+}
+s32 CollisionCheck_SetOC(PlayState* p, CollisionCheckContext* c, Collider* a) {
+    return 0;
+}
+void Actor_SetFocus(Actor* a, f32 y) {
+    a->focus.pos = a->world.pos;
+    a->focus.pos.y += y;
+}
+s16 Rand_S16Offset(s16 base, s16 range) {
+    return base;
+}
+f32 Math_SinS(s16 angle) {
+    return 0;
+}
+s16 Math_SmoothStepToS(s16* value, s16 target, s16 scale, s16 step, s16 min) {
+    return 0;
+}
+bool StaticRutoWater_ShouldTurnBody(const StaticRutoWaterState* state) {
+    return false;
+}
+void Matrix_RotateX(f32 x, u8 mode) {
+    REQUIRE(mode == MTXMODE_APPLY);
+    rotateX = x;
+}
+void Matrix_Push(void) {
+}
+void Matrix_Pop(void) {
+}
+void Matrix_RotateY(f32 y, u8 mode) {
+    REQUIRE(mode == MTXMODE_APPLY);
+}
+void Gfx_SetupDL_25Opa(GraphicsContext* gfx) {
+}
+void Graph_OpenDisps(Gfx** dList, GraphicsContext* gfx, const char* file, s32 line) {
+}
+void Graph_CloseDisps(Gfx** dList, GraphicsContext* gfx, const char* file, s32 line) {
+}
+void MmAssets_EnsureStrictTextureBindings(void) {
+}
+static s32 EnViewer_StaticSkullKidOverrideLimbDraw(PlayState* p, s32 i, Gfx** d, Vec3f* v, Vec3s* r, void* a) {
+    return false;
+}
+static void EnViewer_StaticSkullKidPostLimbDraw(PlayState* p, s32 i, Gfx** d, Vec3s* r, void* a) {
+}
+static void EnViewer_DrawStaticTatl(EnViewer* a, PlayState* p) {
+}
+void SkelAnime_DrawSkeletonOpa(PlayState* play, SkelAnime* skel, OverrideLimbDrawOpa override, PostLimbDrawOpa post,
+                               void* arg) {
+    ++drawCalls;
+    REQUIRE(arg == drawing);
     if (drawing->staticState.type == STATIC_STORY_ACTOR_SKULL_KID) {
         const MmSkullKidDisplayLists* selected = &skullModels[altAssets];
         REQUIRE(drawing->staticState.skullKidHeadDL == selected->head);
@@ -187,7 +316,7 @@ void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawO
         REQUIRE(commands[1].words.w1 == 0xffffffffU);
         return;
     }
-    REQUIRE(post==NULL);
+    REQUIRE(post == NULL);
     if (drawing->staticState.type == STATIC_STORY_ACTOR_GREAT_FAIRY) {
         const char* const eyePaths[] = { gGreatFairyEyeOpenTex, gGreatFairyEyeHalfTex, gGreatFairyEyeClosedTex };
         REQUIRE(play->state.gfxCtx->polyOpa.p == commands + 3);
@@ -197,7 +326,9 @@ void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawO
         REQUIRE(strcmp((const char*)commands[0].words.w1, eyePaths[greatFairyExpectedEye]) == 0);
         REQUIRE(strcmp((const char*)commands[1].words.w1, eyePaths[greatFairyExpectedEye]) == 0);
         REQUIRE(strcmp((const char*)commands[2].words.w1, gGreatFairyMouthClosedTex) == 0);
-        Vec3s rot = {0}; Vec3f pos = {0}; Gfx* dl = originalHead;
+        Vec3s rot = { 0 };
+        Vec3f pos = { 0 };
+        Gfx* dl = originalHead;
         REQUIRE(override != NULL);
         override(play, 14, &dl, &pos, &rot, arg);
         REQUIRE(dl == originalHead && rot.x == 0 && rot.z == 0);
@@ -205,7 +336,8 @@ void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawO
         REQUIRE(dl == expectedHead);
         REQUIRE(rot.x == (drawing->staticState.pose == 0 ? 6000 : 4096));
         REQUIRE(rot.z == (drawing->staticState.pose == 0 ? -6000 : -4096));
-        rot = (Vec3s){0}; dl = originalHead;
+        rot = (Vec3s){ 0 };
+        dl = originalHead;
         override(play, 8, &dl, &pos, &rot, arg);
         REQUIRE(dl == originalHead);
         REQUIRE(rot.x == (drawing->staticState.pose == 0 ? 200 : 0));
@@ -215,11 +347,13 @@ void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawO
         REQUIRE(play->state.gfxCtx->polyOpa.p == commands + 1);
         REQUIRE((commands[0].words.w0 & 0xffff) == 8 * 4);
         const char* eyePath = (const char*)commands[0].words.w1;
-        REQUIRE(((uintptr_t)eyePath & 1) == 0); // Odd addresses are interpreted as segmented pointers.
+        REQUIRE(((uintptr_t)eyePath & 1) == 0);       // Odd addresses are interpreted as segmented pointers.
         REQUIRE(strncmp(eyePath, "__OTR__", 7) == 0); // Keep HD metadata, not just ImageData.
-        REQUIRE(strcmp(eyePath + 7, StaticStoryMm_GetEyeTexturePath(drawing->staticState.type,
-            drawing->staticState.eyeIndex)) == 0);
-        Vec3s rot = {0}; Vec3f pos = {0}; Gfx* dl = originalHead;
+        REQUIRE(strcmp(eyePath + 7,
+                       StaticStoryMm_GetEyeTexturePath(drawing->staticState.type, drawing->staticState.eyeIndex)) == 0);
+        Vec3s rot = { 0 };
+        Vec3f pos = { 0 };
+        Gfx* dl = originalHead;
         REQUIRE(override != NULL);
         override(play, 5, &dl, &pos, &rot, arg);
         REQUIRE(dl == expectedHead);
@@ -227,12 +361,13 @@ void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawO
     }
     // Segment commands must already be emitted before the skeleton draw boundary.
     REQUIRE(play->state.gfxCtx->polyOpa.p > commands);
-    faceCommands=play->state.gfxCtx->polyOpa.p-commands-1;
+    faceCommands = play->state.gfxCtx->polyOpa.p - commands - 1;
     REQUIRE((commands[faceCommands].words.w0 >> 24) == G_SETENVCOLOR);
     REQUIRE(commands[faceCommands].words.w1 == 0xffffffffU);
-    const StaticStoryMmPresentation* p=StaticStoryMm_GetPresentation(drawing->staticState.type,drawing->staticState.pose);
+    const StaticStoryMmPresentation* p =
+        StaticStoryMm_GetPresentation(drawing->staticState.type, drawing->staticState.pose);
     unsigned firstFace = drawing->staticState.type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN;
-    REQUIRE(faceCommands==firstFace+(p->eyeCount!=0)+(p->mouthCount!=0));
+    REQUIRE(faceCommands == firstFace + (p->eyeCount != 0) + (p->mouthCount != 0));
     if (firstFace) {
         REQUIRE((commands[0].words.w0 & 0xffff) == 0x0C * 4);
         REQUIRE(commands[0].words.w1 == (uintptr_t)MmAssets_GetOpaqueRenderMode());
@@ -241,54 +376,70 @@ void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawO
             REQUIRE(MmAssets_GetOpaqueRenderMode()[index].words.w1 == 0);
         }
     }
-    if(p->eyeCount || p->mouthCount) {
-        StaticStoryMmFace face=StaticStoryMm_ResolveFace(drawing->staticState.type,drawing->staticState.pose,
-             skel->curFrame,drawing->staticState.eyeIndex,drawing->staticState.tracking);
-        REQUIRE(commands[firstFace].words.w1==(uintptr_t)eyes[face.eye]);
-        REQUIRE(commands[firstFace+1].words.w1==(uintptr_t)mouths[face.mouth]);
-        REQUIRE((commands[firstFace].words.w0 & 0xffff)==p->eyeSegment*4);
-        REQUIRE((commands[firstFace+1].words.w0 & 0xffff)==p->mouthSegment*4);
+    if (p->eyeCount || p->mouthCount) {
+        StaticStoryMmFace face =
+            StaticStoryMm_ResolveFace(drawing->staticState.type, drawing->staticState.pose, skel->curFrame,
+                                      drawing->staticState.eyeIndex, drawing->staticState.tracking);
+        REQUIRE(commands[firstFace].words.w1 == (uintptr_t)eyes[face.eye]);
+        REQUIRE(commands[firstFace + 1].words.w1 == (uintptr_t)mouths[face.mouth]);
+        REQUIRE((commands[firstFace].words.w0 & 0xffff) == p->eyeSegment * 4);
+        REQUIRE((commands[firstFace + 1].words.w0 & 0xffff) == p->mouthSegment * 4);
     }
-    Vec3s rot={0};Vec3f pos={0};Gfx* dl=originalHead;
-    REQUIRE(override!=NULL);
-    override(play,11,&dl,&pos,&rot,arg);
+    Vec3s rot = { 0 };
+    Vec3f pos = { 0 };
+    Gfx* dl = originalHead;
+    REQUIRE(override != NULL);
+    override(play, 11, &dl, &pos, &rot, arg);
     REQUIRE(dl == originalHead);
-    if(drawing->staticState.type==STATIC_STORY_ACTOR_LULU && drawing->staticState.pose==0 && drawing->staticState.tracking)
-        REQUIRE(rot.x==200);
-    override(play,12,&dl,&pos,&rot,arg);
+    if (drawing->staticState.type == STATIC_STORY_ACTOR_LULU && drawing->staticState.pose == 0 &&
+        drawing->staticState.tracking)
+        REQUIRE(rot.x == 200);
+    override(play, 12, &dl, &pos, &rot, arg);
     REQUIRE(dl == expectedHead);
-    if(drawing->staticState.type==STATIC_STORY_ACTOR_LULU && drawing->staticState.pose==0 && drawing->staticState.tracking)
-        REQUIRE(rot.x==300 && rot.z==50);
+    if (drawing->staticState.type == STATIC_STORY_ACTOR_LULU && drawing->staticState.pose == 0 &&
+        drawing->staticState.tracking)
+        REQUIRE(rot.x == 300 && rot.z == 50);
 }
-void SkelAnime_DrawFlexLod(PlayState* play,void** skeleton,Vec3s* joints,s32 count,
-                         OverrideLimbDrawOpa override,PostLimbDrawOpa post,void* arg,s32 lod) {
-    ++lodDraws;REQUIRE(count==18 && lod==0 && post==NULL && arg==drawing);
-    REQUIRE(joints==drawing->skin.skelAnime.jointTable);
-    REQUIRE(play->state.gfxCtx->polyOpa.p==commands+3);
-    StaticStoryMmFace face=StaticStoryMm_KafeiFace(drawing->staticState.mmAppearance);
-    REQUIRE(commands[0].words.w1==(uintptr_t)eyes[face.eye]);
-    REQUIRE(commands[1].words.w1==(uintptr_t)mouths[face.mouth]);
-    REQUIRE((commands[0].words.w0&0xffff)==8*4 && (commands[1].words.w0&0xffff)==9*4);
-    REQUIRE(commands[2].words.w1==0xffffffffU);
-    Vec3f pos={17,34,-17};Vec3s rot={1,2,3};Gfx* dl=(Gfx*)0x1234;
-    REQUIRE(!override(play,1,&dl,&pos,&rot,arg));
-    REQUIRE(fabsf(pos.x-11)<0.0001f && fabsf(pos.y-22)<0.0001f && fabsf(pos.z+11)<0.0001f);
-    REQUIRE(dl==(Gfx*)0x1234 && rot.x==1 && rot.y==2 && rot.z==3);
-    pos=(Vec3f){17,34,-17};override(play,2,&dl,&pos,&rot,arg);REQUIRE(pos.x==17 && pos.y==34);
+void SkelAnime_DrawFlexLod(PlayState* play, void** skeleton, Vec3s* joints, s32 count, OverrideLimbDrawOpa override,
+                           PostLimbDrawOpa post, void* arg, s32 lod) {
+    ++lodDraws;
+    REQUIRE(count == 18 && lod == 0 && post == NULL && arg == drawing);
+    REQUIRE(joints == drawing->skin.skelAnime.jointTable);
+    REQUIRE(play->state.gfxCtx->polyOpa.p == commands + 3);
+    StaticStoryMmFace face = StaticStoryMm_KafeiFace(drawing->staticState.mmAppearance);
+    REQUIRE(commands[0].words.w1 == (uintptr_t)eyes[face.eye]);
+    REQUIRE(commands[1].words.w1 == (uintptr_t)mouths[face.mouth]);
+    REQUIRE((commands[0].words.w0 & 0xffff) == 8 * 4 && (commands[1].words.w0 & 0xffff) == 9 * 4);
+    REQUIRE(commands[2].words.w1 == 0xffffffffU);
+    Vec3f pos = { 17, 34, -17 };
+    Vec3s rot = { 1, 2, 3 };
+    Gfx* dl = (Gfx*)0x1234;
+    REQUIRE(!override(play, 1, &dl, &pos, &rot, arg));
+    REQUIRE(fabsf(pos.x - 11) < 0.0001f && fabsf(pos.y - 22) < 0.0001f && fabsf(pos.z + 11) < 0.0001f);
+    REQUIRE(dl == (Gfx*)0x1234 && rot.x == 1 && rot.y == 2 && rot.z == 3);
+    pos = (Vec3f){ 17, 34, -17 };
+    override(play, 2, &dl, &pos, &rot, arg);
+    REQUIRE(pos.x == 17 && pos.y == 34);
 }
 /* PRODUCTION_OPAQUE_RENDER_MODE */
 /* PRODUCTION_VIEWER_FUNCTIONS */
 
-static void prepare(EnViewer* viewer,int type,int pose) {
-    memset(viewer,0,sizeof(*viewer));
-    viewer->animObjBankIndex=-1;
-    viewer->staticState.staticMode=true;viewer->staticState.type=type;viewer->staticState.pose=pose;
-    for(unsigned i=0;i<4;++i) viewer->staticState.objectSlots[i]=-1;
-    viewer->actor.world.pos=(Vec3f){12,345,67};viewer->actor.home.pos=viewer->actor.world.pos;
+static void prepare(EnViewer* viewer, int type, int pose) {
+    memset(viewer, 0, sizeof(*viewer));
+    viewer->animObjBankIndex = -1;
+    viewer->staticState.staticMode = true;
+    viewer->staticState.type = type;
+    viewer->staticState.pose = pose;
+    for (unsigned i = 0; i < 4; ++i)
+        viewer->staticState.objectSlots[i] = -1;
+    viewer->actor.world.pos = (Vec3f){ 12, 345, 67 };
+    viewer->actor.home.pos = viewer->actor.world.pos;
 }
-static void draw(EnViewer* viewer,PlayState* play) {
-    drawing=viewer;play->state.gfxCtx->polyOpa.p=commands;rotateX=0;
-    EnViewer_DrawStaticMmActor(viewer,play);
+static void draw(EnViewer* viewer, PlayState* play) {
+    drawing = viewer;
+    play->state.gfxCtx->polyOpa.p = commands;
+    rotateX = 0;
+    EnViewer_DrawStaticMmActor(viewer, play);
 }
 static void testLuluHdBlink(PlayState* play) {
     altAssets = true;
@@ -299,14 +450,15 @@ static void testLuluHdBlink(PlayState* play) {
         EnViewerStatic_WaitForObjects(&first, play);
         EnViewerStatic_WaitForObjects(&second, play);
         first.staticState.tracking = pose == 0;
-        first.staticState.interactInfo.headRot = (Vec3s){50, 100, 0};
+        first.staticState.interactInfo.headRot = (Vec3s){ 50, 100, 0 };
         first.staticState.interactInfo.torsoRot.y = 200;
         unsigned mouth = pose == 2;
         expectedHead = hdHeads[mouth][0];
         draw(&first, play);
-        for (unsigned tick = 0; tick < 30; ++tick) EnViewer_Update(&first.actor, play);
+        for (unsigned tick = 0; tick < 30; ++tick)
+            EnViewer_Update(&first.actor, play);
         draw(&first, play);
-        const unsigned sequence[] = {1, 2, 3, 2, 1, 0};
+        const unsigned sequence[] = { 1, 2, 3, 2, 1, 0 };
         for (unsigned tick = 0; tick < 6; ++tick) {
             EnViewer_Update(&first.actor, play);
             expectedHead = hdHeads[mouth][sequence[tick]];
@@ -335,80 +487,97 @@ static void testLuluHdBlink(PlayState* play) {
     }
     altAssets = false;
     expectedHead = originalHead;
-    puts("PASS Lulu HD blink: four poses, all eye frames, mouth selection, private timing, render independence, optional-asset fallback");
+    puts("PASS Lulu HD blink: four poses, all eye frames, mouth selection, private timing, render independence, "
+         "optional-asset fallback");
 }
 static void testShopGalBlink(PlayState* play) {
-    for (unsigned useAlt = 0; useAlt < 2; ++useAlt) for (unsigned pose = 0; pose < 3; ++pose) {
-        altAssets = useAlt;
-        expectedHead = useAlt ? shopGalHeads[0] : originalHead;
-        EnViewer first, second;
-        prepare(&first, STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, pose);
-        prepare(&second, STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, pose);
-        EnViewerStatic_WaitForObjects(&first, play);
-        EnViewerStatic_WaitForObjects(&second, play);
-        REQUIRE(first.staticState.initialized && second.staticState.initialized);
-        draw(&first, play);
-        for (unsigned tick = 0; tick < 30; ++tick) EnViewer_Update(&first.actor, play);
-        REQUIRE(first.staticState.eyeIndex == 0);
-        for (unsigned tick = 1; tick <= 4; ++tick) {
-            EnViewer_Update(&first.actor, play);
-            REQUIRE(first.staticState.eyeIndex == tick % 4);
-            const unsigned states[] = {0, 1, 2, 1};
-            expectedHead = useAlt ? shopGalHeads[states[tick % 4]] : originalHead;
-            draw(&first, play);
-            draw(&first, play);
-            REQUIRE(second.staticState.eyeIndex == 0);
+    for (unsigned useAlt = 0; useAlt < 2; ++useAlt)
+        for (unsigned pose = 0; pose < 3; ++pose) {
+            altAssets = useAlt;
             expectedHead = useAlt ? shopGalHeads[0] : originalHead;
-            draw(&second, play);
+            EnViewer first, second;
+            prepare(&first, STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, pose);
+            prepare(&second, STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, pose);
+            EnViewerStatic_WaitForObjects(&first, play);
+            EnViewerStatic_WaitForObjects(&second, play);
+            REQUIRE(first.staticState.initialized && second.staticState.initialized);
+            draw(&first, play);
+            for (unsigned tick = 0; tick < 30; ++tick)
+                EnViewer_Update(&first.actor, play);
+            REQUIRE(first.staticState.eyeIndex == 0);
+            for (unsigned tick = 1; tick <= 4; ++tick) {
+                EnViewer_Update(&first.actor, play);
+                REQUIRE(first.staticState.eyeIndex == tick % 4);
+                const unsigned states[] = { 0, 1, 2, 1 };
+                expectedHead = useAlt ? shopGalHeads[states[tick % 4]] : originalHead;
+                draw(&first, play);
+                draw(&first, play);
+                REQUIRE(second.staticState.eyeIndex == 0);
+                expectedHead = useAlt ? shopGalHeads[0] : originalHead;
+                draw(&second, play);
+            }
+            REQUIRE(first.staticState.blinkTimer == 30);
+            expectedHead = originalHead;
+            unsigned loads = hdLoads;
+            hdHeadExists = false;
+            draw(&first, play);
+            REQUIRE(hdLoads == loads);
+            hdHeadExists = true;
+            hdHeadLoads = false;
+            draw(&first, play);
+            hdHeadLoads = true;
+            EnViewer_Destroy(&first.actor, play);
+            EnViewer_Destroy(&second.actor, play);
         }
-        REQUIRE(first.staticState.blinkTimer == 30);
-        expectedHead = originalHead;
-        unsigned loads = hdLoads;
-        hdHeadExists = false;
-        draw(&first, play);
-        REQUIRE(hdLoads == loads);
-        hdHeadExists = true; hdHeadLoads = false;
-        draw(&first, play);
-        hdHeadLoads = true;
-        EnViewer_Destroy(&first.actor, play);
-        EnViewer_Destroy(&second.actor, play);
-    }
-    altAssets = false; expectedHead = originalHead;
-    puts("PASS Treasure Chest Shop Gal: three poses, complete blink, per-instance timing, aligned OTR eye paths retain HD metadata");
+    altAssets = false;
+    expectedHead = originalHead;
+    puts("PASS Treasure Chest Shop Gal: three poses, complete blink, per-instance timing, aligned OTR eye paths retain "
+         "HD metadata");
 }
 static void testShopGalFootAnimations(PlayState* play) {
-    for (unsigned pose=0;pose<3;++pose) for (unsigned mode=0;mode<5;++mode) {
-        altAssets=mode!=0;footAnimExists=mode!=1;footAnimLoads=mode!=2;
-        footAnimations[0].common.frameCount=footAnimations[1].common.frameCount=mode==3 ? 31 : 32;
-        EnViewer viewer;prepare(&viewer,STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL,pose);
-        EnViewerStatic_WaitForObjects(&viewer,play);
-        REQUIRE(viewer.staticState.initialized);
-        REQUIRE(viewer.skin.skelAnime.animation==(mode==4 ? &footAnimations[pose==1] : &animation));
-        EnViewer_Destroy(&viewer.actor,play);
-    }
-    altAssets=false;footAnimExists=false;footAnimLoads=true;
+    for (unsigned pose = 0; pose < 3; ++pose)
+        for (unsigned mode = 0; mode < 5; ++mode) {
+            altAssets = mode != 0;
+            footAnimExists = mode != 1;
+            footAnimLoads = mode != 2;
+            footAnimations[0].common.frameCount = footAnimations[1].common.frameCount = mode == 3 ? 31 : 32;
+            EnViewer viewer;
+            prepare(&viewer, STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, pose);
+            EnViewerStatic_WaitForObjects(&viewer, play);
+            REQUIRE(viewer.staticState.initialized);
+            REQUIRE(viewer.skin.skelAnime.animation == (mode == 4 ? &footAnimations[pose == 1] : &animation));
+            EnViewer_Destroy(&viewer.actor, play);
+        }
+    altAssets = false;
+    footAnimExists = false;
+    footAnimLoads = true;
     puts("PASS Shop Gal foot clips: three poses, alt-disabled, absent, failed and mismatched-duration fallbacks");
 }
 static void drawGreatFairy(EnViewer* viewer, PlayState* play) {
-    drawing = viewer; play->state.gfxCtx->polyOpa.p = commands;
+    drawing = viewer;
+    play->state.gfxCtx->polyOpa.p = commands;
     EnViewer_DrawStaticGreatFairy(viewer, play);
 }
 static void testGreatFairyBlink(PlayState* play) {
-    const unsigned eyesAtTick[] = {0, 1, 2, 2, 1, 0};
+    const unsigned eyesAtTick[] = { 0, 1, 2, 2, 1, 0 };
     for (unsigned pose = 0; pose < 3; ++pose) {
-        EnViewer first, second; Vec3s joints[28] = {0}, otherJoints[28] = {0};
+        EnViewer first, second;
+        Vec3s joints[28] = { 0 }, otherJoints[28] = { 0 };
         prepare(&first, STATIC_STORY_ACTOR_GREAT_FAIRY, pose);
         first.staticState.initialized = true;
-        first.staticState.interactInfo.headRot = (Vec3s){-6000, 6000, 0};
+        first.staticState.interactInfo.headRot = (Vec3s){ -6000, 6000, 0 };
         first.staticState.interactInfo.torsoRot.y = 200;
         first.skin.skelAnime.jointTable = joints;
-        second = first; second.skin.skelAnime.jointTable = otherJoints;
+        second = first;
+        second.skin.skelAnime.jointTable = otherJoints;
         altAssets = true;
         for (unsigned tick = 0; tick <= 5; ++tick) {
-            if (tick) EnViewerStatic_Update(&first, play);
+            if (tick)
+                EnViewerStatic_Update(&first, play);
             greatFairyExpectedEye = eyesAtTick[tick];
             expectedHead = greatFairyHeads[greatFairyExpectedEye];
-            drawGreatFairy(&first, play); drawGreatFairy(&first, play);
+            drawGreatFairy(&first, play);
+            drawGreatFairy(&first, play);
             REQUIRE(second.staticState.eyeIndex == 0);
         }
         REQUIRE(first.staticState.eyeIndex == 0 && first.staticState.blinkTimer == 20);
@@ -416,108 +585,162 @@ static void testGreatFairyBlink(PlayState* play) {
         first.staticState.eyeIndex = 255;
         drawGreatFairy(&first, play);
         for (unsigned mode = 0; mode < 3; ++mode) {
-            altAssets = mode != 0; hdHeadExists = mode != 1; hdHeadLoads = mode != 2;
-            first.staticState.eyeIndex = 2; greatFairyExpectedEye = 2; expectedHead = originalHead;
+            altAssets = mode != 0;
+            hdHeadExists = mode != 1;
+            hdHeadLoads = mode != 2;
+            first.staticState.eyeIndex = 2;
+            greatFairyExpectedEye = 2;
+            expectedHead = originalHead;
             unsigned loads = hdLoads;
             drawGreatFairy(&first, play);
-            if (mode != 2) REQUIRE(hdLoads == loads);
+            if (mode != 2)
+                REQUIRE(hdLoads == loads);
         }
         hdHeadExists = hdHeadLoads = true;
     }
-    altAssets = false; expectedHead = originalHead;
-    puts("PASS Great Fairy: three poses, 100 ms closure, private timing, safe indices, head/torso tracking and optional-head fallbacks");
+    altAssets = false;
+    expectedHead = originalHead;
+    puts("PASS Great Fairy: three poses, 100 ms closure, private timing, safe indices, head/torso tracking and "
+         "optional-head fallbacks");
 }
 int main(void) {
-    static PlayState play;static GraphicsContext gfx;play.state.gfxCtx=&gfx;
-    EnViewer skull = {0};skull.staticState.type=STATIC_STORY_ACTOR_SKULL_KID;
+    static PlayState play;
+    static GraphicsContext gfx;
+    play.state.gfxCtx = &gfx;
+    EnViewer skull = { 0 };
+    skull.staticState.type = STATIC_STORY_ACTOR_SKULL_KID;
     for (unsigned model = 0; model < 2; ++model) {
         for (unsigned limb = 0; limb < 22; ++limb)
-            if (limb != 0 && limb != 1 && limb != 17) skullModels[model].limbs[limb] = skullGeometry[model][limb];
+            if (limb != 0 && limb != 1 && limb != 17)
+                skullModels[model].limbs[limb] = skullGeometry[model][limb];
         skullModels[model].head = skullGeometry[model][22];
         skullModels[model].eyes = skullGeometry[model][23];
         skullModels[model].mask = skullGeometry[model][24];
     }
     for (unsigned toggle = 0; toggle < 3; ++toggle) {
         altAssets = toggle == 1;
-        drawing=&skull;gfx.polyOpa.p=commands;
-        EnViewer_DrawStaticSkullKid(&skull,&play);
+        drawing = &skull;
+        gfx.polyOpa.p = commands;
+        EnViewer_DrawStaticSkullKid(&skull, &play);
     }
     skullModelAvailable = false;
     unsigned beforeMissingDraw = drawCalls;
-    EnViewer_DrawStaticSkullKid(&skull,&play);
+    EnViewer_DrawStaticSkullKid(&skull, &play);
     REQUIRE(drawCalls == beforeMissingDraw);
     skullModelAvailable = true;
     puts("PASS Skull Kid: complete model selection updates at draw after live Alt changes");
-    gSegments[6]=0x12345678;
-    const int actors[]={STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN,STATIC_STORY_ACTOR_KEATON,STATIC_STORY_ACTOR_LULU};
-    for(unsigned a=0;a<3;++a) for(unsigned pose=0;pose<(a==2?4:3);++pose) {
-        EnViewer first,second;prepare(&first,actors[a],pose);prepare(&second,actors[a],pose);
-        EnViewerStatic_WaitForObjects(&first,&play);EnViewerStatic_WaitForObjects(&second,&play);
-        REQUIRE(first.staticState.initialized && second.staticState.initialized);
-        REQUIRE(first.skin.skelAnime.jointTable!=second.skin.skelAnime.jointTable);
-        REQUIRE(first.staticState.mmResourceOwner!=second.staticState.mmResourceOwner);
-        unsigned beforeInit=initCalls;EnViewerStatic_WaitForObjects(&first,&play);REQUIRE(beforeInit==initCalls);
-        REQUIRE(first.actor.world.pos.y==345 && first.actor.home.pos.y==345);
-        REQUIRE(first.actor.scale.x==0.01f && first.actor.shape.yOffset==0);
-        REQUIRE(objectCalls==0 && gSegments[6]==0x12345678);
-        first.staticState.blinkTimer=0;first.staticState.eyeIndex=0;
-        EnViewer_Update(&first.actor,&play);
-        REQUIRE(gSegments[6]==0x12345678);
-        REQUIRE(first.skin.skelAnime.jointTable[0].x==130 && first.skin.skelAnime.jointTable[0].y==456);
-        REQUIRE(second.skin.skelAnime.jointTable[0].x==123 && second.staticState.eyeIndex==0);
-        first.staticState.tracking=true;first.staticState.interactInfo.headRot.y=100;
-        first.staticState.interactInfo.headRot.x=50;first.staticState.interactInfo.torsoRot.y=200;
-        draw(&first,&play);
-        if(a==0 && pose==0) REQUIRE(rotateX>0);else REQUIRE(rotateX==0);
-        first.skin.skelAnime.curFrame=43;draw(&first,&play);
-        unsigned frees=freeCalls,releases=releaseCalls;
-        EnViewer_Destroy(&first.actor,&play);EnViewer_Destroy(&first.actor,&play);
-        REQUIRE(freeCalls==frees+1 && releaseCalls==releases+1);
-        REQUIRE(second.staticState.initialized);draw(&second,&play);
-        EnViewer_Destroy(&second.actor,&play);
+    gSegments[6] = 0x12345678;
+    const int actors[] = { STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, STATIC_STORY_ACTOR_KEATON, STATIC_STORY_ACTOR_LULU };
+    for (unsigned a = 0; a < 3; ++a)
+        for (unsigned pose = 0; pose < (a == 2 ? 4 : 3); ++pose) {
+            EnViewer first, second;
+            prepare(&first, actors[a], pose);
+            prepare(&second, actors[a], pose);
+            EnViewerStatic_WaitForObjects(&first, &play);
+            EnViewerStatic_WaitForObjects(&second, &play);
+            REQUIRE(first.staticState.initialized && second.staticState.initialized);
+            REQUIRE(first.skin.skelAnime.jointTable != second.skin.skelAnime.jointTable);
+            REQUIRE(first.staticState.mmResourceOwner != second.staticState.mmResourceOwner);
+            unsigned beforeInit = initCalls;
+            EnViewerStatic_WaitForObjects(&first, &play);
+            REQUIRE(beforeInit == initCalls);
+            REQUIRE(first.actor.world.pos.y == 345 && first.actor.home.pos.y == 345);
+            REQUIRE(first.actor.scale.x == 0.01f && first.actor.shape.yOffset == 0);
+            REQUIRE(objectCalls == 0 && gSegments[6] == 0x12345678);
+            first.staticState.blinkTimer = 0;
+            first.staticState.eyeIndex = 0;
+            EnViewer_Update(&first.actor, &play);
+            REQUIRE(gSegments[6] == 0x12345678);
+            REQUIRE(first.skin.skelAnime.jointTable[0].x == 130 && first.skin.skelAnime.jointTable[0].y == 456);
+            REQUIRE(second.skin.skelAnime.jointTable[0].x == 123 && second.staticState.eyeIndex == 0);
+            first.staticState.tracking = true;
+            first.staticState.interactInfo.headRot.y = 100;
+            first.staticState.interactInfo.headRot.x = 50;
+            first.staticState.interactInfo.torsoRot.y = 200;
+            draw(&first, &play);
+            if (a == 0 && pose == 0)
+                REQUIRE(rotateX > 0);
+            else
+                REQUIRE(rotateX == 0);
+            first.skin.skelAnime.curFrame = 43;
+            draw(&first, &play);
+            unsigned frees = freeCalls, releases = releaseCalls;
+            EnViewer_Destroy(&first.actor, &play);
+            EnViewer_Destroy(&first.actor, &play);
+            REQUIRE(freeCalls == frees + 1 && releaseCalls == releases + 1);
+            REQUIRE(second.staticState.initialized);
+            draw(&second, &play);
+            EnViewer_Destroy(&second.actor, &play);
+        }
+    EnViewer failed;
+    prepare(&failed, STATIC_STORY_ACTOR_LULU, 2);
+    loadSuccess = false;
+    unsigned before = initCalls;
+    EnViewerStatic_WaitForObjects(&failed, &play);
+    EnViewer_Destroy(&failed.actor, &play);
+    REQUIRE(initCalls == before && !failed.staticState.initialized);
+    loadSuccess = true;
+    allocationSuccess = false;
+    prepare(&failed, STATIC_STORY_ACTOR_LULU, 3);
+    unsigned frees = freeCalls, releases = releaseCalls, loops = loopCalls;
+    EnViewerStatic_WaitForObjects(&failed, &play);
+    EnViewer_Destroy(&failed.actor, &play);
+    REQUIRE(freeCalls == frees + 1 && releaseCalls == releases + 1 && loopCalls == loops);
+    REQUIRE(killCalls == 2 && colliderFrees == 20 && objectCalls == 0);
+    allocationSuccess = true;
+    R_UPDATE_RATE = 2;
+    for (unsigned f = 0; f < 89; ++f) {
+        for (unsigned j = 0; j < 66; ++j)
+            playerData[f * 67 + j] = f * 100 + j;
+        playerData[f * 67 + 66] = 0;
     }
-    EnViewer failed;prepare(&failed,STATIC_STORY_ACTOR_LULU,2);loadSuccess=false;
-    unsigned before=initCalls;EnViewerStatic_WaitForObjects(&failed,&play);EnViewer_Destroy(&failed.actor,&play);
-    REQUIRE(initCalls==before && !failed.staticState.initialized);
-    loadSuccess=true;allocationSuccess=false;prepare(&failed,STATIC_STORY_ACTOR_LULU,3);
-    unsigned frees=freeCalls,releases=releaseCalls,loops=loopCalls;
-    EnViewerStatic_WaitForObjects(&failed,&play);EnViewer_Destroy(&failed.actor,&play);
-    REQUIRE(freeCalls==frees+1 && releaseCalls==releases+1 && loopCalls==loops);
-    REQUIRE(killCalls==2 && colliderFrees==20 && objectCalls==0);
-    allocationSuccess=true;R_UPDATE_RATE=2;
-    for(unsigned f=0;f<89;++f) { for(unsigned j=0;j<66;++j) playerData[f*67+j]=f*100+j;playerData[f*67+66]=0; }
-    for(unsigned pose=0;pose<2;++pose) {
-        EnViewer a,b;prepare(&a,STATIC_STORY_ACTOR_CHILD_KAFEI,pose);prepare(&b,STATIC_STORY_ACTOR_CHILD_KAFEI,pose);
-        unsigned loopsBefore=loopCalls;
-        EnViewerStatic_WaitForObjects(&a,&play);EnViewerStatic_WaitForObjects(&b,&play);
-        REQUIRE(a.staticState.initialized && b.staticState.initialized && loopCalls==loopsBefore);
-        REQUIRE(a.skin.skelAnime.limbCount==22 && a.skin.skelAnime.jointTable[0].x==0);
-        EnViewer_Update(&a.actor,&play);
-        REQUIRE(a.skin.skelAnime.curFrame==1 && a.skin.skelAnime.jointTable[0].x==100);
-        REQUIRE(b.skin.skelAnime.curFrame==0 && b.skin.skelAnime.jointTable[0].x==0);
-        REQUIRE(gSegments[6]==0x12345678 && a.actor.world.pos.y==345 && a.actor.home.pos.y==345);
-        a.staticState.mmAppearance=0x48;draw(&a,&play);draw(&a,&play);
-        REQUIRE(a.skin.skelAnime.jointTable[0].x==100);
-        unsigned freesBefore=freeCalls,releaseBefore=releaseCalls,drawBefore=lodDraws;
-        EnViewer_Destroy(&a.actor,&play);EnViewer_Destroy(&a.actor,&play);
-        EnViewerStatic_Update(&a,&play);draw(&a,&play);
-        REQUIRE(freeCalls==freesBefore+1 && releaseCalls==releaseBefore+1 && lodDraws==drawBefore);
-        draw(&b,&play);EnViewer_Destroy(&b.actor,&play);
+    for (unsigned pose = 0; pose < 2; ++pose) {
+        EnViewer a, b;
+        prepare(&a, STATIC_STORY_ACTOR_CHILD_KAFEI, pose);
+        prepare(&b, STATIC_STORY_ACTOR_CHILD_KAFEI, pose);
+        unsigned loopsBefore = loopCalls;
+        EnViewerStatic_WaitForObjects(&a, &play);
+        EnViewerStatic_WaitForObjects(&b, &play);
+        REQUIRE(a.staticState.initialized && b.staticState.initialized && loopCalls == loopsBefore);
+        REQUIRE(a.skin.skelAnime.limbCount == 22 && a.skin.skelAnime.jointTable[0].x == 0);
+        EnViewer_Update(&a.actor, &play);
+        REQUIRE(a.skin.skelAnime.curFrame == 1 && a.skin.skelAnime.jointTable[0].x == 100);
+        REQUIRE(b.skin.skelAnime.curFrame == 0 && b.skin.skelAnime.jointTable[0].x == 0);
+        REQUIRE(gSegments[6] == 0x12345678 && a.actor.world.pos.y == 345 && a.actor.home.pos.y == 345);
+        a.staticState.mmAppearance = 0x48;
+        draw(&a, &play);
+        draw(&a, &play);
+        REQUIRE(a.skin.skelAnime.jointTable[0].x == 100);
+        unsigned freesBefore = freeCalls, releaseBefore = releaseCalls, drawBefore = lodDraws;
+        EnViewer_Destroy(&a.actor, &play);
+        EnViewer_Destroy(&a.actor, &play);
+        EnViewerStatic_Update(&a, &play);
+        draw(&a, &play);
+        REQUIRE(freeCalls == freesBefore + 1 && releaseCalls == releaseBefore + 1 && lodDraws == drawBefore);
+        draw(&b, &play);
+        EnViewer_Destroy(&b.actor, &play);
     }
-    for(bool failLoad=false;;failLoad=true) {
-        prepare(&failed,STATIC_STORY_ACTOR_CHILD_KAFEI,0);loadSuccess=!failLoad;allocationSuccess=false;
-        unsigned freesBefore=freeCalls,releaseBefore=releaseCalls;
-        EnViewerStatic_WaitForObjects(&failed,&play);EnViewer_Destroy(&failed.actor,&play);
+    for (bool failLoad = false;; failLoad = true) {
+        prepare(&failed, STATIC_STORY_ACTOR_CHILD_KAFEI, 0);
+        loadSuccess = !failLoad;
+        allocationSuccess = false;
+        unsigned freesBefore = freeCalls, releaseBefore = releaseCalls;
+        EnViewerStatic_WaitForObjects(&failed, &play);
+        EnViewer_Destroy(&failed.actor, &play);
         REQUIRE(!failed.staticState.initialized);
-        REQUIRE(freeCalls==freesBefore+!failLoad && releaseCalls==releaseBefore+!failLoad);
-        if(failLoad) break;
+        REQUIRE(freeCalls == freesBefore + !failLoad && releaseCalls == releaseBefore + !failLoad);
+        if (failLoad)
+            break;
     }
-    allocationSuccess = true; loadSuccess = true;
+    allocationSuccess = true;
+    loadSuccess = true;
     testLuluHdBlink(&play);
     testShopGalBlink(&play);
     testShopGalFootAnimations(&play);
     testGreatFairyBlink(&play);
-    puts("PASS Kafei production viewer: no Player calls; private sampling, LOD draw/root/face commands and failure lifecycle");
-    puts("PASS compiled production viewer init/update/draw/free: 10 poses, independent state, root preservation, face order, typed-load and partial-allocation failure");
+    puts("PASS Kafei production viewer: no Player calls; private sampling, LOD draw/root/face commands and failure "
+         "lifecycle");
+    puts("PASS compiled production viewer init/update/draw/free: 10 poses, independent state, root preservation, face "
+         "order, typed-load and partial-allocation failure");
     return 0;
 }
