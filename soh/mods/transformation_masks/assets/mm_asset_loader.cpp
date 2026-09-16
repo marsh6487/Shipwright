@@ -34,13 +34,16 @@ extern "C" {
 #include <fast/resource/type/Texture.h>
 #include "mm_strict_texture_binding.h"
 #include <fast/resource/type/Vertex.h>
+#include <fast/resource/ResourceType.h>
 #include <libultraship/libultraship.h>
 #include <libultraship/log/luslog.h>
+#include <ship/utils/binarytools/MemoryStream.h>
 #include <SDL2/SDL.h>
 #include "soh/OTRGlobals.h"
 #include "soh/GameVersions.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/resource/type/Array.h"
+#include "soh/resource/type/SohResourceType.h"
 #include "soh/resource/type/Text.h"
 #include "functions.h"           // For Audio_SetFontInstrument, AudioLoad_IsFontLoadComplete
 #include "variables.h"           // Native cull display lists; never assume adjacent arrays.
@@ -579,9 +582,19 @@ static const char* MmAssets_StripOtrPrefix(const char* path);
 
 namespace {
 
+static constexpr const char* kSkullKidModelPrefix = "objects/object_stk_3ds/v1/";
+
 struct MmDisplayListGraphContext {
-    const std::unordered_map<uint64_t, std::string>* pathsByHash;
+    std::shared_ptr<Ship::Archive> archive;
+    bool optionalSkullKid = false;
+    std::unordered_map<uint64_t, std::string> pathsByHash;
     std::unordered_map<std::string, Gfx*> inProgress;
+    std::unordered_map<std::string, std::shared_ptr<Ship::IResource>> resources;
+    std::unordered_map<std::string, std::shared_ptr<std::vector<Gfx>>> displayLists;
+    MmStrictTextureBindings textures;
+    bool modelAttempted = false;
+    bool modelComplete = false;
+    MmSkullKidDisplayLists model = {};
 };
 
 struct MmDisplayListResolveContext {
@@ -589,9 +602,11 @@ struct MmDisplayListResolveContext {
     int depth;
 };
 
-static std::unordered_map<std::string, Gfx*> sStrictDisplayListGraphCache;
-static std::vector<std::shared_ptr<std::vector<Gfx>>> sStrictDisplayListGraphStorage;
-static MmStrictTextureBindings sStrictDisplayListTextures;
+// The archive shared_ptr is both the identity and an owner. A later mount of
+// the same filename cannot reuse this graph, and scene cache clears cannot
+// release vertices, texture aliases or lists already handed to the renderer.
+static std::unordered_map<std::shared_ptr<Ship::Archive>, std::unique_ptr<MmDisplayListGraphContext>>
+    sDisplayListGraphs;
 
 // Matches MM Scene_SetRenderModeXlu's opaque index-0 table. Keep all four
 // entries: G_DL_INDEX addresses both command 0 and command 2.
@@ -601,6 +616,154 @@ static Gfx sMmOpaqueRenderModeDL[] = {
 
 static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayListGraphContext& graph, int depth);
 
+static MmDisplayListGraphContext* MmAssets_GetDisplayListGraph(const std::shared_ptr<Ship::Archive>& archive) {
+    if (!archive) return nullptr;
+    auto found = sDisplayListGraphs.find(archive);
+    if (found != sDisplayListGraphs.end()) return found->second.get();
+    auto files = archive->ListFiles();
+    if (!files) return nullptr;
+    auto graph = std::make_unique<MmDisplayListGraphContext>();
+    graph->archive = archive;
+    graph->optionalSkullKid = archive != sMmArchive;
+    for (const auto& [hash, path] : *files) {
+        if (!graph->optionalSkullKid || path.rfind(kSkullKidModelPrefix, 0) == 0)
+            graph->pathsByHash.emplace(hash, path);
+    }
+    auto* result = graph.get();
+    sDisplayListGraphs.emplace(archive, std::move(graph));
+    return result;
+}
+
+// The optional v1 format is binary F3DEX2, vertex arrays and raw RGBA32. Check
+// serialized lengths before factories can allocate from untrusted counts.
+static bool MmAssets_ValidateSkullKidResource(const std::shared_ptr<Ship::File>& file,
+                                             const std::shared_ptr<Ship::ResourceInitData>& init) {
+    const auto& bytes = *file->Buffer;
+    auto word = [&](size_t offset) {
+        uint32_t result = 0;
+        for (unsigned byte = 0; byte < 4; ++byte) {
+            const unsigned shift = init->ByteOrder == Ship::Endianness::Big ? (3 - byte) * 8 : byte * 8;
+            result |= uint32_t(static_cast<unsigned char>(bytes[offset + byte])) << shift;
+        }
+        return result;
+    };
+    if (init->Format != RESOURCE_FORMAT_BINARY) return false;
+    if (init->Type == static_cast<uint32_t>(Fast::ResourceType::DisplayList)) {
+        return init->ResourceVersion == 0 && bytes.size() >= 80 && bytes.size() <= 72 + 4096 * 8 &&
+               bytes[64] == ucode_f3dex2 && (bytes.size() - 72) % 8 == 0 &&
+               word(bytes.size() - 8) == 0xDF000000;
+    }
+    if (init->Type == static_cast<uint32_t>(SOH::ResourceType::SOH_Array)) {
+        return init->ResourceVersion == 0 && bytes.size() >= 72 &&
+               word(64) == static_cast<uint32_t>(SOH::ArrayResourceType::Vertex) && word(68) != 0 &&
+               word(68) <= (bytes.size() - 72) / 16 && (bytes.size() - 72) % 16 == 0;
+    }
+    if (init->Type == static_cast<uint32_t>(Fast::ResourceType::Texture)) {
+        return init->ResourceVersion == 1 && bytes.size() >= 92 &&
+               word(64) == static_cast<uint32_t>(Fast::TextureType::RGBA32bpp) &&
+               word(76) == TEX_FLAG_LOAD_AS_RAW && word(88) <= bytes.size() - 92;
+    }
+    return false;
+}
+
+static std::shared_ptr<Ship::IResource> MmAssets_LoadGraphResource(const std::string& path,
+                                                                 MmDisplayListGraphContext& graph) {
+    auto cached = graph.resources.find(path);
+    if (cached != graph.resources.end()) return cached->second;
+    if (graph.optionalSkullKid && path.rfind(kSkullKidModelPrefix, 0) != 0) return nullptr;
+    try {
+        auto file = graph.archive->LoadFile(path);
+        if (!file || !file->Buffer || file->Buffer->size() < 64 ||
+            (file->Buffer->at(0) != 0 && file->Buffer->at(0) != 1)) return nullptr;
+        if (graph.optionalSkullKid && file->Buffer->size() > 256U * 1024U * 1024U) return nullptr;
+        auto loader = Ship::Context::GetRawInstance()->GetResourceManager()->GetResourceLoader();
+        // Passing null initData lets the loader follow GLOBAL .meta redirects,
+        // even when file came from a specific archive. Both graphs use the
+        // standard 64-byte OTR binary header; read that header without redirects.
+        Ship::BinaryReader reader(std::make_shared<Ship::MemoryStream>(file->Buffer));
+        auto init = std::make_shared<Ship::ResourceInitData>();
+        init->Parent = graph.archive;
+        init->Path = path;
+        init->Format = RESOURCE_FORMAT_BINARY;
+        init->ByteOrder = static_cast<Ship::Endianness>(reader.ReadUByte());
+        reader.SetEndianness(init->ByteOrder);
+        init->IsCustom = reader.ReadUByte() != 0;
+        reader.ReadUInt16(); // Reserved bytes.
+        init->Type = reader.ReadUInt32();
+        init->ResourceVersion = reader.ReadInt32();
+        init->Id = reader.ReadUInt64();
+        file->BufferOffset = 64;
+        if (graph.optionalSkullKid && !MmAssets_ValidateSkullKidResource(file, init)) return nullptr;
+        auto resource = loader->LoadResource(path, file, init);
+        if (resource) graph.resources.emplace(path, resource);
+        return resource;
+    } catch (const std::exception& error) {
+        MMASSETS_LOG("[MM Assets] graph resource rejected: %s (%s)", path.c_str(), error.what());
+    } catch (...) {
+        MMASSETS_LOG("[MM Assets] graph resource rejected: %s", path.c_str());
+    }
+    return nullptr;
+}
+
+static bool MmAssets_ValidateSkullKidCommands(const std::vector<MmDisplayListCommand>& commands) {
+    auto validTriangle = [](uintptr_t packed) {
+        for (unsigned shift = 0; shift < 24; shift += 8) {
+            const unsigned index = (packed >> shift) & 0xFF;
+            if ((index & 1) != 0 || index >= 32 * 2) return false;
+        }
+        return true;
+    };
+    for (size_t i = 0; i < commands.size(); ++i) {
+        const auto& command = commands[i];
+        switch (command.w0 >> 24) {
+            case 0xDF: return true;
+            case 0x20: // Texture hash.
+            case 0x31: // Nested-list hash.
+            case 0x33: // Debug marker hash; no resource is loaded.
+                if (++i >= commands.size()) return false;
+                break;
+            case 0x32: { // Vertex hash; the patcher also checks the byte range.
+                const unsigned count = (command.w0 >> 12) & 0xFF;
+                const unsigned end = (command.w0 & 0xFF) >> 1;
+                if ((command.w0 & 1) != 0 || count == 0 || end < count || end > 32 ||
+                    ++i >= commands.size()) return false;
+                break;
+            }
+            case 0xDA: { // Only load an existing native flex matrix, never a new resource.
+                const uintptr_t address = command.w1 & ~uintptr_t(1);
+                if (command.w0 != 0xDA380003 || !(command.w1 & 1) || (address >> 24) != 0x0D ||
+                    (address & 0xFFFFFF) % 64 != 0 || (address & 0xFFFFFF) >= 20 * 64) return false;
+                break;
+            }
+            case 0x05:
+                if (!validTriangle(command.w0)) return false;
+                break;
+            case 0x06:
+                if (!validTriangle(command.w0) || !validTriangle(command.w1)) return false;
+                break;
+            case 0x00:
+                // G_NOOP also carries OPEN_DISPS filename pointers in this engine.
+                if (command.w0 != 0 || command.w1 != 0) return false;
+                break;
+            case 0xE2: case 0xE3:
+                // F3DEX2 derives a bit shift from 31 - shift - (length - 1).
+                if (((command.w0 >> 8) & 0xFF) + (command.w0 & 0xFF) > 31) return false;
+                break;
+            // Pointer-free F3DEX2 material/geometry commands.
+            case 0x03: case 0xD7: case 0xD9:
+            case 0xE6: case 0xE7: case 0xE8: case 0xE9:
+            case 0xF2: case 0xF3: case 0xF4: case 0xF5: case 0xF8: case 0xF9:
+            case 0xFA: case 0xFB: case 0xFC:
+                break;
+            default:
+                // Raw addresses, filepaths and other unresolved OTR resource
+                // commands could escape the selected archive. v1 forbids them.
+                return false;
+        }
+    }
+    return false;
+}
+
 static uintptr_t MmAssets_ResolveDisplayListReference(void* context, MmDisplayListReferenceKind kind, uint64_t hash,
                                                       size_t* resourceSize) {
     auto* resolve = static_cast<MmDisplayListResolveContext*>(context);
@@ -608,8 +771,8 @@ static uintptr_t MmAssets_ResolveDisplayListReference(void* context, MmDisplayLi
     if (kind == MM_DISPLAY_LIST_REFERENCE_RENDER_MODE) {
         return (hash == 0 || hash == 2) ? reinterpret_cast<uintptr_t>(&sMmOpaqueRenderModeDL[hash]) : 0;
     }
-    auto pathIt = resolve->graph->pathsByHash->find(hash);
-    if (pathIt == resolve->graph->pathsByHash->end()) {
+    auto pathIt = resolve->graph->pathsByHash.find(hash);
+    if (pathIt == resolve->graph->pathsByHash.end()) {
         MMASSETS_LOG("[MM Assets] STRICT graph hash miss: 0x%016llx", static_cast<unsigned long long>(hash));
         return 0;
     }
@@ -620,13 +783,13 @@ static uintptr_t MmAssets_ResolveDisplayListReference(void* context, MmDisplayLi
     }
 
     if (kind == MM_DISPLAY_LIST_REFERENCE_TEXTURE) {
-        auto textureResource = MmAssets_LoadResourceObjectFromMmArchive(pathIt->second.c_str());
+        auto textureResource = MmAssets_LoadGraphResource(pathIt->second, *resolve->graph);
         auto manager = Ship::Context::GetRawInstance()->GetResourceManager();
         return reinterpret_cast<uintptr_t>(
-            sStrictDisplayListTextures.Bind(*manager, pathIt->second, textureResource));
+            resolve->graph->textures.Bind(*manager, pathIt->second, textureResource));
     }
 
-    auto vertexResource = MmAssets_LoadResourceObjectFromMmArchive(pathIt->second.c_str());
+    auto vertexResource = MmAssets_LoadGraphResource(pathIt->second, *resolve->graph);
     auto vertex = std::dynamic_pointer_cast<Fast::Vertex>(vertexResource);
     auto vertexArray = std::dynamic_pointer_cast<SOH::Array>(vertexResource);
     MmDisplayListVertexResourceView vertexView = {};
@@ -647,9 +810,9 @@ static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayLis
         MMASSETS_LOG("[MM Assets] STRICT graph depth exceeded: %s", path.c_str());
         return nullptr;
     }
-    auto cached = sStrictDisplayListGraphCache.find(path);
-    if (cached != sStrictDisplayListGraphCache.end()) {
-        return cached->second;
+    auto cached = graph.displayLists.find(path);
+    if (cached != graph.displayLists.end()) {
+        return cached->second->data();
     }
     auto active = graph.inProgress.find(path);
     if (active != graph.inProgress.end()) {
@@ -657,7 +820,7 @@ static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayLis
         return nullptr;
     }
 
-    auto displayListResource = MmAssets_LoadResourceObjectFromMmArchive(path.c_str());
+    auto displayListResource = MmAssets_LoadGraphResource(path, graph);
     auto displayList = std::dynamic_pointer_cast<Fast::DisplayList>(displayListResource);
     size_t resourceSize = displayList != nullptr ? displayList->GetPointerSize() : 0;
     Gfx* source = displayList != nullptr ? static_cast<Gfx*>(displayList->GetRawPointer()) : nullptr;
@@ -674,6 +837,10 @@ static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayLis
     for (size_t i = 0; i < commandCapacity; ++i) {
         commands[i].w0 = static_cast<uint32_t>((*output)[i].words.w0);
         commands[i].w1 = static_cast<uintptr_t>((*output)[i].words.w1);
+    }
+    if (graph.optionalSkullKid && !MmAssets_ValidateSkullKidCommands(commands)) {
+        graph.inProgress.erase(path);
+        return nullptr;
     }
 
     MmDisplayListResolveContext resolve = { &graph, depth };
@@ -692,33 +859,72 @@ static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayLis
         (*output)[i].words.w1 = commands[i].w1;
     }
     Gfx* result = output->data();
-    sStrictDisplayListGraphStorage.push_back(std::move(output));
-    sStrictDisplayListGraphCache[path] = result;
+    graph.displayLists.emplace(path, std::move(output));
     graph.inProgress.erase(path);
     MMASSETS_LOG("[MM Assets] STRICT graph ready: %s (nested=%zu vertices=%zu textures=%zu renderMode=%zu)", path.c_str(),
                  stats.nestedPatched, stats.verticesPatched, stats.texturesPatched, stats.renderModePatched);
     return result;
 }
 
+static const MmSkullKidDisplayLists* MmAssets_LoadSkullKidModel(MmDisplayListGraphContext& graph) {
+    if (graph.modelAttempted) return graph.modelComplete ? &graph.model : nullptr;
+    graph.modelAttempted = true;
+    MmSkullKidDisplayLists model = {};
+    auto load = [&](const char* nativePath) {
+        std::string path = nativePath;
+        if (graph.optionalSkullKid) path = kSkullKidModelPrefix + path.substr(path.find_last_of('/') + 1);
+        return MmAssets_PatchDisplayListGraph(path, graph, 0);
+    };
+    for (unsigned limb = 0; limb < 22; ++limb) {
+        const char* path = StaticStoryMm_GetSkullKidLimbDisplayListPath(limb);
+        if (path && !(model.limbs[limb] = load(path))) return nullptr;
+    }
+    model.head = load("objects/object_stk/gSkullKidNormalHeadDL");
+    model.eyes = load("objects/object_stk/gSkullKidNormalEyesDL");
+    model.mask = load("objects/object_stk/gSkullKidMajorasMask1DL");
+    if (!model.head || !model.eyes || !model.mask) return nullptr;
+    graph.model = model; // Publish only after every root and transitive reference passed.
+    graph.modelComplete = true;
+    return &graph.model;
+}
+
+static bool MmAssets_HasSkullKidModel(const std::shared_ptr<Ship::Archive>& archive) {
+    // Any supplied root declares a candidate. Unrelated HD textures or metadata
+    // alone are not a model; an incomplete candidate must not borrow lower packs.
+    for (unsigned limb = 0; limb < 22; ++limb) {
+        const char* native = StaticStoryMm_GetSkullKidLimbDisplayListPath(limb);
+        if (native && archive->HasFile(std::string(kSkullKidModelPrefix) + (strrchr(native, '/') + 1))) return true;
+    }
+    for (const char* name : {"gSkullKidNormalHeadDL", "gSkullKidNormalEyesDL", "gSkullKidMajorasMask1DL"}) {
+        if (archive->HasFile(std::string(kSkullKidModelPrefix) + name)) return true;
+    }
+    return false;
+}
+
 } // namespace
 
 Gfx* MmAssets_LoadDisplayListGraphStrict(const char* displayListPath) {
-    if (displayListPath == nullptr || !sMmArchive) {
-        return nullptr;
-    }
+    auto* graph = MmAssets_GetDisplayListGraph(sMmArchive);
+    return displayListPath && graph
+               ? MmAssets_PatchDisplayListGraph(MmAssets_StripOtrPrefix(displayListPath), *graph, 0) : nullptr;
+}
 
-    static std::unordered_map<uint64_t, std::string> sPathsByHash;
-    if (sPathsByHash.empty()) {
-        auto files = sMmArchive->ListFiles();
-        if (!files) {
-            return nullptr;
-        }
-        for (const auto& [hash, path] : *files) {
-            sPathsByHash[hash] = path;
+const MmSkullKidDisplayLists* MmAssets_GetSkullKidDisplayLists(void) {
+    if (!sMmArchive) return nullptr;
+    auto manager = Ship::Context::GetRawInstance()->GetResourceManager();
+    if (manager->IsAltAssetsEnabled()) {
+        auto archives = manager->GetArchiveManager()->GetArchives();
+        if (archives) for (auto it = archives->rbegin(); it != archives->rend(); ++it) {
+            if (*it == sMmArchive || !MmAssets_HasSkullKidModel(*it)) continue;
+            auto* graph = MmAssets_GetDisplayListGraph(*it);
+            if (graph) {
+                if (const auto* model = MmAssets_LoadSkullKidModel(*graph)) return model;
+            }
+            break; // Invalid highest-priority candidate selects the entire native model.
         }
     }
-    MmDisplayListGraphContext graph = { &sPathsByHash, {} };
-    return MmAssets_PatchDisplayListGraph(MmAssets_StripOtrPrefix(displayListPath), graph, 0);
+    auto* graph = MmAssets_GetDisplayListGraph(sMmArchive);
+    return graph ? MmAssets_LoadSkullKidModel(*graph) : nullptr;
 }
 
 Gfx* MmAssets_GetOpaqueRenderMode(void) {
@@ -726,7 +932,8 @@ Gfx* MmAssets_GetOpaqueRenderMode(void) {
 }
 
 void MmAssets_EnsureStrictTextureBindings(void) {
-    sStrictDisplayListTextures.EnsurePublished(*Ship::Context::GetRawInstance()->GetResourceManager());
+    auto manager = Ship::Context::GetRawInstance()->GetResourceManager();
+    for (const auto& entry : sDisplayListGraphs) entry.second->textures.EnsurePublished(*manager);
 }
 
 /**

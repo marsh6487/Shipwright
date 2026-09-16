@@ -48,7 +48,7 @@ static const StaticStoryActorDefinition sDefinitions[STATIC_STORY_ACTOR_MAX] = {
     [STATIC_STORY_ACTOR_PHANTOM_GANON] = { 0, 1, OBJECT_GND, STATIC_ADAPTER_PHANTOM_GANON, 0.01f, 80.0f, 35, 100,
                                            0, 30, 30, 120.0f, STATIC_TRACKING_NONE, 0, 0.0f },
     [STATIC_STORY_ACTOR_SKULL_KID] = { 1, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_SKULL_KID, 0.01f, 55.0f, 20, 60, 0,
-                                       30, 30, 90.0f, STATIC_TRACKING_NONE, 0, 0.0f },
+                                       30, 30, 90.0f, STATIC_TRACKING_SKULL_KID, 0, 0.0f },
     [STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN] = { 2, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_HAPPY_MASK_SALESMAN,
                                                  0.01f, 60.0f, 22, 70, 0, 30, 30, 100.0f,
                                                  STATIC_TRACKING_HAPPY_MASK_SALESMAN, 12, 0.0f },
@@ -162,9 +162,9 @@ static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STO
                     STATIC_SKELETON_PHANTOM_GANON),
     },
     [STATIC_STORY_ACTOR_SKULL_KID] = {
-        STATIC_POSE(STATIC_ANIM_SKULL_KID_RECLINING_FLOAT, STATIC_POSE_FLAG_NO_TRACKING,
+        STATIC_POSE(STATIC_ANIM_SKULL_KID_RECLINING_FLOAT, STATIC_POSE_FLAG_NONE,
                     STATIC_SKELETON_SKULL_KID),
-        STATIC_POSE(STATIC_ANIM_SKULL_KID_ARMS_CROSSED_FLOAT, STATIC_POSE_FLAG_NO_TRACKING,
+        STATIC_POSE(STATIC_ANIM_SKULL_KID_ARMS_CROSSED_FLOAT, STATIC_POSE_FLAG_NONE,
                     STATIC_SKELETON_SKULL_KID),
     },
     [STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN] = {
@@ -404,6 +404,9 @@ StaticStoryTrackingMode StaticStoryActor_GetTrackingMode(StaticStoryActorType ty
     }
     if (definition->trackingAdapter == STATIC_TRACKING_NONE) {
         return STATIC_TRACKING_MODE_NONE;
+    }
+    if (definition->trackingAdapter == STATIC_TRACKING_SKULL_KID) {
+        return STATIC_TRACKING_MODE_BODY_YAW;
     }
     return poseDescriptor->flags & STATIC_POSE_FLAG_HEAD_ONLY_TRACKING ? STATIC_TRACKING_MODE_HEAD_ONLY
                                                                       : STATIC_TRACKING_MODE_FULL;

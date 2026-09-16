@@ -29,6 +29,12 @@ static EnViewer* drawing;
 static Gfx commands[16];
 static unsigned faceCommands;
 static bool altAssets, hdHeadExists = true, hdHeadLoads = true;
+static MmSkullKidDisplayLists skullModels[2];
+static Gfx skullGeometry[2][25][1];
+static bool skullModelAvailable = true;
+const MmSkullKidDisplayLists* MmAssets_GetSkullKidDisplayLists(void) {
+    return skullModelAvailable ? &skullModels[altAssets] : NULL;
+}
 static Gfx originalHead[1], hdHeads[2][4][1], shopGalHeads[3][1], greatFairyHeads[3][1];
 static unsigned greatFairyExpectedEye;
 static Gfx* expectedHead = originalHead;
@@ -155,6 +161,9 @@ f32 Math_SinS(s16 angle) { return 0; }
 s16 Math_SmoothStepToS(s16* value,s16 target,s16 scale,s16 step,s16 min) { return 0; }
 bool StaticRutoWater_ShouldTurnBody(const StaticRutoWaterState* state) { return false; }
 void Matrix_RotateX(f32 x,u8 mode) { REQUIRE(mode==MTXMODE_APPLY);rotateX=x; }
+void Matrix_Push(void) {}
+void Matrix_Pop(void) {}
+void Matrix_RotateY(f32 y,u8 mode) { REQUIRE(mode==MTXMODE_APPLY); }
 void Gfx_SetupDL_25Opa(GraphicsContext* gfx) {}
 void Graph_OpenDisps(Gfx** dList,GraphicsContext* gfx,const char* file,s32 line) {}
 void Graph_CloseDisps(Gfx** dList,GraphicsContext* gfx,const char* file,s32 line) {}
@@ -165,6 +174,12 @@ static void EnViewer_DrawStaticTatl(EnViewer* a,PlayState* p) {}
 void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawOpa override,PostLimbDrawOpa post,void* arg) {
     ++drawCalls;REQUIRE(arg==drawing);
     if (drawing->staticState.type == STATIC_STORY_ACTOR_SKULL_KID) {
+        const MmSkullKidDisplayLists* selected = &skullModels[altAssets];
+        REQUIRE(drawing->staticState.skullKidHeadDL == selected->head);
+        REQUIRE(drawing->staticState.skullKidEyesDL == selected->eyes);
+        REQUIRE(drawing->staticState.skullKidMaskDL == selected->mask);
+        for (unsigned limb = 0; limb < 22; ++limb)
+            REQUIRE(drawing->staticState.skullKidLimbDLs[limb] == selected->limbs[limb]);
         REQUIRE(post == EnViewer_StaticSkullKidPostLimbDraw);
         REQUIRE(play->state.gfxCtx->polyOpa.p == commands + 2);
         REQUIRE((commands[0].words.w0 >> 24) == G_RDPPIPESYNC);
@@ -415,8 +430,24 @@ static void testGreatFairyBlink(PlayState* play) {
 int main(void) {
     static PlayState play;static GraphicsContext gfx;play.state.gfxCtx=&gfx;
     EnViewer skull = {0};skull.staticState.type=STATIC_STORY_ACTOR_SKULL_KID;
-    drawing=&skull;gfx.polyOpa.p=commands;
+    for (unsigned model = 0; model < 2; ++model) {
+        for (unsigned limb = 0; limb < 22; ++limb)
+            if (limb != 0 && limb != 1 && limb != 17) skullModels[model].limbs[limb] = skullGeometry[model][limb];
+        skullModels[model].head = skullGeometry[model][22];
+        skullModels[model].eyes = skullGeometry[model][23];
+        skullModels[model].mask = skullGeometry[model][24];
+    }
+    for (unsigned toggle = 0; toggle < 3; ++toggle) {
+        altAssets = toggle == 1;
+        drawing=&skull;gfx.polyOpa.p=commands;
+        EnViewer_DrawStaticSkullKid(&skull,&play);
+    }
+    skullModelAvailable = false;
+    unsigned beforeMissingDraw = drawCalls;
     EnViewer_DrawStaticSkullKid(&skull,&play);
+    REQUIRE(drawCalls == beforeMissingDraw);
+    skullModelAvailable = true;
+    puts("PASS Skull Kid: complete model selection updates at draw after live Alt changes");
     gSegments[6]=0x12345678;
     const int actors[]={STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN,STATIC_STORY_ACTOR_KEATON,STATIC_STORY_ACTOR_LULU};
     for(unsigned a=0;a<3;++a) for(unsigned pose=0;pose<(a==2?4:3);++pose) {

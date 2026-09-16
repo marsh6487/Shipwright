@@ -9,6 +9,7 @@
 typedef enum {
     STATIC_STORY_MM_TRACKING_NONE,
     STATIC_STORY_MM_TRACKING_HEAD_TORSO,
+    STATIC_STORY_MM_TRACKING_BODY_YAW,
 } StaticStoryMmTracking;
 
 typedef struct {
@@ -57,6 +58,8 @@ bool StaticStoryMm_ResourcesComplete(const StaticStoryMmPresentation* presentati
                                      bool hasAnimation, bool hasSecondarySkeleton);
 float StaticStoryMm_GetHoverOffset(uint16_t phase);
 float StaticStoryMm_ComposeHoverY(float authoredY, uint16_t phase);
+float StaticStoryMm_GetShapeYOffset(StaticStoryActorType type, uint8_t pose);
+int16_t StaticStoryMm_GetModelYawOffset(StaticStoryActorType type, uint8_t pose);
 StaticStoryMmVec3f StaticStoryMm_GetTatlAnchor(uint8_t pose);
 uint8_t StaticStoryMm_GetTatlOuterAlpha(uint16_t phase);
 float StaticStoryMm_GetTatlScale(uint16_t phase);

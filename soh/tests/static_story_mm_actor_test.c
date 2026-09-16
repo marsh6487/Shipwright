@@ -155,8 +155,8 @@ int main(void) {
     REQUIRE(upright->requiresSecondarySkeleton);
     REQUIRE(StaticStoryMm_UsesNativeFairyCompanion(STATIC_STORY_ACTOR_SKULL_KID));
     REQUIRE(!StaticStoryMm_UsesNativeFairyCompanion(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL));
-    REQUIRE(reclining->tracking == STATIC_STORY_MM_TRACKING_NONE);
-    REQUIRE(upright->tracking == STATIC_STORY_MM_TRACKING_NONE);
+    REQUIRE(reclining->tracking == STATIC_STORY_MM_TRACKING_BODY_YAW);
+    REQUIRE(upright->tracking == STATIC_STORY_MM_TRACKING_BODY_YAW);
     REQUIRE(StaticStoryMm_ResourcesComplete(reclining, true, true, true));
     REQUIRE(!StaticStoryMm_ResourcesComplete(reclining, true, true, false));
     REQUIRE(fabsf(StaticStoryMm_GetHoverOffset(0)) < 0.001f);

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #define STATIC_STORY_MM_TAU 6.28318530717958647692f
+#define STATIC_STORY_MM_HOVER_AMPLITUDE 10.0f
 
 static const StaticStoryMmPresentation sTreasureChestShopGalPresentations[] = {
     { "objects/object_bg/gTreasureChestShopGalSkel", "objects/object_bg/object_bg_Anim_009890", NULL, NULL, NULL,
@@ -26,11 +27,11 @@ static const StaticStoryMmPresentation sSkullKidPresentations[] = {
     { "objects/object_stk/gSkullKidSkel", "objects/object_stk2/gSkullKidRecliningFloatAnim",
       "objects/gameplay_keep/gameplay_keep_Skel_02AF58", "objects/gameplay_keep/gameplay_keep_Anim_029140",
       "objects/object_stk/gSkullKidMajorasMask1DL", "objects/object_stk/gSkullKidNormalHeadDL",
-      "objects/object_stk/gSkullKidNormalEyesDL", 21, STATIC_STORY_MM_TRACKING_NONE, true },
+      "objects/object_stk/gSkullKidNormalEyesDL", 21, STATIC_STORY_MM_TRACKING_BODY_YAW, true },
     { "objects/object_stk/gSkullKidSkel", "objects/object_stk2/gSkullKidFloatingArmsCrossedAnim",
       "objects/gameplay_keep/gameplay_keep_Skel_02AF58", "objects/gameplay_keep/gameplay_keep_Anim_029140",
       "objects/object_stk/gSkullKidMajorasMask1DL", "objects/object_stk/gSkullKidNormalHeadDL",
-      "objects/object_stk/gSkullKidNormalEyesDL", 21, STATIC_STORY_MM_TRACKING_NONE, true },
+      "objects/object_stk/gSkullKidNormalEyesDL", 21, STATIC_STORY_MM_TRACKING_BODY_YAW, true },
 };
 
 /* Counts and clip lengths verified against the unmodified MM donor archive. */
@@ -143,11 +144,40 @@ const char* StaticStoryMm_GetEyeTexturePath(StaticStoryActorType type, uint8_t e
 }
 
 float StaticStoryMm_GetHoverOffset(uint16_t phase) {
-    return sinf((float)phase * (STATIC_STORY_MM_TAU / 65536.0f)) * 10.0f;
+    return sinf((float)phase * (STATIC_STORY_MM_TAU / 65536.0f)) * STATIC_STORY_MM_HOVER_AMPLITUDE;
 }
 
 float StaticStoryMm_ComposeHoverY(float authoredY, uint16_t phase) {
     return authoredY + StaticStoryMm_GetHoverOffset(phase);
+}
+
+float StaticStoryMm_GetShapeYOffset(StaticStoryActorType type, uint8_t pose) {
+    static const struct {
+        bool anchorFeet;
+        float lowestFootY;
+    } anchors[] = {
+        { false, 0.0f },
+        /* Full native loop, frame 21: -2550.3546125 model units. The encoded
+         * R2 3DS feet reach -2537.3810622, so the native bound covers both.
+         * Reclining intentionally retains its original placement. */
+        { true, -2550.3547f },
+    };
+    if (type != STATIC_STORY_ACTOR_SKULL_KID || pose >= sizeof(anchors) / sizeof(anchors[0]) ||
+        !anchors[pose].anchorFeet) {
+        return 0.0f;
+    }
+    const StaticStoryActorDefinition* definition = StaticStoryActor_GetDefinition(type);
+    /* Shape offsets are model units; include the independent world-space
+     * hover trough so feet stay above the authored Y through either loop. */
+    return ceilf(fmaxf(0.0f, STATIC_STORY_MM_HOVER_AMPLITUDE / definition->scale - anchors[pose].lowestFootY));
+}
+
+int16_t StaticStoryMm_GetModelYawOffset(StaticStoryActorType type, uint8_t pose) {
+    /* The look-left clip carries a cutscene body turn in its pelvis, not its
+     * root yaw. Its hip axis has mean heading 19310.906 binary-angle units
+     * (range 19308.091..19313.727); the other Lulu loops start at zero.
+     * A fixed model-space correction keeps the animated head/torso gesture. */
+    return type == STATIC_STORY_ACTOR_LULU && pose == 1 ? -19311 : 0;
 }
 
 StaticStoryMmVec3f StaticStoryMm_GetTatlAnchor(uint8_t pose) {

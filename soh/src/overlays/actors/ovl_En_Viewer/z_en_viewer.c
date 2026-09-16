@@ -522,6 +522,16 @@ static bool EnViewerStatic_UpdateRutoWater(EnViewer* this, PlayState* play, bool
     return false;
 }
 
+static bool EnViewer_StaticSelectSkullKidModel(EnViewer* this) {
+    const MmSkullKidDisplayLists* model = MmAssets_GetSkullKidDisplayLists();
+    if (model == NULL) return false;
+    memcpy(this->staticState.skullKidLimbDLs, model->limbs, sizeof(model->limbs));
+    this->staticState.skullKidHeadDL = model->head;
+    this->staticState.skullKidEyesDL = model->eyes;
+    this->staticState.skullKidMaskDL = model->mask;
+    return true;
+}
+
 void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
     const StaticStoryActorDefinition* definition =
         StaticStoryActor_GetDefinition((StaticStoryActorType)this->staticState.type);
@@ -592,22 +602,7 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
             }
         }
         if (presentation != NULL && presentation->requiresSecondarySkeleton) {
-            this->staticState.skullKidMaskDL =
-                MmAssets_LoadDisplayListGraphStrict(presentation->maskDisplayListPath);
-            this->staticState.skullKidHeadDL =
-                MmAssets_LoadDisplayListGraphStrict(presentation->headDisplayListPath);
-            this->staticState.skullKidEyesDL =
-                MmAssets_LoadDisplayListGraphStrict(presentation->eyesDisplayListPath);
-            secondaryComplete = this->staticState.skullKidMaskDL != NULL && this->staticState.skullKidHeadDL != NULL &&
-                                this->staticState.skullKidEyesDL != NULL;
-            for (int limb = 0; limb < 22 && secondaryComplete; ++limb) {
-                const char* displayListPath = StaticStoryMm_GetSkullKidLimbDisplayListPath(limb);
-
-                if (displayListPath != NULL) {
-                    this->staticState.skullKidLimbDLs[limb] = MmAssets_LoadDisplayListGraphStrict(displayListPath);
-                    secondaryComplete = this->staticState.skullKidLimbDLs[limb] != NULL;
-                }
-            }
+            secondaryComplete = EnViewer_StaticSelectSkullKidModel(this);
             if (!StaticStoryMm_UsesNativeFairyCompanion((StaticStoryActorType)this->staticState.type)) {
                 secondarySkeleton = (FlexSkeletonHeader*)MmAssets_LoadSkeleton(presentation->secondarySkeletonPath);
                 secondaryAnimation = (AnimationHeader*)MmAssets_LoadAnimation(presentation->secondaryAnimationPath);
@@ -741,7 +736,8 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
     Actor_SetScale(&this->actor, definition->scale);
     const StaticStoryGanonPresentation* ganonPresentation =
         StaticStoryGanon_GetPresentation((StaticStoryActorType)this->staticState.type);
-    ActorShape_Init(&this->actor.shape, ganonPresentation != NULL ? ganonPresentation->shapeYOffset : 0.0f,
+    ActorShape_Init(&this->actor.shape, ganonPresentation != NULL ? ganonPresentation->shapeYOffset :
+                    StaticStoryMm_GetShapeYOffset((StaticStoryActorType)this->staticState.type, this->staticState.pose),
                     ActorShadow_DrawCircle, definition->colliderRadius);
     if (!usesMmAssets) {
         gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[this->animObjBankIndex].segment);
@@ -923,6 +919,17 @@ static void EnViewerStatic_UpdateTracking(EnViewer* this, PlayState* play) {
         StaticStoryActor_GetDefinition((StaticStoryActorType)this->staticState.type);
     NpcInteractInfo* interactInfo = &this->staticState.interactInfo;
 
+    if (StaticStoryActor_GetTrackingMode((StaticStoryActorType)this->staticState.type, this->staticState.pose) ==
+        STATIC_TRACKING_MODE_BODY_YAW) {
+        /* These hovering clips have no safe additive neck/torso tracking pose.
+         * Turn about the authored placement's up axis, then ease back home. */
+        s16 targetYaw = this->staticState.tracking ? this->actor.yawTowardsPlayer : this->actor.home.rot.y;
+        Math_SmoothStepToS(&this->actor.shape.rot.y, targetYaw, 4, 0x400, 1);
+        this->actor.world.rot.y = this->actor.shape.rot.y;
+        interactInfo->headRot = (Vec3s){ 0, 0, 0 };
+        interactInfo->torsoRot = (Vec3s){ 0, 0, 0 };
+        return;
+    }
     if (definition != NULL &&
         StaticStoryActor_CanTrack((StaticStoryActorType)this->staticState.type, this->staticState.pose) &&
         this->staticState.tracking) {
@@ -2069,6 +2076,8 @@ static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
     OverrideLimbDrawOpa overrideLimbDraw = NULL;
     const StaticStoryMmPresentation* presentation =
         StaticStoryMm_GetPresentation((StaticStoryActorType)this->staticState.type, this->staticState.pose);
+    s16 modelYaw = StaticStoryMm_GetModelYawOffset((StaticStoryActorType)this->staticState.type,
+                                                 this->staticState.pose);
 
     if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
         overrideLimbDraw = EnViewer_StaticTreasureChestShopGalOverrideLimbDraw;
@@ -2109,11 +2118,18 @@ static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
                        (uintptr_t)this->staticState.mmMouthTextures[face.mouth]);
         gDPSetEnvColor(POLY_OPA_DISP++, 255, 255, 255, 255);
     }
+    if (modelYaw != 0) {
+        Matrix_Push();
+        Matrix_RotateY(BINANG_TO_RAD(modelYaw), MTXMODE_APPLY);
+    }
     if (presentation != NULL && presentation->kind == STATIC_STORY_MM_SCOPED_PLAYER_LOD) {
         SkelAnime_DrawFlexLod(play, this->skin.skelAnime.skeleton, this->skin.skelAnime.jointTable, 18,
                              overrideLimbDraw, NULL, this, 0);
     } else {
         SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, overrideLimbDraw, NULL, this);
+    }
+    if (modelYaw != 0) {
+        Matrix_Pop();
     }
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -2145,12 +2161,12 @@ static void EnViewer_StaticSkullKidPostLimbDraw(PlayState* play, s32 limbIndex, 
     }
 }
 
-/* Tatl's limbs branch through segment 0x08. This setup contains no per-frame
+/* Tael's limbs branch through segment 0x08. This setup contains no per-frame
  * values, so it must remain at a stable address: frame interpolation can replay
  * Skull Kid's command stream after the transient graphics pool is recycled. */
 static Gfx sStaticStoryTatlSetupDL[] = {
     gsDPPipeSync(),
-    gsDPSetPrimColor(0, 1, 255, 255, 230, 255),
+    gsDPSetPrimColor(0, 1, 0x3F, 0x12, 0x5D, 255),
     gsDPSetRenderMode(G_RM_PASS, G_RM_ZB_CLD_SURF2),
     gsSPEndDisplayList(),
 };
@@ -2183,7 +2199,7 @@ static void EnViewer_DrawStaticTatl(EnViewer* this, PlayState* play) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_27Xlu(play->state.gfxCtx);
     gSPSegment(POLY_XLU_DISP++, 0x08, sStaticStoryTatlSetupDL);
-    gDPSetEnvColor(POLY_XLU_DISP++, 0x5F, 0x25, 0x75, outerAlpha);
+    gDPSetEnvColor(POLY_XLU_DISP++, 0xFA, 0x28, 0x0A, outerAlpha);
     Matrix_Push();
     Matrix_Translate((anchor.x + orbitX) * 100.0f, anchor.y * 100.0f, (anchor.z + orbitZ) * 100.0f,
                      MTXMODE_APPLY);
@@ -2195,6 +2211,9 @@ static void EnViewer_DrawStaticTatl(EnViewer* this, PlayState* play) {
 }
 
 static void EnViewer_DrawStaticSkullKid(EnViewer* this, PlayState* play) {
+    // Model sets are retained and selected atomically. Recheck here so changing
+    // alternate assets also switches geometry for an actor already in the scene.
+    if (!EnViewer_StaticSelectSkullKidModel(this)) return;
     MmAssets_EnsureStrictTextureBindings();
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);

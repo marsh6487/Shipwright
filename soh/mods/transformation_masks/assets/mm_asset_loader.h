@@ -87,6 +87,18 @@ Gfx* MmAssets_LoadDisplayListGraphStrict(const char* displayListPath);
 void MmAssets_EnsureStrictTextureBindings(void);
 Gfx* MmAssets_GetOpaqueRenderMode(void);
 
+/* A complete model on the native 21-limb skeleton. Index 17 is drawn manually.
+ * All pointers and their resources remain valid across scene/cache eviction.
+ * Alt assets selects one complete objects/object_stk_3ds/v1/ archive, or the
+ * whole strict native model if the optional archive is absent or invalid. */
+typedef struct {
+    Gfx* limbs[22];
+    Gfx* head;
+    Gfx* eyes;
+    Gfx* mask;
+} MmSkullKidDisplayLists;
+const MmSkullKidDisplayLists* MmAssets_GetSkullKidDisplayLists(void);
+
 /**
  * Load a resource from mm.o2r and get its size
  * @param path Resource path (e.g., "objects/gameplay_keep/gPlayerAnim_...")

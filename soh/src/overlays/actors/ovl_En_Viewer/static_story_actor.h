@@ -104,6 +104,7 @@ typedef enum {
     STATIC_TRACKING_TREASURE_CHEST_SHOP_GAL,
     STATIC_TRACKING_HAPPY_MASK_SALESMAN,
     STATIC_TRACKING_LULU,
+    STATIC_TRACKING_SKULL_KID,
 } StaticStoryTrackingAdapter;
 
 typedef enum {
@@ -115,6 +116,7 @@ typedef enum {
     STATIC_TRACKING_MODE_NONE,
     STATIC_TRACKING_MODE_FULL,
     STATIC_TRACKING_MODE_HEAD_ONLY,
+    STATIC_TRACKING_MODE_BODY_YAW,
 } StaticStoryTrackingMode;
 
 typedef enum {
