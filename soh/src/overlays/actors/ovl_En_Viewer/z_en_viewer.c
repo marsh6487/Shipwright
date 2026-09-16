@@ -1951,6 +1951,21 @@ static s32 EnViewer_StaticTreasureChestShopGalOverrideLimbDraw(PlayState* play, 
                                                                Vec3f* pos, Vec3s* rot, void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
 
+    if (limbIndex == 5 && ResourceMgr_IsAltAssetsEnabled()) {
+        /* Optional MMD replacement: its authored blink moves eyelid geometry.
+         * The three baked heads retain the model's own eyes and textures. */
+        static const char* const heads[] = {
+            "alt/objects/object_bg/ShopGalMMDBlinkHead0DL",
+            "alt/objects/object_bg/ShopGalMMDBlinkHead1DL",
+            "alt/objects/object_bg/ShopGalMMDBlinkHead2DL",
+            "alt/objects/object_bg/ShopGalMMDBlinkHead1DL",
+        };
+        uint8_t eye = this->staticState.eyeIndex < 4 ? this->staticState.eyeIndex : 0;
+        if (ResourceMgr_FileExists(heads[eye])) {
+            Gfx* head = (Gfx*)ResourceMgr_GetResourceDataByNameHandlingMQ(heads[eye]);
+            if (head != NULL) *dList = head;
+        }
+    }
     if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, this->staticState.pose)) {
         /* object_bg Treasure Chest Shop Gal enum order: head 5. */
         if (limbIndex == 5) {
@@ -1981,11 +1996,11 @@ static s32 EnViewer_StaticOrdinaryMmOverrideLimbDraw(PlayState* play, s32 limbIn
                 "alt/objects/object_zov/Lulu3DSHDBlinkHead3DL",
             },
         };
-        StaticStoryMmFace face = StaticStoryMm_ResolveFace(type, this->staticState.pose,
-            this->skin.skelAnime.curFrame, this->staticState.eyeIndex, this->staticState.tracking);
         uint8_t phase = this->staticState.luluHdBlinkPhase;
         uint8_t eye = eyeSequence[phase < 6 ? phase : 0];
-        const char* path = heads[face.mouth != 0][eye];
+        /* The HD singing mouth is expressive enough that it should only be
+         * used by the singing pose, including during a blink. */
+        const char* path = heads[this->staticState.pose == 2][eye];
         if (ResourceMgr_FileExists(path)) {
             /* Each R6 head binds its own HD eye/mouth textures. Loading the
              * explicit alt path keeps it in the resource cache without the

@@ -27,12 +27,13 @@ static EnViewer* drawing;
 static Gfx commands[16];
 static unsigned faceCommands;
 static bool altAssets, hdHeadExists = true, hdHeadLoads = true;
-static Gfx originalHead[1], hdHeads[2][4][1];
+static Gfx originalHead[1], hdHeads[2][4][1], shopGalHeads[3][1];
 static Gfx* expectedHead = originalHead;
 static unsigned hdLoads;
 bool ResourceMgr_IsAltAssetsEnabled(void) { return altAssets; }
 uint8_t ResourceMgr_FileExists(const char* path) {
-    REQUIRE(strncmp(path, "alt/objects/object_zov/Lulu3DSHDBlinkHead", 39) == 0);
+    REQUIRE(strncmp(path, "alt/objects/object_zov/Lulu3DSHDBlinkHead", 39) == 0 ||
+            strncmp(path, "alt/objects/object_bg/ShopGalMMDBlinkHead", 39) == 0);
     return hdHeadExists;
 }
 char* ResourceMgr_GetResourceDataByNameHandlingMQ(const char* path) {
@@ -43,6 +44,11 @@ char* ResourceMgr_GetResourceDataByNameHandlingMQ(const char* path) {
         snprintf(expected, sizeof(expected), "alt/objects/object_zov/Lulu3DSHDBlinkHead%u%sDL",
                  eye, mouth ? "" : "MouthClosed");
         if (strcmp(path, expected) == 0) return hdHeadLoads ? (char*)hdHeads[mouth][eye] : NULL;
+    }
+    for (unsigned eye = 0; eye < 3; ++eye) {
+        char expected[96];
+        snprintf(expected, sizeof(expected), "alt/objects/object_bg/ShopGalMMDBlinkHead%uDL", eye);
+        if (strcmp(path, expected) == 0) return hdHeadLoads ? (char*)shopGalHeads[eye] : NULL;
     }
     REQUIRE(false);
     return NULL;
@@ -164,7 +170,7 @@ void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawO
         Vec3s rot = {0}; Vec3f pos = {0}; Gfx* dl = originalHead;
         REQUIRE(override != NULL);
         override(play, 5, &dl, &pos, &rot, arg);
-        REQUIRE(dl == originalHead);
+        REQUIRE(dl == expectedHead);
         return;
     }
     // Segment commands must already be emitted before the skeleton draw boundary.
@@ -243,7 +249,7 @@ static void testLuluHdBlink(PlayState* play) {
         first.staticState.tracking = pose == 0;
         first.staticState.interactInfo.headRot = (Vec3s){50, 100, 0};
         first.staticState.interactInfo.torsoRot.y = 200;
-        unsigned mouth = pose >= 2;
+        unsigned mouth = pose == 2;
         expectedHead = hdHeads[mouth][0];
         draw(&first, play);
         for (unsigned tick = 0; tick < 30; ++tick) EnViewer_Update(&first.actor, play);
@@ -280,7 +286,9 @@ static void testLuluHdBlink(PlayState* play) {
     puts("PASS Lulu HD blink: four poses, all eye frames, mouth selection, private timing, render independence, optional-asset fallback");
 }
 static void testShopGalBlink(PlayState* play) {
-    for (unsigned pose = 0; pose < 3; ++pose) {
+    for (unsigned useAlt = 0; useAlt < 2; ++useAlt) for (unsigned pose = 0; pose < 3; ++pose) {
+        altAssets = useAlt;
+        expectedHead = useAlt ? shopGalHeads[0] : originalHead;
         EnViewer first, second;
         prepare(&first, STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, pose);
         prepare(&second, STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, pose);
@@ -293,15 +301,27 @@ static void testShopGalBlink(PlayState* play) {
         for (unsigned tick = 1; tick <= 4; ++tick) {
             EnViewer_Update(&first.actor, play);
             REQUIRE(first.staticState.eyeIndex == tick % 4);
+            const unsigned states[] = {0, 1, 2, 1};
+            expectedHead = useAlt ? shopGalHeads[states[tick % 4]] : originalHead;
             draw(&first, play);
             draw(&first, play);
             REQUIRE(second.staticState.eyeIndex == 0);
+            expectedHead = useAlt ? shopGalHeads[0] : originalHead;
             draw(&second, play);
         }
         REQUIRE(first.staticState.blinkTimer == 30);
+        expectedHead = originalHead;
+        unsigned loads = hdLoads;
+        hdHeadExists = false;
+        draw(&first, play);
+        REQUIRE(hdLoads == loads);
+        hdHeadExists = true; hdHeadLoads = false;
+        draw(&first, play);
+        hdHeadLoads = true;
         EnViewer_Destroy(&first.actor, play);
         EnViewer_Destroy(&second.actor, play);
     }
+    altAssets = false; expectedHead = originalHead;
     puts("PASS Treasure Chest Shop Gal: three poses, complete blink, per-instance timing, aligned OTR eye paths retain HD metadata");
 }
 int main(void) {
