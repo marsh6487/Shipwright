@@ -753,6 +753,8 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
     this->staticState.collider.dim.yShift = definition->colliderYShift;
     this->actor.colChkInfo.mass = MASS_IMMOVABLE;
     this->staticState.blinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
+    this->staticState.luluHdBlinkPhase = 0;
+    this->staticState.luluHdBlinkTimer = this->staticState.blinkTimer;
     int8_t fixedEyeIndex = StaticStoryActor_GetFixedEyeIndex((StaticStoryActorType)this->staticState.type,
                                                              this->staticState.pose);
     this->staticState.eyeIndex = fixedEyeIndex >= 0 ? fixedEyeIndex : 0;
@@ -831,6 +833,18 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
     } else if (++this->staticState.eyeIndex >= 3) {
         this->staticState.eyeIndex = 0;
         this->staticState.blinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
+    }
+    /* The optional 3DS head has four eye images, independent of MM's three-eye
+     * expression logic (which holds Lulu's eyes open throughout singing).
+     * Five non-open updates give a 250 ms blink at the normal 20 Hz tick rate. */
+    if (this->staticState.type == STATIC_STORY_ACTOR_LULU && ResourceMgr_IsAltAssetsEnabled() &&
+        ResourceMgr_FileExists("alt/objects/object_zov/Lulu3DSHDBlinkHead0DL")) {
+        if (this->staticState.luluHdBlinkTimer > 0) {
+            this->staticState.luluHdBlinkTimer--;
+        } else if (++this->staticState.luluHdBlinkPhase >= 6) {
+            this->staticState.luluHdBlinkPhase = 0;
+            this->staticState.luluHdBlinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
+        }
     }
     if (canInteract) {
         Collider_UpdateCylinder(&this->actor, &this->staticState.collider);
@@ -1950,6 +1964,36 @@ static s32 EnViewer_StaticOrdinaryMmOverrideLimbDraw(PlayState* play, s32 limbIn
                                                      Vec3f* pos, Vec3s* rot, void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
     StaticStoryActorType type = (StaticStoryActorType)this->staticState.type;
+    if (type == STATIC_STORY_ACTOR_LULU && limbIndex == 12 && ResourceMgr_IsAltAssetsEnabled()) {
+        static const uint8_t eyeSequence[] = { 0, 1, 2, 3, 2, 1 };
+        static const char* const heads[2][4] = {
+            {
+                "alt/objects/object_zov/Lulu3DSHDBlinkHead0MouthClosedDL",
+                "alt/objects/object_zov/Lulu3DSHDBlinkHead1MouthClosedDL",
+                "alt/objects/object_zov/Lulu3DSHDBlinkHead2MouthClosedDL",
+                "alt/objects/object_zov/Lulu3DSHDBlinkHead3MouthClosedDL",
+            },
+            {
+                "alt/objects/object_zov/Lulu3DSHDBlinkHead0DL",
+                "alt/objects/object_zov/Lulu3DSHDBlinkHead1DL",
+                "alt/objects/object_zov/Lulu3DSHDBlinkHead2DL",
+                "alt/objects/object_zov/Lulu3DSHDBlinkHead3DL",
+            },
+        };
+        StaticStoryMmFace face = StaticStoryMm_ResolveFace(type, this->staticState.pose,
+            this->skin.skelAnime.curFrame, this->staticState.eyeIndex, this->staticState.tracking);
+        uint8_t phase = this->staticState.luluHdBlinkPhase;
+        uint8_t eye = eyeSequence[phase < 6 ? phase : 0];
+        const char* path = heads[face.mouth != 0][eye];
+        if (ResourceMgr_FileExists(path)) {
+            /* Each R6 head binds its own HD eye/mouth textures. Loading the
+             * explicit alt path keeps it in the resource cache without the
+             * original/alt unload performed by LoadGfxByName; several Lulus
+             * can safely reference the same head in one graphics frame. */
+            Gfx* head = (Gfx*)ResourceMgr_GetResourceDataByNameHandlingMQ(path);
+            if (head != NULL) *dList = head;
+        }
+    }
     if (type == STATIC_STORY_ACTOR_CHILD_KAFEI) {
         if (limbIndex == 1) { pos->x *= 11.0f/17.0f; pos->y *= 11.0f/17.0f; pos->z *= 11.0f/17.0f; }
         return false;

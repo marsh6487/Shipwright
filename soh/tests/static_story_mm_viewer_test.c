@@ -10,6 +10,7 @@
 #include "src/overlays/actors/ovl_En_Viewer/static_story_kokiri.h"
 #include "mods/transformation_masks/assets/mm_asset_loader.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
+#include "soh/ResourceManagerHelpers.h"
 
 void osSyncPrintfUnused(const char* format,...) {}
 void FrameInterpolation_RecordOpenChild(const void* a,int b) {}
@@ -25,6 +26,27 @@ static AnimationHeader animation;
 static EnViewer* drawing;
 static Gfx commands[16];
 static unsigned faceCommands;
+static bool altAssets, hdHeadExists = true, hdHeadLoads = true;
+static Gfx originalHead[1], hdHeads[2][4][1];
+static Gfx* expectedHead = originalHead;
+static unsigned hdLoads;
+bool ResourceMgr_IsAltAssetsEnabled(void) { return altAssets; }
+uint8_t ResourceMgr_FileExists(const char* path) {
+    REQUIRE(strncmp(path, "alt/objects/object_zov/Lulu3DSHDBlinkHead", 39) == 0);
+    return hdHeadExists;
+}
+char* ResourceMgr_GetResourceDataByNameHandlingMQ(const char* path) {
+    ++hdLoads;
+    REQUIRE(altAssets && hdHeadExists);
+    for (unsigned mouth = 0; mouth < 2; ++mouth) for (unsigned eye = 0; eye < 4; ++eye) {
+        char expected[96];
+        snprintf(expected, sizeof(expected), "alt/objects/object_zov/Lulu3DSHDBlinkHead%u%sDL",
+                 eye, mouth ? "" : "MouthClosed");
+        if (strcmp(path, expected) == 0) return hdHeadLoads ? (char*)hdHeads[mouth][eye] : NULL;
+    }
+    REQUIRE(false);
+    return NULL;
+}
 uintptr_t gSegments[16];
 static GameInfo gameInfo;
 GameInfo* gGameInfo = &gameInfo;
@@ -141,12 +163,16 @@ void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawO
         REQUIRE((commands[firstFace].words.w0 & 0xffff)==p->eyeSegment*4);
         REQUIRE((commands[firstFace+1].words.w0 & 0xffff)==p->mouthSegment*4);
     }
-    Vec3s rot={0};Vec3f pos={0};Gfx* dl=NULL;
+    Vec3s rot={0};Vec3f pos={0};Gfx* dl=originalHead;
     REQUIRE(override!=NULL);
     override(play,11,&dl,&pos,&rot,arg);
+    REQUIRE(dl == originalHead);
     if(drawing->staticState.type==STATIC_STORY_ACTOR_LULU && drawing->staticState.pose==0 && drawing->staticState.tracking)
         REQUIRE(rot.x==200);
     override(play,12,&dl,&pos,&rot,arg);
+    REQUIRE(dl == expectedHead);
+    if(drawing->staticState.type==STATIC_STORY_ACTOR_LULU && drawing->staticState.pose==0 && drawing->staticState.tracking)
+        REQUIRE(rot.x==300 && rot.z==50);
 }
 void SkelAnime_DrawFlexLod(PlayState* play,void** skeleton,Vec3s* joints,s32 count,
                          OverrideLimbDrawOpa override,PostLimbDrawOpa post,void* arg,s32 lod) {
@@ -177,6 +203,53 @@ static void prepare(EnViewer* viewer,int type,int pose) {
 static void draw(EnViewer* viewer,PlayState* play) {
     drawing=viewer;play->state.gfxCtx->polyOpa.p=commands;rotateX=0;
     EnViewer_DrawStaticMmActor(viewer,play);
+}
+static void testLuluHdBlink(PlayState* play) {
+    altAssets = true;
+    for (unsigned pose = 0; pose < 4; ++pose) {
+        EnViewer first, second;
+        prepare(&first, STATIC_STORY_ACTOR_LULU, pose);
+        prepare(&second, STATIC_STORY_ACTOR_LULU, pose);
+        EnViewerStatic_WaitForObjects(&first, play);
+        EnViewerStatic_WaitForObjects(&second, play);
+        first.staticState.tracking = pose == 0;
+        first.staticState.interactInfo.headRot = (Vec3s){50, 100, 0};
+        first.staticState.interactInfo.torsoRot.y = 200;
+        unsigned mouth = pose >= 2;
+        expectedHead = hdHeads[mouth][0];
+        draw(&first, play);
+        for (unsigned tick = 0; tick < 30; ++tick) EnViewer_Update(&first.actor, play);
+        draw(&first, play);
+        const unsigned sequence[] = {1, 2, 3, 2, 1, 0};
+        for (unsigned tick = 0; tick < 6; ++tick) {
+            EnViewer_Update(&first.actor, play);
+            expectedHead = hdHeads[mouth][sequence[tick]];
+            draw(&first, play);
+            draw(&first, play); // Extra renders must not advance the blink.
+            expectedHead = hdHeads[mouth][0];
+            draw(&second, play); // Each placed Lulu has independent timing.
+        }
+        expectedHead = originalHead;
+        unsigned loads = hdLoads;
+        altAssets = false;
+        draw(&first, play);
+        REQUIRE(hdLoads == loads);
+        altAssets = true;
+        hdHeadExists = false;
+        draw(&first, play);
+        REQUIRE(hdLoads == loads);
+        hdHeadExists = true;
+        hdHeadLoads = false;
+        draw(&first, play);
+        hdHeadLoads = true;
+        expectedHead = hdHeads[mouth][0];
+        draw(&first, play); // Live re-enable resumes the HD head.
+        EnViewer_Destroy(&first.actor, play);
+        EnViewer_Destroy(&second.actor, play);
+    }
+    altAssets = false;
+    expectedHead = originalHead;
+    puts("PASS Lulu HD blink: four poses, all eye frames, mouth selection, private timing, render independence, optional-asset fallback");
 }
 int main(void) {
     static PlayState play;static GraphicsContext gfx;play.state.gfxCtx=&gfx;
@@ -247,6 +320,8 @@ int main(void) {
         REQUIRE(freeCalls==freesBefore+!failLoad && releaseCalls==releaseBefore+!failLoad);
         if(failLoad) break;
     }
+    allocationSuccess = true; loadSuccess = true;
+    testLuluHdBlink(&play);
     puts("PASS Kafei production viewer: no Player calls; private sampling, LOD draw/root/face commands and failure lifecycle");
     puts("PASS compiled production viewer init/update/draw/free: 10 poses, independent state, root preservation, face order, typed-load and partial-allocation failure");
     return 0;

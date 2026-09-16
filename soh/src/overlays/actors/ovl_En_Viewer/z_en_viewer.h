@@ -77,6 +77,8 @@ typedef struct {
     uint8_t talking;
     uint8_t tracking;
     int16_t blinkTimer;
+    uint8_t luluHdBlinkPhase;
+    int16_t luluHdBlinkTimer;
     int16_t objectSlots[4];
     NpcInteractInfo interactInfo;
     ColliderCylinder collider;
