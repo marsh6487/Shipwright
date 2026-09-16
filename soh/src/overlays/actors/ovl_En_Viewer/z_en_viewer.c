@@ -840,12 +840,14 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
     }
     int8_t fixedEyeIndex = StaticStoryActor_GetFixedEyeIndex((StaticStoryActorType)this->staticState.type,
                                                              this->staticState.pose);
+    /* Great Fairy holds the fully closed head for two 20 Hz updates. */
+    u8 blinkFrameCount = this->staticState.type == STATIC_STORY_ACTOR_GREAT_FAIRY ? 5 :
+                        this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL ? 4 : 3;
     if (fixedEyeIndex >= 0) {
         this->staticState.eyeIndex = fixedEyeIndex;
     } else if (this->staticState.blinkTimer > 0) {
         this->staticState.blinkTimer--;
-    } else if (++this->staticState.eyeIndex >=
-               (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL ? 4 : 3)) {
+    } else if (++this->staticState.eyeIndex >= blinkFrameCount) {
         this->staticState.eyeIndex = 0;
         this->staticState.blinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
     }
@@ -1925,6 +1927,11 @@ void EnViewer_DrawStaticNabooru(EnViewer* this, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+static u8 EnViewer_StaticGreatFairyEyeIndex(u8 phase) {
+    static const u8 eyes[] = { 0, 1, 2, 2, 1 };
+    return eyes[phase < ARRAY_COUNT(eyes) ? phase : 0];
+}
+
 static s32 EnViewer_StaticGreatFairyOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
                                                       Vec3s* rot, void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
@@ -1932,6 +1939,20 @@ static s32 EnViewer_StaticGreatFairyOverrideLimbDraw(PlayState* play, s32 limbIn
         StaticStoryActor_GetTrackingMode(STATIC_STORY_ACTOR_GREAT_FAIRY, this->staticState.pose);
     StaticStoryGreatFairyTrackingLimb trackingLimb = StaticStoryActor_GetGreatFairyTrackingLimb(limbIndex);
 
+    if (trackingLimb == STATIC_GREAT_FAIRY_TRACKING_LIMB_HEAD && ResourceMgr_IsAltAssetsEnabled()) {
+        /* Optional HW replacement: the eye artwork is part of its mesh, so
+         * blink by selecting baked eyelid geometry instead of a texture. */
+        static const char* const heads[] = {
+            "alt/objects/object_dy_obj/HWGreatFairyCharcoalBlinkHead0DL",
+            "alt/objects/object_dy_obj/HWGreatFairyCharcoalBlinkHead1DL",
+            "alt/objects/object_dy_obj/HWGreatFairyCharcoalBlinkHead2DL",
+        };
+        const char* path = heads[EnViewer_StaticGreatFairyEyeIndex(this->staticState.eyeIndex)];
+        if (ResourceMgr_FileExists(path)) {
+            Gfx* head = (Gfx*)ResourceMgr_GetResourceDataByNameHandlingMQ(path);
+            if (head != NULL) *dList = head;
+        }
+    }
     if (trackingMode == STATIC_TRACKING_MODE_FULL && trackingLimb == STATIC_GREAT_FAIRY_TRACKING_LIMB_TORSO) {
         rot->x += this->staticState.interactInfo.torsoRot.y;
     } else if (trackingMode != STATIC_TRACKING_MODE_NONE &&
@@ -1951,11 +1972,12 @@ static s32 EnViewer_StaticGreatFairyOverrideLimbDraw(PlayState* play, s32 limbIn
 
 void EnViewer_DrawStaticGreatFairy(EnViewer* this, PlayState* play) {
     static void* sEyes[] = { gGreatFairyEyeOpenTex, gGreatFairyEyeHalfTex, gGreatFairyEyeClosedTex };
+    u8 eye = EnViewer_StaticGreatFairyEyeIndex(this->staticState.eyeIndex);
 
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
-    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
+    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyes[eye]));
+    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(sEyes[eye]));
     gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(gGreatFairyMouthClosedTex));
     SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, EnViewer_StaticGreatFairyOverrideLimbDraw, NULL, this);
     CLOSE_DISPS(play->state.gfxCtx);

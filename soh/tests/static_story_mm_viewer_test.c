@@ -10,6 +10,7 @@
 #include "src/overlays/actors/ovl_En_Viewer/static_story_kokiri.h"
 #include "mods/transformation_masks/assets/mm_asset_loader.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
+#include "objects/object_dy_obj/object_dy_obj.h"
 #include "soh/ResourceManagerHelpers.h"
 
 void osSyncPrintfUnused(const char* format,...) {}
@@ -28,14 +29,16 @@ static EnViewer* drawing;
 static Gfx commands[16];
 static unsigned faceCommands;
 static bool altAssets, hdHeadExists = true, hdHeadLoads = true;
-static Gfx originalHead[1], hdHeads[2][4][1], shopGalHeads[3][1];
+static Gfx originalHead[1], hdHeads[2][4][1], shopGalHeads[3][1], greatFairyHeads[3][1];
+static unsigned greatFairyExpectedEye;
 static Gfx* expectedHead = originalHead;
 static unsigned hdLoads;
 bool ResourceMgr_IsAltAssetsEnabled(void) { return altAssets; }
 uint8_t ResourceMgr_FileExists(const char* path) {
     if (strstr(path, "ShopGalMMDLevel") != NULL) return footAnimExists;
     REQUIRE(strncmp(path, "alt/objects/object_zov/Lulu3DSHDBlinkHead", 39) == 0 ||
-            strncmp(path, "alt/objects/object_bg/ShopGalMMDBlinkHead", 39) == 0);
+            strncmp(path, "alt/objects/object_bg/ShopGalMMDBlinkHead", 39) == 0 ||
+            strstr(path, "alt/objects/object_dy_obj/HWGreatFairyCharcoalBlinkHead") == path);
     return hdHeadExists;
 }
 char* ResourceMgr_GetResourceDataByNameHandlingMQ(const char* path) {
@@ -58,6 +61,8 @@ char* ResourceMgr_GetResourceDataByNameHandlingMQ(const char* path) {
         char expected[96];
         snprintf(expected, sizeof(expected), "alt/objects/object_bg/ShopGalMMDBlinkHead%uDL", eye);
         if (strcmp(path, expected) == 0) return hdHeadLoads ? (char*)shopGalHeads[eye] : NULL;
+        snprintf(expected, sizeof(expected), "alt/objects/object_dy_obj/HWGreatFairyCharcoalBlinkHead%uDL", eye);
+        if (strcmp(path, expected) == 0) return hdHeadLoads ? (char*)greatFairyHeads[eye] : NULL;
     }
     REQUIRE(false);
     return NULL;
@@ -168,6 +173,29 @@ void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawO
         return;
     }
     REQUIRE(post==NULL);
+    if (drawing->staticState.type == STATIC_STORY_ACTOR_GREAT_FAIRY) {
+        const char* const eyePaths[] = { gGreatFairyEyeOpenTex, gGreatFairyEyeHalfTex, gGreatFairyEyeClosedTex };
+        REQUIRE(play->state.gfxCtx->polyOpa.p == commands + 3);
+        REQUIRE((commands[0].words.w0 & 0xffff) == 8 * 4);
+        REQUIRE((commands[1].words.w0 & 0xffff) == 9 * 4);
+        REQUIRE((commands[2].words.w0 & 0xffff) == 10 * 4);
+        REQUIRE(strcmp((const char*)commands[0].words.w1, eyePaths[greatFairyExpectedEye]) == 0);
+        REQUIRE(strcmp((const char*)commands[1].words.w1, eyePaths[greatFairyExpectedEye]) == 0);
+        REQUIRE(strcmp((const char*)commands[2].words.w1, gGreatFairyMouthClosedTex) == 0);
+        Vec3s rot = {0}; Vec3f pos = {0}; Gfx* dl = originalHead;
+        REQUIRE(override != NULL);
+        override(play, 14, &dl, &pos, &rot, arg);
+        REQUIRE(dl == originalHead && rot.x == 0 && rot.z == 0);
+        override(play, 15, &dl, &pos, &rot, arg);
+        REQUIRE(dl == expectedHead);
+        REQUIRE(rot.x == (drawing->staticState.pose == 0 ? 6000 : 4096));
+        REQUIRE(rot.z == (drawing->staticState.pose == 0 ? -6000 : -4096));
+        rot = (Vec3s){0}; dl = originalHead;
+        override(play, 8, &dl, &pos, &rot, arg);
+        REQUIRE(dl == originalHead);
+        REQUIRE(rot.x == (drawing->staticState.pose == 0 ? 200 : 0));
+        return;
+    }
     if (drawing->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
         REQUIRE(play->state.gfxCtx->polyOpa.p == commands + 1);
         REQUIRE((commands[0].words.w0 & 0xffff) == 8 * 4);
@@ -346,6 +374,44 @@ static void testShopGalFootAnimations(PlayState* play) {
     altAssets=false;footAnimExists=false;footAnimLoads=true;
     puts("PASS Shop Gal foot clips: three poses, alt-disabled, absent, failed and mismatched-duration fallbacks");
 }
+static void drawGreatFairy(EnViewer* viewer, PlayState* play) {
+    drawing = viewer; play->state.gfxCtx->polyOpa.p = commands;
+    EnViewer_DrawStaticGreatFairy(viewer, play);
+}
+static void testGreatFairyBlink(PlayState* play) {
+    const unsigned eyesAtTick[] = {0, 1, 2, 2, 1, 0};
+    for (unsigned pose = 0; pose < 3; ++pose) {
+        EnViewer first, second; Vec3s joints[28] = {0}, otherJoints[28] = {0};
+        prepare(&first, STATIC_STORY_ACTOR_GREAT_FAIRY, pose);
+        first.staticState.initialized = true;
+        first.staticState.interactInfo.headRot = (Vec3s){-6000, 6000, 0};
+        first.staticState.interactInfo.torsoRot.y = 200;
+        first.skin.skelAnime.jointTable = joints;
+        second = first; second.skin.skelAnime.jointTable = otherJoints;
+        altAssets = true;
+        for (unsigned tick = 0; tick <= 5; ++tick) {
+            if (tick) EnViewerStatic_Update(&first, play);
+            greatFairyExpectedEye = eyesAtTick[tick];
+            expectedHead = greatFairyHeads[greatFairyExpectedEye];
+            drawGreatFairy(&first, play); drawGreatFairy(&first, play);
+            REQUIRE(second.staticState.eyeIndex == 0);
+        }
+        REQUIRE(first.staticState.eyeIndex == 0 && first.staticState.blinkTimer == 20);
+        // Invalid state must select the open face, never index past the arrays.
+        first.staticState.eyeIndex = 255;
+        drawGreatFairy(&first, play);
+        for (unsigned mode = 0; mode < 3; ++mode) {
+            altAssets = mode != 0; hdHeadExists = mode != 1; hdHeadLoads = mode != 2;
+            first.staticState.eyeIndex = 2; greatFairyExpectedEye = 2; expectedHead = originalHead;
+            unsigned loads = hdLoads;
+            drawGreatFairy(&first, play);
+            if (mode != 2) REQUIRE(hdLoads == loads);
+        }
+        hdHeadExists = hdHeadLoads = true;
+    }
+    altAssets = false; expectedHead = originalHead;
+    puts("PASS Great Fairy: three poses, 100 ms closure, private timing, safe indices, head/torso tracking and optional-head fallbacks");
+}
 int main(void) {
     static PlayState play;static GraphicsContext gfx;play.state.gfxCtx=&gfx;
     EnViewer skull = {0};skull.staticState.type=STATIC_STORY_ACTOR_SKULL_KID;
@@ -419,6 +485,7 @@ int main(void) {
     testLuluHdBlink(&play);
     testShopGalBlink(&play);
     testShopGalFootAnimations(&play);
+    testGreatFairyBlink(&play);
     puts("PASS Kafei production viewer: no Player calls; private sampling, LOD draw/root/face commands and failure lifecycle");
     puts("PASS compiled production viewer init/update/draw/free: 10 poses, independent state, root preservation, face order, typed-load and partial-allocation failure");
     return 0;
