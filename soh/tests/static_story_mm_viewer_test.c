@@ -22,7 +22,8 @@ static bool loadSuccess=true,allocationSuccess=true;
 static float rotateX;
 static unsigned char eyes[8][16], mouths[4][16];
 static FlexSkeletonHeader skeleton;
-static AnimationHeader animation;
+static AnimationHeader animation, footAnimations[2];
+static bool footAnimExists, footAnimLoads = true;
 static EnViewer* drawing;
 static Gfx commands[16];
 static unsigned faceCommands;
@@ -32,11 +33,19 @@ static Gfx* expectedHead = originalHead;
 static unsigned hdLoads;
 bool ResourceMgr_IsAltAssetsEnabled(void) { return altAssets; }
 uint8_t ResourceMgr_FileExists(const char* path) {
+    if (strstr(path, "ShopGalMMDLevel") != NULL) return footAnimExists;
     REQUIRE(strncmp(path, "alt/objects/object_zov/Lulu3DSHDBlinkHead", 39) == 0 ||
             strncmp(path, "alt/objects/object_bg/ShopGalMMDBlinkHead", 39) == 0);
     return hdHeadExists;
 }
 char* ResourceMgr_GetResourceDataByNameHandlingMQ(const char* path) {
+    if (strstr(path, "ShopGalMMDLevel") != NULL) {
+        REQUIRE(altAssets && footAnimExists);
+        if (strcmp(path, "alt/objects/object_bg/ShopGalMMDLevelIdleAnim") == 0)
+            return footAnimLoads ? (char*)&footAnimations[0] : NULL;
+        REQUIRE(strcmp(path, "alt/objects/object_bg/ShopGalMMDLevelSwayAnim") == 0);
+        return footAnimLoads ? (char*)&footAnimations[1] : NULL;
+    }
     ++hdLoads;
     REQUIRE(altAssets && hdHeadExists);
     for (unsigned mouth = 0; mouth < 2; ++mouth) for (unsigned eye = 0; eye < 4; ++eye) {
@@ -324,6 +333,19 @@ static void testShopGalBlink(PlayState* play) {
     altAssets = false; expectedHead = originalHead;
     puts("PASS Treasure Chest Shop Gal: three poses, complete blink, per-instance timing, aligned OTR eye paths retain HD metadata");
 }
+static void testShopGalFootAnimations(PlayState* play) {
+    for (unsigned pose=0;pose<3;++pose) for (unsigned mode=0;mode<5;++mode) {
+        altAssets=mode!=0;footAnimExists=mode!=1;footAnimLoads=mode!=2;
+        footAnimations[0].common.frameCount=footAnimations[1].common.frameCount=mode==3 ? 31 : 32;
+        EnViewer viewer;prepare(&viewer,STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL,pose);
+        EnViewerStatic_WaitForObjects(&viewer,play);
+        REQUIRE(viewer.staticState.initialized);
+        REQUIRE(viewer.skin.skelAnime.animation==(mode==4 ? &footAnimations[pose==1] : &animation));
+        EnViewer_Destroy(&viewer.actor,play);
+    }
+    altAssets=false;footAnimExists=false;footAnimLoads=true;
+    puts("PASS Shop Gal foot clips: three poses, alt-disabled, absent, failed and mismatched-duration fallbacks");
+}
 int main(void) {
     static PlayState play;static GraphicsContext gfx;play.state.gfxCtx=&gfx;
     EnViewer skull = {0};skull.staticState.type=STATIC_STORY_ACTOR_SKULL_KID;
@@ -396,6 +418,7 @@ int main(void) {
     allocationSuccess = true; loadSuccess = true;
     testLuluHdBlink(&play);
     testShopGalBlink(&play);
+    testShopGalFootAnimations(&play);
     puts("PASS Kafei production viewer: no Player calls; private sampling, LOD draw/root/face commands and failure lifecycle");
     puts("PASS compiled production viewer init/update/draw/free: 10 poses, independent state, root preservation, face order, typed-load and partial-allocation failure");
     return 0;

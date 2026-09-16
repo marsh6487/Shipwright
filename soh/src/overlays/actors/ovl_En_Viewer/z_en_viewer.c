@@ -570,6 +570,20 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
             animation = (AnimationHeader*)MmAssets_LoadAnimation(presentation != NULL ? presentation->animationPath : "");
         }
         if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
+            /* The MMD replacement needs foot tracks fitted to its shoes.
+             * Keep MM's archive-scoped clip as the fallback for all other assets. */
+            if (ResourceMgr_IsAltAssetsEnabled()) {
+                const char* path = this->staticState.pose == 1 ?
+                    "alt/objects/object_bg/ShopGalMMDLevelSwayAnim" :
+                    "alt/objects/object_bg/ShopGalMMDLevelIdleAnim";
+                if (ResourceMgr_FileExists(path)) {
+                    AnimationHeader* fitted = (AnimationHeader*)ResourceMgr_GetResourceDataByNameHandlingMQ(path);
+                    if (fitted != NULL && animation != NULL &&
+                        fitted->common.frameCount == animation->common.frameCount) {
+                        animation = fitted;
+                    }
+                }
+            }
             for (int eye = 0; eye < 4; ++eye) {
                 this->staticState.mmEyeTextures[eye] =
                     MmAssets_LoadResource(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL,
