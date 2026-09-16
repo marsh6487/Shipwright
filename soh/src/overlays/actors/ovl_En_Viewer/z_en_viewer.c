@@ -570,7 +570,7 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
             animation = (AnimationHeader*)MmAssets_LoadAnimation(presentation != NULL ? presentation->animationPath : "");
         }
         if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
-            for (int eye = 0; eye < 3; ++eye) {
+            for (int eye = 0; eye < 4; ++eye) {
                 this->staticState.mmEyeTextures[eye] =
                     MmAssets_LoadResource(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL,
                                                                           eye));
@@ -830,7 +830,8 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
         this->staticState.eyeIndex = fixedEyeIndex;
     } else if (this->staticState.blinkTimer > 0) {
         this->staticState.blinkTimer--;
-    } else if (++this->staticState.eyeIndex >= 3) {
+    } else if (++this->staticState.eyeIndex >=
+               (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL ? 4 : 3)) {
         this->staticState.eyeIndex = 0;
         this->staticState.blinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
     }
@@ -2029,8 +2030,19 @@ static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
         gSPSegment(POLY_OPA_DISP++, 0x0C, MmAssets_GetOpaqueRenderMode());
     }
     if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
+        /* Retain the resource path through segment 8 so the renderer can read
+         * HD dimensions, format and scaling. Raw ImageData loses that metadata.
+         * Both the base address and row stride must be even: bit 0 is the
+         * interpreter's segmented-address tag. Reopen through the half eye. */
+        static const ALIGN_ASSET(2) char eyePaths[4][80] = {
+            "__OTR__objects/object_bg/gTreasureChestShopGalEyeOpenDownTex",
+            "__OTR__objects/object_bg/gTreasureChestShopGalEyeHalfDownTex",
+            "__OTR__objects/object_bg/gTreasureChestShopGalEyeClosedTex",
+            "__OTR__objects/object_bg/gTreasureChestShopGalEyeHalfDownTex",
+        };
+        uint8_t eye = this->staticState.eyeIndex < 4 ? this->staticState.eyeIndex : 0;
         gSPSegment(POLY_OPA_DISP++, 0x08,
-                   (uintptr_t)this->staticState.mmEyeTextures[this->staticState.eyeIndex]);
+                   (uintptr_t)eyePaths[eye]);
     }
     if (presentation != NULL && presentation->frameCount != 0) {
         StaticStoryMmFace face = StaticStoryMm_ResolveFace((StaticStoryActorType)this->staticState.type,

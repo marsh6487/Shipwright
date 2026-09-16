@@ -80,9 +80,23 @@ bool MmAssets_LoadKafei(unsigned char pose,MmNormalActorResources* output) {
     return loaded;
 }
 void MmAssets_ReleaseNormalActor(void* owner) { if(owner) { ++releaseCalls;free(owner); } }
-void* MmAssets_LoadSkeleton(const char* path) { REQUIRE(false);return NULL; }
-void* MmAssets_LoadAnimation(const char* path) { REQUIRE(false);return NULL; }
-void* MmAssets_LoadResource(const char* path) { REQUIRE(false);return NULL; }
+void* MmAssets_LoadSkeleton(const char* path) {
+    REQUIRE(strcmp(path, "objects/object_bg/gTreasureChestShopGalSkel") == 0);
+    skeleton.sh.limbCount = 23; skeleton.dListCount = 16;
+    return &skeleton;
+}
+void* MmAssets_LoadAnimation(const char* path) {
+    REQUIRE(strcmp(path, "objects/object_bg/object_bg_Anim_009890") == 0 ||
+            strcmp(path, "objects/object_bg/object_bg_Anim_001384") == 0);
+    animation.common.frameCount = 32;
+    return &animation;
+}
+void* MmAssets_LoadResource(const char* path) {
+    for (unsigned eye = 0; eye < 3; ++eye)
+        if (strcmp(path, StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, eye)) == 0)
+            return eyes[eye];
+    REQUIRE(false); return NULL;
+}
 Gfx* MmAssets_LoadDisplayListGraphStrict(const char* path) { REQUIRE(false);return NULL; }
 void Actor_Kill(Actor* a) { ++killCalls; }
 s32 Object_GetIndex(ObjectContext* c,s16 id) { ++objectCalls;return -1; }
@@ -139,6 +153,20 @@ void SkelAnime_DrawSkeletonOpa(PlayState* play,SkelAnime* skel,OverrideLimbDrawO
         return;
     }
     REQUIRE(post==NULL);
+    if (drawing->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
+        REQUIRE(play->state.gfxCtx->polyOpa.p == commands + 1);
+        REQUIRE((commands[0].words.w0 & 0xffff) == 8 * 4);
+        const char* eyePath = (const char*)commands[0].words.w1;
+        REQUIRE(((uintptr_t)eyePath & 1) == 0); // Odd addresses are interpreted as segmented pointers.
+        REQUIRE(strncmp(eyePath, "__OTR__", 7) == 0); // Keep HD metadata, not just ImageData.
+        REQUIRE(strcmp(eyePath + 7, StaticStoryMm_GetEyeTexturePath(drawing->staticState.type,
+            drawing->staticState.eyeIndex)) == 0);
+        Vec3s rot = {0}; Vec3f pos = {0}; Gfx* dl = originalHead;
+        REQUIRE(override != NULL);
+        override(play, 5, &dl, &pos, &rot, arg);
+        REQUIRE(dl == originalHead);
+        return;
+    }
     // Segment commands must already be emitted before the skeleton draw boundary.
     REQUIRE(play->state.gfxCtx->polyOpa.p > commands);
     faceCommands=play->state.gfxCtx->polyOpa.p-commands-1;
@@ -251,6 +279,31 @@ static void testLuluHdBlink(PlayState* play) {
     expectedHead = originalHead;
     puts("PASS Lulu HD blink: four poses, all eye frames, mouth selection, private timing, render independence, optional-asset fallback");
 }
+static void testShopGalBlink(PlayState* play) {
+    for (unsigned pose = 0; pose < 3; ++pose) {
+        EnViewer first, second;
+        prepare(&first, STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, pose);
+        prepare(&second, STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, pose);
+        EnViewerStatic_WaitForObjects(&first, play);
+        EnViewerStatic_WaitForObjects(&second, play);
+        REQUIRE(first.staticState.initialized && second.staticState.initialized);
+        draw(&first, play);
+        for (unsigned tick = 0; tick < 30; ++tick) EnViewer_Update(&first.actor, play);
+        REQUIRE(first.staticState.eyeIndex == 0);
+        for (unsigned tick = 1; tick <= 4; ++tick) {
+            EnViewer_Update(&first.actor, play);
+            REQUIRE(first.staticState.eyeIndex == tick % 4);
+            draw(&first, play);
+            draw(&first, play);
+            REQUIRE(second.staticState.eyeIndex == 0);
+            draw(&second, play);
+        }
+        REQUIRE(first.staticState.blinkTimer == 30);
+        EnViewer_Destroy(&first.actor, play);
+        EnViewer_Destroy(&second.actor, play);
+    }
+    puts("PASS Treasure Chest Shop Gal: three poses, complete blink, per-instance timing, aligned OTR eye paths retain HD metadata");
+}
 int main(void) {
     static PlayState play;static GraphicsContext gfx;play.state.gfxCtx=&gfx;
     EnViewer skull = {0};skull.staticState.type=STATIC_STORY_ACTOR_SKULL_KID;
@@ -322,6 +375,7 @@ int main(void) {
     }
     allocationSuccess = true; loadSuccess = true;
     testLuluHdBlink(&play);
+    testShopGalBlink(&play);
     puts("PASS Kafei production viewer: no Player calls; private sampling, LOD draw/root/face commands and failure lifecycle");
     puts("PASS compiled production viewer init/update/draw/free: 10 poses, independent state, root preservation, face order, typed-load and partial-allocation failure");
     return 0;
