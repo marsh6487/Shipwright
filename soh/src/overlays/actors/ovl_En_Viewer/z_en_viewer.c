@@ -391,6 +391,10 @@ void EnViewerStatic_Init(EnViewer* this, PlayState* play) {
     StaticStoryActorType type = StaticStoryActor_GetType(this->actor.params);
     StaticStoryObjectRequirements objects = StaticStoryActor_GetObjectRequirements(type);
 
+    /* Scene-editor placements should remain visible across open areas. Keep
+     * the existing frustum padding; the draw-distance setting can extend this. */
+    this->actor.uncullZoneForward = 6000.0f;
+
     StaticStoryActor_NormalizePlacementRotation(&this->actor.world.rot.x, &this->actor.world.rot.y,
                                                 &this->actor.world.rot.z);
     this->actor.shape.rot.x = this->actor.world.rot.x;

@@ -4,6 +4,7 @@
 #include "overlays/actors/ovl_Arms_Hook/z_arms_hook.h"
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
 #include "overlays/actors/ovl_En_Part/z_en_part.h"
+#include "overlays/actors/ovl_En_Viewer/static_story_actor.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "objects/gameplay_dangeon_keep/gameplay_dangeon_keep.h"
 #include "objects/object_bdoor/object_bdoor.h"
@@ -3151,8 +3152,9 @@ s32 Ship_CalcShouldDrawAndUpdate(PlayState* play, Actor* actor, Vec3f* projected
         return true;
     }
 
-    // Skip cutscne actors that depend on culling to hide from camera pans
-    if (actor->id == ACTOR_EN_VIEWER) {
+    // Scripted cutscene actors depend on culling during camera pans. Static
+    // scene-editor placements share this actor ID but should honor the settings.
+    if (actor->id == ACTOR_EN_VIEWER && !StaticStoryActor_IsParam(actor->params)) {
         return false;
     }
 
