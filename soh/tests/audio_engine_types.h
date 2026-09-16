@@ -15,9 +15,19 @@ typedef int64_t s64;
 typedef float f32;
 typedef double f64;
 typedef void* OSMesg;
-typedef struct { int unused; } OSMesgQueue;
-typedef struct { int unused; } OSIoMesg;
-typedef struct { int unused; } OSTask;
-typedef struct { int unused; } OSPiHandle;
-typedef struct { int unused; } Acmd;
+typedef struct {
+    int unused;
+} OSMesgQueue;
+typedef struct {
+    int unused;
+} OSIoMesg;
+typedef struct {
+    int unused;
+} OSTask;
+typedef struct {
+    int unused;
+} OSPiHandle;
+typedef struct {
+    int unused;
+} Acmd;
 #include "z64audio.h"

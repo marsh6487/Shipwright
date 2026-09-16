@@ -47,11 +47,7 @@ static bool FixtureOffer(float distance, void* context) {
 }
 
 static const StaticStoryTalkOperations sOperations = {
-    FixtureGetState,
-    FixtureShouldAdvance,
-    FixtureClose,
-    FixtureProcess,
-    FixtureOffer,
+    FixtureGetState, FixtureShouldAdvance, FixtureClose, FixtureProcess, FixtureOffer,
 };
 
 int main(void) {
@@ -65,8 +61,7 @@ int main(void) {
     };
 
     /* Phantom is rejected before both the active-conversation and offer/request branches. */
-    StaticStoryTalk_Update(STATIC_STORY_ACTOR_PHANTOM_GANON, &progression, 120.0f, &session, &sOperations,
-                           &fixture);
+    StaticStoryTalk_Update(STATIC_STORY_ACTOR_PHANTOM_GANON, &progression, 120.0f, &session, &sOperations, &fixture);
     REQUIRE(!session.talking);
     REQUIRE(!session.tracking);
     REQUIRE(session.textId == 0);

@@ -61,7 +61,7 @@ if os.environ.get("MM_VERIFY_STAGE") != "resource":
     loader=(ROOT/'soh/mods/transformation_masks/assets/mm_asset_loader.cpp').read_text()
     table=re.search(r'static Gfx sMmOpaqueRenderModeDL\[\] = \{.*?\n\};',loader,re.S).group(0)
     fixture=fixture.replace('/* PRODUCTION_OPAQUE_RENDER_MODE */',table+'\n'+function(loader,'MmAssets_GetOpaqueRenderMode'))
-    functions=['EnViewer_Update','EnViewer_Destroy','EnViewerStatic_WaitForObjects','EnViewerStatic_Update',
+    functions=['EnViewer_Update','EnViewer_Destroy','EnViewer_StaticSelectSkullKidModel','EnViewerStatic_WaitForObjects','EnViewerStatic_Update',
                'EnViewer_StaticGreatFairyEyeIndex','EnViewer_StaticGreatFairyOverrideLimbDraw','EnViewer_DrawStaticGreatFairy',
                'EnViewer_StaticTreasureChestShopGalOverrideLimbDraw','EnViewer_StaticOrdinaryMmOverrideLimbDraw','EnViewer_DrawStaticMmActor','EnViewer_DrawStaticSkullKid']
     fixture=fixture.replace('/* PRODUCTION_VIEWER_FUNCTIONS */','\n'.join(function(viewer,n) for n in functions))

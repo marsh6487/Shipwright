@@ -1,10 +1,10 @@
 #include <stdbool.h>
 
-#define REQUIRE(condition)                                                                                              \
-    do {                                                                                                                \
-        if (!(condition)) {                                                                                             \
-            return 1;                                                                                                   \
-        }                                                                                                               \
+#define REQUIRE(condition)  \
+    do {                    \
+        if (!(condition)) { \
+            return 1;       \
+        }                   \
     } while (0)
 #define assert(condition) REQUIRE(condition)
 

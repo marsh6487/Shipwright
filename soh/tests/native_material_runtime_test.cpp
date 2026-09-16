@@ -72,11 +72,13 @@ int main() {
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/any/paste0") == Prelude::NativeMaterialProfile::LakeHylia);
     archive->project["edits"]["any_scene"][0]["data"]["pastes"][0]["chain"][0]["path"] = "unrelated";
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/any/paste0") == Prelude::NativeMaterialProfile::None);
-    auto& items=archive->project["edits"]["any_scene"][0]["data"]["pastes"];
-    auto a=items[0];a["chain"][0]["path"]="objects/object_spot06_objects/gLakeHyliaHighWaterDL";
-    auto b=a;b["chain"][0]["path"]="objects/object_spot01_objects/gKakarikoWellWaterDL";
-    items=nlohmann::json::array({a,b,a});
-    REQUIRE(Prelude::ProfileFor(archive,"custom/prelude/any/paste0")==Prelude::NativeMaterialProfile::None);
+    auto& items = archive->project["edits"]["any_scene"][0]["data"]["pastes"];
+    auto a = items[0];
+    a["chain"][0]["path"] = "objects/object_spot06_objects/gLakeHyliaHighWaterDL";
+    auto b = a;
+    b["chain"][0]["path"] = "objects/object_spot01_objects/gKakarikoWellWaterDL";
+    items = nlohmann::json::array({ a, b, a });
+    REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/any/paste0") == Prelude::NativeMaterialProfile::None);
     GraphicsContext ctx;
     auto& lists = Prelude::Lists().lists;
     auto lakePointer = lists[1].data();
@@ -89,12 +91,13 @@ int main() {
                                                    -1, 1, 1, 1));
         CheckCommands(lists[3],
                       Gfx_TwoTexScrollEx(&ctx, 0, game % 128, 0, 32, 16, 1, game % 128, 0, 32, 16, 1, 0, 1, 0));
-        for (size_t i=4;i<lists.size();++i) {
-            const int size=i<7?32:64;
-            const int rate=((i-4)%3==0?-20:(i-4)%3==1?20:10)*(size/32);
-            CheckCommands(lists[i],Gfx_TwoTexScrollEx(&ctx,0,0,0,size,size,1,0,
-                game*static_cast<uint32_t>(rate),size,size,0,0,0,rate));
-            for (size_t j=1;j<i;++j) REQUIRE(lists[i].data()!=lists[j].data());
+        for (size_t i = 4; i < lists.size(); ++i) {
+            const int size = i < 7 ? 32 : 64;
+            const int rate = ((i - 4) % 3 == 0 ? -20 : (i - 4) % 3 == 1 ? 20 : 10) * (size / 32);
+            CheckCommands(lists[i], Gfx_TwoTexScrollEx(&ctx, 0, 0, 0, size, size, 1, 0,
+                                                       game * static_cast<uint32_t>(rate), size, size, 0, 0, 0, rate));
+            for (size_t j = 1; j < i; ++j)
+                REQUIRE(lists[i].data() != lists[j].data());
         }
         auto before = lists;
         sFrameAllocation = {}; // Simulate transient allocation reuse after draw.

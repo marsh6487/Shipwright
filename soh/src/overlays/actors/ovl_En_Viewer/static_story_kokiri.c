@@ -13,13 +13,20 @@ static void* sFadoEyes[] = { gFaEyeOpenTex, gFaEyeHalfTex, gFaEyeClosedTex };
 
 static AnimationHeader* StaticStoryKokiri_GetAnimation(uint16_t animation) {
     switch (animation) {
-        case STATIC_ANIM_KOKIRI_IDLE: return (AnimationHeader*)gKokiriIdleAnim;
-        case STATIC_ANIM_KOKIRI_ARMS_BEHIND: return (AnimationHeader*)gKokiriStandingArmsBehindBackAnim;
-        case STATIC_ANIM_KOKIRI_HANDS_HIPS: return (AnimationHeader*)gKokiriStandingHandsOnHipsAnim;
-        case STATIC_ANIM_KOKIRI_SITTING_HEAD_HAND: return (AnimationHeader*)gKokiriSittingHeadOnHandAnim;
-        case STATIC_ANIM_KOKIRI_SITTING_CROSSED_LEGS: return (AnimationHeader*)gKokiriSittingCrossedLegsAnim;
-        case STATIC_ANIM_KOKIRI_SITTING_CROSSED_ARMS_LEGS: return (AnimationHeader*)gKokiriSittingCrossedArmsLegsAnim;
-        default: return NULL;
+        case STATIC_ANIM_KOKIRI_IDLE:
+            return (AnimationHeader*)gKokiriIdleAnim;
+        case STATIC_ANIM_KOKIRI_ARMS_BEHIND:
+            return (AnimationHeader*)gKokiriStandingArmsBehindBackAnim;
+        case STATIC_ANIM_KOKIRI_HANDS_HIPS:
+            return (AnimationHeader*)gKokiriStandingHandsOnHipsAnim;
+        case STATIC_ANIM_KOKIRI_SITTING_HEAD_HAND:
+            return (AnimationHeader*)gKokiriSittingHeadOnHandAnim;
+        case STATIC_ANIM_KOKIRI_SITTING_CROSSED_LEGS:
+            return (AnimationHeader*)gKokiriSittingCrossedLegsAnim;
+        case STATIC_ANIM_KOKIRI_SITTING_CROSSED_ARMS_LEGS:
+            return (AnimationHeader*)gKokiriSittingCrossedArmsLegsAnim;
+        default:
+            return NULL;
     }
 }
 
@@ -45,11 +52,12 @@ void StaticStoryKokiri_Init(EnViewer* this, PlayState* play) {
 
     gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[this->staticState.objectSlots[3]].segment);
     SkelAnime_InitFlex(play, &this->skin.skelAnime, (FlexSkeletonHeader*)gKw1Skel, NULL, NULL, NULL, 0);
-    Animation_PlayLoopSetSpeed(&this->skin.skelAnime, StaticStoryKokiri_GetAnimation(pose->animation), pose->playbackSpeed);
+    Animation_PlayLoopSetSpeed(&this->skin.skelAnime, StaticStoryKokiri_GetAnimation(pose->animation),
+                               pose->playbackSpeed);
 }
 
 static s32 StaticStoryKokiri_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
-                                               void* thisx, Gfx** gfx) {
+                                              void* thisx, Gfx** gfx) {
     EnViewer* this = (EnViewer*)thisx;
 
     if (limbIndex == 15) {
@@ -78,7 +86,7 @@ static s32 StaticStoryKokiri_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gf
 }
 
 static void StaticStoryKokiri_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, void* thisx,
-                                            Gfx** gfx) {
+                                           Gfx** gfx) {
     EnViewer* this = (EnViewer*)thisx;
 
     if (limbIndex == 7) {

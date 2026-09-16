@@ -6,8 +6,12 @@ static u16 sPrevMainBgmSeqId = NA_BGM_DISABLED;
 static int sNumFramesMoving, sNumFramesStill;
 static u8 sAudioEnemyVol = 100;
 static int splitVolume;
-static u8 Audio_GetSeqFlags(u8 id) { return id == 0x18 ? 1 : 0; }
-static void Audio_SplitBgmChannels(int volume) { splitVolume = volume; }
+static u8 Audio_GetSeqFlags(u8 id) {
+    return id == 0x18 ? 1 : 0;
+}
+static void Audio_SplitBgmChannels(int volume) {
+    splitVolume = volume;
+}
 extern "C" void Audio_SetVolScale(u8, u8, u8, u8);
 #define Audio_StartSeq(player, fade, id) Audio_QueueSeqCmd(((player) << 24) | ((fade) << 16) | (id))
 #define Audio_SeqCmd1(player, fade) Audio_QueueSeqCmd(0x100000FF | ((player) << 24) | ((fade) << 16))
@@ -42,7 +46,7 @@ static void TestCombat(PlayState& play) {
 
     // Full-width identity: neither vanilla 0x5D nor custom 0x25D may
     // inherit 0x15D's registration, despite identical player-facing IDs.
-    for (u16 other : {0x005D, 0x025D}) {
+    for (u16 other : { 0x005D, 0x025D }) {
         StartNight(play);
         Audio_QueueResolvedSeqCmd(0, other, 0);
         Audio_ProcessSeqCmds();
@@ -56,12 +60,18 @@ static void TestCombat(PlayState& play) {
     // resource from silently regaining combat eligibility.
     for (int release = 0; release < 5; ++release) {
         StartNight(play);
-        if (release == 0) gSaveContext.nightFlag = 0;
-        if (release == 1) enabled = false;
-        if (release == 2) play.sceneNum = 0x20;
-        if (release < 3) Frame();
-        if (release == 3) HyruleFieldNightMusic_Reset();
-        if (release == 4) Audio_ResetActiveSequences();
+        if (release == 0)
+            gSaveContext.nightFlag = 0;
+        if (release == 1)
+            enabled = false;
+        if (release == 2)
+            play.sceneNum = 0x20;
+        if (release < 3)
+            Frame();
+        if (release == 3)
+            HyruleFieldNightMusic_Reset();
+        if (release == 4)
+            Audio_ResetActiveSequences();
         Audio_QueueResolvedSeqCmd(0, 0x15D, 0);
         Audio_ProcessSeqCmds();
         sPrevSeqMode = SEQ_MODE_DEFAULT;

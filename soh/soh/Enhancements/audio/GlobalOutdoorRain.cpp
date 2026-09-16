@@ -209,15 +209,15 @@ static void UpdateLightning(PlayState* play, bool thunderEnabled, bool enhancedR
 }
 
 static void UpdateOvercast(PlayState* play, bool enabled, bool outdoors) {
-    const bool compatibleSky = play->skyboxId == SKYBOX_NORMAL_SKY && !play->envCtx.skyboxDisabled &&
-                               play->csCtx.state == CS_STATE_IDLE;
+    const bool compatibleSky =
+        play->skyboxId == SKYBOX_NORMAL_SKY && !play->envCtx.skyboxDisabled && play->csCtx.state == CS_STATE_IDLE;
     const GlobalOutdoorRainOvercastState state = {
         .enabled = enabled,
         .outdoors = outdoors,
         .compatibleSky = compatibleSky,
-        .rainActive = sRainSource == GlobalOutdoorRainSource::NativePlaced ||
-                      (sRainSource == GlobalOutdoorRainSource::EnhancedOutdoor &&
-                       sCycle.phase != GlobalOutdoorRainPhase::Dry),
+        .rainActive =
+            sRainSource == GlobalOutdoorRainSource::NativePlaced ||
+            (sRainSource == GlobalOutdoorRainSource::EnhancedOutdoor && sCycle.phase != GlobalOutdoorRainPhase::Dry),
         .ownsOvercast = sOwnsOvercast,
     };
 
@@ -287,8 +287,8 @@ void GlobalOutdoorRain_Update(PlayState* play) {
         if (previousScene != play->sceneNum || previousRoom != play->roomCtx.curRoom.num ||
             previousIndoors != play->envCtx.indoors) {
             std::fprintf(stderr, "[weather-audio] location scene=%d room=%d indoors=%d source=%d density=%d\n",
-                         play->sceneNum, play->roomCtx.curRoom.num, play->envCtx.indoors,
-                         static_cast<int>(sRainSource), play->envCtx.unk_EE[0]);
+                         play->sceneNum, play->roomCtx.curRoom.num, play->envCtx.indoors, static_cast<int>(sRainSource),
+                         play->envCtx.unk_EE[0]);
             previousScene = play->sceneNum;
             previousRoom = play->roomCtx.curRoom.num;
             previousIndoors = play->envCtx.indoors;

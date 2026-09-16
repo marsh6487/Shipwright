@@ -20,27 +20,39 @@ static size_t sSoundFontsCapacity;
 static size_t sSequenceMapCapacity;
 #define MM_SEQ_CAP_HEADROOM 256
 static bool collectionEntries[65536];
-bool AudioCollection_HasSequenceNum(u16 id) { return collectionEntries[id]; }
-void AudioCollection_AddToCollection(char* path, u16 id) { collectionEntries[id] = true; }
+bool AudioCollection_HasSequenceNum(u16 id) {
+    return collectionEntries[id];
+}
+void AudioCollection_AddToCollection(char* path, u16 id) {
+    collectionEntries[id] = true;
+}
 static Instrument instruments[1024];
 static NoteSubEu gDefaultNoteSub;
 static Instrument* instrumentPointers[1024];
 static char script[] = { (char)0xFF };
 static u8 gDefaultShortNoteVelocityTable[16], gDefaultShortNoteGateTimeTable[16];
-static struct { int sceneNum; }* gPlayState;
+static struct { int sceneNum; } * gPlayState;
 #define SCENE_JABU_JABU_BOSS 19
-void AudioSeq_SkipForwardSequence(SequencePlayer* player) {}
-void GameInteractor_ExecuteOnSeqPlayerInit(s32 player, s32 sequence) {}
+void AudioSeq_SkipForwardSequence(SequencePlayer* player) {
+}
+void GameInteractor_ExecuteOnSeqPlayerInit(s32 player, s32 sequence) {
+}
 void* AudioHeap_SearchCaches(s32 table, s32 cache, s32 id);
 void Audio_NoteInit(Note* note);
 void Audio_AdsrInit(AdsrState* adsr, AdsrEnvelope* envelope, s16* volOut);
-void Audio_BuildSyntheticWave(Note* note, SequenceLayer* layer, s32 instrument) { REQUIRE(false); }
+void Audio_BuildSyntheticWave(Note* note, SequenceLayer* layer, s32 instrument) {
+    REQUIRE(false);
+}
 static u8 sFanfareStartTimer;
 static u16 sFanfareSeqId, currentFanfare;
 static int fanfareStops;
-u16 func_800FA0B4(u8 player) { return currentFanfare; }
+u16 func_800FA0B4(u8 player) {
+    return currentFanfare;
+}
 s32* AudioLoad_GetFontsForSequence(s32 id, u32* count);
-s32* func_800E5E84(s32 id, u32* count) { return AudioLoad_GetFontsForSequence(id, count); }
+s32* func_800E5E84(s32 id, u32* count) {
+    return AudioLoad_GetFontsForSequence(id, count);
+}
 #define Audio_SeqCmd1(player, fade) (++fanfareStops)
 void* AudioHeap_SearchPermanentCache(s32 table, s32 id);
 void* AudioHeap_AllocPermanent(s32 table, s32 id, size_t size);
@@ -53,21 +65,45 @@ typedef struct {
     intptr_t baseAddr1, baseAddr2;
     u32 medium1, medium2;
 } RelocInfo;
-void AudioLoad_RelocateFontAndPreloadSamples(s32 id, SoundFontData* data, RelocInfo* info, s32 temporary) {}
-void AudioLoad_SyncDma(uintptr_t source, u8* dest, size_t size, s32 medium) { memcpy(dest, (void*)source, size); }
-void AudioLoad_SyncDmaUnkMedium(uintptr_t source, u8* dest, size_t size, s32 medium) { REQUIRE(false); }
-void AudioLoad_SetSampleFontLoadStatusAndApplyCaches(s32 id, s32 status) { REQUIRE(false); }
-void AudioHeap_DiscardSampleBank(s32 id) { REQUIRE(false); }
-void AudioHeap_DiscardFont(s32 id) {}
+void AudioLoad_RelocateFontAndPreloadSamples(s32 id, SoundFontData* data, RelocInfo* info, s32 temporary) {
+}
+void AudioLoad_SyncDma(uintptr_t source, u8* dest, size_t size, s32 medium) {
+    memcpy(dest, (void*)source, size);
+}
+void AudioLoad_SyncDmaUnkMedium(uintptr_t source, u8* dest, size_t size, s32 medium) {
+    REQUIRE(false);
+}
+void AudioLoad_SetSampleFontLoadStatusAndApplyCaches(s32 id, s32 status) {
+    REQUIRE(false);
+}
+void AudioHeap_DiscardSampleBank(s32 id) {
+    REQUIRE(false);
+}
+void AudioHeap_DiscardFont(s32 id) {
+}
 void AudioHeap_DiscardSequence(s32 id);
 
-u32 AudioLoad_GetRealTableIndex(s32 table, u32 id) { return id; }
-SequenceData ResourceMgr_LoadSeqByName(const char* path) { return sequences[strtoul(path, NULL, 10)]; }
-SequenceData* ResourceMgr_LoadSeqPtrByName(const char* path) { return &sequences[strtoul(path, NULL, 10)]; }
-u16 AudioEditor_GetReplacementSeq(u16 id) { return id; }
-SoundFont* ResourceMgr_LoadAudioSoundFontByName(const char* path) { return &fonts[strtoul(path, NULL, 10)]; }
-void AudioSeq_SequencePlayerDisable(SequencePlayer* player) { player->enabled = false; }
-void AudioSeq_ResetSequencePlayer(SequencePlayer* player) { player->enabled = false; }
+u32 AudioLoad_GetRealTableIndex(s32 table, u32 id) {
+    return id;
+}
+SequenceData ResourceMgr_LoadSeqByName(const char* path) {
+    return sequences[strtoul(path, NULL, 10)];
+}
+SequenceData* ResourceMgr_LoadSeqPtrByName(const char* path) {
+    return &sequences[strtoul(path, NULL, 10)];
+}
+u16 AudioEditor_GetReplacementSeq(u16 id) {
+    return id;
+}
+SoundFont* ResourceMgr_LoadAudioSoundFontByName(const char* path) {
+    return &fonts[strtoul(path, NULL, 10)];
+}
+void AudioSeq_SequencePlayerDisable(SequencePlayer* player) {
+    player->enabled = false;
+}
+void AudioSeq_ResetSequencePlayer(SequencePlayer* player) {
+    player->enabled = false;
+}
 u8* AudioLoad_SyncLoadSeq(s32 id);
 void AudioLoad_SetFontLoadStatus(s32 id, s32 status);
 SoundFontData* AudioLoad_SyncLoadFont(u32 id);
@@ -82,8 +118,9 @@ int main(void) {
         instrumentPointers[i] = &instruments[i];
         fonts[i].instruments = &instrumentPointers[i];
         fonts[i].numInstruments = 1;
-        sequences[i] = (SequenceData){ .seqData = script, .seqDataSize = sizeof(script),
-                                      .medium = 2, .numFonts = 1, .resolvedFont = i };
+        sequences[i] = (SequenceData){
+            .seqData = script, .seqDataSize = sizeof(script), .medium = 2, .numFonts = 1, .resolvedFont = i
+        };
         sequences[i].fonts[0] = i;
     }
     gAudioContext.fontLoadStatus = fontStatus;
@@ -98,9 +135,9 @@ int main(void) {
     static u8 sequencePool[32768], sequenceTemporaryPool[4096];
     gAudioContext.seqCache.persistent.pool =
         (AudioAllocPool){ .start = sequencePool, .cur = sequencePool, .size = sizeof(sequencePool) };
-    gAudioContext.seqCache.temporary.pool =
-        (AudioAllocPool){ .start = sequenceTemporaryPool, .cur = sequenceTemporaryPool,
-                         .size = sizeof(sequenceTemporaryPool) };
+    gAudioContext.seqCache.temporary.pool = (AudioAllocPool){ .start = sequenceTemporaryPool,
+                                                              .cur = sequenceTemporaryPool,
+                                                              .size = sizeof(sequenceTemporaryPool) };
     AudioHeap_TemporaryCacheClear(&gAudioContext.seqCache.temporary);
     gAudioContext.audioBufferParameters.numSequencePlayers = 4;
     u32 fontCount = 0;
@@ -177,7 +214,7 @@ int main(void) {
     AudioSeq_SelectChannelFont(&channel, 255);
     REQUIRE(channel.fontId == 257);
     // Packed stream CRC bytes have the same meaning after widening host IDs.
-    SequenceData packed = { .fonts = {0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01} };
+    SequenceData packed = { .fonts = { 0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01 } };
     REQUIRE(AudioSequence_GetFontHash(&packed) == UINT64_C(0x0123456789ABCDEF));
     currentFanfare = 0;
     gAudioContext.seqPlayers[SEQ_PLAYER_FANFARE].defaultFont = 0;
@@ -278,7 +315,8 @@ int main(void) {
         REQUIRE(sequenceMap == registered);
         REQUIRE(gAudioContext.seqLoadStatus == registeredStatus);
     }
-    for (int i = 1024; i < 1152; ++i) free(sequenceMap[i]);
+    for (int i = 1024; i < 1152; ++i)
+        free(sequenceMap[i]);
     free(sequenceMap);
     free(registeredStatus);
     sequenceMap = sequenceNames;

@@ -5,7 +5,9 @@
 #include <unordered_map>
 #include <fast/resource/type/Texture.h>
 
-namespace Ship { class ResourceManager; }
+namespace Ship {
+class ResourceManager;
+}
 
 // Owns immutable texture snapshots and their command-facing paths. The strict
 // display-list cache owns this store for the same lifetime as its patched lists.
@@ -16,6 +18,7 @@ class MmStrictTextureBindings {
     void EnsurePublished(Ship::ResourceManager& manager) const;
     static std::shared_ptr<Fast::Texture> Snapshot(const std::shared_ptr<Ship::IResource>& resource,
                                                    const std::string& canonical);
+
   private:
     struct Binding {
         std::string path;

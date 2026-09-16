@@ -14,7 +14,7 @@
 namespace Fast {
 extern void GfxSetInstance(std::shared_ptr<Interpreter>);
 extern bool gfx_set_timg_otr_filepath_handler_custom(F3DGfx**);
-}
+} // namespace Fast
 using namespace Fast;
 
 static std::shared_ptr<Fast::Texture> MakeTexture(unsigned flags, unsigned char value) {
@@ -37,24 +37,29 @@ int main(int argc, char** argv) {
     REQUIRE(context->InitLogging());
     REQUIRE(context->InitConfiguration());
     REQUIRE(context->InitConsoleVariables());
-    REQUIRE(context->InitResourceManager({argv[1]}, {}, 1));
+    REQUIRE(context->InitResourceManager({ argv[1] }, {}, 1));
     auto manager = context->GetResourceManager();
     REQUIRE(manager->GetResourceLoader()->RegisterResourceFactory(
-        std::make_shared<Fast::ResourceFactoryBinaryTextureV0>(), RESOURCE_FORMAT_BINARY,
-        "Texture", static_cast<uint32_t>(Fast::ResourceType::Texture), 0));
+        std::make_shared<Fast::ResourceFactoryBinaryTextureV0>(), RESOURCE_FORMAT_BINARY, "Texture",
+        static_cast<uint32_t>(Fast::ResourceType::Texture), 0));
     unsigned donorTextures = 0;
     auto archive = manager->GetArchiveManager()->GetArchives()->at(0);
     auto files = archive->ListFiles();
     for (const auto& entry : *files) {
-        if (entry.second.rfind("objects/object_stk/", 0) != 0) continue;
+        if (entry.second.rfind("objects/object_stk/", 0) != 0)
+            continue;
         // The supplied archive includes this zero-byte, non-texture table marker.
-        if (entry.second == "objects/object_stk/gSkullKidSkelLimbs") continue;
+        if (entry.second == "objects/object_stk/gSkullKidSkelLimbs")
+            continue;
         auto file = archive->LoadFile(entry.second);
-        if (!file || !file->Buffer) fprintf(stderr, "Cannot read archive entry: %s\n", entry.second.c_str());
+        if (!file || !file->Buffer)
+            fprintf(stderr, "Cannot read archive entry: %s\n", entry.second.c_str());
         REQUIRE(file && file->Buffer);
         const auto& bytes = *file->Buffer;
-        if (bytes.size() < 64) continue;
-        if (bytes[4] != 'X' || bytes[5] != 'E' || bytes[6] != 'T' || bytes[7] != 'O') continue;
+        if (bytes.size() < 64)
+            continue;
+        if (bytes[4] != 'X' || bytes[5] != 'E' || bytes[6] != 'T' || bytes[7] != 'O')
+            continue;
         auto resource = manager->LoadResourceProcess(entry.second, true);
         auto snapshot = MmStrictTextureBindings::Snapshot(resource, entry.second);
         REQUIRE(snapshot && snapshot->GetRawPointer() != resource->GetRawPointer());
@@ -78,7 +83,7 @@ int main(int argc, char** argv) {
     F3DGfx command{};
     command.words.w0 = 0x25100003;
     command.words.w1 = reinterpret_cast<uintptr_t>(alias);
-    for (bool useAlt : {false, true, false}) {
+    for (bool useAlt : { false, true, false }) {
         manager->SetAltAssetsEnabled(useAlt);
         F3DGfx* cursor = &command;
         REQUIRE(!gfx_set_timg_otr_filepath_handler_custom(&cursor));
@@ -133,7 +138,8 @@ int main(int argc, char** argv) {
     const char* fallback = bindings.Bind(*manager, "objects/object_stk/bad", donor);
     REQUIRE(fallback && static_cast<uint8_t*>(manager->GetCachedResource(fallback, true)->GetRawPointer())[0] == 11);
     interpreter.reset();
-    puts("PASS: real resource manager and filepath interpreter metadata, Alt toggles, immutable snapshots and eviction");
+    puts(
+        "PASS: real resource manager and filepath interpreter metadata, Alt toggles, immutable snapshots and eviction");
     fflush(nullptr);
     // The headless Context has no Window; its normal application destructor
     // assumes one. All tested resource/cache lifecycles above are explicit.

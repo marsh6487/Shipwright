@@ -47,8 +47,8 @@ int main(void) {
 
     LoaderFixture fixture = { .result = true };
     bool loadFromMessageTable = true;
-    REQUIRE(StaticStoryDialogue_HandleOpenText(STATIC_STORY_TEXT_LULU, 2, &loadFromMessageTable, FixtureLoad,
-                                                &fixture));
+    REQUIRE(
+        StaticStoryDialogue_HandleOpenText(STATIC_STORY_TEXT_LULU, 2, &loadFromMessageTable, FixtureLoad, &fixture));
     REQUIRE(fixture.calls == 1);
     REQUIRE(fixture.language == 2);
     REQUIRE(strcmp(fixture.text, "Pleased to meet you. I'm Lulu.") == 0);
@@ -57,7 +57,7 @@ int main(void) {
     fixture = (LoaderFixture){ .result = false };
     loadFromMessageTable = true;
     REQUIRE(!StaticStoryDialogue_HandleOpenText(STATIC_STORY_TEXT_SKULL_KID, 1, &loadFromMessageTable, FixtureLoad,
-                                                 &fixture));
+                                                &fixture));
     REQUIRE(fixture.calls == 1);
     REQUIRE(loadFromMessageTable);
 

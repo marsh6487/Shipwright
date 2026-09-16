@@ -2,21 +2,19 @@
 #include <stdint.h>
 #include <string.h>
 
-#define REQUIRE(condition)                                                                                              \
-    do {                                                                                                                \
-        if (!(condition)) {                                                                                             \
-            return 1;                                                                                                   \
-        }                                                                                                               \
+#define REQUIRE(condition)  \
+    do {                    \
+        if (!(condition)) { \
+            return 1;       \
+        }                   \
     } while (0)
 
 #include "z64object.h"
 #include "../src/overlays/actors/ovl_En_Viewer/static_story_ganon.h"
 
 int main(void) {
-    const StaticStoryGanonPresentation* phantom =
-        StaticStoryGanon_GetPresentation(STATIC_STORY_ACTOR_PHANTOM_GANON);
-    const StaticStoryActorDefinition* descriptor =
-        StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_PHANTOM_GANON);
+    const StaticStoryGanonPresentation* phantom = StaticStoryGanon_GetPresentation(STATIC_STORY_ACTOR_PHANTOM_GANON);
+    const StaticStoryActorDefinition* descriptor = StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_PHANTOM_GANON);
 
     REQUIRE(phantom != NULL);
     REQUIRE(descriptor != NULL);

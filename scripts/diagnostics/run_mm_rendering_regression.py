@@ -25,7 +25,7 @@ flags=['-std=gnu11','-DF3DEX_GBI_2','-DLOG_LEVEL_GAME_PRINTS=6','-DNDEBUG','-ffu
 viewer=(ROOT/'soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.c').read_text()
 loader=(ROOT/'soh/mods/transformation_masks/assets/mm_asset_loader.cpp').read_text()
 fixture=(ROOT/'soh/tests/static_story_mm_viewer_test.c').read_text()
-names=['EnViewer_Update','EnViewer_Destroy','EnViewerStatic_WaitForObjects','EnViewerStatic_Update',
+names=['EnViewer_Update','EnViewer_Destroy','EnViewer_StaticSelectSkullKidModel','EnViewerStatic_WaitForObjects','EnViewerStatic_Update',
        'EnViewer_StaticGreatFairyEyeIndex','EnViewer_StaticGreatFairyOverrideLimbDraw','EnViewer_DrawStaticGreatFairy',
        'EnViewer_StaticTreasureChestShopGalOverrideLimbDraw','EnViewer_StaticOrdinaryMmOverrideLimbDraw','EnViewer_DrawStaticMmActor','EnViewer_DrawStaticSkullKid']
 table=re.search(r'static Gfx sMmOpaqueRenderModeDL\[\] = \{.*?\n\};',loader,re.S).group(0)

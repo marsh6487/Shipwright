@@ -674,12 +674,10 @@ void AudioEditor::DrawElement() {
                 SohGui::mSohMenu->MenuDrawItem(globalOutdoorRain,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 if (CVarGetInteger(CVAR_AUDIO("GlobalOutdoorRain"), 0)) {
-                    SohGui::mSohMenu->MenuDrawItem(globalOutdoorRainMode,
-                                                   static_cast<uint32_t>(ImGui::GetContentRegionAvail().x),
-                                                   THEME_COLOR);
-                    SohGui::mSohMenu->MenuDrawItem(globalOutdoorRainColor,
-                                                   static_cast<uint32_t>(ImGui::GetContentRegionAvail().x),
-                                                   THEME_COLOR);
+                    SohGui::mSohMenu->MenuDrawItem(
+                        globalOutdoorRainMode, static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
+                    SohGui::mSohMenu->MenuDrawItem(
+                        globalOutdoorRainColor, static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 }
                 SohGui::mSohMenu->MenuDrawItem(globalOutdoorRainOvercast,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
@@ -1025,8 +1023,7 @@ void RegisterAudioWidgets() {
                      .Size(ImVec2(300.0f, 0.0f)));
     SohGui::mSohMenu->AddSearchWidget({ voicePitch, "Enhancements", "Audio Editor", "Audio Options" });
 
-    hyruleFieldNightMusic = { .name = "Enable Hyrule Field Night Music",
-                              .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    hyruleFieldNightMusic = { .name = "Enable Hyrule Field Night Music", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
     hyruleFieldNightMusic.CVar(CVAR_AUDIO("HyruleFieldNightMusic"))
         .Options(CheckboxOptions()
                      .Color(THEME_COLOR)
@@ -1035,8 +1032,7 @@ void RegisterAudioWidgets() {
                               "ordinary SFX, and proximity weather."));
     SohGui::mSohMenu->AddSearchWidget({ hyruleFieldNightMusic, "Enhancements", "Audio Editor", "Audio Options" });
 
-    globalOutdoorRain = { .name = "Enable Rain in Outdoor Scenes",
-                          .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    globalOutdoorRain = { .name = "Enable Rain in Outdoor Scenes", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
     globalOutdoorRain.CVar(CVAR_AUDIO("GlobalOutdoorRain"))
         .Options(CheckboxOptions()
                      .Color(THEME_COLOR)
@@ -1064,30 +1060,25 @@ void RegisterAudioWidgets() {
                               "proximity-weather rain keep their original color."));
     SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRainColor, "Enhancements", "Audio Editor", "Audio Options" });
 
-    globalOutdoorRainOvercast = { .name = "Overcast Sky During Rain",
-                                  .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    globalOutdoorRainOvercast = { .name = "Overcast Sky During Rain", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
     globalOutdoorRainOvercast.CVar(CVAR_AUDIO("GlobalOutdoorRainOvercast"))
         .Options(CheckboxOptions()
                      .Color(THEME_COLOR)
                      .DefaultValue(true)
                      .Tooltip("Fades compatible outdoor skies and lighting to the native overcast palette during "
                               "placed thunderstorms, persistent rain, and intermittent rain."));
-    SohGui::mSohMenu->AddSearchWidget(
-        { globalOutdoorRainOvercast, "Enhancements", "Audio Editor", "Audio Options" });
+    SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRainOvercast, "Enhancements", "Audio Editor", "Audio Options" });
 
-    weatherAudioDiagnostics = { .name = "Log Weather Audio Diagnostics",
-                                .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    weatherAudioDiagnostics = { .name = "Log Weather Audio Diagnostics", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
     weatherAudioDiagnostics.CVar(CVAR_AUDIO("WeatherAudioDiagnostics"))
         .Options(CheckboxOptions()
                      .Color(THEME_COLOR)
                      .DefaultValue(false)
                      .Tooltip("Logs thunder voice admission and periodic pre/post weather PCM peaks and clamp "
                               "counts. Intended only for the POC7 stabilization playthrough."));
-    SohGui::mSohMenu->AddSearchWidget(
-        { weatherAudioDiagnostics, "Enhancements", "Audio Editor", "Audio Options" });
+    SohGui::mSohMenu->AddSearchWidget({ weatherAudioDiagnostics, "Enhancements", "Audio Editor", "Audio Options" });
 
-    proximityWeatherThunder = { .name = "Enable Weather Thunder",
-                                .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    proximityWeatherThunder = { .name = "Enable Weather Thunder", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
     proximityWeatherThunder.CVar(CVAR_AUDIO("ProximityWeatherThunder"))
         .Options(CheckboxOptions()
                      .Color(THEME_COLOR)
@@ -1106,12 +1097,10 @@ void RegisterAudioWidgets() {
     SohGui::mSohMenu->AddSearchWidget(
         { proximityWeatherThunderStyle, "Enhancements", "Audio Editor", "Audio Options" });
 
-    proximityWeatherRainVolume = { .name = "Weather Rain Volume: %d%%",
-                                   .type = WidgetType::WIDGET_CVAR_SLIDER_INT };
+    proximityWeatherRainVolume = { .name = "Weather Rain Volume: %d%%", .type = WidgetType::WIDGET_CVAR_SLIDER_INT };
     proximityWeatherRainVolume.CVar(CVAR_AUDIO("ProximityWeatherRainVolume"))
         .Options(IntSliderOptions().Color(THEME_COLOR).Min(0).Max(100).DefaultValue(50).Size(ImVec2(300.0f, 0.0f)));
-    SohGui::mSohMenu->AddSearchWidget(
-        { proximityWeatherRainVolume, "Enhancements", "Audio Editor", "Audio Options" });
+    SohGui::mSohMenu->AddSearchWidget({ proximityWeatherRainVolume, "Enhancements", "Audio Editor", "Audio Options" });
 
     proximityWeatherThunderVolume = { .name = "Weather Thunder Volume: %d%%",
                                       .type = WidgetType::WIDGET_CVAR_SLIDER_INT };
@@ -1123,7 +1112,12 @@ void RegisterAudioWidgets() {
     proximityWeatherThunderFrequency = { .name = "Weather Thunder Frequency: %d%%",
                                          .type = WidgetType::WIDGET_CVAR_SLIDER_INT };
     proximityWeatherThunderFrequency.CVar(CVAR_AUDIO("ProximityWeatherThunderFrequency"))
-        .Options(IntSliderOptions().Color(THEME_COLOR).Min(0).Max(100).DefaultValue(50).Size(ImVec2(300.0f, 0.0f))
+        .Options(IntSliderOptions()
+                     .Color(THEME_COLOR)
+                     .Min(0)
+                     .Max(100)
+                     .DefaultValue(50)
+                     .Size(ImVec2(300.0f, 0.0f))
                      .Tooltip("Controls the shared lightning cadence. 50% preserves the native timing; 0% disables "
                               "strikes and 100% approximately doubles their frequency."));
     SohGui::mSohMenu->AddSearchWidget(
