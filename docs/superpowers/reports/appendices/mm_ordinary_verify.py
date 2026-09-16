@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Run exact production-function resource/lifecycle CPU fixtures, with normal build headers.
-Usage: source build-env.sh; python mm_ordinary_verify.py BUILD_DIR MM_ARCHIVE
+Usage: source build-env.sh; python mm_ordinary_verify.py BUILD_DIR MM_ARCHIVE [LULU_HD SHOP_GAL_HD]
+Supplying the two HD mod archives also exercises repeated alternate-asset unload/reentry.
 No archive writes. Temporary objects live outside the build tree; no concurrent Ninja writer.
 """
 from pathlib import Path
 import os, re, shlex, subprocess, sys, tempfile
 ROOT = Path(__file__).resolve().parents[4]
 BUILD = Path(sys.argv[1]).resolve()
-ARCHIVE = Path(sys.argv[2]).resolve()
+ARCHIVES = [Path(path).resolve() for path in sys.argv[2:]]
 WORK = Path(tempfile.mkdtemp(prefix='mm-ordinary-'))
 print('Fixture output:', WORK, flush=True)
 
@@ -45,12 +46,13 @@ if os.environ.get("MM_VERIFY_STAGE") != "viewer":
     for name in ['Skeleton','SkeletonLimb','Animation','PlayerAnimation']:
         objects += [compile(ROOT/f'soh/soh/resource/type/{name}.cpp',True),compile(ROOT/f'soh/soh/resource/importer/{name}Factory.cpp',True)]
     objects += [compile(ROOT/'soh/src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.c')]
+    objects += [compile(ROOT/'soh/mods/transformation_masks/assets/mm_strict_texture_binding.cpp',True)]
     libs = ['libultraship/src/libultraship.a','_deps/stormlib-build/libstorm.a','libultraship/libImGui.a',
             'libultraship/libstb.a','libultraship/liblibgfxd.a','_deps/prism-build/libprism.a','libultraship/libmonocypher.a']
     sysroot=ROOT.parent/'linux-sysroot/usr/lib/x86_64-linux-gnu'
     run(['c++',*objects,'-Wl,--gc-sections','-Wl,--start-group',*[BUILD/l for l in libs],'-Wl,--end-group',
          '-L'+str(sysroot),'-Wl,-rpath,'+str(sysroot),'-lSDL2','-lOpenGL','-lzip','-ltinyxml2','-lspdlog','-lfmt','-lpng','-lz','-ldl','-pthread','-o',WORK/'resource_fixture'])
-    run([WORK/'resource_fixture',ARCHIVE])
+    run([WORK/'resource_fixture',*ARCHIVES])
 
 
 if os.environ.get("MM_VERIFY_STAGE") != "resource":
@@ -60,6 +62,7 @@ if os.environ.get("MM_VERIFY_STAGE") != "resource":
     table=re.search(r'static Gfx sMmOpaqueRenderModeDL\[\] = \{.*?\n\};',loader,re.S).group(0)
     fixture=fixture.replace('/* PRODUCTION_OPAQUE_RENDER_MODE */',table+'\n'+function(loader,'MmAssets_GetOpaqueRenderMode'))
     functions=['EnViewer_Update','EnViewer_Destroy','EnViewerStatic_WaitForObjects','EnViewerStatic_Update',
+               'EnViewer_StaticGreatFairyEyeIndex','EnViewer_StaticGreatFairyOverrideLimbDraw','EnViewer_DrawStaticGreatFairy',
                'EnViewer_StaticTreasureChestShopGalOverrideLimbDraw','EnViewer_StaticOrdinaryMmOverrideLimbDraw','EnViewer_DrawStaticMmActor','EnViewer_DrawStaticSkullKid']
     fixture=fixture.replace('/* PRODUCTION_VIEWER_FUNCTIONS */','\n'.join(function(viewer,n) for n in functions))
     p=WORK/'viewer_fixture.c';p.write_text(fixture)

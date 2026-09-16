@@ -14,6 +14,7 @@
 #include "soh/resource/importer/SkeletonLimbFactory.h"
 #include "soh/resource/importer/AnimationFactory.h"
 #include "mods/transformation_masks/assets/mm_normal_actor_resource.h"
+#include "mods/transformation_masks/assets/mm_strict_texture_binding.h"
 #include "mods/transformation_masks/assets/mm_kafei_resource.h"
 #include "soh/resource/importer/PlayerAnimationFactory.h"
 #include "mods/transformation_masks/assets/mm_asset_loader.h"
@@ -31,13 +32,198 @@ static std::unordered_map<std::string, std::shared_ptr<Ship::IResource>> sMmReso
 #define MMASSETS_LOG(...) ((void)0)
 /* PRODUCTION_RESOURCE_FUNCTIONS */
 
+static void TestSkullKidSceneReentry(const std::shared_ptr<Ship::ResourceManager>& manager) {
+    for (bool alt : {false, true}) for (unsigned pose = 0; pose < 2; ++pose) {
+        manager->SetAltAssetsEnabled(alt);
+        const auto* presentation = StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_SKULL_KID, pose);
+        auto seed = std::dynamic_pointer_cast<SOH::Skeleton>(
+            MmAssets_LoadResourceObjectFromMmArchive(presentation->skeletonPath));
+        REQUIRE(seed && seed->limbTable.size() == 21);
+        const auto paths = seed->limbTable;
+        sMmResourceCache.clear();
+        manager->UnloadResources("*");
+        seed.reset();
+        // Real archive limbs, selected as alternate resources without requiring
+        // a particular third-party Skull Kid pack. Only the cache keys differ.
+        auto loadAlternateLimbs = [&]() {
+            for (const auto& path : paths) {
+                auto file = sMmArchive->LoadFile(path);
+                REQUIRE(file);
+                auto limb = manager->GetResourceLoader()->LoadResource("alt/" + path, file);
+                REQUIRE(limb);
+                manager->CacheExternalResource("alt/" + path, limb);
+            }
+        };
+        if (alt) loadAlternateLimbs();
+        auto skeleton = std::dynamic_pointer_cast<SOH::Skeleton>(
+            MmAssets_LoadResourceObjectFromMmArchive(presentation->skeletonPath));
+        auto animation = std::dynamic_pointer_cast<SOH::Animation>(
+            MmAssets_LoadResourceObjectFromMmArchive(presentation->animationPath));
+        REQUIRE(skeleton && animation);
+        REQUIRE(MmNormalActor::ValidateAnimation(animation, 21, animation->animationData.animationHeader.common.frameCount));
+        std::vector<std::weak_ptr<Ship::IResource>> limbs;
+        std::vector<std::string> displayLists;
+        for (size_t i = 0; i < paths.size(); ++i) {
+            auto limb = std::dynamic_pointer_cast<SOH::SkeletonLimb>(manager->LoadResourceProcess(paths[i]));
+            REQUIRE(limb && limb->limbType == SOH::LimbType::Standard);
+            REQUIRE(limb->GetRawPointer() == skeleton->skeletonHeaderSegments[i]);
+            REQUIRE(limb->GetInitData()->Path.starts_with("alt/") == alt);
+            limbs.push_back(limb);
+            const auto* dl = reinterpret_cast<const char*>(limb->limbData.standardLimb.dList);
+            displayLists.emplace_back(dl ? dl : "");
+        }
+        for (unsigned scene = 0; scene < 4; ++scene) {
+            manager->UnloadResources("alt/*");
+            manager->UnloadResources("*"); // Also exercise eviction of vanilla limbs.
+            // Synthetic alternate keys are not in an archive's directory index.
+            for (const auto& path : paths) manager->UnloadResource("alt/" + path);
+            for (size_t i = 0; i < limbs.size(); ++i) {
+                auto limb = std::dynamic_pointer_cast<SOH::SkeletonLimb>(limbs[i].lock());
+                REQUIRE(limb);
+                REQUIRE(limb->GetRawPointer() == skeleton->skeletonHeaderSegments[i]);
+                const auto& data = limb->limbData.standardLimb;
+                REQUIRE(data.child == 255 || data.child < limbs.size());
+                REQUIRE(data.sibling == 255 || data.sibling < limbs.size());
+                const auto* dl = reinterpret_cast<const char*>(data.dList);
+                REQUIRE(displayLists[i] == (dl ? dl : ""));
+            }
+            if (alt) loadAlternateLimbs();
+            else for (const auto& path : paths) REQUIRE(manager->LoadResourceProcess(path));
+            REQUIRE(MmAssets_LoadResourceObjectFromMmArchive(presentation->skeletonPath) == skeleton);
+            REQUIRE(MmAssets_LoadResourceObjectFromMmArchive(presentation->animationPath) == animation);
+        }
+        sMmResourceCache.clear();
+        manager->UnloadResources("*");
+        for (const auto& path : paths) manager->UnloadResource("alt/" + path);
+        skeleton.reset();
+        for (const auto& limb : limbs) REQUIRE(limb.expired());
+    }
+    puts("PASS Skull Kid: both poses, Alt off/on, 16 cache-unload/reentry cycles and final limb release");
+}
+
+static void TestSkullKidTextureReentry(const std::shared_ptr<Ship::ResourceManager>& manager) {
+    const std::string canonical = "objects/object_stk/gSkullKidEyeTex";
+    auto source = MmAssets_LoadResourceObjectFromMmArchive(canonical.c_str());
+    REQUIRE(MmNormalActor::ValidateTexture(source));
+    MmStrictTextureBindings bindings;
+    const char* alias = bindings.Bind(*manager, canonical, source);
+    REQUIRE(alias);
+    const std::string stableAlias = alias;
+    auto texture = std::dynamic_pointer_cast<Fast::Texture>(manager->GetCachedResource(stableAlias, true));
+    REQUIRE(texture);
+    const std::vector<uint8_t> pixels(texture->ImageData, texture->ImageData + texture->ImageDataSize);
+    texture.reset();
+    source.reset();
+    sMmResourceCache.clear();
+    for (bool alt : {false, true}) for (unsigned scene = 0; scene < 4; ++scene) {
+        manager->SetAltAssetsEnabled(alt);
+        manager->UnloadResources("*");
+        manager->UnloadResource(stableAlias);
+        manager->UnloadResource("alt/" + stableAlias);
+        bindings.EnsurePublished(*manager); // Called before each Skull Kid draw.
+        auto reloaded = std::dynamic_pointer_cast<Fast::Texture>(manager->LoadResourceProcess(stableAlias));
+        REQUIRE(reloaded && reloaded->ImageDataSize == pixels.size());
+        REQUIRE(std::memcmp(reloaded->ImageData, pixels.data(), pixels.size()) == 0);
+        REQUIRE(reloaded->GetInitData()->Path == canonical);
+        REQUIRE(stableAlias == alias);
+    }
+    manager->UnloadResource(stableAlias);
+    manager->UnloadResource("alt/" + stableAlias);
+    puts("PASS Skull Kid: texture aliases and retained pixels survive repeated eviction with Alt off/on");
+}
+
+/* GameState_Destroy unloads alternate assets while the MM archive cache survives. The
+ * cached skeleton must own its original limbs, even when the same paths are
+ * subsequently loaded into new resources by the next scene. */
+static void TestSceneReentry(const std::shared_ptr<Ship::ResourceManager>& manager) {
+    manager->SetAltAssetsEnabled(true);
+    for (auto actor : {STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, STATIC_STORY_ACTOR_LULU}) {
+        sMmResourceCache.clear();
+        manager->UnloadResources("*");
+        const auto* presentation = StaticStoryMm_GetPresentation(actor, 0);
+        auto skeleton = std::dynamic_pointer_cast<SOH::Skeleton>(
+            MmAssets_LoadResourceObjectFromMmArchive(presentation->skeletonPath));
+        REQUIRE(skeleton);
+        std::vector<std::weak_ptr<Ship::IResource>> limbs;
+        std::vector<std::string> displayLists;
+        bool hasAlternateLimb = false;
+        for (size_t i = 0; i < skeleton->limbTable.size(); ++i) {
+            auto limb = std::dynamic_pointer_cast<SOH::SkeletonLimb>(
+                manager->LoadResourceProcess(skeleton->limbTable[i]));
+            REQUIRE(limb && limb->limbType == SOH::LimbType::Standard);
+            REQUIRE(limb->GetRawPointer() == skeleton->skeletonHeaderSegments[i]);
+            hasAlternateLimb |= limb->GetInitData()->Path.starts_with("alt/");
+            limbs.push_back(limb);
+            const auto* dl = reinterpret_cast<const char*>(limb->limbData.standardLimb.dList);
+            displayLists.emplace_back(dl ? dl : "");
+        }
+        // An unmodded archive alone does not exercise the HD scene-unload bug.
+        REQUIRE(hasAlternateLimb);
+        for (unsigned scene = 0; scene < 4; ++scene) {
+            if (actor == STATIC_STORY_ACTOR_LULU) {
+                MmNormalActorResources resources{};
+                const bool loaded = MmAssets_LoadNormalActor(actor, 0, &resources);
+                REQUIRE(loaded && resources.owner && resources.skeleton);
+                REQUIRE(resources.skeleton == skeleton->GetRawPointer());
+                MmAssets_ReleaseNormalActor(resources.owner);
+            } else {
+                auto cached = MmAssets_LoadResourceObjectFromMmArchive(presentation->skeletonPath);
+                REQUIRE(cached == skeleton);
+            }
+            manager->UnloadResources("alt/*");
+            for (size_t i = 0; i < limbs.size(); ++i) {
+                auto limb = std::dynamic_pointer_cast<SOH::SkeletonLimb>(limbs[i].lock());
+                REQUIRE(limb); // Previously freed here: the next draw dereferenced this address.
+                REQUIRE(limb->GetRawPointer() == skeleton->skeletonHeaderSegments[i]);
+                const auto* dl = reinterpret_cast<const char*>(limb->limbData.standardLimb.dList);
+                REQUIRE(displayLists[i] == (dl ? dl : ""));
+                // Populate the new scene's cache with fresh objects at the same paths.
+                auto reloaded = manager->LoadResourceProcess(skeleton->limbTable[i]);
+                REQUIRE(reloaded);
+            }
+        }
+        sMmResourceCache.clear();
+        manager->UnloadResources("*");
+        skeleton.reset();
+        for (const auto& limb : limbs) REQUIRE(limb.expired());
+        std::printf("PASS actor %d: four HD scene unload/reentry cycles, final limb release\n", actor);
+    }
+}
+
+static void TestXmlSkeletonRetention(const std::shared_ptr<Ship::ResourceManager>& manager) {
+    // Exercise the other skeleton factory with a real limb from the archive.
+    auto source = std::dynamic_pointer_cast<SOH::Skeleton>(
+        MmAssets_LoadResourceObjectFromMmArchive("objects/object_zov/gLuluSkel"));
+    REQUIRE(source && !source->limbTable.empty());
+    const std::string limbPath = source->limbTable.front();
+    const std::string xml = "<Skeleton Version=\"0\" Type=\"Flex\" LimbType=\"Standard\" "
+                            "LimbCount=\"1\" DisplayListCount=\"0\"><SkeletonLimb Path=\"" +
+                            limbPath + "\"/></Skeleton>";
+    auto file = std::make_shared<Ship::File>();
+    file->Buffer = std::make_shared<std::vector<char>>(xml.begin(), xml.end());
+    file->IsLoaded = true;
+    auto skeleton = std::dynamic_pointer_cast<SOH::Skeleton>(
+        manager->GetResourceLoader()->LoadResource("tests/retained_xml_skeleton", file));
+    REQUIRE(skeleton && skeleton->skeletonHeaderSegments.size() == 1);
+    std::weak_ptr<Ship::IResource> limb = manager->LoadResourceProcess(limbPath);
+    REQUIRE(!limb.expired() && limb.lock()->GetRawPointer() == skeleton->skeletonHeaderSegments[0]);
+    source.reset();
+    sMmResourceCache.clear();
+    manager->UnloadResources("*");
+    REQUIRE(!limb.expired());
+    REQUIRE(limb.lock()->GetRawPointer() == skeleton->skeletonHeaderSegments[0]);
+    skeleton.reset();
+    REQUIRE(limb.expired());
+    puts("PASS XML skeleton: limb retained across cache unload, released with skeleton");
+}
+
 int main(int argc, char** argv) {
-    REQUIRE(argc == 2);
+    REQUIRE(argc >= 2);
     auto context = Ship::Context::CreateUninitializedInstance("MM ordinary test", "mmtest", "/tmp/mm-ordinary-test.json");
     REQUIRE(context->InitLogging());
     REQUIRE(context->InitConfiguration());
     REQUIRE(context->InitConsoleVariables());
-    REQUIRE(context->InitResourceManager({argv[1]}, {}, 1));
+    REQUIRE(context->InitResourceManager(std::vector<std::string>(argv + 1, argv + argc), {}, 1));
     OTRGlobals globals;
     globals.context = context;
     OTRGlobals::Instance = &globals;
@@ -47,6 +233,10 @@ int main(int argc, char** argv) {
         RESOURCE_FORMAT_BINARY, "Skeleton", 0x4F534B4C, 0));
     REQUIRE(loader->RegisterResourceFactory(std::make_shared<SOH::ResourceFactoryBinarySkeletonLimbV0>(),
         RESOURCE_FORMAT_BINARY, "SkeletonLimb", 0x4F534C42, 0));
+    REQUIRE(loader->RegisterResourceFactory(std::make_shared<SOH::ResourceFactoryXMLSkeletonV0>(),
+        RESOURCE_FORMAT_XML, "Skeleton", 0x4F534B4C, 0));
+    REQUIRE(loader->RegisterResourceFactory(std::make_shared<SOH::ResourceFactoryXMLSkeletonLimbV0>(),
+        RESOURCE_FORMAT_XML, "SkeletonLimb", 0x4F534C42, 0));
     REQUIRE(loader->RegisterResourceFactory(std::make_shared<SOH::ResourceFactoryBinaryAnimationV0>(),
         RESOURCE_FORMAT_BINARY, "Animation", 0x4F414E4D, 0));
     REQUIRE(loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryTextureV0>(),
@@ -54,6 +244,10 @@ int main(int argc, char** argv) {
     REQUIRE(loader->RegisterResourceFactory(std::make_shared<SOH::ResourceFactoryBinaryPlayerAnimationV0>(),
         RESOURCE_FORMAT_BINARY, "PlayerAnimation", 0x4F50414D, 0));
     sMmArchive = manager->GetArchiveManager()->GetArchives()->at(0);
+    TestSkullKidSceneReentry(manager);
+    TestSkullKidTextureReentry(manager);
+    if (argc > 2) TestSceneReentry(manager);
+    TestXmlSkeletonRetention(manager);
     auto resolve = [manager](const std::string& path) { return manager->LoadResourceProcess(path); };
     unsigned loads = 0;
     for (bool alt : {false,true}) {
@@ -75,8 +269,10 @@ int main(int argc, char** argv) {
                 auto rawChild = resources.skeleton->sh.segment[0];
                 sMmResourceCache.clear();
                 manager->UnloadResource(presentation->skeletonPath);
-                for (const auto& path : std::static_pointer_cast<SOH::Skeleton>(retained->at(0))->limbTable)
+                for (const auto& path : std::static_pointer_cast<SOH::Skeleton>(retained->at(0))->limbTable) {
                     manager->UnloadResource(path);
+                    manager->UnloadResource("alt/" + path);
+                }
                 REQUIRE(!child.expired());
                 REQUIRE(child.lock()->GetRawPointer() == rawChild);
                 REQUIRE(resources.animation->frameData[0] ==
@@ -96,21 +292,21 @@ int main(int argc, char** argv) {
     auto anim=std::dynamic_pointer_cast<SOH::Animation>(animation);
     REQUIRE(typed && anim);
     std::vector<MmNormalActor::Resource> retained;
-    REQUIRE(MmNormalActor::ValidateSkeleton(skeleton,22,21,resolve,retained));
+    REQUIRE(MmNormalActor::ValidateSkeleton(skeleton,22,21,retained));
     retained.clear();
     auto original = typed->skeletonHeaderSegments[0];
     typed->skeletonHeaderSegments[0] = typed->skeletonHeaderSegments[1];
-    REQUIRE(!MmNormalActor::ValidateSkeleton(skeleton,22,21,resolve,retained));
+    REQUIRE(!MmNormalActor::ValidateSkeleton(skeleton,22,21,retained));
     typed->skeletonHeaderSegments[0] = original;
     auto child=std::dynamic_pointer_cast<SOH::SkeletonLimb>(resolve(typed->limbTable[0]));
     child->limbType = SOH::LimbType::LOD;
-    REQUIRE(!MmNormalActor::ValidateSkeleton(skeleton,22,21,resolve,retained));
+    REQUIRE(!MmNormalActor::ValidateSkeleton(skeleton,22,21,retained));
     child->limbType = SOH::LimbType::Standard;
     auto oldSibling=child->limbData.standardLimb.sibling;
     child->limbData.standardLimb.sibling=0;
-    REQUIRE(!MmNormalActor::ValidateSkeleton(skeleton,22,21,resolve,retained));
+    REQUIRE(!MmNormalActor::ValidateSkeleton(skeleton,22,21,retained));
     child->limbData.standardLimb.sibling=oldSibling;
-    REQUIRE(!MmNormalActor::ValidateSkeleton(animation,22,21,resolve,retained));
+    REQUIRE(!MmNormalActor::ValidateSkeleton(animation,22,21,retained));
     REQUIRE(!MmNormalActor::ValidateAnimation(skeleton,22,30));
     REQUIRE(!MmNormalActor::ValidateAnimation(animation,22,31));
     auto index=anim->rotationIndices[0].x;
@@ -127,7 +323,7 @@ int main(int argc, char** argv) {
     REQUIRE(!MmNormalActor::ValidateTexture(animation));
     auto kafei=MmAssets_LoadResourceObjectFromMmArchive("objects/object_test3/gKafeiSkel");
     REQUIRE(kafei);
-    REQUIRE(!MmNormalActor::ValidateSkeleton(kafei,21,18,resolve,retained));
+    REQUIRE(!MmNormalActor::ValidateSkeleton(kafei,21,18,retained));
     // MM Link wrappers are deliberately unsupported by the global SoH factory.
     // Type rejection is also exercised above on a real SOH::Animation instance.
     REQUIRE(!MmNormalActor::ValidateAnimation(kafei,21,89));

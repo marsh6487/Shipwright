@@ -986,9 +986,7 @@ bool MmAssets_LoadNormalActor(int actorType, unsigned char pose, MmNormalActorRe
         auto retained = std::make_unique<std::vector<MmNormalActor::Resource>>();
         auto skeleton = MmAssets_LoadResourceObjectFromMmArchive(presentation->skeletonPath);
         auto animation = MmAssets_LoadResourceObjectFromMmArchive(presentation->animationPath);
-        auto manager = OTRGlobals::Instance->context->GetResourceManager();
-        if (!MmNormalActor::ValidateSkeleton(skeleton, presentation->limbCount, presentation->matrixCount,
-                [manager](const std::string& path) { return manager->LoadResourceProcess(path); }, *retained) ||
+        if (!MmNormalActor::ValidateSkeleton(skeleton, presentation->limbCount, presentation->matrixCount, *retained) ||
             !MmNormalActor::ValidateAnimation(animation, presentation->limbCount, presentation->frameCount)) return false;
         retained->push_back(animation);
         MmNormalActorResources result = {};

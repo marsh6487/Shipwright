@@ -9,25 +9,26 @@
 
 namespace MmNormalActor {
 using Resource = std::shared_ptr<Ship::IResource>;
-using Resolve = std::function<Resource(const std::string&)>;
 
-/* Retain the precise children whose pointers the stock skeleton factory selected.
+/* Validate the owned children whose pointers the stock skeleton factory selected.
+ * Resolving their paths again after an alt-cache unload can return different
+ * resources, even though the original skeleton and its limbs are still valid.
  * Header tags alone cannot distinguish MM Kafei's misleading Standard/LOD graph. */
 inline bool ValidateSkeleton(const Resource& resource, unsigned limbs, unsigned matrices,
-                             const Resolve& resolve, std::vector<Resource>& retained) {
+                             std::vector<Resource>& retained) {
     auto skeleton = std::dynamic_pointer_cast<SOH::Skeleton>(resource);
     if (!skeleton || skeleton->type != SOH::SkeletonType::Flex ||
         skeleton->limbType != SOH::LimbType::Standard || skeleton->limbTableType != SOH::LimbType::Standard ||
         skeleton->limbCount != (int)limbs || skeleton->limbTableCount != (int)limbs || skeleton->dListCount != (int)matrices ||
         limbs == 0 || limbs > 254 || matrices > limbs || skeleton->limbTable.size() != limbs ||
-        skeleton->skeletonHeaderSegments.size() != limbs) return false;
+        skeleton->skeletonHeaderSegments.size() != limbs || skeleton->limbResources.size() != limbs) return false;
     const auto& header = skeleton->skeletonData.flexSkeletonHeader;
     if (header.sh.limbCount != limbs || header.sh.skeletonType != (uint8_t)SOH::SkeletonType::Flex ||
         header.dListCount != matrices || header.sh.segment != skeleton->skeletonHeaderSegments.data()) return false;
     std::vector<Resource> children;
     unsigned actualMatrices = 0;
     for (unsigned i = 0; i < limbs; ++i) {
-        auto child = std::dynamic_pointer_cast<SOH::SkeletonLimb>(resolve(skeleton->limbTable[i]));
+        auto child = std::dynamic_pointer_cast<SOH::SkeletonLimb>(skeleton->limbResources[i]);
         if (!child || child->limbType != SOH::LimbType::Standard ||
             header.sh.segment[i] != child->GetRawPointer()) return false;
         const auto& limb = child->limbData.standardLimb;
