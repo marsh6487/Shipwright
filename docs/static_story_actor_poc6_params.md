@@ -87,16 +87,38 @@ resources reject the placement before skeleton initialization.
 | `0x7E1C` | Lulu | Look left | 30 | No |
 | `0x7E2C` | Lulu | Sing | 72 | No |
 | `0x7E3C` | Lulu | Look around | 87 | No |
+| `0x7E0D` | Anju | Seated umbrella crying | 43 | No |
 
-All ten animations loop at their ordinary speed with authored root translation.
+All eleven animations loop at their ordinary speed with authored root translation.
 Lulu's singing is animation only, with open eyes and mouth; it does not start audio,
 ocarina, or quest actions. The unmodified 87-frame look-around clip remains a raw
 loop pending an observed visual seam check. Happy Mask Salesman uses his happy
 closed eyes and smile. Keaton does not bind face segments.
 
-All three use scale `0.01`. Happy Mask Salesman and Lulu use collider radius/height
+All four use scale `0.01`. Happy Mask Salesman and Lulu use collider radius/height
 `22/70`, focus height `60`, and talk distance `100`; Keaton uses `18/50`, `35`, and
 `70`. These are static placement defaults. Collider Y shift is zero.
+
+Anju uses the native `gAnju2UmbrellaCryAnim` loop, sad eyes, closed mouth and the
+umbrella attached to right-hand limb 8. This is the seated crying loop, not the
+sit-down transition. Her dialogue is "...Kafei... I promised I'd wait for you."
+through catalogue text `0x8F26`, with talk range `90`. Conversation leaves her pose
+and placement intact. She has no tracking, schedule, quest or audio actions.
+Her world XYZ and yaw stay at the authored placement. There is no gravity, floor
+snap, furniture collision correction, hovering or automatic foot-height offset.
+The pose's root translation remains in the skeleton, so align the seated body with
+your ledge, chair or log manually; the actor origin is near the feet, below the seat.
+She uses an immovable `20/50/0` collider and focus height `40`. The umbrella graph
+retains its vertices and textures across scene/cache eviction.
+
+An optional HD Anju pack uses `objects/object_anju_hd/v1/` and requires Alternate
+Assets enabled. It supplies all 19 drawn limbs, three complete head states and the
+umbrella as one archive-owned graph. Missing or invalid resources fall back to the
+whole native model. The custom heads blink open/half/closed/closed/half at 20 Hz;
+the original blue eye artwork and closed mouth are retained. The native fallback
+keeps its fixed sad eyes. Each actor owns its blink timer; additional render calls
+do not advance it. The custom mesh's 476-unit fit is applied only to three local
+draw branches, never to world placement, collision or the native skeleton.
 
 Child Kafei (identity 21) uses `0x7E0B` for the 89-frame idle and `0x7E1B` for
 its 48-frame gesture. Both are private, native-rate full loops with no tracking,

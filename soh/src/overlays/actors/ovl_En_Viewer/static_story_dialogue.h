@@ -11,6 +11,7 @@ typedef enum {
     STATIC_STORY_TEXT_HAPPY_MASK_SALESMAN = 0x8F23,
     STATIC_STORY_TEXT_CHILD_KAFEI = 0x8F24,
     STATIC_STORY_TEXT_LULU = 0x8F25,
+    STATIC_STORY_TEXT_ANJU = 0x8F26,
 } StaticStoryDialogueTextId;
 
 typedef bool (*StaticStoryDialogueLoadFunc)(const char* text, uint8_t language, void* context);

@@ -1,5 +1,6 @@
 /* Exact production graph functions are inserted by mm_skull_kid_verify.py. */
 #include <cstdio>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <unordered_map>
@@ -69,7 +70,55 @@ static void CheckSet(const MmSkullKidDisplayLists* set, unsigned value,
     }
 }
 
+static void CheckAnjuUmbrella(const std::shared_ptr<Ship::ResourceManager>& manager) {
+    const char* path = "objects/object_an2/gAnju2UmbrellaDL";
+    Gfx* umbrella = MmAssets_LoadDisplayListGraphStrict(path);
+    REQUIRE(umbrella);
+    auto* graph = MmAssets_GetDisplayListGraph(sMmArchive);
+    const auto& list = *graph->displayLists.at(path);
+    std::vector<std::pair<std::string, std::vector<uint8_t>>> textures;
+    std::vector<std::pair<const Vtx*, Vtx>> vertices;
+    for (size_t i = 0; i < list.size(); ++i) {
+        const auto& command = list[i];
+        auto opcode = command.words.w0 >> 24;
+        if (opcode == 0x33) {
+            ++i;
+        } else if (opcode == 0x01) {
+            auto* vertex = reinterpret_cast<const Vtx*>(command.words.w1);
+            REQUIRE(vertex);
+            vertices.emplace_back(vertex, *vertex);
+        } else if (opcode == 0x25) {
+            const char* alias = reinterpret_cast<const char*>(command.words.w1);
+            auto texture = std::dynamic_pointer_cast<Fast::Texture>(manager->LoadResourceProcess(alias));
+            REQUIRE(texture && texture->GetInitData()->Parent == sMmArchive);
+            textures.emplace_back(
+                alias, std::vector<uint8_t>(texture->ImageData, texture->ImageData + texture->ImageDataSize));
+        } else {
+            REQUIRE(opcode != 0x20 && opcode != 0x31 && opcode != 0x32 && opcode != 0xDA);
+        }
+    }
+    REQUIRE(vertices.size() == 3 && textures.size() == 3);
+    for (unsigned scene = 0; scene < 4; ++scene) {
+        manager->SetAltAssetsEnabled(scene % 2);
+        sMmResourceCache.clear();
+        manager->UnloadResources("*");
+        for (const auto& item : textures)
+            manager->UnloadResource(item.first);
+        MmAssets_EnsureStrictTextureBindings();
+        REQUIRE(MmAssets_LoadDisplayListGraphStrict(path) == umbrella);
+        for (const auto& vertex : vertices)
+            REQUIRE(memcmp(vertex.first, &vertex.second, sizeof(Vtx)) == 0);
+        for (const auto& item : textures) {
+            auto texture = std::dynamic_pointer_cast<Fast::Texture>(manager->LoadResourceProcess(item.first));
+            REQUIRE(texture && texture->ImageDataSize == item.second.size());
+            REQUIRE(memcmp(texture->ImageData, item.second.data(), item.second.size()) == 0);
+        }
+    }
+    puts("PASS Anju umbrella: native graph, vertex offsets and texture ownership across 4 Alt/cache-reentry cycles");
+}
+
 static void CheckActualPack(const std::shared_ptr<Ship::ResourceManager>& manager, int argc, char** argv) {
+    CheckAnjuUmbrella(manager);
     manager->SetAltAssetsEnabled(false);
     const auto* native = MmAssets_GetSkullKidDisplayLists();
     REQUIRE(native && native->head && native->eyes && native->mask);
@@ -165,8 +214,88 @@ static void CheckActualPack(const std::shared_ptr<Ship::ResourceManager>& manage
            rootCount, triangles, vertexCommands, aliases.size());
 }
 
+static void CheckAnjuPack(const std::shared_ptr<Ship::ResourceManager>& manager, int argc, char** argv) {
+    manager->SetAltAssetsEnabled(false);
+    const auto* native = MmAssets_GetAnjuDisplayLists();
+    REQUIRE(native && !native->custom && native->umbrella);
+    auto archive = manager->GetArchiveManager()->AddArchive(argv[3]);
+    REQUIRE(archive && MmAssets_GetAnjuDisplayLists() == native);
+    manager->SetAltAssetsEnabled(true);
+    const auto* custom = MmAssets_GetAnjuDisplayLists();
+    REQUIRE(custom && custom != native && custom->custom && custom->umbrella);
+    REQUIRE(!custom->limbs[0] && !custom->limbs[1]);
+    for (unsigned i = 2; i <= 20; ++i)
+        REQUIRE(custom->limbs[i] && native->limbs[i]);
+    REQUIRE(custom->heads[0] == custom->limbs[9]);
+    REQUIRE(custom->heads[1] != custom->heads[0] && custom->heads[2] != custom->heads[1]);
+    REQUIRE(native->heads[0] == native->heads[1] && native->heads[1] == native->heads[2]);
+    auto* graph = MmAssets_GetDisplayListGraph(archive, true);
+    REQUIRE(graph->optionalAnju && !graph->optionalSkullKid);
+    std::vector<std::weak_ptr<Ship::IResource>> owners;
+    std::vector<std::pair<std::string, std::vector<uint8_t>>> pixels;
+    std::vector<std::pair<const Vtx*, Vtx>> vertices;
+    for (const auto& [path, resource] : graph->resources) {
+        REQUIRE(path.rfind("objects/object_anju_hd/v1/", 0) == 0 && resource->GetInitData()->Parent == archive);
+        owners.push_back(resource);
+    }
+    for (const auto& [path, list] : graph->displayLists) {
+        for (size_t i = 0; i < list->size(); ++i) {
+            const auto& cmd = list->at(i);
+            const unsigned op = cmd.words.w0 >> 24;
+            if (op == 0x33) {
+                ++i;
+                continue;
+            }
+            REQUIRE(op != 0x20 && op != 0x31 && op != 0x32);
+            if (op == 0xDA)
+                REQUIRE((cmd.words.w1 & 0xFFFFFE) < 19 * 64);
+            if (op == 0x01) {
+                auto* vertex = reinterpret_cast<const Vtx*>(cmd.words.w1);
+                REQUIRE(vertex);
+                vertices.emplace_back(vertex, *vertex);
+            } else if (op == 0x25) {
+                const char* alias = reinterpret_cast<const char*>(cmd.words.w1);
+                auto texture = std::dynamic_pointer_cast<Fast::Texture>(manager->LoadResourceProcess(alias));
+                REQUIRE(texture && texture->GetInitData()->Parent == archive && texture->Flags == TEX_FLAG_LOAD_AS_RAW);
+                if (std::none_of(pixels.begin(), pixels.end(), [&](const auto& item) { return item.first == alias; }))
+                    pixels.emplace_back(
+                        alias, std::vector<uint8_t>(texture->ImageData, texture->ImageData + texture->ImageDataSize));
+            }
+        }
+    }
+    REQUIRE(!pixels.empty() && !vertices.empty());
+    for (int i = 4; i < argc; ++i) {
+        auto broken = manager->GetArchiveManager()->AddArchive(argv[i]);
+        REQUIRE(broken && MmAssets_GetAnjuDisplayLists() == native);
+        manager->GetArchiveManager()->RemoveArchive(broken);
+        REQUIRE(MmAssets_GetAnjuDisplayLists() == custom);
+    }
+    for (unsigned scene = 0; scene < 8; ++scene) {
+        manager->UnloadResources("*");
+        sMmResourceCache.clear();
+        for (const auto& [alias, data] : pixels)
+            manager->UnloadResource(alias);
+        manager->SetAltAssetsEnabled(scene % 2);
+        REQUIRE(MmAssets_GetAnjuDisplayLists() == (scene % 2 ? custom : native));
+        MmAssets_EnsureStrictTextureBindings();
+        for (const auto& owner : owners)
+            REQUIRE(!owner.expired());
+        for (const auto& [pointer, original] : vertices)
+            REQUIRE(memcmp(pointer, &original, sizeof(Vtx)) == 0);
+        for (const auto& [alias, data] : pixels) {
+            auto texture = std::dynamic_pointer_cast<Fast::Texture>(manager->LoadResourceProcess(alias));
+            REQUIRE(texture && texture->ImageDataSize == data.size());
+            REQUIRE(memcmp(texture->ImageData, data.data(), data.size()) == 0);
+        }
+    }
+    printf("PASS Anju HD archive: 19 limbs, 3 blink heads, umbrella, %zu owned vertex loads, complete fallback and 8 "
+           "Alt/cache-reentry cycles\n",
+           vertices.size());
+}
+
 int main(int argc, char** argv) {
-    const bool actualPack = argc >= 4 && strcmp(argv[1], "--actual") == 0;
+    const bool anjuPack = argc >= 4 && strcmp(argv[1], "--anju") == 0;
+    const bool actualPack = anjuPack || (argc >= 4 && strcmp(argv[1], "--actual") == 0);
     REQUIRE(actualPack || argc >= 5);
     auto context = Ship::Context::CreateUninitializedInstance("Skull Kid graph test", "stkgraph", "/tmp/stkgraph.json");
     REQUIRE(context->InitLogging());
@@ -196,7 +325,10 @@ int main(int argc, char** argv) {
                                             static_cast<uint32_t>(SOH::ResourceType::SOH_Array), 0));
     sMmArchive = archiveManager->GetArchives()->at(0);
     if (actualPack) {
-        CheckActualPack(manager, argc, argv);
+        if (anjuPack)
+            CheckAnjuPack(manager, argc, argv);
+        else
+            CheckActualPack(manager, argc, argv);
         fflush(nullptr);
         std::_Exit(0);
     }

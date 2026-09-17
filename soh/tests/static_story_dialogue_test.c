@@ -32,6 +32,7 @@ int main(void) {
         { STATIC_STORY_TEXT_HAPPY_MASK_SALESMAN, "You've met with a terrible fate, haven't you?" },
         { STATIC_STORY_TEXT_CHILD_KAFEI, "I've made a promise to Anju." },
         { STATIC_STORY_TEXT_LULU, "Pleased to meet you. I'm Lulu." },
+        { STATIC_STORY_TEXT_ANJU, "...Kafei... I promised I'd wait for you." },
     };
 
     for (size_t entry = 0; entry < sizeof(expected) / sizeof(expected[0]); ++entry) {
@@ -53,6 +54,12 @@ int main(void) {
     REQUIRE(fixture.language == 2);
     REQUIRE(strcmp(fixture.text, "Pleased to meet you. I'm Lulu.") == 0);
     REQUIRE(!loadFromMessageTable);
+
+    fixture = (LoaderFixture){ .result = true };
+    loadFromMessageTable = true;
+    REQUIRE(StaticStoryDialogue_HandleOpenText(0x8F26, 3, &loadFromMessageTable, FixtureLoad, &fixture));
+    REQUIRE(fixture.calls == 1 && fixture.language == 3);
+    REQUIRE(!loadFromMessageTable && strstr(fixture.text, "Kafei") != NULL);
 
     fixture = (LoaderFixture){ .result = false };
     loadFromMessageTable = true;

@@ -22,6 +22,9 @@ void FrameInterpolation_RecordCloseChild(void) {
 void gSPSegment(void* value, int segment, uintptr_t target) {
     __gSPSegment((Gfx*)value, segment, target);
 }
+void gSPDisplayList(Gfx* pkt, Gfx* dl) {
+    __gSPDisplayList(pkt, dl);
+}
 
 static unsigned initCalls, freeCalls, releaseCalls, drawCalls, killCalls, objectCalls, colliderFrees, loopCalls;
 static bool loadSuccess = true, allocationSuccess = true;
@@ -37,6 +40,12 @@ static bool altAssets, hdHeadExists = true, hdHeadLoads = true;
 static MmSkullKidDisplayLists skullModels[2];
 static Gfx skullGeometry[2][25][1];
 static bool skullModelAvailable = true;
+static MmAnjuDisplayLists anjuModels[2];
+static Gfx anjuGeometry[2][24][1];
+static bool umbrellaAvailable = true;
+const MmAnjuDisplayLists* MmAssets_GetAnjuDisplayLists(void) {
+    return umbrellaAvailable ? &anjuModels[altAssets] : NULL;
+}
 const MmSkullKidDisplayLists* MmAssets_GetSkullKidDisplayLists(void) {
     return skullModelAvailable ? &skullModels[altAssets] : NULL;
 }
@@ -90,6 +99,13 @@ static GameInfo gameInfo;
 GameInfo* gGameInfo = &gameInfo;
 static int16_t playerData[89 * 67];
 static unsigned lodDraws;
+static Gfx umbrella[1];
+static Mtx umbrellaMatrix;
+static unsigned umbrellaLoads, umbrellaMatrices, bindingChecks;
+Mtx* Matrix_NewMtx(GraphicsContext* gfx, char* file, s32 line) {
+    ++umbrellaMatrices;
+    return &umbrellaMatrix;
+}
 static ColliderCylinderInit sStaticCylinderInit;
 void EnViewerStatic_Update(EnViewer*, PlayState*);
 static void EnViewerStatic_UpdateTracking(EnViewer* self, PlayState* play) {
@@ -169,8 +185,9 @@ void* MmAssets_LoadResource(const char* path) {
     return NULL;
 }
 Gfx* MmAssets_LoadDisplayListGraphStrict(const char* path) {
-    REQUIRE(false);
-    return NULL;
+    REQUIRE(strcmp(path, "objects/object_an2/gAnju2UmbrellaDL") == 0);
+    ++umbrellaLoads;
+    return umbrellaAvailable ? umbrella : NULL;
 }
 void Actor_Kill(Actor* a) {
     ++killCalls;
@@ -290,6 +307,7 @@ void Graph_OpenDisps(Gfx** dList, GraphicsContext* gfx, const char* file, s32 li
 void Graph_CloseDisps(Gfx** dList, GraphicsContext* gfx, const char* file, s32 line) {
 }
 void MmAssets_EnsureStrictTextureBindings(void) {
+    ++bindingChecks;
 }
 static s32 EnViewer_StaticSkullKidOverrideLimbDraw(PlayState* p, s32 i, Gfx** d, Vec3f* v, Vec3s* r, void* a) {
     return false;
@@ -314,6 +332,33 @@ void SkelAnime_DrawSkeletonOpa(PlayState* play, SkelAnime* skel, OverrideLimbDra
         REQUIRE((commands[0].words.w0 >> 24) == G_RDPPIPESYNC);
         REQUIRE((commands[1].words.w0 >> 24) == G_SETENVCOLOR);
         REQUIRE(commands[1].words.w1 == 0xffffffffU);
+        return;
+    }
+    if (drawing->staticState.type == STATIC_STORY_ACTOR_ANJU) {
+        REQUIRE(post != NULL);
+        REQUIRE(play->state.gfxCtx->polyOpa.p == commands + 3);
+        REQUIRE(commands[0].words.w1 == (uintptr_t)eyes[0]);
+        REQUIRE(commands[1].words.w1 == (uintptr_t)mouths[0]);
+        Vec3s rot = { 0 };
+        Gfx* dl = originalHead;
+        for (unsigned limb = 1; limb <= 20; ++limb) {
+            const MmAnjuDisplayLists* model = &anjuModels[altAssets];
+            Vec3f pos = { 10, 20, 30 };
+            REQUIRE(override != NULL);
+            override(play, limb, &dl, &pos, &rot, arg);
+            if (limb > 1)
+                REQUIRE(dl == (limb == 9 ? expectedHead : model->limbs[limb]));
+            REQUIRE(pos.x == 10 && pos.z == 30);
+            REQUIRE(pos.y == 20 + (altAssets && (limb == 2 || limb == 10 || limb == 17) ? 476 : 0));
+            Gfx* before = play->state.gfxCtx->polyOpa.p;
+            post(play, limb, &dl, &rot, arg);
+            REQUIRE(play->state.gfxCtx->polyOpa.p == before + (limb == 8 ? 2 : 0));
+        }
+        REQUIRE(play->state.gfxCtx->polyOpa.p == commands + 5);
+        REQUIRE((commands[3].words.w0 >> 24) == G_MTX);
+        REQUIRE(commands[3].words.w1 == (uintptr_t)&umbrellaMatrix);
+        REQUIRE((commands[4].words.w0 >> 24) == G_DL);
+        REQUIRE(commands[4].words.w1 == (uintptr_t)umbrella);
         return;
     }
     REQUIRE(post == NULL);
@@ -421,6 +466,29 @@ void SkelAnime_DrawFlexLod(PlayState* play, void** skeleton, Vec3s* joints, s32 
     override(play, 2, &dl, &pos, &rot, arg);
     REQUIRE(pos.x == 17 && pos.y == 34);
 }
+/* Only unrelated OoT renderers are stubbed. MM tests enter the public draw
+ * function and its real static-actor dispatcher, not the MM helper directly. */
+#define UNEXPECTED_DRAW(name)                    \
+    void name(EnViewer* self, PlayState* play) { \
+        REQUIRE(false);                          \
+    }
+UNEXPECTED_DRAW(EnViewer_DrawGanondorf)
+UNEXPECTED_DRAW(EnViewer_DrawHorse)
+UNEXPECTED_DRAW(EnViewer_DrawZelda)
+UNEXPECTED_DRAW(EnViewer_DrawImpa)
+UNEXPECTED_DRAW(EnViewer_DrawStaticChildMalon)
+UNEXPECTED_DRAW(EnViewer_DrawStaticSaria)
+UNEXPECTED_DRAW(EnViewer_DrawStaticAdultZelda)
+UNEXPECTED_DRAW(EnViewer_DrawStaticSheik)
+UNEXPECTED_DRAW(EnViewer_DrawStaticAdultRuto)
+UNEXPECTED_DRAW(EnViewer_DrawStaticAdultRutoXlu)
+UNEXPECTED_DRAW(EnViewer_DrawStaticChildRuto)
+UNEXPECTED_DRAW(StaticStoryKokiri_Draw)
+UNEXPECTED_DRAW(EnViewer_DrawStaticAdultMalon)
+UNEXPECTED_DRAW(EnViewer_DrawStaticDarunia)
+UNEXPECTED_DRAW(EnViewer_DrawStaticNabooru)
+UNEXPECTED_DRAW(EnViewer_DrawStaticPhantomGanon)
+#undef UNEXPECTED_DRAW
 /* PRODUCTION_OPAQUE_RENDER_MODE */
 /* PRODUCTION_VIEWER_FUNCTIONS */
 
@@ -430,6 +498,7 @@ static void prepare(EnViewer* viewer, int type, int pose) {
     viewer->staticState.staticMode = true;
     viewer->staticState.type = type;
     viewer->staticState.pose = pose;
+    viewer->actor.params = 0x7E00;
     for (unsigned i = 0; i < 4; ++i)
         viewer->staticState.objectSlots[i] = -1;
     viewer->actor.world.pos = (Vec3f){ 12, 345, 67 };
@@ -438,8 +507,104 @@ static void prepare(EnViewer* viewer, int type, int pose) {
 static void draw(EnViewer* viewer, PlayState* play) {
     drawing = viewer;
     play->state.gfxCtx->polyOpa.p = commands;
+    play->state.gfxCtx->polyXlu.p = commands + 15;
     rotateX = 0;
-    EnViewer_DrawStaticMmActor(viewer, play);
+    EnViewer_Draw(&viewer->actor, play);
+}
+static void testAnjuSeatedAnchor(PlayState* play) {
+    const StaticStoryActorType anju = STATIC_STORY_ACTOR_ANJU;
+    REQUIRE(StaticStoryActor_GetType(0x7E0D) == anju);
+    REQUIRE(StaticStoryActor_IsAvailable(anju));
+    REQUIRE(!StaticStoryActor_CanTrack(anju, 0) && StaticStoryActor_CanTalk(anju));
+    REQUIRE(StaticStoryActor_SelectTextId(anju, NULL) == 0x8F26);
+    REQUIRE(!StaticStoryActor_LocksRootTranslation(anju, 0));
+    const StaticStoryMmPresentation* p = StaticStoryMm_GetPresentation(anju, 0);
+    REQUIRE(p && strcmp(p->animationPath, "objects/object_an2/gAnju2UmbrellaCryAnim") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetEyeTexturePath(anju, 0), "objects/object_an1/gAnju1EyeSadTex") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetMouthTexturePath(anju, 0), "objects/object_an1/gAnju1MouthClosedTex") == 0);
+    for (unsigned scene = 0; scene < 4; ++scene) {
+        altAssets = scene % 2;
+        EnViewer a;
+        prepare(&a, anju, 0);
+        a.actor.world.rot.y = a.actor.shape.rot.y = -12345;
+        // Deliberately place the inferred floor above the actor and supply motion:
+        // presentation updates must never run floor correction or movement.
+        a.actor.floorHeight = 9000;
+        a.actor.gravity = -9;
+        a.actor.velocity = (Vec3f){ 123, 456, 789 };
+        a.actor.colChkInfo.displacement = (Vec3f){ 11, 999, -13 };
+        unsigned before = drawCalls, loads = umbrellaLoads, matrices = umbrellaMatrices, bindings = bindingChecks;
+        EnViewerStatic_WaitForObjects(&a, play);
+        REQUIRE(a.staticState.initialized && a.isVisible);
+        REQUIRE(a.skin.skelAnime.limbCount == 21 && a.skin.skelAnime.dListCount == 19);
+        REQUIRE(a.skin.skelAnime.endFrame == 42 && a.actor.shape.yOffset == 0);
+        REQUIRE(a.actor.colChkInfo.mass == MASS_IMMOVABLE);
+        for (unsigned tick = 0; tick < 86; ++tick) {
+            EnViewer_Update(&a.actor, play);
+            static const unsigned sequence[] = { 0, 1, 2, 2, 1 };
+            expectedHead = anjuModels[altAssets].heads[altAssets ? sequence[a.staticState.anjuBlinkPhase] : 0];
+            draw(&a, play);
+            REQUIRE(a.actor.world.pos.x == 12 && a.actor.world.pos.y == 345 && a.actor.world.pos.z == 67);
+            REQUIRE(a.actor.home.pos.y == 345 && a.actor.shape.yOffset == 0);
+            REQUIRE(a.actor.world.rot.y == -12345 && a.actor.shape.rot.y == -12345);
+            REQUIRE(a.skin.skelAnime.jointTable[0].y == 456);
+        }
+        REQUIRE(drawCalls == before + 86 && umbrellaLoads == loads);
+        REQUIRE(umbrellaMatrices == matrices + 86 && bindingChecks == bindings + 86);
+        EnViewer_Destroy(&a.actor, play);
+        draw(&a, play);
+        REQUIRE(drawCalls == before + 86);
+    }
+    EnViewer failed;
+    prepare(&failed, anju, 0);
+    umbrellaAvailable = false;
+    unsigned releases = releaseCalls, kills = killCalls, inits = initCalls;
+    EnViewerStatic_WaitForObjects(&failed, play);
+    REQUIRE(!failed.staticState.initialized && initCalls == inits && killCalls == kills + 1);
+    EnViewer_Destroy(&failed.actor, play);
+    REQUIRE(releaseCalls == releases + 1);
+    umbrellaAvailable = true;
+    puts("PASS Anju: public draw, sad face, right-hand umbrella, fixed placed Y/yaw, missing umbrella and reentry");
+}
+static void testAnjuHdBlink(PlayState* play) {
+    EnViewer first, second;
+    altAssets = true;
+    prepare(&first, STATIC_STORY_ACTOR_ANJU, 0);
+    prepare(&second, STATIC_STORY_ACTOR_ANJU, 0);
+    EnViewerStatic_WaitForObjects(&first, play);
+    EnViewerStatic_WaitForObjects(&second, play);
+    first.staticState.anjuBlinkTimer = 0;
+    const unsigned sequence[] = { 1, 2, 2, 1, 0 };
+    for (unsigned tick = 0; tick < 5; ++tick) {
+        EnViewer_Update(&first.actor, play);
+        expectedHead = anjuModels[1].heads[sequence[tick]];
+        uint8_t phase = first.staticState.anjuBlinkPhase;
+        int16_t timer = first.staticState.anjuBlinkTimer;
+        draw(&first, play);
+        draw(&first, play);
+        REQUIRE(first.staticState.anjuBlinkPhase == phase && first.staticState.anjuBlinkTimer == timer);
+        REQUIRE(second.staticState.anjuBlinkPhase == 0 && second.staticState.anjuBlinkTimer == 30);
+        expectedHead = anjuModels[1].heads[0];
+        draw(&second, play);
+    }
+    REQUIRE(first.staticState.anjuBlinkPhase == 0 && first.staticState.anjuBlinkTimer == 30);
+    first.staticState.anjuBlinkPhase = 2;
+    altAssets = false;
+    expectedHead = anjuModels[0].heads[0];
+    draw(&first, play);
+    REQUIRE(first.staticState.anjuModel == &anjuModels[0]);
+    altAssets = true;
+    expectedHead = anjuModels[1].heads[2];
+    draw(&first, play);
+    REQUIRE(first.staticState.anjuModel == &anjuModels[1]);
+    first.staticState.anjuBlinkPhase = 255;
+    expectedHead = anjuModels[1].heads[0];
+    draw(&first, play);
+    EnViewer_Destroy(&first.actor, play);
+    EnViewer_Destroy(&second.actor, play);
+    altAssets = false;
+    puts("PASS Anju HD blink: 100ms full closure, independent instances, render independence, live Alt and bounded "
+         "phase");
 }
 static void testLuluHdBlink(PlayState* play) {
     altAssets = true;
@@ -610,6 +775,12 @@ int main(void) {
     EnViewer skull = { 0 };
     skull.staticState.type = STATIC_STORY_ACTOR_SKULL_KID;
     for (unsigned model = 0; model < 2; ++model) {
+        anjuModels[model].custom = model;
+        anjuModels[model].umbrella = umbrella;
+        for (unsigned limb = 2; limb <= 20; ++limb)
+            anjuModels[model].limbs[limb] = anjuGeometry[model][limb];
+        for (unsigned phase = 0; phase < 3; ++phase)
+            anjuModels[model].heads[phase] = anjuGeometry[model][21 + (model ? phase : 0)];
         for (unsigned limb = 0; limb < 22; ++limb)
             if (limb != 0 && limb != 1 && limb != 17)
                 skullModels[model].limbs[limb] = skullGeometry[model][limb];
@@ -708,8 +879,10 @@ int main(void) {
         REQUIRE(b.skin.skelAnime.curFrame == 0 && b.skin.skelAnime.jointTable[0].x == 0);
         REQUIRE(gSegments[6] == 0x12345678 && a.actor.world.pos.y == 345 && a.actor.home.pos.y == 345);
         a.staticState.mmAppearance = 0x48;
+        unsigned drawnBefore = lodDraws;
         draw(&a, &play);
         draw(&a, &play);
+        REQUIRE(lodDraws == drawnBefore + 2);
         REQUIRE(a.skin.skelAnime.jointTable[0].x == 100);
         unsigned freesBefore = freeCalls, releaseBefore = releaseCalls, drawBefore = lodDraws;
         EnViewer_Destroy(&a.actor, &play);
@@ -738,6 +911,8 @@ int main(void) {
     testShopGalBlink(&play);
     testShopGalFootAnimations(&play);
     testGreatFairyBlink(&play);
+    testAnjuSeatedAnchor(&play);
+    testAnjuHdBlink(&play);
     puts("PASS Kafei production viewer: no Player calls; private sampling, LOD draw/root/face commands and failure "
          "lifecycle");
     puts("PASS compiled production viewer init/update/draw/free: 10 poses, independent state, root preservation, face "

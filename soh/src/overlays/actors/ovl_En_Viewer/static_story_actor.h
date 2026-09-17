@@ -35,6 +35,7 @@ typedef enum {
     STATIC_STORY_ACTOR_KEATON,
     STATIC_STORY_ACTOR_CHILD_KAFEI,
     STATIC_STORY_ACTOR_LULU,
+    STATIC_STORY_ACTOR_ANJU,
     STATIC_STORY_ACTOR_MAX,
 } StaticStoryActorType;
 
@@ -61,6 +62,7 @@ typedef enum {
     STATIC_ADAPTER_MM_KEATON,
     STATIC_ADAPTER_MM_LULU,
     STATIC_ADAPTER_MM_KAFEI,
+    STATIC_ADAPTER_MM_ANJU,
 } StaticStoryActorAdapter;
 
 typedef enum {
@@ -85,6 +87,7 @@ typedef enum {
     STATIC_SKELETON_KEATON,
     STATIC_SKELETON_LULU,
     STATIC_SKELETON_KAFEI,
+    STATIC_SKELETON_ANJU,
 } StaticStorySkeletonFamily;
 
 typedef enum {
@@ -206,6 +209,7 @@ typedef enum {
     STATIC_ANIM_LULU_LOOK_AROUND,
     STATIC_ANIM_KAFEI_IDLE,
     STATIC_ANIM_KAFEI_GESTURE,
+    STATIC_ANIM_ANJU_UMBRELLA_CRY,
 } StaticStoryAnimation;
 
 enum {

@@ -8,23 +8,26 @@ void EnViewerStatic_OfferTalk(EnViewer* viewer, PlayState* play);
 SaveContext gSaveContext;
 u32 gBitFlags[32];
 static unsigned processCalls, offerCalls, stateCalls, advanceCalls, closeCalls, flagCalls;
+static bool acceptTalk;
+static u8 messageState = TEXT_STATE_NONE;
+static f32 offeredDistance;
 u32 Actor_ProcessTalkRequest(Actor* actor, PlayState* play) {
     (void)actor;
     (void)play;
     processCalls++;
-    return 0;
+    return acceptTalk;
 }
 s32 Actor_OfferTalk(Actor* actor, PlayState* play, f32 distance) {
     (void)actor;
     (void)play;
-    (void)distance;
+    offeredDistance = distance;
     offerCalls++;
     return 0;
 }
 u8 Message_GetState(MessageContext* msgCtx) {
     (void)msgCtx;
     stateCalls++;
-    return TEXT_STATE_NONE;
+    return messageState;
 }
 u8 Message_ShouldAdvance(PlayState* play) {
     (void)play;
@@ -57,5 +60,24 @@ int main(void) {
     REQUIRE(viewer.staticState.interactInfo.talkState == NPC_TALK_STATE_IDLE);
     REQUIRE(processCalls == 0 && offerCalls == 0 && stateCalls == 0 && advanceCalls == 0 && closeCalls == 0);
     REQUIRE(flagCalls == 0);
+
+    memset(&viewer, 0, sizeof(viewer));
+    viewer.staticState.type = STATIC_STORY_ACTOR_ANJU;
+    viewer.actor.world.pos = (Vec3f){ 10, 123, 30 };
+    viewer.actor.shape.rot.y = 12000;
+    AnimationHeader seatedAnimation = { 0 };
+    viewer.skin.skelAnime.animation = &seatedAnimation;
+    EnViewerStatic_OfferTalk(&viewer, &play);
+    REQUIRE(viewer.actor.textId == 0x8F26 && offeredDistance == 90.0f);
+    REQUIRE(!viewer.staticState.talking);
+    acceptTalk = true;
+    EnViewerStatic_OfferTalk(&viewer, &play);
+    REQUIRE(viewer.staticState.talking && viewer.staticState.interactInfo.talkState == NPC_TALK_STATE_TALKING);
+    messageState = TEXT_STATE_CLOSING;
+    EnViewerStatic_OfferTalk(&viewer, &play);
+    REQUIRE(!viewer.staticState.talking && viewer.staticState.interactInfo.talkState == NPC_TALK_STATE_IDLE);
+    REQUIRE(viewer.skin.skelAnime.animation == &seatedAnimation && viewer.staticState.pose == 0);
+    REQUIRE(viewer.actor.world.pos.x == 10 && viewer.actor.world.pos.y == 123 && viewer.actor.world.pos.z == 30);
+    REQUIRE(viewer.actor.shape.rot.y == 12000);
     return 0;
 }

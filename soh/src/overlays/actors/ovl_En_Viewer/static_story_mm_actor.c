@@ -63,6 +63,25 @@ static const StaticStoryMmPresentation sLuluPresentations[] = {
     ORDINARY("object_zov", "gLuluSkel", "gLuluLookAroundAnim", 22, 21, 87, STATIC_STORY_MM_TRACKING_NONE, 3, 2, 9, 8),
 };
 #undef ORDINARY
+static const StaticStoryMmPresentation sAnjuPresentation = {
+    "objects/object_an1/gAnju1Skel",
+    "objects/object_an2/gAnju2UmbrellaCryAnim",
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    20,
+    STATIC_STORY_MM_TRACKING_NONE,
+    false,
+    STATIC_STORY_MM_NORMAL_FLEX,
+    19,
+    43,
+    1,
+    1,
+    8,
+    9,
+};
 static const StaticStoryMmPresentation sKafeiPresentations[] = {
     { "objects/object_test3/gKafeiSkel", "objects/gameplay_keep/gPlayerAnim_link_normal_wait_free", NULL, NULL, NULL,
       NULL, NULL, 21, STATIC_STORY_MM_TRACKING_NONE, false, STATIC_STORY_MM_SCOPED_PLAYER_LOD, 18, 89, 8, 4, 8, 9 },
@@ -135,10 +154,14 @@ const StaticStoryMmPresentation* StaticStoryMm_GetPresentation(StaticStoryActorT
         return &sLuluPresentations[pose];
     if (type == STATIC_STORY_ACTOR_CHILD_KAFEI && pose < 2)
         return &sKafeiPresentations[pose];
+    if (type == STATIC_STORY_ACTOR_ANJU && pose == 0)
+        return &sAnjuPresentation;
     return NULL;
 }
 
 const char* StaticStoryMm_GetEyeTexturePath(StaticStoryActorType type, uint8_t eyeIndex) {
+    if (type == STATIC_STORY_ACTOR_ANJU)
+        return eyeIndex == 0 ? "objects/object_an1/gAnju1EyeSadTex" : NULL;
     static const char* kafei[] = {
         "objects/object_test3/gKafeiEyesOpenTex",   "objects/object_test3/gKafeiEyesHalfTex",
         "objects/object_test3/gKafeiEyesClosedTex", "objects/object_test3/gKafeiEyesRightTex",
@@ -235,6 +258,8 @@ bool StaticStoryMm_ResourcesComplete(const StaticStoryMmPresentation* presentati
 }
 
 const char* StaticStoryMm_GetMouthTexturePath(StaticStoryActorType type, uint8_t mouthIndex) {
+    if (type == STATIC_STORY_ACTOR_ANJU)
+        return mouthIndex == 0 ? "objects/object_an1/gAnju1MouthClosedTex" : NULL;
     static const char* kafei[] = { "objects/object_test3/gKafeiMouthClosedTex",
                                    "objects/object_test3/gKafeiMouthHalfTex", "objects/object_test3/gKafeiMouthOpenTex",
                                    "objects/object_test3/gKafeiMouthSmileTex" };
@@ -251,7 +276,8 @@ const char* StaticStoryMm_GetMouthTexturePath(StaticStoryActorType type, uint8_t
 StaticStoryMmFace StaticStoryMm_ResolveFace(StaticStoryActorType type, uint8_t pose, float frame, uint8_t blinkEye,
                                             bool tracking) {
     StaticStoryMmFace face = { blinkEye < 3 ? blinkEye : 0, 0 };
-    if (type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN)
+    /* Native laundry-pool crying holds the sad eyes and closed mouth. */
+    if (type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN || type == STATIC_STORY_ACTOR_ANJU)
         face.eye = 0;
     if (type == STATIC_STORY_ACTOR_LULU) {
         if (pose == 0 && face.eye == 0 && !tracking)

@@ -33,6 +33,7 @@ void StaticStoryDialogue_Register() {
     COND_ID_HOOK(OnOpenText, STATIC_STORY_TEXT_HAPPY_MASK_SALESMAN, true, StaticStoryDialogue_OnOpenText);
     COND_ID_HOOK(OnOpenText, STATIC_STORY_TEXT_CHILD_KAFEI, true, StaticStoryDialogue_OnOpenText);
     COND_ID_HOOK(OnOpenText, STATIC_STORY_TEXT_LULU, true, StaticStoryDialogue_OnOpenText);
+    COND_ID_HOOK(OnOpenText, STATIC_STORY_TEXT_ANJU, true, StaticStoryDialogue_OnOpenText);
 }
 
 static RegisterShipInitFunc initFunc(StaticStoryDialogue_Register);

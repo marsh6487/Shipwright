@@ -607,6 +607,16 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
                 eyeTexturesComplete = eyeTexturesComplete && this->staticState.mmEyeTextures[eye] != NULL;
             }
         }
+        if (this->staticState.type == STATIC_STORY_ACTOR_ANJU) {
+            /* The strict graph owns its lists, vertices and texture aliases
+             * across scene/cache eviction, just like Skull Kid's graph. */
+            this->staticState.anjuModel = MmAssets_GetAnjuDisplayLists();
+            if (this->staticState.anjuModel == NULL) {
+                Actor_Kill(&this->actor);
+                return;
+            }
+            this->staticState.anjuUmbrellaDL = this->staticState.anjuModel->umbrella;
+        }
         if (presentation != NULL && presentation->requiresSecondarySkeleton) {
             secondaryComplete = EnViewer_StaticSelectSkullKidModel(this);
             if (!StaticStoryMm_UsesNativeFairyCompanion((StaticStoryActorType)this->staticState.type)) {
@@ -775,6 +785,8 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
     this->staticState.blinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
     this->staticState.luluHdBlinkPhase = 0;
     this->staticState.luluHdBlinkTimer = this->staticState.blinkTimer;
+    this->staticState.anjuBlinkPhase = 0;
+    this->staticState.anjuBlinkTimer = this->staticState.blinkTimer;
     int8_t fixedEyeIndex =
         StaticStoryActor_GetFixedEyeIndex((StaticStoryActorType)this->staticState.type, this->staticState.pose);
     this->staticState.eyeIndex = fixedEyeIndex >= 0 ? fixedEyeIndex : 0;
@@ -868,6 +880,17 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
         } else if (++this->staticState.luluHdBlinkPhase >= 6) {
             this->staticState.luluHdBlinkPhase = 0;
             this->staticState.luluHdBlinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
+        }
+    }
+    if (this->staticState.type == STATIC_STORY_ACTOR_ANJU) {
+        /* The custom eyelids close for two updates (100 ms at 20 Hz).
+         * Keep time per instance and outside draw/interpolation callbacks;
+         * the native crying face continues to use its fixed sad eye. */
+        if (this->staticState.anjuBlinkTimer > 0) {
+            this->staticState.anjuBlinkTimer--;
+        } else if (++this->staticState.anjuBlinkPhase >= 5) {
+            this->staticState.anjuBlinkPhase = 0;
+            this->staticState.anjuBlinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
         }
     }
     if (canInteract) {
@@ -2031,6 +2054,21 @@ static s32 EnViewer_StaticOrdinaryMmOverrideLimbDraw(PlayState* play, s32 limbIn
                                                      Vec3s* rot, void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
     StaticStoryActorType type = (StaticStoryActorType)this->staticState.type;
+    if (type == STATIC_STORY_ACTOR_ANJU && this->staticState.anjuModel != NULL) {
+        const MmAnjuDisplayLists* model = this->staticState.anjuModel;
+        if (limbIndex > 1 && limbIndex <= 20)
+            *dList = model->limbs[limbIndex];
+        if (limbIndex == 9) {
+            static const uint8_t sequence[] = { 0, 1, 2, 2, 1 };
+            uint8_t phase = this->staticState.anjuBlinkPhase;
+            *dList = model->heads[model->custom && phase < 5 ? sequence[phase] : 0];
+        }
+        /* The supplied rig has this local fit offset on the three root
+         * branches. It is draw-only: never change actor/home Y or collision. */
+        if (model->custom && (limbIndex == 2 || limbIndex == 10 || limbIndex == 17))
+            pos->y += 476.0f;
+        return false;
+    }
     if (type == STATIC_STORY_ACTOR_LULU && limbIndex == 12 && ResourceMgr_IsAltAssetsEnabled()) {
         static const uint8_t eyeSequence[] = { 0, 1, 2, 3, 2, 1 };
         static const char* const heads[2][4] = {
@@ -2086,10 +2124,29 @@ static s32 EnViewer_StaticOrdinaryMmOverrideLimbDraw(PlayState* play, s32 limbIn
     return false;
 }
 
+static void EnViewer_StaticAnjuPostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, void* thisx) {
+    EnViewer* this = (EnViewer*)thisx;
+    /* MM En_An draws the umbrella in right-hand limb 8, without an extra
+     * transform. Do not copy her schedule's position, yaw or floor handling. */
+    if (limbIndex == 8 && this->staticState.anjuUmbrellaDL != NULL) {
+        OPEN_DISPS(play->state.gfxCtx);
+        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_OPA_DISP++, this->staticState.anjuUmbrellaDL);
+        CLOSE_DISPS(play->state.gfxCtx);
+    }
+}
+
 static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
     if (!this->staticState.initialized)
         return;
+    if (this->staticState.type == STATIC_STORY_ACTOR_ANJU) {
+        this->staticState.anjuModel = MmAssets_GetAnjuDisplayLists();
+        if (this->staticState.anjuModel == NULL)
+            return;
+        this->staticState.anjuUmbrellaDL = this->staticState.anjuModel->umbrella;
+    }
     OverrideLimbDrawOpa overrideLimbDraw = NULL;
+    PostLimbDrawOpa postLimbDraw = NULL;
     const StaticStoryMmPresentation* presentation =
         StaticStoryMm_GetPresentation((StaticStoryActorType)this->staticState.type, this->staticState.pose);
     s16 modelYaw =
@@ -2104,6 +2161,10 @@ static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     if (this->staticState.type == STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN) {
         gSPSegment(POLY_OPA_DISP++, 0x0C, MmAssets_GetOpaqueRenderMode());
+    }
+    if (this->staticState.type == STATIC_STORY_ACTOR_ANJU) {
+        MmAssets_EnsureStrictTextureBindings();
+        postLimbDraw = EnViewer_StaticAnjuPostLimbDraw;
     }
     if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
         /* Retain the resource path through segment 8 so the renderer can read
@@ -2140,7 +2201,7 @@ static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
         SkelAnime_DrawFlexLod(play, this->skin.skelAnime.skeleton, this->skin.skelAnime.jointTable, 18,
                               overrideLimbDraw, NULL, this, 0);
     } else {
-        SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, overrideLimbDraw, NULL, this);
+        SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, overrideLimbDraw, postLimbDraw, this);
     }
     if (modelYaw != 0) {
         Matrix_Pop();
@@ -2299,7 +2360,9 @@ void EnViewerStatic_Draw(EnViewer* this, PlayState* play) {
         case STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL:
         case STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN:
         case STATIC_STORY_ACTOR_KEATON:
+        case STATIC_STORY_ACTOR_CHILD_KAFEI:
         case STATIC_STORY_ACTOR_LULU:
+        case STATIC_STORY_ACTOR_ANJU:
             EnViewer_DrawStaticMmActor(this, play);
             break;
         case STATIC_STORY_ACTOR_SKULL_KID:

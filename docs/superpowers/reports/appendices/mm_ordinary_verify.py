@@ -5,7 +5,7 @@ Supplying the two HD mod archives also exercises repeated alternate-asset unload
 No archive writes. Temporary objects live outside the build tree; no concurrent Ninja writer.
 """
 from pathlib import Path
-import os, re, shlex, subprocess, sys, tempfile
+import json, os, re, shlex, struct, subprocess, sys, tempfile, zipfile
 ROOT = Path(__file__).resolve().parents[4]
 BUILD = Path(sys.argv[1]).resolve()
 ARCHIVES = [Path(path).resolve() for path in sys.argv[2:]]
@@ -37,10 +37,31 @@ def compile(path, cpp=False):
     return out
 
 if os.environ.get("MM_VERIFY_STAGE") != "viewer":
+    poison = WORK/'anju_metadata_poison.o2r'
+    with zipfile.ZipFile(ARCHIVES[0]) as native, zipfile.ZipFile(poison, 'w') as output:
+        for path in native.namelist():
+            if not path.startswith(('objects/object_an1/', 'objects/object_an2/gAnju2UmbrellaCryAnim')):
+                continue
+            data = bytearray(native.read(path))
+            if len(data) < 64:
+                continue
+            kind = struct.unpack_from('<I', data, 4)[0]
+            types = {0x4F534B4C:'Skeleton', 0x4F534C42:'SkeletonLimb', 0x4F414E4D:'Animation', 0x4F544558:'Texture'}
+            if kind not in types:
+                continue
+            if kind == 0x4F534C42:
+                value = struct.unpack_from('<h', data, len(data)-6)[0]
+                struct.pack_into('<h', data, len(data)-6, value+476)
+            elif kind == 0x4F414E4D:
+                struct.pack_into('<h', data, 68, 1)
+            target = 'poison/'+path
+            output.writestr(target, data[64:])
+            output.writestr(path+'.meta', json.dumps(dict(format='BINARY', type=types[kind], version=0, path=target)))
+    os.environ['MM_ANJU_META_TEST_PACK'] = str(poison)
     loader = (ROOT/'soh/mods/transformation_masks/assets/mm_asset_loader.cpp').read_text()
     resource_source = (ROOT/'soh/tests/static_story_mm_resource_test.cpp').read_text()
     resource_source=resource_source.replace('/* PRODUCTION_RESOURCE_FUNCTIONS */', '\n'.join(function(loader,n) for n in [
-        'MmAssets_LoadResourceObjectFromMmArchive', 'MmAssets_LoadNormalActor', 'MmAssets_LoadKafei', 'MmAssets_ReleaseNormalActor']))
+        'MmAssets_LoadResourceObjectFromMmArchive', 'MmAssets_LoadAnjuNativeResource', 'MmAssets_LoadNormalActor', 'MmAssets_LoadKafei', 'MmAssets_ReleaseNormalActor']))
     p=WORK/'resource_fixture.cpp';p.write_text(resource_source)
     objects=[compile(p,True)]
     for name in ['Skeleton','SkeletonLimb','Animation','PlayerAnimation']:
@@ -63,8 +84,10 @@ if os.environ.get("MM_VERIFY_STAGE") != "resource":
     fixture=fixture.replace('/* PRODUCTION_OPAQUE_RENDER_MODE */',table+'\n'+function(loader,'MmAssets_GetOpaqueRenderMode'))
     functions=['EnViewer_Update','EnViewer_Destroy','EnViewer_StaticSelectSkullKidModel','EnViewerStatic_WaitForObjects','EnViewerStatic_Update',
                'EnViewer_StaticGreatFairyEyeIndex','EnViewer_StaticGreatFairyOverrideLimbDraw','EnViewer_DrawStaticGreatFairy',
-               'EnViewer_StaticTreasureChestShopGalOverrideLimbDraw','EnViewer_StaticOrdinaryMmOverrideLimbDraw','EnViewer_DrawStaticMmActor','EnViewer_DrawStaticSkullKid']
-    fixture=fixture.replace('/* PRODUCTION_VIEWER_FUNCTIONS */','\n'.join(function(viewer,n) for n in functions))
+               'EnViewer_StaticTreasureChestShopGalOverrideLimbDraw','EnViewer_StaticOrdinaryMmOverrideLimbDraw','EnViewer_StaticAnjuPostLimbDraw','EnViewer_DrawStaticMmActor','EnViewer_DrawStaticSkullKid',
+               'EnViewerStatic_Draw']
+    draw_table=re.search(r'static EnViewerDrawFunc sDrawFuncs\[\] = \{.*?\n\};',viewer,re.S).group(0)
+    fixture=fixture.replace('/* PRODUCTION_VIEWER_FUNCTIONS */','\n'.join(function(viewer,n) for n in functions) + '\n' + draw_table + '\n' + function(viewer,'EnViewer_Draw'))
     p=WORK/'viewer_fixture.c';p.write_text(fixture)
     objects=[compile(p)]
     for name in ['actor','mm_actor','ganon']:

@@ -583,10 +583,35 @@ static const char* MmAssets_StripOtrPrefix(const char* path);
 namespace {
 
 static constexpr const char* kSkullKidModelPrefix = "objects/object_stk_3ds/v1/";
+static constexpr const char* kAnjuModelPrefix = "objects/object_anju_hd/v1/";
+static const char* const kAnjuModelLimbs[21] = {
+    nullptr,
+    nullptr,
+    "gAnju1TorsoDL",
+    "gAnju1LeftUpperArmDL",
+    "gAnju1LeftForearmDL",
+    "gAnju1LeftHandDL",
+    "gAnju1RightUpperArmDL",
+    "gAnju1RightForearmDL",
+    "gAnju1RightHandDL",
+    "gAnju1HeadDL",
+    "gAnju1PelvisDL",
+    "gAnju1RightThighDL",
+    "gAnju1RightShinDL",
+    "gAnju1RightFootDL",
+    "gAnju1LeftThighDL",
+    "gAnju1LeftShinDL",
+    "gAnju1LeftFootDL",
+    "gAnju1Skirt1DL",
+    "gAnju1Skirt2DL",
+    "gAnju1Skirt3DL",
+    "gAnju1Skirt4DL",
+};
 
 struct MmDisplayListGraphContext {
     std::shared_ptr<Ship::Archive> archive;
     bool optionalSkullKid = false;
+    bool optionalAnju = false;
     std::unordered_map<uint64_t, std::string> pathsByHash;
     std::unordered_map<std::string, Gfx*> inProgress;
     std::unordered_map<std::string, std::shared_ptr<Ship::IResource>> resources;
@@ -595,6 +620,9 @@ struct MmDisplayListGraphContext {
     bool modelAttempted = false;
     bool modelComplete = false;
     MmSkullKidDisplayLists model = {};
+    bool anjuAttempted = false;
+    bool anjuComplete = false;
+    MmAnjuDisplayLists anju = {};
 };
 
 struct MmDisplayListResolveContext {
@@ -607,6 +635,7 @@ struct MmDisplayListResolveContext {
 // release vertices, texture aliases or lists already handed to the renderer.
 static std::unordered_map<std::shared_ptr<Ship::Archive>, std::unique_ptr<MmDisplayListGraphContext>>
     sDisplayListGraphs;
+static std::unordered_map<std::shared_ptr<Ship::Archive>, std::unique_ptr<MmDisplayListGraphContext>> sAnjuGraphs;
 
 // Matches MM Scene_SetRenderModeXlu's opaque index-0 table. Keep all four
 // entries: G_DL_INDEX addresses both command 0 and command 2.
@@ -619,24 +648,28 @@ static Gfx sMmOpaqueRenderModeDL[] = {
 
 static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayListGraphContext& graph, int depth);
 
-static MmDisplayListGraphContext* MmAssets_GetDisplayListGraph(const std::shared_ptr<Ship::Archive>& archive) {
+static MmDisplayListGraphContext* MmAssets_GetDisplayListGraph(const std::shared_ptr<Ship::Archive>& archive,
+                                                               bool anju = false) {
     if (!archive)
         return nullptr;
-    auto found = sDisplayListGraphs.find(archive);
-    if (found != sDisplayListGraphs.end())
+    auto& cache = anju ? sAnjuGraphs : sDisplayListGraphs;
+    auto found = cache.find(archive);
+    if (found != cache.end())
         return found->second.get();
     auto files = archive->ListFiles();
     if (!files)
         return nullptr;
     auto graph = std::make_unique<MmDisplayListGraphContext>();
     graph->archive = archive;
-    graph->optionalSkullKid = archive != sMmArchive;
+    graph->optionalSkullKid = archive != sMmArchive && !anju;
+    graph->optionalAnju = archive != sMmArchive && anju;
     for (const auto& [hash, path] : *files) {
-        if (!graph->optionalSkullKid || path.rfind(kSkullKidModelPrefix, 0) == 0)
+        if ((!graph->optionalSkullKid && !graph->optionalAnju) ||
+            path.rfind(anju ? kAnjuModelPrefix : kSkullKidModelPrefix, 0) == 0)
             graph->pathsByHash.emplace(hash, path);
     }
     auto* result = graph.get();
-    sDisplayListGraphs.emplace(archive, std::move(graph));
+    cache.emplace(archive, std::move(graph));
     return result;
 }
 
@@ -677,14 +710,15 @@ static std::shared_ptr<Ship::IResource> MmAssets_LoadGraphResource(const std::st
     auto cached = graph.resources.find(path);
     if (cached != graph.resources.end())
         return cached->second;
-    if (graph.optionalSkullKid && path.rfind(kSkullKidModelPrefix, 0) != 0)
+    const bool optionalModel = graph.optionalSkullKid || graph.optionalAnju;
+    if (optionalModel && path.rfind(graph.optionalAnju ? kAnjuModelPrefix : kSkullKidModelPrefix, 0) != 0)
         return nullptr;
     try {
         auto file = graph.archive->LoadFile(path);
         if (!file || !file->Buffer || file->Buffer->size() < 64 ||
             (file->Buffer->at(0) != 0 && file->Buffer->at(0) != 1))
             return nullptr;
-        if (graph.optionalSkullKid && file->Buffer->size() > 256U * 1024U * 1024U)
+        if (optionalModel && file->Buffer->size() > 256U * 1024U * 1024U)
             return nullptr;
         auto loader = Ship::Context::GetRawInstance()->GetResourceManager()->GetResourceLoader();
         // Passing null initData lets the loader follow GLOBAL .meta redirects,
@@ -703,7 +737,7 @@ static std::shared_ptr<Ship::IResource> MmAssets_LoadGraphResource(const std::st
         init->ResourceVersion = reader.ReadInt32();
         init->Id = reader.ReadUInt64();
         file->BufferOffset = 64;
-        if (graph.optionalSkullKid && !MmAssets_ValidateSkullKidResource(file, init))
+        if (optionalModel && !MmAssets_ValidateSkullKidResource(file, init))
             return nullptr;
         auto resource = loader->LoadResource(path, file, init);
         if (resource)
@@ -715,7 +749,8 @@ static std::shared_ptr<Ship::IResource> MmAssets_LoadGraphResource(const std::st
     return nullptr;
 }
 
-static bool MmAssets_ValidateSkullKidCommands(const std::vector<MmDisplayListCommand>& commands) {
+static bool MmAssets_ValidateSkullKidCommands(const std::vector<MmDisplayListCommand>& commands,
+                                              unsigned matrixCount = 20) {
     auto validTriangle = [](uintptr_t packed) {
         for (unsigned shift = 0; shift < 24; shift += 8) {
             const unsigned index = (packed >> shift) & 0xFF;
@@ -745,7 +780,7 @@ static bool MmAssets_ValidateSkullKidCommands(const std::vector<MmDisplayListCom
             case 0xDA: { // Only load an existing native flex matrix, never a new resource.
                 const uintptr_t address = command.w1 & ~uintptr_t(1);
                 if (command.w0 != 0xDA380003 || !(command.w1 & 1) || (address >> 24) != 0x0D ||
-                    (address & 0xFFFFFF) % 64 != 0 || (address & 0xFFFFFF) >= 20 * 64)
+                    (address & 0xFFFFFF) % 64 != 0 || (address & 0xFFFFFF) >= matrixCount * 64)
                     return false;
                 break;
             }
@@ -868,7 +903,8 @@ static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayLis
         commands[i].w0 = static_cast<uint32_t>((*output)[i].words.w0);
         commands[i].w1 = static_cast<uintptr_t>((*output)[i].words.w1);
     }
-    if (graph.optionalSkullKid && !MmAssets_ValidateSkullKidCommands(commands)) {
+    if ((graph.optionalSkullKid || graph.optionalAnju) &&
+        !MmAssets_ValidateSkullKidCommands(commands, graph.optionalAnju ? 19 : 20)) {
         graph.inProgress.erase(path);
         return nullptr;
     }
@@ -938,6 +974,42 @@ static bool MmAssets_HasSkullKidModel(const std::shared_ptr<Ship::Archive>& arch
     return false;
 }
 
+static const MmAnjuDisplayLists* MmAssets_LoadAnjuModel(MmDisplayListGraphContext& graph) {
+    if (graph.anjuAttempted)
+        return graph.anjuComplete ? &graph.anju : nullptr;
+    graph.anjuAttempted = true;
+    MmAnjuDisplayLists model = {};
+    const std::string prefix = graph.optionalAnju ? kAnjuModelPrefix : "objects/object_an1/";
+    for (unsigned limb = 2; limb <= 20; ++limb) {
+        model.limbs[limb] = MmAssets_PatchDisplayListGraph(prefix + kAnjuModelLimbs[limb], graph, 0);
+        if (!model.limbs[limb])
+            return nullptr;
+    }
+    model.heads[0] = model.limbs[9];
+    model.heads[1] = graph.optionalAnju ? MmAssets_PatchDisplayListGraph(prefix + "gAnju1BlinkHalfHeadDL", graph, 0)
+                                        : model.heads[0];
+    model.heads[2] = graph.optionalAnju ? MmAssets_PatchDisplayListGraph(prefix + "gAnju1BlinkClosedHeadDL", graph, 0)
+                                        : model.heads[0];
+    model.umbrella = MmAssets_PatchDisplayListGraph(
+        graph.optionalAnju ? prefix + "gAnju2UmbrellaDL" : "objects/object_an2/gAnju2UmbrellaDL", graph, 0);
+    if (!model.heads[1] || !model.heads[2] || !model.umbrella)
+        return nullptr;
+    model.custom = graph.optionalAnju;
+    graph.anju = model;
+    graph.anjuComplete = true;
+    return &graph.anju;
+}
+
+static bool MmAssets_HasAnjuModel(const std::shared_ptr<Ship::Archive>& archive) {
+    for (unsigned limb = 2; limb <= 20; ++limb)
+        if (archive->HasFile(std::string(kAnjuModelPrefix) + kAnjuModelLimbs[limb]))
+            return true;
+    for (const char* name : { "gAnju1BlinkHalfHeadDL", "gAnju1BlinkClosedHeadDL", "gAnju2UmbrellaDL" })
+        if (archive->HasFile(std::string(kAnjuModelPrefix) + name))
+            return true;
+    return false;
+}
+
 } // namespace
 
 Gfx* MmAssets_LoadDisplayListGraphStrict(const char* displayListPath) {
@@ -973,9 +1045,33 @@ Gfx* MmAssets_GetOpaqueRenderMode(void) {
     return sMmOpaqueRenderModeDL;
 }
 
+const MmAnjuDisplayLists* MmAssets_GetAnjuDisplayLists(void) {
+    if (!sMmArchive)
+        return nullptr;
+    auto manager = Ship::Context::GetRawInstance()->GetResourceManager();
+    if (manager->IsAltAssetsEnabled()) {
+        auto archives = manager->GetArchiveManager()->GetArchives();
+        if (archives)
+            for (auto it = archives->rbegin(); it != archives->rend(); ++it) {
+                if (*it == sMmArchive || !MmAssets_HasAnjuModel(*it))
+                    continue;
+                auto* graph = MmAssets_GetDisplayListGraph(*it, true);
+                if (graph) {
+                    if (const auto* model = MmAssets_LoadAnjuModel(*graph))
+                        return model;
+                }
+                break;
+            }
+    }
+    auto* graph = MmAssets_GetDisplayListGraph(sMmArchive, true);
+    return graph ? MmAssets_LoadAnjuModel(*graph) : nullptr;
+}
+
 void MmAssets_EnsureStrictTextureBindings(void) {
     auto manager = Ship::Context::GetRawInstance()->GetResourceManager();
     for (const auto& entry : sDisplayListGraphs)
+        entry.second->textures.EnsurePublished(*manager);
+    for (const auto& entry : sAnjuGraphs)
         entry.second->textures.EnsurePublished(*manager);
 }
 
@@ -1096,6 +1192,30 @@ static std::shared_ptr<Ship::IResource> MmAssets_LoadResourceObjectFromMmArchive
         MMASSETS_LOG("[MM Assets] Exception in LoadFromMmArchive '%s': %s", path, e.what());
     } catch (...) { MMASSETS_LOG("[MM Assets] Unknown exception in LoadFromMmArchive '%s'", path); }
     return nullptr;
+}
+
+static std::shared_ptr<Ship::IResource> MmAssets_LoadAnjuNativeResource(const char* path) {
+    if (!sMmArchive || !path)
+        return nullptr;
+    auto file = sMmArchive->LoadFile(path);
+    if (!file || !file->Buffer || file->Buffer->size() < 64 || file->Buffer->at(0) > 1)
+        return nullptr;
+    // An explicitly selected file still follows global .meta redirects when
+    // initData is null. Read its native header, including archive identity.
+    Ship::BinaryReader reader(std::make_shared<Ship::MemoryStream>(file->Buffer));
+    auto init = std::make_shared<Ship::ResourceInitData>();
+    init->Parent = sMmArchive;
+    init->Path = path;
+    init->Format = RESOURCE_FORMAT_BINARY;
+    init->ByteOrder = static_cast<Ship::Endianness>(reader.ReadUByte());
+    reader.SetEndianness(init->ByteOrder);
+    init->IsCustom = reader.ReadUByte() != 0;
+    reader.ReadUInt16();
+    init->Type = reader.ReadUInt32();
+    init->ResourceVersion = reader.ReadInt32();
+    init->Id = reader.ReadUInt64();
+    file->BufferOffset = 64;
+    return Ship::Context::GetRawInstance()->GetResourceManager()->GetResourceLoader()->LoadResource(path, file, init);
 }
 
 static void* MmAssets_LoadFromMmArchive(const char* path, size_t* outSize) {
@@ -1246,8 +1366,36 @@ bool MmAssets_LoadNormalActor(int actorType, unsigned char pose, MmNormalActorRe
         return false;
     try {
         auto retained = std::make_unique<std::vector<MmNormalActor::Resource>>();
-        auto skeleton = MmAssets_LoadResourceObjectFromMmArchive(presentation->skeletonPath);
-        auto animation = MmAssets_LoadResourceObjectFromMmArchive(presentation->animationPath);
+        auto load = type == STATIC_STORY_ACTOR_ANJU ? MmAssets_LoadAnjuNativeResource
+                                                    : MmAssets_LoadResourceObjectFromMmArchive;
+        auto skeleton = load(presentation->skeletonPath);
+        auto animation = load(presentation->animationPath);
+        if (type == STATIC_STORY_ACTOR_ANJU) {
+            /* The factory's child lookups can select global alt limbs. Anju
+             * always animates a private native hierarchy; the draw callback
+             * chooses one complete geometry pack and its bounded fit offset. */
+            auto source = std::dynamic_pointer_cast<SOH::Skeleton>(skeleton);
+            if (!source || source->limbTable.size() != 20)
+                return false;
+            auto scoped = std::make_shared<SOH::Skeleton>();
+            scoped->type = source->type;
+            scoped->limbType = source->limbType;
+            scoped->limbCount = source->limbCount;
+            scoped->dListCount = source->dListCount;
+            scoped->limbTableType = source->limbTableType;
+            scoped->limbTableCount = source->limbTableCount;
+            scoped->limbTable = source->limbTable;
+            for (const auto& path : scoped->limbTable) {
+                auto child = load(path.c_str());
+                if (!child)
+                    return false;
+                scoped->limbResources.push_back(child);
+                scoped->skeletonHeaderSegments.push_back(child->GetRawPointer());
+            }
+            scoped->skeletonData.flexSkeletonHeader = source->skeletonData.flexSkeletonHeader;
+            scoped->skeletonData.flexSkeletonHeader.sh.segment = scoped->skeletonHeaderSegments.data();
+            skeleton = scoped;
+        }
         if (!MmNormalActor::ValidateSkeleton(skeleton, presentation->limbCount, presentation->matrixCount, *retained) ||
             !MmNormalActor::ValidateAnimation(animation, presentation->limbCount, presentation->frameCount))
             return false;
@@ -1258,7 +1406,7 @@ bool MmAssets_LoadNormalActor(int actorType, unsigned char pose, MmNormalActorRe
             unsigned index = eye ? i : i - presentation->eyeCount;
             const char* path =
                 eye ? StaticStoryMm_GetEyeTexturePath(type, index) : StaticStoryMm_GetMouthTexturePath(type, index);
-            auto texture = MmAssets_LoadResourceObjectFromMmArchive(path);
+            auto texture = load(path);
             if (!MmNormalActor::ValidateTexture(texture))
                 return false;
             (eye ? result.eyes : result.mouths)[index] = texture->GetRawPointer();

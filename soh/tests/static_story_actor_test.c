@@ -256,7 +256,7 @@ int main(void) {
         REQUIRE(definition->focusHeight > 0.0f);
         REQUIRE(definition->colliderRadius > 0);
         REQUIRE(definition->colliderHeight > definition->colliderRadius);
-        REQUIRE(definition->talkDistance > 0.0f);
+        REQUIRE(!StaticStoryActor_CanTalk(type) || definition->talkDistance > 0.0f);
         if (definition->available) {
             REQUIRE(definition->adapter != STATIC_ADAPTER_NONE);
             for (uint8_t pose = 0; pose <= definition->maxPose; ++pose) {
@@ -271,9 +271,9 @@ int main(void) {
             }
         }
         REQUIRE(StaticStoryActor_SelectTextId((StaticStoryActorType)type, &early) != 0 ||
-                type == STATIC_STORY_ACTOR_PHANTOM_GANON);
+                !StaticStoryActor_CanTalk(type));
         REQUIRE(StaticStoryActor_SelectTextId((StaticStoryActorType)type, &complete) != 0 ||
-                type == STATIC_STORY_ACTOR_PHANTOM_GANON);
+                !StaticStoryActor_CanTalk(type));
     }
 
     REQUIRE(StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_SHEIK, 0));

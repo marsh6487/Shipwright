@@ -7,6 +7,8 @@
 #include <unordered_map>
 #include <ship/Context.h>
 #include <ship/resource/ResourceManager.h>
+#include <ship/utils/binarytools/MemoryStream.h>
+#include <ship/utils/StrHash64.h>
 #include <fast/resource/factory/TextureFactory.h>
 #include <fast/resource/ResourceType.h>
 #include "soh/OTRGlobals.h"
@@ -33,6 +35,100 @@ static std::shared_ptr<Ship::Archive> sMmArchive;
 static std::unordered_map<std::string, std::shared_ptr<Ship::IResource>> sMmResourceCache;
 #define MMASSETS_LOG(...) ((void)0)
 /* PRODUCTION_RESOURCE_FUNCTIONS */
+
+static void TestAnjuNativeHierarchy(const std::shared_ptr<Ship::ResourceManager>& manager) {
+    manager->SetAltAssetsEnabled(false);
+    const auto* presentation = StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_ANJU, 0);
+    auto seed =
+        std::dynamic_pointer_cast<SOH::Skeleton>(MmAssets_LoadResourceObjectFromMmArchive(presentation->skeletonPath));
+    REQUIRE(seed && seed->limbTable.size() == 20);
+    auto paths = seed->limbTable;
+    std::vector<Vec3s> offsets;
+    for (const auto& path : paths) {
+        auto child =
+            std::dynamic_pointer_cast<SOH::SkeletonLimb>(MmAssets_LoadResourceObjectFromMmArchive(path.c_str()));
+        REQUIRE(child);
+        offsets.push_back(child->limbData.standardLimb.jointPos);
+    }
+    for (unsigned cycle = 0; cycle < 4; ++cycle) {
+        sMmResourceCache.clear();
+        manager->UnloadResources("*");
+        manager->SetAltAssetsEnabled(true);
+        for (unsigned i = 0; i < paths.size(); ++i) {
+            auto child = std::dynamic_pointer_cast<SOH::SkeletonLimb>(
+                manager->GetResourceLoader()->LoadResource("alt/" + paths[i], sMmArchive->LoadFile(paths[i])));
+            REQUIRE(child);
+            child->limbData.standardLimb.jointPos.y += 476;
+            manager->CacheExternalResource("alt/" + paths[i], child);
+        }
+        MmNormalActorResources resources{};
+        REQUIRE(MmAssets_LoadNormalActor(STATIC_STORY_ACTOR_ANJU, 0, &resources));
+        for (unsigned i = 0; i < paths.size(); ++i) {
+            auto* child = static_cast<StandardLimb*>(resources.skeleton->sh.segment[i]);
+            REQUIRE(child && std::memcmp(&child->jointPos, &offsets[i], sizeof(Vec3s)) == 0);
+        }
+        sMmResourceCache.clear();
+        manager->UnloadResources("*");
+        for (unsigned i = 0; i < paths.size(); ++i) {
+            auto* child = static_cast<StandardLimb*>(resources.skeleton->sh.segment[i]);
+            REQUIRE(child && std::memcmp(&child->jointPos, &offsets[i], sizeof(Vec3s)) == 0);
+        }
+        MmAssets_ReleaseNormalActor(resources.owner);
+    }
+    manager->SetAltAssetsEnabled(false);
+    puts("PASS Anju native hierarchy: global alt offsets ignored, all 20 children retained through 4 cache cycles");
+}
+
+static void TestAnjuNativeMetadata(const std::shared_ptr<Ship::ResourceManager>& manager) {
+    const char* pack = std::getenv("MM_ANJU_META_TEST_PACK");
+    REQUIRE(pack);
+    MmNormalActorResources native{};
+    REQUIRE(MmAssets_LoadNormalActor(STATIC_STORY_ACTOR_ANJU, 0, &native));
+    std::vector<Vec3s> offsets;
+    for (unsigned i = 0; i < 20; ++i)
+        offsets.push_back(static_cast<StandardLimb*>(native.skeleton->sh.segment[i])->jointPos);
+    auto poison = manager->GetArchiveManager()->AddArchive(pack);
+    REQUIRE(poison);
+    // Ordinary O2R indexing strips .meta names. Explicitly expose them here to
+    // exercise ResourceLoader's metadata capability, not a normal-pack failure.
+    auto files = poison->ListFiles();
+    const auto originalFiles = *files;
+    for (const auto& [hash, path] : originalFiles) {
+        const auto meta = path + ".meta";
+        if (poison->LoadFile(meta))
+            (*files)[CRC64(meta.c_str())] = meta;
+    }
+    auto archives =
+        std::make_shared<std::vector<std::shared_ptr<Ship::Archive>>>(*manager->GetArchiveManager()->GetArchives());
+    manager->GetArchiveManager()->SetArchives(archives);
+    for (bool alt : { false, true }) {
+        manager->SetAltAssetsEnabled(alt);
+        manager->UnloadResources("*");
+        sMmResourceCache.clear();
+        const char* animationPath = "objects/object_an2/gAnju2UmbrellaCryAnim";
+        REQUIRE(manager->LoadFileProcess(std::string(animationPath) + ".meta"));
+        auto redirected =
+            std::dynamic_pointer_cast<SOH::Animation>(MmAssets_LoadResourceObjectFromMmArchive(animationPath));
+        REQUIRE(redirected && redirected->animationData.animationHeader.common.frameCount == 1);
+        MmNormalActorResources resources{};
+        REQUIRE(MmAssets_LoadNormalActor(STATIC_STORY_ACTOR_ANJU, 0, &resources));
+        REQUIRE(resources.animation->common.frameCount == 43);
+        for (unsigned i = 0; i < 20; ++i) {
+            auto* limb = static_cast<StandardLimb*>(resources.skeleton->sh.segment[i]);
+            REQUIRE(std::memcmp(&limb->jointPos, &offsets[i], sizeof(Vec3s)) == 0);
+        }
+        auto retained = static_cast<std::vector<MmNormalActor::Resource>*>(resources.owner);
+        for (unsigned i = 1; i < retained->size(); ++i)
+            REQUIRE(retained->at(i)->GetInitData()->Parent == sMmArchive);
+        MmAssets_ReleaseNormalActor(resources.owner);
+    }
+    MmAssets_ReleaseNormalActor(native.owner);
+    manager->GetArchiveManager()->RemoveArchive(poison);
+    manager->UnloadResources("*");
+    sMmResourceCache.clear();
+    manager->SetAltAssetsEnabled(false);
+    puts("PASS Anju native metadata: global redirects cannot replace hierarchy, animation or face textures");
+}
 
 static void TestSkullKidSceneReentry(const std::shared_ptr<Ship::ResourceManager>& manager) {
     for (bool alt : { false, true })
@@ -264,14 +360,16 @@ int main(int argc, char** argv) {
     if (argc > 2)
         TestSceneReentry(manager);
     TestXmlSkeletonRetention(manager);
+    TestAnjuNativeHierarchy(manager);
+    TestAnjuNativeMetadata(manager);
     auto resolve = [manager](const std::string& path) { return manager->LoadResourceProcess(path); };
     unsigned loads = 0;
     for (bool alt : { false, true }) {
         manager->SetAltAssetsEnabled(alt);
         sMmResourceCache.clear();
-        for (auto actor :
-             { STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, STATIC_STORY_ACTOR_KEATON, STATIC_STORY_ACTOR_LULU }) {
-            unsigned count = actor == STATIC_STORY_ACTOR_LULU ? 4 : 3;
+        for (auto actor : { STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, STATIC_STORY_ACTOR_KEATON, STATIC_STORY_ACTOR_LULU,
+                            STATIC_STORY_ACTOR_ANJU }) {
+            unsigned count = actor == STATIC_STORY_ACTOR_ANJU ? 1 : actor == STATIC_STORY_ACTOR_LULU ? 4 : 3;
             for (unsigned pose = 0; pose < count; ++pose) {
                 MmNormalActorResources resources{};
                 bool loaded = MmAssets_LoadNormalActor(actor, pose, &resources);
@@ -358,7 +456,7 @@ int main(int argc, char** argv) {
     REQUIRE(!MmNormalActor::ValidateTexture(texture));
     tex->ImageDataSize = dataSize;
     REQUIRE(!MmAssets_LoadNormalActor(STATIC_STORY_ACTOR_LULU, 4, &disabled));
-    std::printf("PASS actual archive loader: %u presentations (10 x Alt off/on), 7 unique faces; "
+    std::printf("PASS actual archive loader: %u presentations (11 x Alt off/on), native faces; "
                 "type/bounds/identity/retention negatives\n",
                 loads);
 

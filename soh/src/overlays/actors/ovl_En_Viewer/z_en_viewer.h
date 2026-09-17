@@ -101,6 +101,10 @@ typedef struct {
     void* mmEyeTextures[8];
     void* mmMouthTextures[4];
     void* mmResourceOwner;
+    Gfx* anjuUmbrellaDL;
+    const struct MmAnjuDisplayLists* anjuModel;
+    uint8_t anjuBlinkPhase;
+    int16_t anjuBlinkTimer;
     const int16_t* mmPlayerFrames;
     uint16_t mmPlayerFrameCount;
     uint16_t mmAppearance;

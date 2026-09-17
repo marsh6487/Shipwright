@@ -59,7 +59,7 @@ static void testDefaultRange(PlayState* play) {
     const s16 prefixes[] = { 0x7F00, 0x7E00 };
     unsigned checked = 0;
     for (unsigned prefix = 0; prefix < ARRAY_COUNT(prefixes); ++prefix) {
-        for (s16 id = 1; id <= 12; ++id) {
+        for (s16 id = 1; id <= 13; ++id) {
             s16 params = prefixes[prefix] | id;
             if (!StaticStoryActor_IsAvailable(StaticStoryActor_GetType(params)))
                 continue;
@@ -82,7 +82,7 @@ static void testDefaultRange(PlayState* play) {
 }
 
 static void testSettings(PlayState* play) {
-    const s16 params[] = { 0x7F02, 0x7F0A, 0x7E09, 0x7E08, 0x7E0C };
+    const s16 params[] = { 0x7F02, 0x7F0A, 0x7E09, 0x7E08, 0x7E0C, 0x7E0D };
     for (unsigned i = 0; i < ARRAY_COUNT(params); ++i) {
         EnViewer actor = placement(play, params[i]);
         /* Isolate the settings exclusion from the separate default-range change. */

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Compile exact production graph functions and exercise controlled binary O2R packs.
-Usage: python mm_skull_kid_verify.py BUILD_DIR [MM_ARCHIVE SKULL_KID_3DS_ARCHIVE]
+Usage: python mm_skull_kid_verify.py BUILD_DIR [MM_ARCHIVE SKULL_KID_3DS_ARCHIVE [ANJU_HD_ARCHIVE]]
 All archives and object files are temporary; this never writes into the build tree.
 """
 from pathlib import Path
@@ -148,7 +148,7 @@ run(['c++', *objects, '-Wl,--gc-sections', '-Wl,--start-group', *[BUILD / lib fo
      '-lfmt', '-lpng', '-lz', '-ldl', '-pthread', '-o', WORK / 'graph_fixture'])
 run([WORK / 'graph_fixture', *archives])
 if len(sys.argv) > 2:
-    if len(sys.argv) != 4: raise SystemExit(__doc__)
+    if len(sys.argv) not in (4, 5): raise SystemExit(__doc__)
     real_native, real_pack = map(lambda path: Path(path).resolve(), sys.argv[2:4])
     with zipfile.ZipFile(real_pack) as archive:
         actual_entries = {name: archive.read(name) for name in archive.namelist()}
@@ -159,3 +159,25 @@ if len(sys.argv) > 2:
     truncated[texture_path] = truncated[texture_path][:-1]
     run([WORK / 'graph_fixture', '--actual', real_native, real_pack,
          write_pack('actual_missing_root', missing), write_pack('actual_truncated_texture', truncated)])
+    if len(sys.argv) == 5:
+        anju = Path(sys.argv[4]).resolve()
+        prefix = 'objects/object_anju_hd/v1/'
+        with zipfile.ZipFile(anju) as archive:
+            entries = {name: archive.read(name) for name in archive.namelist()}
+        broken_packs = []
+        for leaf in ['gAnju1BlinkClosedHeadDL', 'gAnju2UmbrellaDL', 'tex5']:
+            broken = dict(entries)
+            del broken[prefix + leaf]
+            broken_packs.append(write_pack('anju_missing_' + leaf, broken))
+        broken = dict(entries)
+        broken[prefix + 'tex2'] = broken[prefix + 'tex2'][:-1]
+        broken_packs.append(write_pack('anju_truncated_texture', broken))
+        broken = dict(entries)
+        leaf = next(path for path, data in broken.items() if path.endswith('DL') and
+                    struct.pack('<I', 0xDA380003) in data[72:])
+        data = bytearray(broken[leaf])
+        offset = data.index(struct.pack('<I', 0xDA380003), 72)
+        struct.pack_into('<I', data, offset + 4, 0x0D0004C1)  # Slot 19 is outside Anju's 19-slot allocation.
+        broken[leaf] = data
+        broken_packs.append(write_pack('anju_matrix_slot_19', broken))
+        run([WORK / 'graph_fixture', '--anju', real_native, anju, *broken_packs])

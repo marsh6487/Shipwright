@@ -99,6 +99,17 @@ typedef struct {
 } MmSkullKidDisplayLists;
 const MmSkullKidDisplayLists* MmAssets_GetSkullKidDisplayLists(void);
 
+/* Anju's 20 native limbs / 19 matrix slots. Optional v1 packs supply the
+ * complete body and three eyelid heads, atomically selected at draw time.
+ * The native fallback, umbrella and all referenced resources are retained. */
+typedef struct MmAnjuDisplayLists {
+    Gfx* limbs[21];
+    Gfx* heads[3];
+    Gfx* umbrella;
+    uint8_t custom;
+} MmAnjuDisplayLists;
+const MmAnjuDisplayLists* MmAssets_GetAnjuDisplayLists(void);
+
 /**
  * Load a resource from mm.o2r and get its size
  * @param path Resource path (e.g., "objects/gameplay_keep/gPlayerAnim_...")
