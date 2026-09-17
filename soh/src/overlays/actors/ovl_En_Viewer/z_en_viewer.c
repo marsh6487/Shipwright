@@ -610,7 +610,7 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
         if (this->staticState.type == STATIC_STORY_ACTOR_ANJU) {
             /* The strict graph owns its lists, vertices and texture aliases
              * across scene/cache eviction, just like Skull Kid's graph. */
-            this->staticState.anjuModel = MmAssets_GetAnjuDisplayLists();
+            this->staticState.anjuModel = MmAssets_GetAnjuDisplayLists(this->staticState.pose);
             if (this->staticState.anjuModel == NULL) {
                 Actor_Kill(&this->actor);
                 return;
@@ -2140,7 +2140,7 @@ static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
     if (!this->staticState.initialized)
         return;
     if (this->staticState.type == STATIC_STORY_ACTOR_ANJU) {
-        this->staticState.anjuModel = MmAssets_GetAnjuDisplayLists();
+        this->staticState.anjuModel = MmAssets_GetAnjuDisplayLists(this->staticState.pose);
         if (this->staticState.anjuModel == NULL)
             return;
         this->staticState.anjuUmbrellaDL = this->staticState.anjuModel->umbrella;

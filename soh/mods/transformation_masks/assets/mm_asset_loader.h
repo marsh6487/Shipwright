@@ -108,7 +108,7 @@ typedef struct MmAnjuDisplayLists {
     Gfx* umbrella;
     uint8_t custom;
 } MmAnjuDisplayLists;
-const MmAnjuDisplayLists* MmAssets_GetAnjuDisplayLists(void);
+const MmAnjuDisplayLists* MmAssets_GetAnjuDisplayLists(uint8_t pose);
 
 /**
  * Load a resource from mm.o2r and get its size

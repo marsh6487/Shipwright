@@ -608,6 +608,22 @@ static const char* const kAnjuModelLimbs[21] = {
     "gAnju1Skirt4DL",
 };
 
+struct MmAnjuPoseLimb {
+    unsigned limb;
+    const char* name;
+};
+static const MmAnjuPoseLimb kAnjuStandingLimbs[] = {
+    { 2, "gAnju1TorsoStandingDL" },   { 3, "gAnju1LeftUpperArmStandingDL" }, { 4, "gAnju1LeftForearmStandingDL" },
+    { 5, "gAnju1RelaxedLeftHandDL" }, { 7, "gAnju1RightForearmStandingDL" }, { 8, "gAnju1RightHandStandingDL" },
+};
+// Seated refits may preserve their standing body in a separate, complete set.
+// Requiring the whole set prevents incomplete packs from mixing the two fits.
+static const MmAnjuPoseLimb kAnjuStandingSkirtLimbs[] = {
+    { 10, "gAnju1PelvisStandingDL" },    { 11, "gAnju1RightThighStandingDL" }, { 12, "gAnju1RightShinStandingDL" },
+    { 14, "gAnju1LeftThighStandingDL" }, { 15, "gAnju1LeftShinStandingDL" },   { 17, "gAnju1Skirt1StandingDL" },
+    { 18, "gAnju1Skirt2StandingDL" },    { 20, "gAnju1Skirt4StandingDL" },
+};
+
 struct MmDisplayListGraphContext {
     std::shared_ptr<Ship::Archive> archive;
     bool optionalSkullKid = false;
@@ -620,9 +636,9 @@ struct MmDisplayListGraphContext {
     bool modelAttempted = false;
     bool modelComplete = false;
     MmSkullKidDisplayLists model = {};
-    bool anjuAttempted = false;
-    bool anjuComplete = false;
-    MmAnjuDisplayLists anju = {};
+    bool anjuAttempted[2] = {};
+    bool anjuComplete[2] = {};
+    MmAnjuDisplayLists anju[2] = {};
 };
 
 struct MmDisplayListResolveContext {
@@ -974,10 +990,45 @@ static bool MmAssets_HasSkullKidModel(const std::shared_ptr<Ship::Archive>& arch
     return false;
 }
 
-static const MmAnjuDisplayLists* MmAssets_LoadAnjuModel(MmDisplayListGraphContext& graph) {
-    if (graph.anjuAttempted)
-        return graph.anjuComplete ? &graph.anju : nullptr;
-    graph.anjuAttempted = true;
+static const MmAnjuDisplayLists* MmAssets_LoadAnjuModel(MmDisplayListGraphContext& graph, uint8_t pose) {
+    if (pose > 1)
+        return nullptr;
+    // Native poses share geometry; only HD packs need distinct corrective roots.
+    if (!graph.optionalAnju)
+        pose = 0;
+    if (graph.anjuAttempted[pose])
+        return graph.anjuComplete[pose] ? &graph.anju[pose] : nullptr;
+    graph.anjuAttempted[pose] = true;
+    if (pose == 1) {
+        const auto* base = MmAssets_LoadAnjuModel(graph, 0);
+        if (!base)
+            return nullptr;
+        MmAnjuDisplayLists model = *base;
+        for (const auto& limb : kAnjuStandingLimbs) {
+            model.limbs[limb.limb] =
+                MmAssets_PatchDisplayListGraph(std::string(kAnjuModelPrefix) + limb.name, graph, 0);
+            if (!model.limbs[limb.limb])
+                return nullptr;
+        }
+        bool standingSkirt = false;
+        for (const auto& limb : kAnjuStandingSkirtLimbs)
+            standingSkirt |= graph.archive->HasFile(std::string(kAnjuModelPrefix) + limb.name);
+        if (standingSkirt) {
+            for (const auto& limb : kAnjuStandingSkirtLimbs) {
+                model.limbs[limb.limb] =
+                    MmAssets_PatchDisplayListGraph(std::string(kAnjuModelPrefix) + limb.name, graph, 0);
+                if (!model.limbs[limb.limb])
+                    return nullptr;
+            }
+        }
+        model.umbrella =
+            MmAssets_PatchDisplayListGraph(std::string(kAnjuModelPrefix) + "gAnju2UmbrellaStandingDL", graph, 0);
+        if (!model.umbrella)
+            return nullptr;
+        graph.anju[pose] = model;
+        graph.anjuComplete[pose] = true;
+        return &graph.anju[pose];
+    }
     MmAnjuDisplayLists model = {};
     const std::string prefix = graph.optionalAnju ? kAnjuModelPrefix : "objects/object_an1/";
     for (unsigned limb = 2; limb <= 20; ++limb) {
@@ -995,16 +1046,23 @@ static const MmAnjuDisplayLists* MmAssets_LoadAnjuModel(MmDisplayListGraphContex
     if (!model.heads[1] || !model.heads[2] || !model.umbrella)
         return nullptr;
     model.custom = graph.optionalAnju;
-    graph.anju = model;
-    graph.anjuComplete = true;
-    return &graph.anju;
+    graph.anju[pose] = model;
+    graph.anjuComplete[pose] = true;
+    return &graph.anju[pose];
 }
 
 static bool MmAssets_HasAnjuModel(const std::shared_ptr<Ship::Archive>& archive) {
     for (unsigned limb = 2; limb <= 20; ++limb)
         if (archive->HasFile(std::string(kAnjuModelPrefix) + kAnjuModelLimbs[limb]))
             return true;
-    for (const char* name : { "gAnju1BlinkHalfHeadDL", "gAnju1BlinkClosedHeadDL", "gAnju2UmbrellaDL" })
+    for (const auto& limb : kAnjuStandingLimbs)
+        if (archive->HasFile(std::string(kAnjuModelPrefix) + limb.name))
+            return true;
+    for (const auto& limb : kAnjuStandingSkirtLimbs)
+        if (archive->HasFile(std::string(kAnjuModelPrefix) + limb.name))
+            return true;
+    for (const char* name :
+         { "gAnju1BlinkHalfHeadDL", "gAnju1BlinkClosedHeadDL", "gAnju2UmbrellaDL", "gAnju2UmbrellaStandingDL" })
         if (archive->HasFile(std::string(kAnjuModelPrefix) + name))
             return true;
     return false;
@@ -1045,8 +1103,8 @@ Gfx* MmAssets_GetOpaqueRenderMode(void) {
     return sMmOpaqueRenderModeDL;
 }
 
-const MmAnjuDisplayLists* MmAssets_GetAnjuDisplayLists(void) {
-    if (!sMmArchive)
+const MmAnjuDisplayLists* MmAssets_GetAnjuDisplayLists(uint8_t pose) {
+    if (!sMmArchive || pose > 1)
         return nullptr;
     auto manager = Ship::Context::GetRawInstance()->GetResourceManager();
     if (manager->IsAltAssetsEnabled()) {
@@ -1057,14 +1115,14 @@ const MmAnjuDisplayLists* MmAssets_GetAnjuDisplayLists(void) {
                     continue;
                 auto* graph = MmAssets_GetDisplayListGraph(*it, true);
                 if (graph) {
-                    if (const auto* model = MmAssets_LoadAnjuModel(*graph))
+                    if (const auto* model = MmAssets_LoadAnjuModel(*graph, pose))
                         return model;
                 }
                 break;
             }
     }
     auto* graph = MmAssets_GetDisplayListGraph(sMmArchive, true);
-    return graph ? MmAssets_LoadAnjuModel(*graph) : nullptr;
+    return graph ? MmAssets_LoadAnjuModel(*graph, pose) : nullptr;
 }
 
 void MmAssets_EnsureStrictTextureBindings(void) {

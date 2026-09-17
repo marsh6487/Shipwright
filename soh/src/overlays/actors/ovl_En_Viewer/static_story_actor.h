@@ -210,6 +210,7 @@ typedef enum {
     STATIC_ANIM_KAFEI_IDLE,
     STATIC_ANIM_KAFEI_GESTURE,
     STATIC_ANIM_ANJU_UMBRELLA_CRY,
+    STATIC_ANIM_ANJU_UMBRELLA_IDLE,
 } StaticStoryAnimation;
 
 enum {
@@ -286,8 +287,7 @@ int16_t StaticStoryActor_ClampGreatFairyHeadRotation(int16_t rotation);
 float StaticStoryActor_GetGreatFairyHoverAmplitude(uint8_t pose);
 int8_t StaticStoryActor_GetFixedEyeIndex(StaticStoryActorType type, uint8_t pose);
 StaticStoryFaceProfile StaticStoryActor_GetFaceProfile(StaticStoryActorType type);
-uint8_t StaticStoryActor_ResolveEyeIndex(StaticStoryActorType type, uint8_t requestedEyeIndex,
-                                        bool hasAlternateHead);
+uint8_t StaticStoryActor_ResolveEyeIndex(StaticStoryActorType type, uint8_t requestedEyeIndex, bool hasAlternateHead);
 bool StaticStoryActor_ShouldOverrideImpaHead(bool hasAlternateSkeleton);
 StaticStoryResourceSource StaticStoryActor_GetResourceSource(StaticStoryActorType type);
 void StaticStoryActor_NormalizePlacementRotation(int16_t* pitch, int16_t* yaw, int16_t* roll);

@@ -11,6 +11,11 @@
 #include "../src/overlays/actors/ovl_En_Viewer/static_story_actor.h"
 
 int main(void) {
+    REQUIRE(StaticStoryActor_GetType(0x7E1D) == STATIC_STORY_ACTOR_ANJU);
+    REQUIRE(StaticStoryActor_SanitizePose(STATIC_STORY_ACTOR_ANJU, StaticStoryActor_GetPose(0x7E1D)) == 1);
+    REQUIRE(StaticStoryActor_SanitizePose(STATIC_STORY_ACTOR_ANJU, 2) == 0);
+    REQUIRE(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_ANJU, 1));
+    REQUIRE(!StaticStoryActor_LocksRootTranslation(STATIC_STORY_ACTOR_ANJU, 1));
     const StaticStoryActorDefinition* definition;
     StaticStoryObjectRequirements objects;
     StaticStoryProgression early = { 0 };

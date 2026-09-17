@@ -63,24 +63,11 @@ static const StaticStoryMmPresentation sLuluPresentations[] = {
     ORDINARY("object_zov", "gLuluSkel", "gLuluLookAroundAnim", 22, 21, 87, STATIC_STORY_MM_TRACKING_NONE, 3, 2, 9, 8),
 };
 #undef ORDINARY
-static const StaticStoryMmPresentation sAnjuPresentation = {
-    "objects/object_an1/gAnju1Skel",
-    "objects/object_an2/gAnju2UmbrellaCryAnim",
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    20,
-    STATIC_STORY_MM_TRACKING_NONE,
-    false,
-    STATIC_STORY_MM_NORMAL_FLEX,
-    19,
-    43,
-    1,
-    1,
-    8,
-    9,
+static const StaticStoryMmPresentation sAnjuPresentations[] = {
+    { "objects/object_an1/gAnju1Skel", "objects/object_an2/gAnju2UmbrellaCryAnim", NULL, NULL, NULL, NULL, NULL, 20,
+      STATIC_STORY_MM_TRACKING_NONE, false, STATIC_STORY_MM_NORMAL_FLEX, 19, 43, 1, 1, 8, 9 },
+    { "objects/object_an1/gAnju1Skel", "objects/object_an2/gAnju2UmbrellaIdleAnim", NULL, NULL, NULL, NULL, NULL, 20,
+      STATIC_STORY_MM_TRACKING_NONE, false, STATIC_STORY_MM_NORMAL_FLEX, 19, 32, 1, 1, 8, 9 },
 };
 static const StaticStoryMmPresentation sKafeiPresentations[] = {
     { "objects/object_test3/gKafeiSkel", "objects/gameplay_keep/gPlayerAnim_link_normal_wait_free", NULL, NULL, NULL,
@@ -154,8 +141,8 @@ const StaticStoryMmPresentation* StaticStoryMm_GetPresentation(StaticStoryActorT
         return &sLuluPresentations[pose];
     if (type == STATIC_STORY_ACTOR_CHILD_KAFEI && pose < 2)
         return &sKafeiPresentations[pose];
-    if (type == STATIC_STORY_ACTOR_ANJU && pose == 0)
-        return &sAnjuPresentation;
+    if (type == STATIC_STORY_ACTOR_ANJU && pose < 2)
+        return &sAnjuPresentations[pose];
     return NULL;
 }
 

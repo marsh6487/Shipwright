@@ -43,8 +43,10 @@ static bool skullModelAvailable = true;
 static MmAnjuDisplayLists anjuModels[2];
 static Gfx anjuGeometry[2][24][1];
 static bool umbrellaAvailable = true;
-const MmAnjuDisplayLists* MmAssets_GetAnjuDisplayLists(void) {
-    return umbrellaAvailable ? &anjuModels[altAssets] : NULL;
+static uint8_t anjuRequestedPose;
+const MmAnjuDisplayLists* MmAssets_GetAnjuDisplayLists(uint8_t pose) {
+    anjuRequestedPose = pose;
+    return umbrellaAvailable && pose < 2 ? &anjuModels[altAssets] : NULL;
 }
 const MmSkullKidDisplayLists* MmAssets_GetSkullKidDisplayLists(void) {
     return skullModelAvailable ? &skullModels[altAssets] : NULL;
@@ -511,21 +513,22 @@ static void draw(EnViewer* viewer, PlayState* play) {
     rotateX = 0;
     EnViewer_Draw(&viewer->actor, play);
 }
-static void testAnjuSeatedAnchor(PlayState* play) {
+static void testAnjuPoseAnchor(PlayState* play, uint8_t pose) {
     const StaticStoryActorType anju = STATIC_STORY_ACTOR_ANJU;
-    REQUIRE(StaticStoryActor_GetType(0x7E0D) == anju);
+    REQUIRE(StaticStoryActor_GetType(pose ? 0x7E1D : 0x7E0D) == anju);
     REQUIRE(StaticStoryActor_IsAvailable(anju));
-    REQUIRE(!StaticStoryActor_CanTrack(anju, 0) && StaticStoryActor_CanTalk(anju));
+    REQUIRE(!StaticStoryActor_CanTrack(anju, pose) && StaticStoryActor_CanTalk(anju));
     REQUIRE(StaticStoryActor_SelectTextId(anju, NULL) == 0x8F26);
-    REQUIRE(!StaticStoryActor_LocksRootTranslation(anju, 0));
-    const StaticStoryMmPresentation* p = StaticStoryMm_GetPresentation(anju, 0);
-    REQUIRE(p && strcmp(p->animationPath, "objects/object_an2/gAnju2UmbrellaCryAnim") == 0);
+    REQUIRE(!StaticStoryActor_LocksRootTranslation(anju, pose));
+    const StaticStoryMmPresentation* p = StaticStoryMm_GetPresentation(anju, pose);
+    REQUIRE(p && strcmp(p->animationPath, pose ? "objects/object_an2/gAnju2UmbrellaIdleAnim"
+                                               : "objects/object_an2/gAnju2UmbrellaCryAnim") == 0);
     REQUIRE(strcmp(StaticStoryMm_GetEyeTexturePath(anju, 0), "objects/object_an1/gAnju1EyeSadTex") == 0);
     REQUIRE(strcmp(StaticStoryMm_GetMouthTexturePath(anju, 0), "objects/object_an1/gAnju1MouthClosedTex") == 0);
     for (unsigned scene = 0; scene < 4; ++scene) {
         altAssets = scene % 2;
         EnViewer a;
-        prepare(&a, anju, 0);
+        prepare(&a, anju, pose);
         a.actor.world.rot.y = a.actor.shape.rot.y = -12345;
         // Deliberately place the inferred floor above the actor and supply motion:
         // presentation updates must never run floor correction or movement.
@@ -536,14 +539,16 @@ static void testAnjuSeatedAnchor(PlayState* play) {
         unsigned before = drawCalls, loads = umbrellaLoads, matrices = umbrellaMatrices, bindings = bindingChecks;
         EnViewerStatic_WaitForObjects(&a, play);
         REQUIRE(a.staticState.initialized && a.isVisible);
+        REQUIRE(anjuRequestedPose == pose);
         REQUIRE(a.skin.skelAnime.limbCount == 21 && a.skin.skelAnime.dListCount == 19);
-        REQUIRE(a.skin.skelAnime.endFrame == 42 && a.actor.shape.yOffset == 0);
+        REQUIRE(a.skin.skelAnime.endFrame == (pose ? 31 : 42) && a.actor.shape.yOffset == 0);
         REQUIRE(a.actor.colChkInfo.mass == MASS_IMMOVABLE);
         for (unsigned tick = 0; tick < 86; ++tick) {
             EnViewer_Update(&a.actor, play);
             static const unsigned sequence[] = { 0, 1, 2, 2, 1 };
             expectedHead = anjuModels[altAssets].heads[altAssets ? sequence[a.staticState.anjuBlinkPhase] : 0];
             draw(&a, play);
+            REQUIRE(anjuRequestedPose == pose);
             REQUIRE(a.actor.world.pos.x == 12 && a.actor.world.pos.y == 345 && a.actor.world.pos.z == 67);
             REQUIRE(a.actor.home.pos.y == 345 && a.actor.shape.yOffset == 0);
             REQUIRE(a.actor.world.rot.y == -12345 && a.actor.shape.rot.y == -12345);
@@ -556,7 +561,7 @@ static void testAnjuSeatedAnchor(PlayState* play) {
         REQUIRE(drawCalls == before + 86);
     }
     EnViewer failed;
-    prepare(&failed, anju, 0);
+    prepare(&failed, anju, pose);
     umbrellaAvailable = false;
     unsigned releases = releaseCalls, kills = killCalls, inits = initCalls;
     EnViewerStatic_WaitForObjects(&failed, play);
@@ -564,13 +569,13 @@ static void testAnjuSeatedAnchor(PlayState* play) {
     EnViewer_Destroy(&failed.actor, play);
     REQUIRE(releaseCalls == releases + 1);
     umbrellaAvailable = true;
-    puts("PASS Anju: public draw, sad face, right-hand umbrella, fixed placed Y/yaw, missing umbrella and reentry");
+    printf("PASS Anju pose %u: public draw, right-hand umbrella, fixed XYZ/yaw, missing umbrella and reentry\n", pose);
 }
-static void testAnjuHdBlink(PlayState* play) {
+static void testAnjuHdBlink(PlayState* play, uint8_t pose) {
     EnViewer first, second;
     altAssets = true;
-    prepare(&first, STATIC_STORY_ACTOR_ANJU, 0);
-    prepare(&second, STATIC_STORY_ACTOR_ANJU, 0);
+    prepare(&first, STATIC_STORY_ACTOR_ANJU, pose);
+    prepare(&second, STATIC_STORY_ACTOR_ANJU, pose);
     EnViewerStatic_WaitForObjects(&first, play);
     EnViewerStatic_WaitForObjects(&second, play);
     first.staticState.anjuBlinkTimer = 0;
@@ -911,8 +916,10 @@ int main(void) {
     testShopGalBlink(&play);
     testShopGalFootAnimations(&play);
     testGreatFairyBlink(&play);
-    testAnjuSeatedAnchor(&play);
-    testAnjuHdBlink(&play);
+    for (uint8_t pose = 0; pose < 2; ++pose) {
+        testAnjuPoseAnchor(&play, pose);
+        testAnjuHdBlink(&play, pose);
+    }
     puts("PASS Kafei production viewer: no Player calls; private sampling, LOD draw/root/face commands and failure "
          "lifecycle");
     puts("PASS compiled production viewer init/update/draw/free: 10 poses, independent state, root preservation, face "

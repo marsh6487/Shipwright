@@ -216,12 +216,12 @@ static void CheckActualPack(const std::shared_ptr<Ship::ResourceManager>& manage
 
 static void CheckAnjuPack(const std::shared_ptr<Ship::ResourceManager>& manager, int argc, char** argv) {
     manager->SetAltAssetsEnabled(false);
-    const auto* native = MmAssets_GetAnjuDisplayLists();
+    const auto* native = MmAssets_GetAnjuDisplayLists(0);
     REQUIRE(native && !native->custom && native->umbrella);
     auto archive = manager->GetArchiveManager()->AddArchive(argv[3]);
-    REQUIRE(archive && MmAssets_GetAnjuDisplayLists() == native);
+    REQUIRE(archive && MmAssets_GetAnjuDisplayLists(0) == native);
     manager->SetAltAssetsEnabled(true);
-    const auto* custom = MmAssets_GetAnjuDisplayLists();
+    const auto* custom = MmAssets_GetAnjuDisplayLists(0);
     REQUIRE(custom && custom != native && custom->custom && custom->umbrella);
     REQUIRE(!custom->limbs[0] && !custom->limbs[1]);
     for (unsigned i = 2; i <= 20; ++i)
@@ -266,9 +266,9 @@ static void CheckAnjuPack(const std::shared_ptr<Ship::ResourceManager>& manager,
     REQUIRE(!pixels.empty() && !vertices.empty());
     for (int i = 4; i < argc; ++i) {
         auto broken = manager->GetArchiveManager()->AddArchive(argv[i]);
-        REQUIRE(broken && MmAssets_GetAnjuDisplayLists() == native);
+        REQUIRE(broken && MmAssets_GetAnjuDisplayLists(0) == native);
         manager->GetArchiveManager()->RemoveArchive(broken);
-        REQUIRE(MmAssets_GetAnjuDisplayLists() == custom);
+        REQUIRE(MmAssets_GetAnjuDisplayLists(0) == custom);
     }
     for (unsigned scene = 0; scene < 8; ++scene) {
         manager->UnloadResources("*");
@@ -276,7 +276,7 @@ static void CheckAnjuPack(const std::shared_ptr<Ship::ResourceManager>& manager,
         for (const auto& [alias, data] : pixels)
             manager->UnloadResource(alias);
         manager->SetAltAssetsEnabled(scene % 2);
-        REQUIRE(MmAssets_GetAnjuDisplayLists() == (scene % 2 ? custom : native));
+        REQUIRE(MmAssets_GetAnjuDisplayLists(0) == (scene % 2 ? custom : native));
         MmAssets_EnsureStrictTextureBindings();
         for (const auto& owner : owners)
             REQUIRE(!owner.expired());

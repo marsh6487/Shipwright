@@ -369,7 +369,7 @@ int main(int argc, char** argv) {
         sMmResourceCache.clear();
         for (auto actor : { STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN, STATIC_STORY_ACTOR_KEATON, STATIC_STORY_ACTOR_LULU,
                             STATIC_STORY_ACTOR_ANJU }) {
-            unsigned count = actor == STATIC_STORY_ACTOR_ANJU ? 1 : actor == STATIC_STORY_ACTOR_LULU ? 4 : 3;
+            unsigned count = actor == STATIC_STORY_ACTOR_ANJU ? 2 : actor == STATIC_STORY_ACTOR_LULU ? 4 : 3;
             for (unsigned pose = 0; pose < count; ++pose) {
                 MmNormalActorResources resources{};
                 bool loaded = MmAssets_LoadNormalActor(actor, pose, &resources);

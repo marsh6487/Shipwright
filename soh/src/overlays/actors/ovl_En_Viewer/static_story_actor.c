@@ -58,7 +58,7 @@ static const StaticStoryActorDefinition sDefinitions[STATIC_STORY_ACTOR_MAX] = {
                                          80.0f, STATIC_TRACKING_NONE, 0, 0.0f },
     [STATIC_STORY_ACTOR_LULU] = { 3, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_LULU, 0.01f, 60.0f, 22, 70, 0, 30, 30, 100.0f,
                                   STATIC_TRACKING_LULU, 12, 0.0f },
-    [STATIC_STORY_ACTOR_ANJU] = { 0, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_ANJU, 0.01f, 40.0f, 20, 50, 0, 30, 30, 90.0f,
+    [STATIC_STORY_ACTOR_ANJU] = { 1, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_ANJU, 0.01f, 40.0f, 20, 50, 0, 30, 30, 90.0f,
                                   STATIC_TRACKING_NONE, 0, 0.0f },
 };
 
@@ -195,6 +195,7 @@ static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STO
     [STATIC_STORY_ACTOR_ANJU] = {
         /* Keep the native seated root motion; the placement itself never moves. */
         STATIC_POSE(STATIC_ANIM_ANJU_UMBRELLA_CRY, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_ANJU),
+        STATIC_POSE(STATIC_ANIM_ANJU_UMBRELLA_IDLE, STATIC_POSE_FLAG_NO_TRACKING, STATIC_SKELETON_ANJU),
     },
 };
 
