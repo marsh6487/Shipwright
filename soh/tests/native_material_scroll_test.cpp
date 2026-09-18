@@ -6,6 +6,8 @@ using namespace Prelude;
 using nlohmann::json;
 
 int main() {
+    REQUIRE(static_cast<int>(NativeMaterialProfile::FountainCentral64) == 9);
+    REQUIRE(static_cast<int>(NativeMaterialProfile::WaterTempleCaustics) == 10);
     auto lake = json::parse(
         R"({"chain":[{"path":"objects/object_spot06_objects/gLakeHyliaHighWaterDL","upto":248}],"placed":{"recipe":"water"}})");
     REQUIRE(ResolveNativeMaterial(lake, true) == NativeMaterialProfile::LakeHylia);
@@ -82,6 +84,28 @@ int main() {
             REQUIRE(ResolveNativeMaterial(copy, true) == NativeMaterialProfile::None);
         }
     }
+    auto caustics = json::parse(
+        R"({"nativeAnimation":{"version":1,"binding":"material-motion","source":"oot.water_temple.caustics","logicalWidth":32,"logicalHeight":32},"chain":[{"path":"arbitrary"}],"stored":{"textures":[{"label":"arbitrary"}]},"geometry":"arbitrary","texture":"arbitrary"})");
+    REQUIRE(ResolveNativeMaterial(caustics, true) == NativeMaterialProfile::WaterTempleCaustics);
+    REQUIRE(ResolveNativeMaterial(caustics, false) == NativeMaterialProfile::WaterTempleCaustics);
+    auto undeclaredCaustics = caustics;
+    undeclaredCaustics.erase("nativeAnimation");
+    REQUIRE(ResolveNativeMaterial(undeclaredCaustics, true) == NativeMaterialProfile::None);
+    REQUIRE(ResolveNativeMaterial(undeclaredCaustics, false) == NativeMaterialProfile::None);
+    for (auto bad : { json(nullptr), json(true), json(2), json(1.0), json("1") }) {
+        auto copy = caustics;
+        copy["nativeAnimation"]["version"] = bad;
+        REQUIRE(ResolveNativeMaterial(copy, true) == NativeMaterialProfile::None);
+    }
+    for (int dimension : { 16, 64 }) {
+        auto copy = caustics;
+        copy["nativeAnimation"]["logicalWidth"] = dimension;
+        copy["nativeAnimation"]["logicalHeight"] = dimension;
+        REQUIRE(ResolveNativeMaterial(copy, true) == NativeMaterialProfile::None);
+    }
+    auto extraCaustics = caustics;
+    extraCaustics["nativeAnimation"]["extra"] = true;
+    REQUIRE(ResolveNativeMaterial(extraCaustics, true) == NativeMaterialProfile::None);
     for (int role = 0; role < 3; ++role) {
         auto direct = pool;
         direct["chain"][0]["path"] =
@@ -136,5 +160,93 @@ int main() {
     bad = fountain;
     bad.back().w1 = 1;
     REQUIRE(!FindNativeScrollInsertion(bad, fp));
+
+    // Tile 0 remains asset-owned. Tile 1 is the fixed 32x32 caustic layer.
+    std::vector<NativeMaterialCommand> causticMaterial = {
+        { 0xf5101000, 0x00018067 }, { 0xf5101000, 0x07000000 }, { 0xf5101100, 0x01014053 }, { 0xf200800c, 0x00104108 },
+        { 0xf2000000, 0x0107c07c }, { 0xf5101000, 0x07000000 }, { 0xdf000000, 0 },
+    };
+    const auto cp = NativeMaterialProfile::WaterTempleCaustics;
+    REQUIRE(FindNativeScrollInsertion(causticMaterial, cp) == 6);
+    REQUIRE(!FindNativeScrollInsertion(causticMaterial, NativeMaterialProfile::LakeHylia));
+    REQUIRE(!FindNativeScrollInsertion(causticMaterial, NativeMaterialProfile::FountainLowerA32));
+    auto authoredSetup = causticMaterial;
+    authoredSetup[0] = { 0xf5684000, 0x0001c4af }; // IA8, line 32, authored masks and shifts.
+    authoredSetup[2].w1 = 0x01015c5e;              // Authored tile 1 shifts remain valid.
+    REQUIRE(FindNativeScrollInsertion(authoredSetup, cp) == 6);
+    auto causticDraw = causticMaterial;
+    causticDraw.insert(causticDraw.end() - 1, { 0x06000204, 0x00000406 });
+    REQUIRE(FindNativeScrollInsertion(causticDraw, cp) == 6);
+    for (const auto& vertexCommands : {
+             std::vector<NativeMaterialCommand>{ { 0x01000000, 0 } },
+             std::vector<NativeMaterialCommand>{ { 0x48000000, 0 } },
+             std::vector<NativeMaterialCommand>{ { 0x32000000, 0 }, { 0xde000000, 0x08000000 } },
+         }) {
+        auto truncatedDraw = causticMaterial;
+        truncatedDraw.insert(truncatedDraw.end() - 1, vertexCommands.begin(), vertexCommands.end());
+        REQUIRE(!FindNativeScrollInsertion(truncatedDraw, cp));
+        truncatedDraw.insert(truncatedDraw.end() - 1, { 0x06000204, 0x00000406 });
+        REQUIRE(FindNativeScrollInsertion(truncatedDraw, cp) == 6 + vertexCommands.size());
+    }
+
+    auto base256 = causticMaterial;
+    base256[3] = { 0xf2000000, 0x003fc3fc };
+    REQUIRE(FindNativeScrollInsertion(base256, cp) == 6);
+    for (size_t missing : { 2u, 4u }) {
+        auto invalid = causticMaterial;
+        invalid.erase(invalid.begin() + missing);
+        REQUIRE(!FindNativeScrollInsertion(invalid, cp));
+    }
+    for (size_t duplicate : { 2u, 4u }) {
+        auto invalid = causticMaterial;
+        invalid.insert(invalid.begin() + duplicate, invalid[duplicate]);
+        REQUIRE(!FindNativeScrollInsertion(invalid, cp));
+    }
+    for (uintptr_t bits : { 1u << 18, 1u << 8, 1u << 14, 1u << 4 }) {
+        auto invalid = causticMaterial;
+        invalid[2].w1 ^= bits;
+        REQUIRE(!FindNativeScrollInsertion(invalid, cp));
+    }
+    for (NativeMaterialCommand descriptor :
+         { NativeMaterialCommand{ 0xf5001100, 0x01014053 }, NativeMaterialCommand{ 0xf5081100, 0x01014053 },
+           NativeMaterialCommand{ 0xf5100100, 0x01014053 }, NativeMaterialCommand{ 0xf5101000, 0x01014053 } }) {
+        auto invalid = causticMaterial;
+        invalid[2] = descriptor;
+        REQUIRE(!FindNativeScrollInsertion(invalid, cp));
+    }
+    auto invalidCaustic = causticMaterial;
+    invalidCaustic[4].w1 ^= 4;
+    REQUIRE(!FindNativeScrollInsertion(invalidCaustic, cp));
+    invalidCaustic = causticMaterial;
+    invalidCaustic[3].w1 |= 0x02000000;
+    REQUIRE(!FindNativeScrollInsertion(invalidCaustic, cp));
+    invalidCaustic = causticMaterial;
+    invalidCaustic.insert(invalidCaustic.end() - 1, { 0xf5101000, 0x00018067 });
+    REQUIRE(!FindNativeScrollInsertion(invalidCaustic, cp));
+    invalidCaustic = causticDraw;
+    invalidCaustic.insert(invalidCaustic.end() - 1, { 0xe7000000, 0 });
+    REQUIRE(!FindNativeScrollInsertion(invalidCaustic, cp));
+    for (uintptr_t opcode : { 0xde000000u, 0xda000000u, 0xdb000000u, 0x4a000000u }) {
+        invalidCaustic = causticMaterial;
+        invalidCaustic.insert(invalidCaustic.end() - 1, { opcode, 0 });
+        REQUIRE(!FindNativeScrollInsertion(invalidCaustic, cp));
+    }
+    invalidCaustic = causticMaterial;
+    invalidCaustic.insert(invalidCaustic.begin(), { 0x33000000, 0 });
+    invalidCaustic.insert(invalidCaustic.begin() + 1, { 0xf5101100, 0x01014053 });
+    REQUIRE(FindNativeScrollInsertion(invalidCaustic, cp) == 8);
+    invalidCaustic = causticMaterial;
+    invalidCaustic.back() = { 0x33000000, 0 };
+    REQUIRE(!FindNativeScrollInsertion(invalidCaustic, cp));
+    invalidCaustic = causticMaterial;
+    invalidCaustic.push_back({ 0xe7000000, 0 });
+    REQUIRE(!FindNativeScrollInsertion(invalidCaustic, cp));
+
+    for (uint32_t f : { 0u, 1u, 127u, 128u, 2047u, 2048u, 0xffffffffu }) {
+        auto p = NativeScrollParameters(cp, f + 31u, f);
+        REQUIRE(p.x1 == 0 && p.y1 == 0 && p.x2 == f && p.y2 == 0);
+        REQUIRE(p.width == 32 && p.height == 32);
+        REQUIRE(p.dx1 == 0 && p.dy1 == 0 && p.dx2 == 1 && p.dy2 == 0);
+    }
     std::cout << "PASS native material identity, command safety, and native scroll parameters\n";
 }

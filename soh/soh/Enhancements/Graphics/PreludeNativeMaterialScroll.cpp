@@ -58,7 +58,7 @@ ProfileMap ReadProfiles(const std::vector<char>& bytes) {
             if (!edit.is_object() || !edit.contains("data") || !edit["data"].is_object()) {
                 continue;
             }
-            for (const char* kind : { "pastes", "shapes" }) {
+            for (const char* kind : { "pastes", "shapes", "materials" }) {
                 const auto& data = edit["data"];
                 auto items = data.find(kind);
                 if (items == data.end() || !items->is_array()) {
@@ -72,7 +72,10 @@ ProfileMap ReadProfiles(const std::vector<char>& bytes) {
                     if (!path.starts_with("custom/prelude/")) {
                         continue;
                     }
-                    auto profile = ResolveNativeMaterial(item, std::string_view(kind) == "pastes");
+                    const bool material = std::string_view(kind) == "materials";
+                    auto profile = material && !item.contains("nativeAnimation")
+                                       ? NativeMaterialProfile::None
+                                       : ResolveNativeMaterial(item, std::string_view(kind) == "pastes");
                     auto [it, inserted] = profiles.emplace(path, profile);
                     if (conflicts.contains(path) || (!inserted && it->second != profile)) {
                         conflicts.insert(path);
@@ -165,6 +168,12 @@ extern "C" void PreludeNativeMaterialScroll_Update(GraphicsContext* gfxCtx, uint
         // dimensions are native scroll parameters, not replacement image sizes.
         const Gfx* native = Gfx_TwoTexScrollEx(gfxCtx, 0, p.x1, p.y1, p.width, p.height, 1, p.x2, p.y2, p.width,
                                                p.height, p.dx1, p.dy1, p.dx2, p.dy2);
-        std::copy_n(native, lists[i].size(), lists[i].begin());
+        if (static_cast<Prelude::NativeMaterialProfile>(i) == Prelude::NativeMaterialProfile::WaterTempleCaustics) {
+            lists[i][0] = native[0];
+            std::copy_n(native + 6, 5, lists[i].begin() + 1);
+            lists[i][6] = native[11];
+        } else {
+            std::copy_n(native, lists[i].size(), lists[i].begin());
+        }
     }
 }

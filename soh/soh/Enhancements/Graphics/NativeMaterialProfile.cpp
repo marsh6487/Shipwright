@@ -16,6 +16,8 @@ NativeMaterialProfile ResolveNativeMaterial(const nlohmann::json& item, bool pas
         const bool small = a["logicalWidth"] == 32;
         if (!small && a["logicalWidth"] != 64)
             return NativeMaterialProfile::None;
+        if (a["source"] == "oot.water_temple.caustics")
+            return small ? NativeMaterialProfile::WaterTempleCaustics : NativeMaterialProfile::None;
         if (a["source"] == "mm.bg_keikoku_spr.lower_a")
             return small ? NativeMaterialProfile::FountainLowerA32 : NativeMaterialProfile::FountainLowerA64;
         if (a["source"] == "mm.bg_keikoku_spr.lower_b")
@@ -72,19 +74,25 @@ NativeMaterialProfile ResolveNativeMaterial(const nlohmann::json& item, bool pas
 
 std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterialCommand>& commands,
                                                 NativeMaterialProfile profile) {
-    const bool fountain = profile >= NativeMaterialProfile::FountainLowerA32 && profile < NativeMaterialProfile::Count;
+    const bool fountain =
+        profile >= NativeMaterialProfile::FountainLowerA32 && profile <= NativeMaterialProfile::FountainCentral64;
+    const bool caustics = profile == NativeMaterialProfile::WaterTempleCaustics;
     const unsigned dimension = profile >= NativeMaterialProfile::FountainLowerA64 ? 64 : 32;
     const unsigned mask = dimension == 64 ? 6 : 5;
     unsigned descriptors = 0;
     std::optional<size_t> firstPrimitive;
+    bool sawVertex = false;
     unsigned tiles = 0;
     for (size_t i = 0; i < commands.size(); ++i) {
         auto opcode = static_cast<uint8_t>(commands[i].w0 >> 24);
         if (opcode == 0xdf) { // F3DEX2 ENDDL
-            return i + 1 == commands.size() && tiles == 3 &&
-                           (!fountain || (descriptors == 3 && commands[i].w0 == 0xdf000000 && commands[i].w1 == 0))
-                       ? firstPrimitive
-                       : std::nullopt;
+            const bool validatedSetup =
+                tiles == 3 && (!fountain && !caustics || descriptors == 3) &&
+                (!fountain && !caustics || (commands[i].w0 == 0xdf000000 && commands[i].w1 == 0));
+            if (i + 1 != commands.size() || !validatedSetup || (!firstPrimitive && (!caustics || sawVertex))) {
+                return std::nullopt;
+            }
+            return firstPrimitive.value_or(i);
         }
         if (opcode == 0x05 || opcode == 0x06 || opcode == 0x07 || opcode == 0x49) {
             if (!firstPrimitive) {
@@ -97,10 +105,12 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
             if (i + 1 >= commands.size() || (firstPrimitive && opcode != 0x32)) {
                 return std::nullopt;
             }
+            sawVertex |= opcode == 0x32;
             ++i;
             continue;
         }
         if (opcode == 0x01 || opcode == 0x48) { // vertex load
+            sawVertex = true;
             continue;
         }
         if (firstPrimitive) {
@@ -116,19 +126,51 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
                     ((tiles & (1u << tile)) || commands[i].w0 != 0xf2000000 ||
                      commands[i].w1 != ((tile << 24) | (((dimension - 1) * 4) << 12) | ((dimension - 1) * 4))))
                     return std::nullopt;
+                if (caustics) {
+                    if (tiles & (1u << tile)) {
+                        return std::nullopt;
+                    }
+                    if (tile == 1) {
+                        if (commands[i].w0 != 0xf2000000 || commands[i].w1 != 0x0107c07c) {
+                            return std::nullopt;
+                        }
+                    } else {
+                        const unsigned uls = (commands[i].w0 >> 12) & 0xfff;
+                        const unsigned ult = commands[i].w0 & 0xfff;
+                        const unsigned lrs = (commands[i].w1 >> 12) & 0xfff;
+                        const unsigned lrt = commands[i].w1 & 0xfff;
+                        if (lrs < uls || lrt < ult) {
+                            return std::nullopt;
+                        }
+                    }
+                }
                 tiles |= 1u << tile;
                 break;
             }
             case 0xf5: {
-                if (!fountain)
+                if (!fountain && !caustics)
                     break;
+                const auto descriptor = commands[i].w0;
                 const auto word = commands[i].w1;
                 const unsigned tile = (word >> 24) & 7;
                 if (tile == 7)
                     break; // separate load tile
-                if (tile > 1 || (descriptors & (1u << tile)) || ((word >> 18) & 3) || ((word >> 8) & 3) ||
-                    ((word >> 14) & 15) != mask || ((word >> 4) & 15) != mask)
+                if (tile > 1 || (descriptors & (1u << tile)))
                     return std::nullopt;
+                if (fountain && (((word >> 18) & 3) || ((word >> 8) & 3) || ((word >> 14) & 15) != mask ||
+                                 ((word >> 4) & 15) != mask)) {
+                    return std::nullopt;
+                }
+                if (caustics) {
+                    const unsigned tmem = descriptor & 0x1ff;
+                    if ((tile == 0 && tmem != 0) ||
+                        (tile == 1 &&
+                         (((descriptor >> 21) & 7) != 0 || ((descriptor >> 19) & 3) != 2 ||
+                          ((descriptor >> 9) & 0x1ff) != 8 || tmem == 0 || ((word >> 18) & 3) != 0 ||
+                          ((word >> 14) & 15) != 5 || ((word >> 8) & 3) != 0 || ((word >> 4) & 15) != 5))) {
+                        return std::nullopt;
+                    }
+                }
                 descriptors |= 1u << tile;
                 break;
             }
@@ -154,7 +196,7 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
 }
 
 ScrollParameters NativeScrollParameters(NativeMaterialProfile profile, uint32_t stateFrames, uint32_t gameplayFrames) {
-    if (profile >= NativeMaterialProfile::FountainLowerA32 && profile < NativeMaterialProfile::Count) {
+    if (profile >= NativeMaterialProfile::FountainLowerA32 && profile <= NativeMaterialProfile::FountainCentral64) {
         const int index = static_cast<int>(profile) - static_cast<int>(NativeMaterialProfile::FountainLowerA32);
         const int dimension = index < 3 ? 32 : 64;
         const int rate = (index % 3 == 0 ? -20 : index % 3 == 1 ? 20 : 10) * (dimension / 32);
@@ -172,6 +214,8 @@ ScrollParameters NativeScrollParameters(NativeMaterialProfile profile, uint32_t 
         case NativeMaterialProfile::LostWoodsLightSheet:
             // Scene draw config 9 / func_8009EE44, segment 08.
             return { gameplayFrames % 128, 0, gameplayFrames % 128, 0, 32, 16, 1, 0, 1, 0 };
+        case NativeMaterialProfile::WaterTempleCaustics:
+            return { 0, 0, gameplayFrames, 0, 32, 32, 0, 0, 1, 0 };
         default:
             return {};
     }

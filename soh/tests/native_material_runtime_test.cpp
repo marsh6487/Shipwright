@@ -65,6 +65,31 @@ static void CheckCommands(const std::array<Gfx, 12>& actual, const Gfx* expected
     }
 }
 
+static void CheckCausticCommands(const std::array<Gfx, 12>& actual, const Gfx* expected) {
+    REQUIRE(actual[0].words.w0 == expected[0].words.w0);
+    REQUIRE(actual[0].words.w1 == expected[0].words.w1);
+    for (size_t i = 0; i < 5; ++i) {
+        REQUIRE(actual[i + 1].words.w0 == expected[i + 6].words.w0);
+        REQUIRE(actual[i + 1].words.w1 == expected[i + 6].words.w1);
+    }
+    REQUIRE(actual[6].words.w0 == expected[11].words.w0);
+    REQUIRE(actual[6].words.w1 == expected[11].words.w1);
+}
+
+static void CheckCausticWords(const std::array<Gfx, 12>& actual, uint32_t x, uint32_t lrs, uint32_t nextX,
+                              uint32_t nextLrs) {
+    const std::array<Prelude::NativeMaterialCommand, 7> expected = {
+        Prelude::NativeMaterialCommand{ 0xe8000000, 0 }, Prelude::NativeMaterialCommand{ 0x4a000000, 0x01000000 },
+        Prelude::NativeMaterialCommand{ x, 0 },          Prelude::NativeMaterialCommand{ lrs, 0x42f80000 },
+        Prelude::NativeMaterialCommand{ nextX, 0 },      Prelude::NativeMaterialCommand{ nextLrs, 0x42f80000 },
+        Prelude::NativeMaterialCommand{ 0xdf000000, 0 },
+    };
+    for (size_t i = 0; i < expected.size(); ++i) {
+        REQUIRE(actual[i].words.w0 == expected[i].w0);
+        REQUIRE(actual[i].words.w1 == expected[i].w1);
+    }
+}
+
 int main() {
     auto archive = std::make_shared<ReloadableArchive>();
     archive->project = nlohmann::json::parse(
@@ -79,6 +104,29 @@ int main() {
     b["chain"][0]["path"] = "objects/object_spot01_objects/gKakarikoWellWaterDL";
     items = nlohmann::json::array({ a, b, a });
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/any/paste0") == Prelude::NativeMaterialProfile::None);
+    auto caustic = nlohmann::json::parse(
+        R"({"newDlPath":"custom/prelude/water_temple/material0","geometry":"arbitrary","nativeAnimation":{"version":1,"binding":"material-motion","source":"oot.water_temple.caustics","logicalWidth":32,"logicalHeight":32}})");
+    archive->project["edits"]["any_scene"][0]["data"] = {
+        { "materials", nlohmann::json::array({ caustic }) },
+    };
+    REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material0") ==
+            Prelude::NativeMaterialProfile::WaterTempleCaustics);
+    archive->project["edits"]["any_scene"][0]["data"]["materials"][0]["nativeAnimation"]["source"] = "bad";
+    REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material0") ==
+            Prelude::NativeMaterialProfile::None);
+    auto shapeLikeMaterial = nlohmann::json::parse(
+        R"({"newDlPath":"custom/prelude/water_temple/material1","stored":{"textures":[{"label":"spot10_room_1Tex_008030"},{"label":"spot10_room_1Tex_008030"}]}})");
+    archive->project["edits"]["any_scene"][0]["data"]["materials"] = nlohmann::json::array({ shapeLikeMaterial });
+    REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material1") ==
+            Prelude::NativeMaterialProfile::None);
+    auto conflictingCaustic = caustic;
+    conflictingCaustic["nativeAnimation"]["source"] = "mm.bg_keikoku_spr.lower_a";
+    archive->project["edits"]["any_scene"][0]["data"]["materials"] = nlohmann::json::array({ caustic, caustic });
+    REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material0") ==
+            Prelude::NativeMaterialProfile::WaterTempleCaustics);
+    archive->project["edits"]["any_scene"][0]["data"]["materials"].push_back(conflictingCaustic);
+    REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material0") ==
+            Prelude::NativeMaterialProfile::None);
     GraphicsContext ctx;
     auto& lists = Prelude::Lists().lists;
     auto lakePointer = lists[1].data();
@@ -91,7 +139,8 @@ int main() {
                                                    -1, 1, 1, 1));
         CheckCommands(lists[3],
                       Gfx_TwoTexScrollEx(&ctx, 0, game % 128, 0, 32, 16, 1, game % 128, 0, 32, 16, 1, 0, 1, 0));
-        for (size_t i = 4; i < lists.size(); ++i) {
+        for (size_t i = static_cast<size_t>(Prelude::NativeMaterialProfile::FountainLowerA32);
+             i <= static_cast<size_t>(Prelude::NativeMaterialProfile::FountainCentral64); ++i) {
             const int size = i < 7 ? 32 : 64;
             const int rate = ((i - 4) % 3 == 0 ? -20 : (i - 4) % 3 == 1 ? 20 : 10) * (size / 32);
             CheckCommands(lists[i], Gfx_TwoTexScrollEx(&ctx, 0, 0, 0, size, size, 1, 0,
@@ -99,12 +148,37 @@ int main() {
             for (size_t j = 1; j < i; ++j)
                 REQUIRE(lists[i].data() != lists[j].data());
         }
+        const auto causticIndex = static_cast<size_t>(Prelude::NativeMaterialProfile::WaterTempleCaustics);
+        CheckCausticCommands(lists[causticIndex],
+                             Gfx_TwoTexScrollEx(&ctx, 0, 0, 0, 32, 32, 1, game, 0, 32, 32, 0, 0, 1, 0));
+        REQUIRE(lists[causticIndex][0].words.w0 >> 24 == 0xe8);
+        REQUIRE(lists[causticIndex][1].words.w0 >> 24 == 0x4a);
+        REQUIRE((lists[causticIndex][1].words.w1 >> 24 & 7) == 1);
+        REQUIRE(lists[causticIndex][6].words.w0 == 0xdf000000);
         auto before = lists;
         sFrameAllocation = {}; // Simulate transient allocation reuse after draw.
         for (size_t i = 1; i < lists.size(); ++i) {
             CheckCommands(lists[i], before[i].data());
         }
         REQUIRE(lakePointer == lists[1].data());
+    }
+    struct CausticCase {
+        uint32_t game;
+        uint32_t x;
+        uint32_t lrs;
+        uint32_t nextX;
+        uint32_t nextLrs;
+    };
+    for (const auto& test : { CausticCase{ 0, 0x00000000, 0x42f80000, 0x3f800000, 0x42fa0000 },
+                              CausticCase{ 1, 0x3f800000, 0x42fa0000, 0x40000000, 0x42fc0000 },
+                              CausticCase{ 127, 0x42fe0000, 0x437b0000, 0x43000000, 0x437c0000 },
+                              CausticCase{ 128, 0x43000000, 0x437c0000, 0x43010000, 0x437d0000 },
+                              CausticCase{ 2047, 0x44ffe000, 0x4507b000, 0x45000000, 0x4507c000 },
+                              CausticCase{ 2048, 0x00000000, 0x42f80000, 0x3f800000, 0x42fa0000 },
+                              CausticCase{ 0xffffffff, 0x44ffe000, 0x4507b000, 0x45000000, 0x4507c000 } }) {
+        PreludeNativeMaterialScroll_Update(&ctx, test.game ^ 0xa5a5a5a5u, test.game);
+        const auto causticIndex = static_cast<size_t>(Prelude::NativeMaterialProfile::WaterTempleCaustics);
+        CheckCausticWords(lists[causticIndex], test.x, test.lrs, test.nextX, test.nextLrs);
     }
     sEnabled = 0;
     PreludeNativeMaterialScroll_Update(&ctx, 5, 8);
@@ -115,5 +189,13 @@ int main() {
     PreludeNativeMaterialScroll_Update(&ctx, 0, 0); // New scene / reset frame counts.
     REQUIRE(lakePointer == lists[1].data());
     REQUIRE(lists[1][1].words.w0 >> 24 == 0x4a); // Native interpolated tile command.
+    const auto causticIndex = static_cast<size_t>(Prelude::NativeMaterialProfile::WaterTempleCaustics);
+    CheckCausticCommands(lists[causticIndex], Gfx_TwoTexScrollEx(&ctx, 0, 0, 0, 32, 32, 1, 0, 0, 32, 32, 0, 0, 1, 0));
+    PreludeNativeMaterialScroll_Update(nullptr, 7, 11);
+    for (size_t i = 1; i < lists.size(); ++i) {
+        REQUIRE(lists[i][0].words.w0 == 0xdf000000);
+    }
+    PreludeNativeMaterialScroll_Update(&ctx, 13, 17);
+    CheckCausticCommands(lists[causticIndex], Gfx_TwoTexScrollEx(&ctx, 0, 0, 0, 32, 32, 1, 17, 0, 32, 32, 0, 0, 1, 0));
     std::cout << "PASS native generated commands, independent buffers, frame reset, disable, lifetime\n";
 }

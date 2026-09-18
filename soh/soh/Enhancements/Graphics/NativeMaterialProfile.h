@@ -16,6 +16,7 @@ enum class NativeMaterialProfile {
     FountainLowerA64,
     FountainLowerB64,
     FountainCentral64,
+    WaterTempleCaustics,
     Count
 };
 struct NativeMaterialCommand {
