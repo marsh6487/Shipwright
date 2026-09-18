@@ -661,6 +661,12 @@ void SohMenu::AddMenuEnhancements() {
         .CVar(CVAR_ENHANCEMENT("EquipmentAlwaysVisible"))
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip("Makes all equipment visible, regardless of age."));
+    AddWidget(path, "Hide Back Equipment and Scabbard", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("HideBackEquipment"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Hides stowed swords, shields, and the scabbard, even while a weapon is drawn.\n"
+            "Equipment held in the hands stays visible. Also applies to the pause-menu preview."));
     AddWidget(path, "Scale Adult Equipment as Child", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("ScaleAdultEquipmentAsChild"))
         .RaceDisable(false)

@@ -7,6 +7,7 @@
  */
 
 #include "pak_loader.h"
+#include "pak_selection.h"
 #include "mods/transformation_masks/transformation_masks.h"
 
 extern "C" Gfx* ResourceMgr_LoadGfxByName(const char* path);
@@ -242,6 +243,36 @@ static s32 sSelectedAdultIndex = -1;
 static s32 sSelectedChildIndex = -1;
 static s32 sSelectedEquipIndex = -1;
 static u8 sInitialized = 0;
+static std::string sModsPath;
+
+extern "C" void PakLoader_SaveSelection(const char* cvarName, s32 index) {
+    if (index < -1 || index >= (s32)sModels.size()) {
+        index = -1;
+    }
+    const std::string pathKey = std::string(cvarName) + "Path";
+    const std::string path = index >= 0 ? PakSelection::RelativePath(sModels[index].pakPath, sModsPath) : "";
+    const char* savedPath = CVarGetString(pathKey.c_str(), nullptr);
+    bool dirty = false;
+    if (CVarGetInteger(cvarName, -1) != index) {
+        CVarSetInteger(cvarName, index);
+        dirty = true;
+    }
+    if (savedPath == nullptr || path != savedPath) {
+        CVarSetString(pathKey.c_str(), path.c_str());
+        dirty = true;
+    }
+    if (dirty) {
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    }
+}
+
+template <typename IsCompatible> static void RestoreSelection(const char* cvarName, IsCompatible isCompatible) {
+    const std::string pathKey = std::string(cvarName) + "Path";
+    const s32 index = PakSelection::ResolveIndex(
+        CVarGetInteger(cvarName, -1), CVarGetString(pathKey.c_str(), nullptr), (s32)sModels.size(),
+        [](s32 i) { return PakSelection::RelativePath(sModels[i].pakPath, sModsPath); }, isCompatible);
+    PakLoader_SaveSelection(cvarName, index);
+}
 
 // Forced body model (from custom items like Kafei Mask, Champion's Tunic)
 static s32 sForcedModelIndex = -1;
@@ -4150,6 +4181,19 @@ static bool IsSiblingGameModsDir(const std::string& name) {
     return (name == "soh" || name == "2ship") && name != appShortName;
 }
 
+static void RestoreSelections(void) {
+    RestoreSelection("gMods.PakLoader.AdultModel", PakLoader_ModelHasAdult);
+    RestoreSelection("gMods.PakLoader.ChildModel", PakLoader_ModelHasChild);
+    RestoreSelection("gMods.PakLoader.Equipment", PakLoader_ModelHasAnyEquipment);
+    for (s32 slot = 0; slot < kSlotCount; ++slot) {
+        const std::string key = std::string("gMods.PakLoader.SlotMix.") + sSlotGroups[slot].cvarKey;
+        RestoreSelection(key.c_str(), [slot](s32 i) { return PakLoader_PakProvidesSlot(i, slot); });
+    }
+    // An early caller may have read numeric slot CVars before the inventory existed.
+    sSlotMixInitialized = 0;
+    EnsureSlotMixLoaded();
+}
+
 extern "C" void PakLoader_Init(void) {
     if (sInitialized)
         return;
@@ -4165,6 +4209,7 @@ extern "C" void PakLoader_Init(void) {
 
     // Use the same method as SOH's mod_menu.cpp (line 134) to find the mods/ folder
     std::string modsPath = Ship::Context::LocateFileAcrossAppDirs("mods", appShortName);
+    sModsPath = modsPath;
     PAK_LOG("Mods path: %s", modsPath.c_str());
 
     // .pak / .zobj are scanned RECURSIVELY under mods/ so users can organise
@@ -4265,35 +4310,12 @@ extern "C" void PakLoader_Init(void) {
         }
     }
 
+    // Sync skins are also selectable locally, so finish the inventory before
+    // resolving persisted paths. Loading them later could discard a valid choice.
+    PakLoader_InitSyncRegistry();
     PAK_LOG("Initialization complete: %d models available", (int)sModels.size());
 
-    // Light sanitisation: only clamp CVars that are clearly out of range or
-    // mis-classified by category (e.g. an Equipment CVar pointing at a body
-    // pak). The deeper "is this value actually in the dropdown map" check is
-    // now done per-frame in each combobox's PreFunc, which can also rebuild
-    // the map dynamically — that avoids accidentally clamping a valid
-    // selection here in Init if a pak's ready-state is still settling.
-    s32 savedAdult = CVarGetInteger("gMods.PakLoader.AdultModel", -1);
-    s32 savedChild = CVarGetInteger("gMods.PakLoader.ChildModel", -1);
-    s32 savedEquip = CVarGetInteger("gMods.PakLoader.Equipment", -1);
-    s32 count = (s32)sModels.size();
-
-    bool dirty = false;
-    if (savedAdult >= count || (savedAdult >= 0 && sModels[savedAdult].isEquipmentOnly)) {
-        CVarSetInteger("gMods.PakLoader.AdultModel", -1);
-        dirty = true;
-    }
-    if (savedChild >= count || (savedChild >= 0 && sModels[savedChild].isEquipmentOnly)) {
-        CVarSetInteger("gMods.PakLoader.ChildModel", -1);
-        dirty = true;
-    }
-    if (savedEquip >= count || (savedEquip >= 0 && !sModels[savedEquip].isEquipmentOnly)) {
-        CVarSetInteger("gMods.PakLoader.Equipment", -1);
-        dirty = true;
-    }
-    if (dirty) {
-        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-    }
+    RestoreSelections();
 
     // Apply persisted CVar selections immediately so the player doesn't have to
     // open the menu after launch to get their saved paks active. Body model
@@ -4316,10 +4338,6 @@ extern "C" void PakLoader_Init(void) {
     // chosen .o2r at boot. Select* calls above skip the trigger when value
     // didn't change from default -1.
     O2rUpdateMounts();
-
-    // Populate the sync registry (harpoon/skins/) — forward declared at
-    // global scope near the top of this file.
-    PakLoader_InitSyncRegistry();
 }
 
 extern "C" u8 PakLoader_HasActiveModel(void) {
@@ -4540,10 +4558,8 @@ static void O2rUpdateMounts(void) {
 }
 
 extern "C" void PakLoader_SelectAdultModel(s32 index) {
-    if (index < -1 || index >= (s32)sModels.size())
+    if (!PakLoader_ModelHasAdult(index))
         index = -1;
-    if (index >= 0 && sModels[index].isEquipmentOnly)
-        index = -1; // Equipment-only paks can't be a body model.
     // Sync-only paks (from harpoon/skins/) ARE allowed locally — same pak data,
     // we just also use it for remote players when one is connected.
     if (index == sSelectedAdultIndex)
@@ -4558,9 +4574,7 @@ extern "C" void PakLoader_SelectAdultModel(s32 index) {
 }
 
 extern "C" void PakLoader_SelectChildModel(s32 index) {
-    if (index < -1 || index >= (s32)sModels.size())
-        index = -1;
-    if (index >= 0 && sModels[index].isEquipmentOnly)
+    if (!PakLoader_ModelHasChild(index))
         index = -1;
     if (index == sSelectedChildIndex)
         return;
@@ -4609,7 +4623,7 @@ extern "C" s32 PakLoader_GetSelectedIndex(void) {
 }
 
 extern "C" void PakLoader_SelectEquipment(s32 index) {
-    if (index < -1 || index >= (s32)sModels.size())
+    if (!PakLoader_ModelHasAnyEquipment(index))
         index = -1;
     if (index == sSelectedEquipIndex)
         return;
@@ -4683,7 +4697,7 @@ extern "C" void PakLoader_SetSlotMix(s32 slotIdx, s32 pakIdx) {
     EnsureSlotMixLoaded();
     if (slotIdx < 0 || slotIdx >= kSlotCount)
         return;
-    if (pakIdx < -1 || pakIdx >= (s32)sModels.size())
+    if (!PakLoader_PakProvidesSlot(pakIdx, slotIdx))
         pakIdx = -1;
     if (sSlotMix[slotIdx] == pakIdx)
         return;
@@ -5091,6 +5105,9 @@ extern "C" void PakLoader_Shutdown(void) {
     sForcedEquipIndex = -1;
     sForcedEquipPath.clear();
     sInitialized = 0;
+    sModsPath.clear();
+    sSlotMixInitialized = 0;
+    std::fill(std::begin(sSlotMix), std::end(sSlotMix), -1);
     for (auto* p : sEquipCombinedDLs)
         free(p);
     sEquipCombinedDLs.clear();

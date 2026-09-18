@@ -1477,6 +1477,8 @@ void ExtEquip_DrawShieldDL(void* playVoid) {
 
 // Draw the ext shield on Link's back (sheath position)
 void ExtEquip_DrawShieldBackDL(void* playVoid) {
+    if (CVarGetInteger(CVAR_ENHANCEMENT("HideBackEquipment"), 0))
+        return;
     ExtEquip_DrawShieldCommon(playVoid, 1);
 }
 
