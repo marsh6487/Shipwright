@@ -168,7 +168,9 @@ extern "C" void PreludeNativeMaterialScroll_Update(GraphicsContext* gfxCtx, uint
         // dimensions are native scroll parameters, not replacement image sizes.
         const Gfx* native = Gfx_TwoTexScrollEx(gfxCtx, 0, p.x1, p.y1, p.width, p.height, 1, p.x2, p.y2, p.width,
                                                p.height, p.dx1, p.dy1, p.dx2, p.dy2);
-        if (static_cast<Prelude::NativeMaterialProfile>(i) == Prelude::NativeMaterialProfile::WaterTempleCaustics) {
+        const auto profile = static_cast<Prelude::NativeMaterialProfile>(i);
+        if (profile == Prelude::NativeMaterialProfile::WaterTempleCaustics ||
+            profile == Prelude::NativeMaterialProfile::ZorasDomainCaustics) {
             lists[i][0] = native[0];
             std::copy_n(native + 6, 5, lists[i].begin() + 1);
             lists[i][6] = native[11];

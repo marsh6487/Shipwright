@@ -90,6 +90,20 @@ static void CheckCausticWords(const std::array<Gfx, 12>& actual, uint32_t x, uin
     }
 }
 
+static void CheckVerticalCausticWords(const std::array<Gfx, 12>& actual, uint32_t y, uint32_t lrt,
+                                      uint32_t nextY, uint32_t nextLrt) {
+    const std::array<Prelude::NativeMaterialCommand, 7> expected = {
+        Prelude::NativeMaterialCommand{ 0xe8000000, 0 }, Prelude::NativeMaterialCommand{ 0x4a000000, 0x01000000 },
+        Prelude::NativeMaterialCommand{ 0, y },          Prelude::NativeMaterialCommand{ 0x42f80000, lrt },
+        Prelude::NativeMaterialCommand{ 0, nextY },      Prelude::NativeMaterialCommand{ 0x42f80000, nextLrt },
+        Prelude::NativeMaterialCommand{ 0xdf000000, 0 },
+    };
+    for (size_t i = 0; i < expected.size(); ++i) {
+        REQUIRE(actual[i].words.w0 == expected[i].w0);
+        REQUIRE(actual[i].words.w1 == expected[i].w1);
+    }
+}
+
 int main() {
     auto archive = std::make_shared<ReloadableArchive>();
     archive->project = nlohmann::json::parse(
@@ -111,6 +125,9 @@ int main() {
     };
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material0") ==
             Prelude::NativeMaterialProfile::WaterTempleCaustics);
+    archive->project["edits"]["any_scene"][0]["data"]["materials"][0]["nativeAnimation"]["source"] =
+        "oot.zoras_domain.caustics";
+    REQUIRE(static_cast<int>(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material0")) == 11);
     archive->project["edits"]["any_scene"][0]["data"]["materials"][0]["nativeAnimation"]["source"] = "bad";
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material0") ==
             Prelude::NativeMaterialProfile::None);
@@ -130,6 +147,8 @@ int main() {
     GraphicsContext ctx;
     auto& lists = Prelude::Lists().lists;
     auto lakePointer = lists[1].data();
+    const auto domainIndex = static_cast<size_t>(Prelude::NativeMaterialProfile::ZorasDomainCaustics);
+    auto domainPointer = lists[domainIndex].data();
     REQUIRE(lakePointer != lists[2].data() && lakePointer != lists[3].data());
     for (uint32_t f : { 0u, 1u, 31u, 32u, 63u, 64u, 127u, 128u, 2047u, 2048u, 0xffffffffu }) {
         const uint32_t game = f + 53u; // Verify different native clock sources.
@@ -155,6 +174,11 @@ int main() {
         REQUIRE(lists[causticIndex][1].words.w0 >> 24 == 0x4a);
         REQUIRE((lists[causticIndex][1].words.w1 >> 24 & 7) == 1);
         REQUIRE(lists[causticIndex][6].words.w0 == 0xdf000000);
+        CheckCausticCommands(lists[domainIndex],
+                             Gfx_TwoTexScrollEx(&ctx, 0, 0, 0, 32, 32, 1, 0, 127 - game % 128, 32, 32, 0, 0, 0, -1));
+        for (size_t i = 1; i < domainIndex; ++i) {
+            REQUIRE(domainPointer != lists[i].data());
+        }
         auto before = lists;
         sFrameAllocation = {}; // Simulate transient allocation reuse after draw.
         for (size_t i = 1; i < lists.size(); ++i) {
@@ -180,6 +204,20 @@ int main() {
         const auto causticIndex = static_cast<size_t>(Prelude::NativeMaterialProfile::WaterTempleCaustics);
         CheckCausticWords(lists[causticIndex], test.x, test.lrs, test.nextX, test.nextLrs);
     }
+    // Literal float command words verify vertical direction and negative interpolation
+    // at the 0 -> 127 phase wrap, independently of the native generator comparison.
+    for (const auto& test : { CausticCase{ 0, 0x42fe0000, 0x437b0000, 0x42fc0000, 0x437a0000 },
+                              CausticCase{ 1, 0x42fc0000, 0x437a0000, 0x42fa0000, 0x43790000 },
+                              CausticCase{ 126, 0x3f800000, 0x42fa0000, 0x00000000, 0x42f80000 },
+                              CausticCase{ 127, 0x00000000, 0x42f80000, 0xbf800000, 0x42f60000 },
+                              CausticCase{ 128, 0x42fe0000, 0x437b0000, 0x42fc0000, 0x437a0000 },
+                              CausticCase{ 129, 0x42fc0000, 0x437a0000, 0x42fa0000, 0x43790000 },
+                              CausticCase{ 2047, 0x00000000, 0x42f80000, 0xbf800000, 0x42f60000 },
+                              CausticCase{ 2048, 0x42fe0000, 0x437b0000, 0x42fc0000, 0x437a0000 },
+                              CausticCase{ 0xffffffff, 0x00000000, 0x42f80000, 0xbf800000, 0x42f60000 } }) {
+        PreludeNativeMaterialScroll_Update(&ctx, test.game ^ 0xa5a5a5a5u, test.game);
+        CheckVerticalCausticWords(lists[domainIndex], test.x, test.lrs, test.nextX, test.nextLrs);
+    }
     sEnabled = 0;
     PreludeNativeMaterialScroll_Update(&ctx, 5, 8);
     for (size_t i = 1; i < lists.size(); ++i) {
@@ -191,11 +229,14 @@ int main() {
     REQUIRE(lists[1][1].words.w0 >> 24 == 0x4a); // Native interpolated tile command.
     const auto causticIndex = static_cast<size_t>(Prelude::NativeMaterialProfile::WaterTempleCaustics);
     CheckCausticCommands(lists[causticIndex], Gfx_TwoTexScrollEx(&ctx, 0, 0, 0, 32, 32, 1, 0, 0, 32, 32, 0, 0, 1, 0));
+    REQUIRE(domainPointer == lists[domainIndex].data());
+    CheckVerticalCausticWords(lists[domainIndex], 0x42fe0000, 0x437b0000, 0x42fc0000, 0x437a0000);
     PreludeNativeMaterialScroll_Update(nullptr, 7, 11);
     for (size_t i = 1; i < lists.size(); ++i) {
         REQUIRE(lists[i][0].words.w0 == 0xdf000000);
     }
     PreludeNativeMaterialScroll_Update(&ctx, 13, 17);
     CheckCausticCommands(lists[causticIndex], Gfx_TwoTexScrollEx(&ctx, 0, 0, 0, 32, 32, 1, 17, 0, 32, 32, 0, 0, 1, 0));
+    CheckCausticCommands(lists[domainIndex], Gfx_TwoTexScrollEx(&ctx, 0, 0, 0, 32, 32, 1, 0, 110, 32, 32, 0, 0, 0, -1));
     std::cout << "PASS native generated commands, independent buffers, frame reset, disable, lifetime\n";
 }

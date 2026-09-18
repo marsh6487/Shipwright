@@ -5,6 +5,8 @@ Usage: python3 scripts/diagnostics/run_native_material_probe.py --json-include D
        --spdlog-include DIR [path/to/vanilla.o2r path/to/retextured.o2r]
 Requires initialized libultraship plus a C++20 compiler. No game/ROM is required;
 this is CPU validation, not an in-game high-resolution rendering test.
+The diagnostic conservatively rejects duplicate metadata paths, including
+identical declarations that the runtime can accept.
 """
 import argparse
 import json
@@ -33,13 +35,21 @@ def fixture(path, bind_fountain=False):
             project, report = binder.analyze(archive)
             print('Verified fountain metadata bindings:', len(report['bindings']), flush=True)
         items = []
+        declared_paths = set()
         for edits in project['edits'].values():
             if not isinstance(edits, list):
                 continue
             for edit in edits:
-                for kind in ('pastes', 'shapes'):
+                for kind in ('pastes', 'shapes', 'materials'):
                     for item in edit.get('data', {}).get(kind, []):
                         name = item['newDlPath']
+                        # Check before filtering unbound/invalid materials or missing
+                        # resources: another declaration can disable this path at runtime.
+                        if name in declared_paths:
+                            raise ValueError(f'Duplicate metadata declaration for path: {name}')
+                        declared_paths.add(name)
+                        if kind == 'materials' and 'nativeAnimation' not in item:
+                            continue  # Match the runtime: materials never infer a shape profile.
                         if name not in archive.namelist():
                             continue
                         data = archive.read(name)
@@ -51,11 +61,33 @@ def fixture(path, bind_fountain=False):
         return items
 
 
+def check_caustics(items, results, required=False, source='oot.water_temple.caustics'):
+    """An export probe exits successfully even when no binding/insertion resolves."""
+    profile, profile_id = {'oot.water_temple.caustics': ('WaterTempleCaustics', 10),
+                           'oot.zoras_domain.caustics': ('ZorasDomainCaustics', 11)}[source]
+    expected = {item['path']: len(item['commands']) for item in items
+                if isinstance(item['metadata'].get('nativeAnimation'), dict) and
+                item['metadata']['nativeAnimation'].get('source') == source}
+    if required and not expected:
+        raise ValueError(f'No explicit {profile} materials found in archive')
+    for path, length in expected.items():
+        matches = [result for result in results if result['path'] == path]
+        if (len(matches) != 1 or matches[0]['profile'] != profile_id or
+                type(matches[0]['insertion']) is not int or not 0 <= matches[0]['insertion'] < length):
+            raise ValueError(f'{profile} profile/insertion did not resolve: {path}: {matches}')
+    if expected:
+        print(f'ASSERTED {len(expected)} {profile} profile(s) with valid insertion', flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--json-include', required=True)
     parser.add_argument('--spdlog-include', required=True)
     parser.add_argument('--bind-mm-fountain', action='store_true', help='Analyze fountain metadata in memory; archive stays read-only')
+    parser.add_argument('--require-water-temple-caustics', action='store_true',
+                        help='Require a WaterTempleCaustics binding and valid insertion in each archive')
+    parser.add_argument('--require-zoras-domain-caustics', action='store_true',
+                        help='Require a ZorasDomainCaustics binding and valid insertion in each archive')
     parser.add_argument('--cxx', default='c++')
     parser.add_argument('archives', nargs='*', type=Path)
     args = parser.parse_args()
@@ -80,9 +112,15 @@ def main():
         run([temp / 'native_material_runtime_test'])
         for path in args.archives:
             data = temp / 'fixture.json'
-            data.write_text(json.dumps(fixture(path.resolve(), args.bind_mm_fountain)))
+            items = fixture(path.resolve(), args.bind_mm_fountain)
+            data.write_text(json.dumps(items))
             print(f'EXPORT {path.name}', flush=True)
-            run([temp / 'native_material_export_probe', data])
+            result = subprocess.run([str(temp / 'native_material_export_probe'), str(data)],
+                                    cwd=ROOT, check=True, capture_output=True, text=True)
+            print(result.stdout, end='', flush=True)
+            check_caustics(items, json.loads(result.stdout), args.require_water_temple_caustics)
+            check_caustics(items, json.loads(result.stdout), args.require_zoras_domain_caustics,
+                           source='oot.zoras_domain.caustics')
 
 
 if __name__ == '__main__':

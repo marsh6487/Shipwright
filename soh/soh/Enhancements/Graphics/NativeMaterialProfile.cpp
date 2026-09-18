@@ -18,6 +18,8 @@ NativeMaterialProfile ResolveNativeMaterial(const nlohmann::json& item, bool pas
             return NativeMaterialProfile::None;
         if (a["source"] == "oot.water_temple.caustics")
             return small ? NativeMaterialProfile::WaterTempleCaustics : NativeMaterialProfile::None;
+        if (a["source"] == "oot.zoras_domain.caustics")
+            return small ? NativeMaterialProfile::ZorasDomainCaustics : NativeMaterialProfile::None;
         if (a["source"] == "mm.bg_keikoku_spr.lower_a")
             return small ? NativeMaterialProfile::FountainLowerA32 : NativeMaterialProfile::FountainLowerA64;
         if (a["source"] == "mm.bg_keikoku_spr.lower_b")
@@ -76,7 +78,8 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
                                                 NativeMaterialProfile profile) {
     const bool fountain =
         profile >= NativeMaterialProfile::FountainLowerA32 && profile <= NativeMaterialProfile::FountainCentral64;
-    const bool caustics = profile == NativeMaterialProfile::WaterTempleCaustics;
+    const bool caustics = profile == NativeMaterialProfile::WaterTempleCaustics ||
+                          profile == NativeMaterialProfile::ZorasDomainCaustics;
     const unsigned dimension = profile >= NativeMaterialProfile::FountainLowerA64 ? 64 : 32;
     const unsigned mask = dimension == 64 ? 6 : 5;
     unsigned descriptors = 0;
@@ -216,6 +219,11 @@ ScrollParameters NativeScrollParameters(NativeMaterialProfile profile, uint32_t 
             return { gameplayFrames % 128, 0, gameplayFrames % 128, 0, 32, 16, 1, 0, 1, 0 };
         case NativeMaterialProfile::WaterTempleCaustics:
             return { 0, 0, gameplayFrames, 0, 32, 32, 0, 0, 1, 0 };
+        case NativeMaterialProfile::ZorasDomainCaustics:
+            // func_8009E730 / opaque segment 0C: active-water vertical motion.
+            // Keep the authored caustic size and do not import the source scene's
+            // adult-age stop: this explicit material also serves thawed scenes.
+            return { 0, 0, 0, 127u - gameplayFrames % 128u, 32, 32, 0, 0, 0, -1 };
         default:
             return {};
     }

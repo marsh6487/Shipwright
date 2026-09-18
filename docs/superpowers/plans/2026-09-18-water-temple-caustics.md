@@ -25,11 +25,11 @@
 | 1 | Existing native importer and tests | Explicit profile; safe material-only lists; tile 1 native interpolation | Current fork 61bf5bad |
 | 2 | Explicit XML material and vanilla caustic texture | Reusable material authoring tool; one Zora's Domain overlay; usage guide | Task 1 metadata and importer contract |
 
-The fresh isolated checkout is on `feat/reusable-water-temple-caustics`, based on `61bf5bad25fe2300b43c779b6c65047db08391c6`. Baseline diagnostic tests pass. No repository AGENTS.md applies. Dependencies for the focused runner are `/workspace/scratch/10800b653a0f/deps` (nlohmann) and `/workspace/scratch/10800b653a0f/deps/spdlog/include`; libultraship is initialized.
+The fresh isolated checkout is on `feat/reusable-water-temple-caustics`, based on `61bf5bad25fe2300b43c779b6c65047db08391c6`. Baseline diagnostic tests pass. No repository AGENTS.md applies. Dependencies for the focused runner are `/path/to/nlohmann/include` (nlohmann) and `/path/to/spdlog/include`; libultraship is initialized.
 
 ## Task 1: Native caustics profile and material-only binding
 
-Work in `/workspace/scratch/10800b653a0f/Shipwright` on the existing feature branch. This task owns only the native bridge/profile and their C++ tests. Do not spawn subagents. Follow TDD, commit the result, and write the requested report.
+Work from the repository root on the existing feature branch. This task owns only the native bridge/profile and their C++ tests. Do not spawn subagents. Follow TDD, commit the result, and write the requested report.
 
 Files:
 - Modify `soh/soh/Enhancements/Graphics/NativeMaterialProfile.h` and `.cpp`.
@@ -47,13 +47,13 @@ Requirements:
 8. Behavioral tests: valid metadata for arbitrary materials/geometry; malformed/64x64 rejection; material-only and flat draw acceptance; existing profiles reject material-only; base dimensions 64x64 and 256x256/nonzero tile offset survive; tile 1 missing/bad dimensions/masks/alias rejected; hidden opcodes in hash payload not interpreted; all earlier profile regressions; actual native generated tile-1 command values across 0,1,127,128,2047,2048,UINT32_MAX with different state/gameplay clocks; stable lifetime, null/disable/re-enable, and materials metadata refresh/conflicts.
 
 Run focused tests via:
-`python3 scripts/diagnostics/run_native_material_probe.py --json-include /workspace/scratch/10800b653a0f/deps --spdlog-include /workspace/scratch/10800b653a0f/deps/spdlog/include`
+`python3 scripts/diagnostics/run_native_material_probe.py --json-include /path/to/nlohmann/include --spdlog-include /path/to/spdlog/include`
 
 Record RED evidence before implementation and GREEN output after. Tests should evaluate real command generation/import decisions; do not write source-text assertions. Check `git diff --check`, self-review, and commit only the task's files. Do not upload assets or modify build workflows.
 
 ## Task 2: Reusable material authoring tool and Zora's Domain probe
 
-Work in `/workspace/scratch/10800b653a0f/Shipwright`, after Task 1 passes review. Do not spawn subagents. Follow TDD for binary encoding/asset invariants, commit source code and documentation only, and write the requested report.
+Work from the repository root, after Task 1 passes review. Do not spawn subagents. Follow TDD for binary encoding/asset invariants, commit source code and documentation only, and write the requested report.
 
 Files:
 - Create `scripts/build_water_temple_caustics.py` (tool/CLI; split binary encoding into a small helper only if clearly needed).
@@ -66,14 +66,14 @@ Requirements:
 2. Compile the selected material's supported XML commands to a binary native material under a deterministic `custom/prelude/materials/` path. Preserve its base texture reference, tile-0 descriptor/size/offset, texture scale, render state, and geometry flags except necessary two-cycle/vertex-shade caustic combine. Refuse existing multi-texture/control-flow/material layouts that cannot be safely converted; don't silently flatten or replace geometry. Fail closed for unsupported XML attributes/opcodes. Encode using the actual libultraship GBI conventions: header 64 bytes, microcode byte + padding to 72, little-endian uint32 word pairs; texture hashes carry separate payload command; use checked CRC64 compatible with StrHash64. Demonstrate representative command encoding against actual GBI macros via a focused compiler fixture, not only a duplicate Python implementation.
 3. Add the native Water Temple caustic texture (32x32 RGBA16) copied from `scenes/nonmq/MIZUsin_scene/MIZUsin_sceneTex_014430` under a custom path. Load it to nonzero TMEM 256, render tile 1, line 8, wrap/masks5, authored shifts, static zero-origin32x32size. Base stays tile0. Use donor two-cycle shaded blend with swapped texture weighting: `(base + (caustic-base)*envAlpha) * SHADE`, environment alpha 95 by default, RGB0. Preserve appropriate alpha/render state for the selected material; document any initially unsupported alpha/blend modes. Do not put scene segments into generated material.
 4. Overlay only overrides `alt/<selected material path>` with a tiny XML wrapper calling the custom binary material. Include the custom material, its caustic texture, and `prelude/project/edits.json` with a `materials` entry carrying the exact nativeAnimation contract. Do not override parents, vertices, triangle lists, culling, room headers, collision, actors, base textures, or original input archives. Preserve the existing source alpha behavior for supported opaque defaults; don't claim arbitrary translucent alpha already handled if it isn't.
-5. Build `/workspace/scratch/10800b653a0f/deliverables/Zoras_Domain_Water_Temple_Caustics_Probe.o2r` from the provided uploads. Also write a concise manifest/report there with source SHA256s, exactly what resources the overlay changes/adds, selected material, native profile, tint/strength choices, unsupported layouts, and validation limits. Do not commit generated assets or private upload paths to source docs. No copied full input archive.
+5. Build `/path/to/deliverables/Zoras_Domain_Water_Temple_Caustics_Probe.o2r` from the provided uploads. Also write a concise manifest/report there with source SHA256s, exactly what resources the overlay changes/adds, selected material, native profile, tint/strength choices, unsupported layouts, and validation limits. Do not commit generated assets or private upload paths to source docs. No copied full input archive.
 6. Generic material-only design is reusable in any room: document how an authored XML material calls the generated native material before arbitrary triangles, or how a Prelude exporter writes the explicit materials/pastes/shapes binding. Different UVs/vertex colors need visual tuning but are not geometry eligibility conditions. Current support is the opaque Water Temple caustic layer, not a third texture added to an existing two-texture water shader. The Lost Woods pool geometry is not provided in the current three inputs, so don't claim that room is patched; document precise reuse steps.
 7. Explain installation priority (overlay must win over Djipi's scenes material), required feature build/branch, existing alt-assets/pack setting, existing native scroll CVar, child and thawed adult verification, existing thaw command remains in control, scene reload as appropriate, and removal of overlay as rollback. Original assets on an older build display a static caustic material; motion requires new code. This is CPU/asset verified, not visually verified in-game. Existing artist vertex colors are preserved; copying donor vertex colors blindly would not recreate authored lighting on another mesh.
 8. Verify real generated overlay through the actual production native profile/export probe; assert it resolves as WaterTempleCaustics with a valid insertion index. Verify source archives SHA unchanged and exact overlay allowlist. Run Python focused tests plus the C++ runner with this overlay and `git diff --check`. Generate user-facing artifacts outside git; parent will save them and publish branch.
 
-Input archive paths available locally:
-- `/workspace/scratch/10800b653a0f/upload/oot(2).o2r`
-- `/workspace/scratch/10800b653a0f/upload/Djipi's 3DE - 20 Scenes Map(2).otr`
-- `/workspace/scratch/10800b653a0f/upload/Djipi's 3DE - 21 Scenes Map 3DS Textures(1).otr`
+Input archive roles (substitute the local confidential input paths):
+- Vanilla donor archive: `/path/to/vanilla.o2r`
+- Djipi scenes archive: `/path/to/scenes.otr`
+- Djipi textures archive: `/path/to/textures.otr`
 
-Extracted material/source references are under `/workspace/scratch/10800b653a0f/investigation/`. Actual libultraship source under `libultraship/src/fast/resource/factory/DisplayListFactory.cpp`, GBI headers and `StrHash64.h` are authoritative for compiler encoding. mpyq is installed. User-supplied files are confidential inputs; tests use generated/synthetic fixtures.
+Extracted material/source references are under `/path/to/private-investigation/`. Actual libultraship source under `libultraship/src/fast/resource/factory/DisplayListFactory.cpp`, GBI headers and `StrHash64.h` are authoritative for compiler encoding. mpyq is installed. User-supplied files are confidential inputs; tests use generated/synthetic fixtures.
