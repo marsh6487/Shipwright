@@ -20,6 +20,10 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(pak_selection_test tests/pak_selection_test.cpp)
+    target_include_directories(pak_selection_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    add_test(NAME pak_selection_test COMMAND pak_selection_test)
+
     add_executable(static_story_actor_test
         tests/static_story_actor_test.c
         src/overlays/actors/ovl_En_Viewer/static_story_actor.c

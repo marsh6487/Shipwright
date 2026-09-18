@@ -123,6 +123,13 @@ void PakLoader_SelectAdultModel(s32 index);
 void PakLoader_SelectChildModel(s32 index);
 
 /**
+ * Persist a validated menu choice by file path as well as its current index.
+ * Keep this separate from Select*: disabling models or rendering a remote
+ * player may change the active selection without changing the user's choice.
+ */
+void PakLoader_SaveSelection(const char* cvarName, s32 index);
+
+/**
  * Get currently selected model indices per age.
  * @return Selected index, or -1 if none
  */

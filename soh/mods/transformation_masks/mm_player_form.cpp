@@ -14949,6 +14949,12 @@ static s32 MmForm_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, 
         *dList = NULL;
     }
 
+    // Rito uses the OOT player limb layout; other full forms have different bones.
+    if (gFormState.currentForm == MM_PLAYER_FORM_RITO && limbIndex == PLAYER_LIMB_SHEATH &&
+        CVarGetInteger(CVAR_ENHANCEMENT("HideBackEquipment"), 0)) {
+        *dList = NULL;
+    }
+
     return 0;
 }
 
@@ -15446,9 +15452,11 @@ static void MmForm_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
                 // Mir_Ray and Twinrova read the reflection direction off this matrix, so it
                 // is captured from whichever limb is carrying the plate this frame.
                 Matrix_Get(&player->shieldMf);
-                gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
-                          G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-                gSPDisplayList(POLY_XLU_DISP++, dl);
+                if (inHand || !CVarGetInteger(CVAR_ENHANCEMENT("HideBackEquipment"), 0)) {
+                    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+                    gSPDisplayList(POLY_XLU_DISP++, dl);
+                }
                 Matrix_Pop();
                 CLOSE_DISPS(play->state.gfxCtx);
             }

@@ -1723,6 +1723,15 @@ static Gfx* Player_ResolveLimbDLForDummyOrLocal(void* dlPathOrPtr) {
     return ResourceMgr_LoadGfxByName(dlPathOrPtr);
 }
 
+// Apply AFTER equipment and model overrides. The sheath limb carries the
+// stowed sword/shield and the empty scabbard; hand limbs are independent.
+// Only hide its display list: keep skeleton traversal and shield collision.
+static void Player_ApplyBackEquipmentVisibility(s32 limbIndex, Gfx** dList) {
+    if (limbIndex == PLAYER_LIMB_SHEATH && CVarGetInteger(CVAR_ENHANCEMENT("HideBackEquipment"), 0)) {
+        *dList = NULL;
+    }
+}
+
 s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
                                            void* thisx) {
     Player* this = (Player*)thisx;
@@ -1931,6 +1940,8 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
         }
     }
 
+    Player_ApplyBackEquipmentVisibility(limbIndex, dList);
+
     if (GameInteractor_InvisibleLinkActive()) {
         this->actor.shape.shadowDraw = NULL;
         *dList = NULL;
@@ -2014,6 +2025,7 @@ s32 Player_OverrideLimbDrawGameplayFirstPerson(PlayState* play, s32 limbIndex, G
 
     GameInteractor_Should(VB_PLAYER_OVERRIDE_LIMB_DRAW, true, limbIndex, dList, thisx, play);
 
+    Player_ApplyBackEquipmentVisibility(limbIndex, dList);
     return false;
 }
 
@@ -2023,6 +2035,7 @@ s32 Player_OverrideLimbDrawGameplayCrawling(PlayState* play, s32 limbIndex, Gfx*
         *dList = NULL;
     }
 
+    Player_ApplyBackEquipmentVisibility(limbIndex, dList);
     return false;
 }
 
@@ -2941,6 +2954,7 @@ s32 Player_OverrideLimbDrawPause(PlayState* play, s32 limbIndex, Gfx** dList, Ve
         // pakDL == NULL → keep the o2r/vanilla *dList from the hook above
     }
 
+    Player_ApplyBackEquipmentVisibility(limbIndex, dList);
     return 0;
 }
 
