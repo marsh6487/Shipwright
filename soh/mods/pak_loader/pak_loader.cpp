@@ -22,6 +22,7 @@ static void O2rUpdateMounts(void);
 #include "global.h"
 #include "z64.h"
 #include "soh/OTRGlobals.h"
+#include "soh/Enhancements/Graphics/PreludeNativeMaterialScroll.h"
 #include <libultraship/bridge.h>       // CVarGet*/CVarSet* — was transitive via OTRGlobals.h before upstream #6636
 #include <libultraship/libultraship.h> // full Ship::Window (GetGui) — was transitive via OTRGlobals.h before #6636
 
@@ -2054,6 +2055,7 @@ static bool LoadO2rEquipment(PakModel& model) {
                 }
                 for (auto& p : toRemove) {
                     archiveManager->RemoveArchive(p);
+                    PreludeNativeMaterialScroll_InvalidateMetadata();
                     PAK_LOG("LoadO2rEquipment: removed auto-mounted '%s' from ArchiveManager", p.c_str());
                 }
             }

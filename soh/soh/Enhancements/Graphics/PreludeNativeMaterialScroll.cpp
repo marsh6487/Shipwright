@@ -11,6 +11,7 @@
 #include <array>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <set>
 #include "soh/cvar_prefixes.h"
 
@@ -36,18 +37,17 @@ ScrollLists& Lists() {
 }
 
 using ProfileMap = std::map<std::string, NativeMaterialProfile>;
-struct MetadataSnapshot {
-    std::shared_ptr<std::vector<char>> bytes;
-    ProfileMap profiles;
-};
 std::mutex sMetadataMutex;
-std::map<std::weak_ptr<Ship::Archive>, MetadataSnapshot, std::owner_less<std::weak_ptr<Ship::Archive>>> sMetadata;
+std::map<std::weak_ptr<Ship::Archive>, ProfileMap, std::owner_less<std::weak_ptr<Ship::Archive>>> sMetadata;
 
-ProfileMap ReadProfiles(const std::vector<char>& bytes) {
+std::optional<ProfileMap> ReadProfiles(const std::vector<char>& bytes) {
     ProfileMap profiles;
     std::set<std::string> conflicts;
     const auto root = nlohmann::json::parse(bytes.begin(), bytes.end(), nullptr, false);
-    if (root.is_discarded() || !root.is_object() || !root.contains("edits") || !root["edits"].is_object()) {
+    if (root.is_discarded()) {
+        return std::nullopt; // A failed ZIP read can still return a partial buffer.
+    }
+    if (!root.is_object() || !root.contains("edits") || !root["edits"].is_object()) {
         return profiles;
     }
     for (const auto& edits : root["edits"]) {
@@ -89,25 +89,33 @@ ProfileMap ReadProfiles(const std::vector<char>& bytes) {
 }
 
 NativeMaterialProfile ProfileFor(const std::shared_ptr<Ship::Archive>& archive, const std::string& path) {
-    if (!archive || !archive->HasFile("prelude/project/edits.json")) {
+    if (!archive) {
         return NativeMaterialProfile::None;
     }
-    // Archives can reopen without changing their shared_ptr identity. Compare
-    // current metadata bytes on resource import, not filesystem timestamps or
-    // texture hashes. Parsing is cached; no metadata I/O occurs during draws.
-    auto file = archive->LoadFile("prelude/project/edits.json");
-    if (!file || !file->Buffer) {
-        return NativeMaterialProfile::None;
-    }
+    // A room may import hundreds of lists from one export. Read and parse its
+    // metadata once, including negative binding results. Keep the initial read
+    // under the lock so concurrent resource imports cannot repeat the ZIP I/O.
+    // Archive/resource reload sites explicitly invalidate this snapshot, since
+    // an archive may reopen without changing its shared_ptr identity.
     std::lock_guard lock(sMetadataMutex);
     std::erase_if(sMetadata, [](const auto& entry) { return entry.first.expired(); });
-    auto& snapshot = sMetadata[archive];
-    if (!snapshot.bytes || *snapshot.bytes != *file->Buffer) {
-        snapshot.profiles = ReadProfiles(*file->Buffer);
-        snapshot.bytes = file->Buffer;
+    auto snapshot = sMetadata.find(archive);
+    if (snapshot == sMetadata.end()) {
+        if (!archive->HasFile("prelude/project/edits.json")) {
+            return NativeMaterialProfile::None;
+        }
+        auto file = archive->LoadFile("prelude/project/edits.json");
+        if (!file || !file->Buffer) {
+            return NativeMaterialProfile::None; // Allow a failed read to retry.
+        }
+        auto profiles = ReadProfiles(*file->Buffer);
+        if (!profiles) {
+            return NativeMaterialProfile::None;
+        }
+        snapshot = sMetadata.emplace(archive, std::move(*profiles)).first;
     }
-    auto profile = snapshot.profiles.find(path);
-    return profile == snapshot.profiles.end() ? NativeMaterialProfile::None : profile->second;
+    auto profile = snapshot->second.find(path);
+    return profile == snapshot->second.end() ? NativeMaterialProfile::None : profile->second;
 }
 } // namespace
 
@@ -160,6 +168,11 @@ NativeMaterialDisplayListFactory::ReadResource(std::shared_ptr<Ship::File> file,
     return resource;
 }
 } // namespace Prelude
+
+extern "C" void PreludeNativeMaterialScroll_InvalidateMetadata(void) {
+    std::lock_guard lock(Prelude::sMetadataMutex);
+    Prelude::sMetadata.clear();
+}
 
 extern "C" void PreludeNativeMaterialScroll_Update(GraphicsContext* gfxCtx, uint32_t stateFrames,
                                                    uint32_t gameplayFrames) {

@@ -3,8 +3,11 @@
 #include "../soh/Enhancements/Graphics/PreludeNativeMaterialScroll.cpp"
 #include "test_require.h"
 #include <fast/lus_gbi.h>
+#include <atomic>
 #include <fstream>
 #include <iostream>
+#include <latch>
+#include <thread>
 
 #include "native_binary_display_list_factory.inc"
 
@@ -29,10 +32,22 @@ class MetadataArchive : public Ship::Archive {
     MetadataArchive() : Archive("fixture") {
     }
     nlohmann::json project;
+    std::atomic<size_t> metadataReads = 0;
+    bool failNextRead = false;
+    bool truncateNextRead = false;
     std::shared_ptr<Ship::File> LoadFile(const std::string& path) override {
         REQUIRE(path == "prelude/project/edits.json");
+        ++metadataReads;
+        if (failNextRead) {
+            failNextRead = false;
+            return nullptr;
+        }
         auto file = std::make_shared<Ship::File>();
-        const auto text = project.dump();
+        auto text = project.dump();
+        if (truncateNextRead) {
+            truncateNextRead = false;
+            text.resize(text.size() / 2);
+        }
         file->Buffer = std::make_shared<std::vector<char>>(text.begin(), text.end());
         return file;
     }
@@ -165,8 +180,82 @@ static void ProbeArchive(const char* fixturePath) {
                            { "insertion", item["insertion"] }, { "instruction_count", result->Instructions.size() },
                            { "adapter_verified", true } });
     }
+    REQUIRE(owner->metadataReads <= 1);
     sOwners.clear();
+    std::cerr << "PASS native archive factory: " << output.size() << " lists, " << owner->metadataReads.load()
+              << " metadata read(s)\n";
     std::cout << output.dump(2) << '\n';
+}
+
+static void CheckMetadataReadReuse() {
+    const std::string path = "custom/prelude/test/sage_platform";
+    const std::vector<Prelude::NativeMaterialCommand> material = {
+        { 0xf5101000, 0x00017c5e }, { 0xf2000000, 0x0007c07c },
+        { 0xf5101000, 0x0101785f }, { 0xf2000000, 0x0107c07c }, { 0xdf000000, 0 },
+    };
+    auto owner = std::make_shared<MetadataArchive>();
+    owner->project = nlohmann::json::parse(
+        R"({"edits":{"test":[{"data":{"materials":[{"newDlPath":"custom/prelude/test/sage_platform","nativeAnimation":{"version":1,"binding":"material-motion","source":"oot.chamber_of_sages.platform","logicalWidth":32,"logicalHeight":32}}]}}]}})");
+    Prelude::NativeMaterialDisplayListFactory factory(std::make_shared<Ship::ArchiveManager>());
+    const auto profile = Prelude::NativeMaterialProfile::ChamberOfSagesPlatform;
+    CheckBinding(ReadDisplayList(factory, path, material, owner), material, profile, 4);
+    CheckBinding(ReadDisplayList(factory, "alt/" + path, material, owner), material, profile, 4);
+    // A room's unbound geometry also passes through the decorator. Importing
+    // more lists from this archive must not reread its entire project JSON.
+    for (size_t i = 0; i < 32; ++i) {
+        CheckBinding(ReadDisplayList(factory, "custom/prelude/test/geometry" + std::to_string(i), material, owner),
+                     material, profile, std::nullopt);
+    }
+    REQUIRE(owner->metadataReads == 1);
+
+    // Reopening the same archive object must refresh removed bindings. It must
+    // not depend on a different owner pointer or a filesystem timestamp change.
+    const auto originalProject = owner->project;
+    owner->project["edits"]["test"][0]["data"]["materials"][0].erase("nativeAnimation");
+    PreludeNativeMaterialScroll_InvalidateMetadata();
+    CheckBinding(ReadDisplayList(factory, path, material, owner), material, profile, std::nullopt);
+    CheckBinding(ReadDisplayList(factory, "alt/" + path, material, owner), material, profile, std::nullopt);
+    REQUIRE(owner->metadataReads == 2);
+
+    owner->project = originalProject;
+    PreludeNativeMaterialScroll_InvalidateMetadata();
+    CheckBinding(ReadDisplayList(factory, path, material, owner), material, profile, 4);
+    REQUIRE(owner->metadataReads == 3);
+
+    auto retry = std::make_shared<MetadataArchive>();
+    retry->project = originalProject;
+    retry->failNextRead = true;
+    CheckBinding(ReadDisplayList(factory, path, material, retry), material, profile, std::nullopt);
+    CheckBinding(ReadDisplayList(factory, path, material, retry), material, profile, 4);
+    CheckBinding(ReadDisplayList(factory, path, material, retry), material, profile, 4);
+    REQUIRE(retry->metadataReads == 2);
+
+    // O2rArchive can return a non-null buffer after a failed/short ZIP read.
+    // Malformed JSON must not turn that transient failure into a cached miss.
+    auto truncated = std::make_shared<MetadataArchive>();
+    truncated->project = originalProject;
+    truncated->truncateNextRead = true;
+    CheckBinding(ReadDisplayList(factory, path, material, truncated), material, profile, std::nullopt);
+    CheckBinding(ReadDisplayList(factory, path, material, truncated), material, profile, 4);
+    CheckBinding(ReadDisplayList(factory, path, material, truncated), material, profile, 4);
+    REQUIRE(truncated->metadataReads == 2);
+
+    // Resource workers can reach the same archive simultaneously on first use.
+    auto concurrent = std::make_shared<MetadataArchive>();
+    concurrent->project = originalProject;
+    std::latch start(1);
+    std::vector<std::thread> readers;
+    for (size_t i = 0; i < 8; ++i) {
+        readers.emplace_back([&] {
+            start.wait();
+            REQUIRE(Prelude::ProfileFor(concurrent, path) == profile);
+        });
+    }
+    start.count_down();
+    for (auto& reader : readers) {
+        reader.join();
+    }
+    REQUIRE(concurrent->metadataReads == 1);
 }
 
 int main(int argc, char** argv) {
@@ -177,5 +266,6 @@ int main(int argc, char** argv) {
     }
     REQUIRE(argc == 1);
     CheckAlternateOwnership();
-    std::cout << "PASS native material factory canonical/alt binding, physical ownership, and parent precedence\n";
+    CheckMetadataReadReuse();
+    std::cout << "PASS native material factory ownership, metadata read reuse, reload, retry, and concurrent imports\n";
 }
