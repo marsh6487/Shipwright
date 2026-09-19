@@ -110,6 +110,24 @@ def main():
                       ROOT / 'soh/tests/native_material_runtime_test.cpp', core,
                       '-o', temp / 'native_material_runtime_test'])
         run([temp / 'native_material_runtime_test'])
+        # Compile the actual decorator and native binary parser together. Keep
+        # only XML loading out of this focused harness (and its dependencies).
+        loader = (ROOT / 'libultraship/src/fast/resource/factory/DisplayListFactory.cpp').read_text()
+        loader_start = loader.index('int8_t GetEndOpcodeByUCode(')
+        loader_end = loader.index('std::shared_ptr<Ship::IResource>\nResourceFactoryXMLDisplayListV0::ReadResource',
+                                  loader_start)
+        (temp / 'native_binary_display_list_factory.inc').write_text(
+            'namespace Fast {\n' + loader[loader_start:loader_end] + '\n}\n')
+        factory_sources = [ROOT / 'libultraship/src' / source for source in (
+            'fast/resource/type/DisplayList.cpp', 'ship/resource/Resource.cpp',
+            'ship/resource/ResourceFactoryBinary.cpp', 'ship/utils/binarytools/BinaryReader.cpp',
+            'ship/utils/binarytools/MemoryStream.cpp', 'ship/utils/binarytools/Stream.cpp')]
+        run(common + ['-DF3DEX_GBI_2', '-D_LANGUAGE_C=', '-DCVAR_PREFIX_ENHANCEMENT="gEnhancements"',
+                      '-I' + str(ROOT / 'libultraship/include'), '-I' + str(ROOT / 'soh'),
+                      '-I' + args.spdlog_include, '-I' + str(temp),
+                      ROOT / 'soh/tests/native_material_factory_test.cpp', core, *factory_sources,
+                      '-o', temp / 'native_material_factory_test'])
+        run([temp / 'native_material_factory_test'])
         for path in args.archives:
             data = temp / 'fixture.json'
             items = fixture(path.resolve(), args.bind_mm_fountain)

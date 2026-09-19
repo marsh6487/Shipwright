@@ -8,6 +8,7 @@
 #include "global.h"
 
 #include "overlays/actors/ovl_Bg_Heavy_Block/z_bg_heavy_block.h"
+#include "overlays/actors/ovl_Bg_Toki_Swd/z_bg_toki_swd.h"
 #include "overlays/actors/ovl_Door_Shutter/z_door_shutter.h"
 #include "overlays/actors/ovl_En_Boom/z_en_boom.h"
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
@@ -6584,8 +6585,9 @@ void func_8083A0F4(PlayState* play, Player* this) {
             this->interactRangeActor->parent = &this->actor;
             Player_SetupAction(play, this, Player_Action_WaitForCutscene, 0);
             this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
-            if (!CVarGetInteger(CVAR_ENHANCEMENT("PersistentMasks"), 0) ||
-                !CVarGetInteger(CVAR_ENHANCEMENT("AdultMasks"), 0)) {
+            if (interactRangeActor->params != BG_TOKI_SWD_TIME_PEDESTAL &&
+                (!CVarGetInteger(CVAR_ENHANCEMENT("PersistentMasks"), 0) ||
+                 !CVarGetInteger(CVAR_ENHANCEMENT("AdultMasks"), 0))) {
                 gSaveContext.ship.maskMemory = PLAYER_MASK_NONE;
             }
         } else {
@@ -8855,7 +8857,9 @@ s32 Player_ActionHandler_2(Player* this, PlayState* play) {
                     this->heldItemAction = this->itemAction;
                     Player_SetupWaitForPutAway(play, this, func_8083A0F4);
 
-                    if (sp24 == PLAYER_IA_SWORD_MASTER) {
+                    if (sp24 == PLAYER_IA_SWORD_MASTER ||
+                        (interactedActor->id == ACTOR_BG_TOKI_SWD &&
+                         interactedActor->params == BG_TOKI_SWD_TIME_PEDESTAL)) {
                         this->nextModelGroup = Player_ActionToModelGroup(this, PLAYER_IA_SWORD_CS);
                         Player_InitItemAction(play, this, PLAYER_IA_SWORD_CS);
                     } else {
@@ -18222,8 +18226,16 @@ static LinkAnimationHeader* D_80855190[] = {
 static Vec3f D_80855198 = { -1.0f, 70.0f, 20.0f };
 
 void func_808519EC(PlayState* play, Player* this, CsCmdActorCue* cue) {
-    Math_Vec3f_Copy(&this->actor.world.pos, &D_80855198);
-    this->actor.shape.rot.y = -0x8000;
+    if (!BgTokiSwd_RelocateTimePedestalPlayer(play, this)) {
+        Math_Vec3f_Copy(&this->actor.world.pos, &D_80855198);
+        this->actor.shape.rot.y = -0x8000;
+    } else if (LINK_IS_ADULT) {
+        // Display the ceremonial sword even when it is not owned. The cutscene
+        // item action changes only the live player model, never save equipment.
+        this->heldItemId = ITEM_NONE;
+        this->nextModelGroup = Player_ActionToModelGroup(this, PLAYER_IA_SWORD_CS);
+        Player_InitItemAction(play, this, PLAYER_IA_SWORD_CS);
+    }
     Player_AnimPlayOnceAdjusted(play, this, this->ageProperties->unk_9C);
     Player_StartAnimMovement(play, this, 0x28F);
 }

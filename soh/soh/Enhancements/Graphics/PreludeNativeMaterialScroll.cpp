@@ -120,7 +120,15 @@ NativeMaterialDisplayListFactory::ReadResource(std::shared_ptr<Ship::File> file,
                                                std::shared_ptr<Ship::ResourceInitData> initData) {
     Fast::ResourceFactoryBinaryDisplayListV0 originalFactory;
     auto resource = originalFactory.ReadResource(file, initData);
-    if (!resource || !initData || !initData->Path.starts_with("custom/prelude/")) {
+    if (!resource || !initData) {
+        return resource;
+    }
+    // Alternate resources share the export's canonical recipe key. Keep their
+    // physical path intact for the owning-archive lookup below.
+    const std::string recipePath = initData->Path.starts_with("alt/custom/prelude/")
+                                       ? initData->Path.substr(4)
+                                       : initData->Path;
+    if (!recipePath.starts_with("custom/prelude/")) {
         return resource;
     }
     auto dl = std::dynamic_pointer_cast<Fast::DisplayList>(resource);
@@ -130,7 +138,7 @@ NativeMaterialDisplayListFactory::ReadResource(std::shared_ptr<Ship::File> file,
     // The ordinary loader does not currently populate Parent. Resolve the exact
     // DL's owning archive, not the globally highest-priority edits.json.
     auto archive = initData->Parent ? initData->Parent : mArchives->GetArchiveFromFile(initData->Path);
-    auto profile = ProfileFor(archive, initData->Path);
+    auto profile = ProfileFor(archive, recipePath);
     if (profile == NativeMaterialProfile::None) {
         return resource;
     }

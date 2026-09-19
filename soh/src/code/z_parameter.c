@@ -11,6 +11,7 @@
 #include "soh/Enhancements/enhancementTypes.h"
 #include "soh/ShipUtils.h"
 #include "mods/extended_equipment.h"
+#include "mods/nei_save.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -1061,7 +1062,8 @@ void func_80083108(PlayState* play) {
                         (gSaveContext.equips.buttonItems[0] == ITEM_NONE)) {
                         if (GameInteractor_Should(VB_TEMP_B_SHOULD_RESTORE,
                                                   (gSaveContext.equips.buttonItems[0] != ITEM_NONE) ||
-                                                      (gSaveContext.infTable[29] == 0))) {
+                                                      (gSaveContext.infTable[29] == 0 &&
+                                                       CUR_EQUIP_VALUE(EQUIP_TYPE_SWORD) != EQUIP_VALUE_SWORD_NONE))) {
                             gSaveContext.equips.buttonItems[0] = gSaveContext.buttonStatus[0];
 
                             GameInteractor_Should(VB_TEMP_B_RESTORE_SWORDLESS, true);
@@ -1089,7 +1091,8 @@ void func_80083108(PlayState* play) {
                         (gSaveContext.equips.buttonItems[0] == ITEM_NONE)) {
                         if (GameInteractor_Should(VB_TEMP_B_SHOULD_RESTORE,
                                                   (gSaveContext.equips.buttonItems[0] != ITEM_NONE) ||
-                                                      (gSaveContext.infTable[29] == 0))) {
+                                                      (gSaveContext.infTable[29] == 0 &&
+                                                       CUR_EQUIP_VALUE(EQUIP_TYPE_SWORD) != EQUIP_VALUE_SWORD_NONE))) {
                             gSaveContext.equips.buttonItems[0] = gSaveContext.buttonStatus[0];
 
                             GameInteractor_Should(VB_TEMP_B_RESTORE_SWORDLESS, true);
@@ -1821,7 +1824,9 @@ void func_80084BF4(PlayState* play, u16 flag) {
                 Interface_LoadItemIcon1(play, 0);
             }
         } else if (gSaveContext.equips.buttonItems[0] == ITEM_NONE) {
-            if ((gSaveContext.equips.buttonItems[0] != ITEM_NONE) || (gSaveContext.infTable[29] == 0)) {
+            if ((gSaveContext.equips.buttonItems[0] != ITEM_NONE) ||
+                (gSaveContext.infTable[29] == 0 &&
+                 CUR_EQUIP_VALUE(EQUIP_TYPE_SWORD) != EQUIP_VALUE_SWORD_NONE)) {
                 gSaveContext.equips.buttonItems[0] = gSaveContext.buttonStatus[0];
                 GameInteractor_Should(VB_TEMP_B_RESTORE_SWORDLESS, true);
                 Interface_LoadItemIcon1(play, 0);
@@ -2032,6 +2037,7 @@ u8 Item_Give(PlayState* play, u8 item) {
             }
 
         } else if (item == ITEM_SWORD_MASTER) {
+            Nei_Save()->timePedestalNoMasterSwordRepair = 0;
             gSaveContext.equips.buttonItems[0] = ITEM_SWORD_MASTER;
             gSaveContext.equips.equipment &= (u16) ~(0xF << (EQUIP_TYPE_SWORD * 4));
             gSaveContext.equips.equipment |= EQUIP_VALUE_SWORD_MASTER << (EQUIP_TYPE_SWORD * 4);

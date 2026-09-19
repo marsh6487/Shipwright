@@ -104,7 +104,38 @@ static void CheckVerticalCausticWords(const std::array<Gfx, 12>& actual, uint32_
     }
 }
 
+static void CheckSagePlatformMetadata() {
+    const auto platform = nlohmann::json::parse(
+        R"({"newDlPath":"custom/prelude/lost_woods/sage_platform","nativeAnimation":{"version":1,"binding":"material-motion","source":"oot.chamber_of_sages.platform","logicalWidth":32,"logicalHeight":32}})");
+    auto owner = std::make_shared<ReloadableArchive>();
+    auto other = std::make_shared<ReloadableArchive>();
+    for (const char* kind : { "pastes", "shapes", "materials" }) {
+        owner->project = { { "edits", { { "lost_woods", nlohmann::json::array({
+            { { "data", { { kind, nlohmann::json::array({ platform }) } } } }
+        }) } } } };
+        REQUIRE(Prelude::ProfileFor(owner, "custom/prelude/lost_woods/sage_platform") ==
+                Prelude::NativeMaterialProfile::ChamberOfSagesPlatform);
+        // Another archive declaring the same resource path must not borrow this binding.
+        other->project = owner->project;
+        other->project["edits"]["lost_woods"][0]["data"][kind][0].erase("nativeAnimation");
+        REQUIRE(Prelude::ProfileFor(other, "custom/prelude/lost_woods/sage_platform") ==
+                Prelude::NativeMaterialProfile::None);
+        REQUIRE(Prelude::ProfileFor(owner, "custom/prelude/lost_woods/sage_platform") ==
+                Prelude::NativeMaterialProfile::ChamberOfSagesPlatform);
+        auto& data = owner->project["edits"]["lost_woods"][0]["data"];
+        auto conflict = platform;
+        conflict["nativeAnimation"]["source"] = "oot.water_temple.caustics";
+        data[kind].push_back(conflict);
+        REQUIRE(Prelude::ProfileFor(owner, "custom/prelude/lost_woods/sage_platform") ==
+                Prelude::NativeMaterialProfile::None);
+        data[kind] = nlohmann::json::array({ platform });
+        REQUIRE(Prelude::ProfileFor(owner, "custom/prelude/lost_woods/sage_platform") ==
+                Prelude::NativeMaterialProfile::ChamberOfSagesPlatform);
+    }
+}
+
 int main() {
+    CheckSagePlatformMetadata();
     auto archive = std::make_shared<ReloadableArchive>();
     archive->project = nlohmann::json::parse(
         R"({"edits":{"any_scene":[{"data":{"pastes":[{"newDlPath":"custom/prelude/any/paste0","chain":[{"path":"objects/object_spot06_objects/gLakeHyliaHighWaterDL"}]}]}}]}})");
@@ -149,6 +180,8 @@ int main() {
     auto lakePointer = lists[1].data();
     const auto domainIndex = static_cast<size_t>(Prelude::NativeMaterialProfile::ZorasDomainCaustics);
     auto domainPointer = lists[domainIndex].data();
+    const auto platformIndex = static_cast<size_t>(Prelude::NativeMaterialProfile::ChamberOfSagesPlatform);
+    auto platformPointer = lists[platformIndex].data();
     REQUIRE(lakePointer != lists[2].data() && lakePointer != lists[3].data());
     for (uint32_t f : { 0u, 1u, 31u, 32u, 63u, 64u, 127u, 128u, 2047u, 2048u, 0xffffffffu }) {
         const uint32_t game = f + 53u; // Verify different native clock sources.
@@ -179,12 +212,19 @@ int main() {
         for (size_t i = 1; i < domainIndex; ++i) {
             REQUIRE(domainPointer != lists[i].data());
         }
+        CheckCommands(lists[platformIndex],
+                      Gfx_TwoTexScrollEx(&ctx, 0, 127 - game % 128, game % 128, 32, 32,
+                                         1, game % 128, game % 128, 32, 32, -1, 1, 1, 1));
+        for (size_t i = 1; i < platformIndex; ++i) {
+            REQUIRE(platformPointer != lists[i].data());
+        }
         auto before = lists;
         sFrameAllocation = {}; // Simulate transient allocation reuse after draw.
         for (size_t i = 1; i < lists.size(); ++i) {
             CheckCommands(lists[i], before[i].data());
         }
         REQUIRE(lakePointer == lists[1].data());
+        REQUIRE(platformPointer == lists[platformIndex].data());
     }
     struct CausticCase {
         uint32_t game;
@@ -218,6 +258,20 @@ int main() {
         PreludeNativeMaterialScroll_Update(&ctx, test.game ^ 0xa5a5a5a5u, test.game);
         CheckVerticalCausticWords(lists[domainIndex], test.x, test.lrs, test.nextX, test.nextLrs);
     }
+    // At gameplay frame 127 both layers interpolate through their wrap instead
+    // of jumping early: tile 0 moves to x=-1, tile 1 moves to x=128, both y=128.
+    const std::array<Prelude::NativeMaterialCommand, 12> platformWrap = {
+        Prelude::NativeMaterialCommand{ 0xe8000000, 0 },
+        { 0x4a000000, 0 },          { 0x00000000, 0x42fe0000 }, { 0x42f80000, 0x437b0000 },
+        { 0xbf800000, 0x43000000 }, { 0x42f60000, 0x437c0000 }, { 0x4a000000, 0x01000000 },
+        { 0x42fe0000, 0x42fe0000 }, { 0x437b0000, 0x437b0000 }, { 0x43000000, 0x43000000 },
+        { 0x437c0000, 0x437c0000 }, { 0xdf000000, 0 },
+    };
+    PreludeNativeMaterialScroll_Update(&ctx, 41, 127);
+    for (size_t i = 0; i < platformWrap.size(); ++i) {
+        REQUIRE(lists[platformIndex][i].words.w0 == platformWrap[i].w0);
+        REQUIRE(lists[platformIndex][i].words.w1 == platformWrap[i].w1);
+    }
     sEnabled = 0;
     PreludeNativeMaterialScroll_Update(&ctx, 5, 8);
     for (size_t i = 1; i < lists.size(); ++i) {
@@ -231,6 +285,9 @@ int main() {
     CheckCausticCommands(lists[causticIndex], Gfx_TwoTexScrollEx(&ctx, 0, 0, 0, 32, 32, 1, 0, 0, 32, 32, 0, 0, 1, 0));
     REQUIRE(domainPointer == lists[domainIndex].data());
     CheckVerticalCausticWords(lists[domainIndex], 0x42fe0000, 0x437b0000, 0x42fc0000, 0x437a0000);
+    REQUIRE(platformPointer == lists[platformIndex].data());
+    CheckCommands(lists[platformIndex],
+                  Gfx_TwoTexScrollEx(&ctx, 0, 127, 0, 32, 32, 1, 0, 0, 32, 32, -1, 1, 1, 1));
     PreludeNativeMaterialScroll_Update(nullptr, 7, 11);
     for (size_t i = 1; i < lists.size(); ++i) {
         REQUIRE(lists[i][0].words.w0 == 0xdf000000);
@@ -238,5 +295,7 @@ int main() {
     PreludeNativeMaterialScroll_Update(&ctx, 13, 17);
     CheckCausticCommands(lists[causticIndex], Gfx_TwoTexScrollEx(&ctx, 0, 0, 0, 32, 32, 1, 17, 0, 32, 32, 0, 0, 1, 0));
     CheckCausticCommands(lists[domainIndex], Gfx_TwoTexScrollEx(&ctx, 0, 0, 0, 32, 32, 1, 0, 110, 32, 32, 0, 0, 0, -1));
+    CheckCommands(lists[platformIndex],
+                  Gfx_TwoTexScrollEx(&ctx, 0, 110, 17, 32, 32, 1, 17, 17, 32, 32, -1, 1, 1, 1));
     std::cout << "PASS native generated commands, independent buffers, frame reset, disable, lifetime\n";
 }

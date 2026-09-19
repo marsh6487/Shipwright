@@ -5,6 +5,92 @@
 using namespace Prelude;
 using nlohmann::json;
 
+static void CheckSagePlatformCommandSafety() {
+    // Main platform prefix from kenjyanoma_room_0DL_001020, with the scene's
+    // environment color made explicit and its 0A scroll call omitted.
+    const std::vector<NativeMaterialCommand> material = {
+        { 0xe7000000, 0 },          { 0xe3001001, 0 },          { 0xd7000002, 0xffffffff },
+        { 0x20100000, 0 },          { 0xa3be9376, 0xabcb60ef }, { 0xf5100000, 0x07017c5e },
+        { 0xe6000000, 0 },          { 0xf3000000, 0x073ff100 }, { 0xe7000000, 0 },
+        { 0xf5101000, 0x00017c5e }, { 0xf2000000, 0x0007c07c }, { 0xe8000000, 0 },
+        { 0xf5101000, 0x0101785f }, { 0xf2000000, 0x0107c07c }, { 0xfc267e04, 0x1ffcfdf8 },
+        { 0xe200001c, 0xc8112078 }, { 0xd9f1fbff, 0 },          { 0xd9ffffff, 0x00010000 },
+        { 0xfa000000, 0xffffffff }, { 0xfb000000, 0x80808080 }, { 0xdf000000, 0 },
+    };
+    const auto profile = NativeMaterialProfile::ChamberOfSagesPlatform;
+    REQUIRE(FindNativeScrollInsertion(material, profile) == 20);
+    REQUIRE(!FindNativeScrollInsertion(material, NativeMaterialProfile::LakeHylia));
+    REQUIRE(!FindNativeScrollInsertion(material, NativeMaterialProfile::WaterTempleCaustics));
+    auto draw = material;
+    draw.insert(draw.end() - 1, { { 0x32004008, 0 }, { 0xde000000, 0x0a000001 },
+                                { 0x06000204, 0x00040600 } });
+    REQUIRE(FindNativeScrollInsertion(draw, profile) == 22); // DE is vertex hash data.
+    auto authoredShifts = material;
+    authoredShifts[9].w1 = 0x00014050;
+    authoredShifts[12].w1 = 0x01014050;
+    REQUIRE(FindNativeScrollInsertion(authoredShifts, profile) == 20);
+    auto replacedTexture = material;
+    replacedTexture[4] = { 0xdf000000, 0x0a000001 }; // Replacement hashes are not opcodes.
+    REQUIRE(FindNativeScrollInsertion(replacedTexture, profile) == 20);
+
+    for (size_t i : { 9u, 10u, 12u, 13u }) {
+        auto invalid = material;
+        invalid.erase(invalid.begin() + i);
+        REQUIRE(!FindNativeScrollInsertion(invalid, profile));
+        invalid = material;
+        invalid.insert(invalid.begin() + i, invalid[i]);
+        REQUIRE(!FindNativeScrollInsertion(invalid, profile));
+    }
+    for (size_t i : { 9u, 12u }) {
+        for (uintptr_t bits : { 1u << 18, 1u << 19, 1u << 8, 1u << 9, 1u << 14, 1u << 4 }) {
+            auto invalid = material;
+            invalid[i].w1 ^= bits; // Clamp, mirror, or the wrong logical wrapping period.
+            REQUIRE(!FindNativeScrollInsertion(invalid, profile));
+        }
+        for (uintptr_t descriptor : { 0xf5681000u, 0xf5102000u, 0xf5101100u }) {
+            auto invalid = material;
+            invalid[i].w0 = descriptor; // Native layers share RGBA16, line 8, TMEM 0.
+            REQUIRE(!FindNativeScrollInsertion(invalid, profile));
+        }
+    }
+    for (size_t i : { 10u, 13u }) {
+        auto invalid = material;
+        invalid[i].w1 ^= 4;
+        REQUIRE(!FindNativeScrollInsertion(invalid, profile));
+        invalid = material;
+        invalid[i].w0 |= 4;
+        REQUIRE(!FindNativeScrollInsertion(invalid, profile));
+        invalid = material;
+        invalid[i].w1 = (invalid[i].w1 & 0x01000000) | 0x000fc0fc;
+        REQUIRE(!FindNativeScrollInsertion(invalid, profile));
+    }
+    for (const auto command : { NativeMaterialCommand{ 0xde000000, 0x0a000001 },
+                                NativeMaterialCommand{ 0xde000000, 0x08000001 },
+                                NativeMaterialCommand{ 0xde000000, 0x09000001 },
+                                NativeMaterialCommand{ 0xda000000, 0 },
+                                NativeMaterialCommand{ 0xdb000000, 0 },
+                                NativeMaterialCommand{ 0x4a000000, 0 } }) {
+        auto invalid = material;
+        invalid.insert(invalid.end() - 1, command);
+        REQUIRE(!FindNativeScrollInsertion(invalid, profile));
+    }
+    auto invalid = draw;
+    invalid.insert(invalid.end() - 1, { 0xe7000000, 0 });
+    REQUIRE(!FindNativeScrollInsertion(invalid, profile));
+    invalid = draw;
+    invalid.erase(invalid.end() - 2); // A vertex load without its draw is not a material-only list.
+    REQUIRE(!FindNativeScrollInsertion(invalid, profile));
+    invalid = material;
+    invalid.back() = { 0x20100000, 0 };
+    REQUIRE(!FindNativeScrollInsertion(invalid, profile));
+    invalid = material;
+    invalid.back().w1 = 1;
+    REQUIRE(!FindNativeScrollInsertion(invalid, profile));
+    invalid = material;
+    invalid.push_back({ 0xe7000000, 0 });
+    REQUIRE(!FindNativeScrollInsertion(invalid, profile));
+}
+
 int main() {
     REQUIRE(static_cast<int>(NativeMaterialProfile::FountainCentral64) == 9);
     REQUIRE(static_cast<int>(NativeMaterialProfile::WaterTempleCaustics) == 10);
@@ -93,11 +179,22 @@ int main() {
     domainCaustics["nativeAnimation"]["source"] = "oot.zoras_domain.caustics";
     REQUIRE(static_cast<int>(ResolveNativeMaterial(domainCaustics, true)) == 11);
     REQUIRE(static_cast<int>(ResolveNativeMaterial(domainCaustics, false)) == 11);
+    auto sagePlatform = caustics;
+    sagePlatform["nativeAnimation"]["source"] = "oot.chamber_of_sages.platform";
+    REQUIRE(ResolveNativeMaterial(sagePlatform, true) == NativeMaterialProfile::ChamberOfSagesPlatform);
+    REQUIRE(ResolveNativeMaterial(sagePlatform, false) == NativeMaterialProfile::ChamberOfSagesPlatform);
+    auto undeclaredPlatform = sagePlatform;
+    undeclaredPlatform.erase("nativeAnimation");
+    undeclaredPlatform["chain"][0]["path"] = "scenes/shared/kenjyanoma_scene/kenjyanoma_room_0DL_001020";
+    undeclaredPlatform["stored"]["textures"] = json::array({ { { "label", "kenjyanoma_room_0Tex_00D618" } },
+                                                          { { "label", "kenjyanoma_room_0Tex_00D618" } } });
+    REQUIRE(ResolveNativeMaterial(undeclaredPlatform, true) == NativeMaterialProfile::None);
+    REQUIRE(ResolveNativeMaterial(undeclaredPlatform, false) == NativeMaterialProfile::None);
     auto undeclaredCaustics = caustics;
     undeclaredCaustics.erase("nativeAnimation");
     REQUIRE(ResolveNativeMaterial(undeclaredCaustics, true) == NativeMaterialProfile::None);
     REQUIRE(ResolveNativeMaterial(undeclaredCaustics, false) == NativeMaterialProfile::None);
-    for (const auto& source : { caustics, domainCaustics }) {
+    for (const auto& source : { caustics, domainCaustics, sagePlatform }) {
         for (auto bad : { json(nullptr), json(true), json(2), json(1.0), json("1") }) {
             auto copy = source;
             copy["nativeAnimation"]["version"] = bad;
@@ -261,6 +358,21 @@ int main() {
         REQUIRE(p.x1 == 0 && p.y1 == 0 && p.x2 == 0 && p.y2 == 127u - f % 128u);
         REQUIRE(p.width == 32 && p.height == 32);
         REQUIRE(p.dx1 == 0 && p.dy1 == 0 && p.dx2 == 0 && p.dy2 == -1);
+    }
+    CheckSagePlatformCommandSafety();
+    struct PlatformPhase {
+        uint32_t frame, left, right;
+    };
+    for (const auto& test : { PlatformPhase{ 0, 127, 0 }, PlatformPhase{ 1, 126, 1 },
+                              PlatformPhase{ 126, 1, 126 }, PlatformPhase{ 127, 0, 127 },
+                              PlatformPhase{ 128, 127, 0 }, PlatformPhase{ 129, 126, 1 },
+                              PlatformPhase{ 2047, 0, 127 }, PlatformPhase{ 2048, 127, 0 },
+                              PlatformPhase{ 0xffffffff, 0, 127 } }) {
+        const auto p = NativeScrollParameters(NativeMaterialProfile::ChamberOfSagesPlatform,
+                                               test.frame ^ 0xa5a5a5a5u, test.frame);
+        REQUIRE(p.x1 == test.left && p.y1 == test.right && p.x2 == test.right && p.y2 == test.right);
+        REQUIRE(p.width == 32 && p.height == 32);
+        REQUIRE(p.dx1 == -1 && p.dy1 == 1 && p.dx2 == 1 && p.dy2 == 1);
     }
     std::cout << "PASS native material identity, command safety, and native scroll parameters\n";
 }

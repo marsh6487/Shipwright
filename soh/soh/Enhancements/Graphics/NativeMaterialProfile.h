@@ -18,6 +18,7 @@ enum class NativeMaterialProfile {
     FountainCentral64,
     WaterTempleCaustics,
     ZorasDomainCaustics,
+    ChamberOfSagesPlatform,
     Count
 };
 struct NativeMaterialCommand {

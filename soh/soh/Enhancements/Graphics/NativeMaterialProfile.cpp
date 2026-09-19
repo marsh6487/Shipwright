@@ -20,6 +20,8 @@ NativeMaterialProfile ResolveNativeMaterial(const nlohmann::json& item, bool pas
             return small ? NativeMaterialProfile::WaterTempleCaustics : NativeMaterialProfile::None;
         if (a["source"] == "oot.zoras_domain.caustics")
             return small ? NativeMaterialProfile::ZorasDomainCaustics : NativeMaterialProfile::None;
+        if (a["source"] == "oot.chamber_of_sages.platform")
+            return small ? NativeMaterialProfile::ChamberOfSagesPlatform : NativeMaterialProfile::None;
         if (a["source"] == "mm.bg_keikoku_spr.lower_a")
             return small ? NativeMaterialProfile::FountainLowerA32 : NativeMaterialProfile::FountainLowerA64;
         if (a["source"] == "mm.bg_keikoku_spr.lower_b")
@@ -80,7 +82,10 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
         profile >= NativeMaterialProfile::FountainLowerA32 && profile <= NativeMaterialProfile::FountainCentral64;
     const bool caustics = profile == NativeMaterialProfile::WaterTempleCaustics ||
                           profile == NativeMaterialProfile::ZorasDomainCaustics;
-    const unsigned dimension = profile >= NativeMaterialProfile::FountainLowerA64 ? 64 : 32;
+    const bool sagePlatform = profile == NativeMaterialProfile::ChamberOfSagesPlatform;
+    const bool strictSetup = fountain || caustics || sagePlatform;
+    const bool materialOnly = caustics || sagePlatform;
+    const unsigned dimension = fountain && profile >= NativeMaterialProfile::FountainLowerA64 ? 64 : 32;
     const unsigned mask = dimension == 64 ? 6 : 5;
     unsigned descriptors = 0;
     std::optional<size_t> firstPrimitive;
@@ -90,9 +95,9 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
         auto opcode = static_cast<uint8_t>(commands[i].w0 >> 24);
         if (opcode == 0xdf) { // F3DEX2 ENDDL
             const bool validatedSetup =
-                tiles == 3 && (!fountain && !caustics || descriptors == 3) &&
-                (!fountain && !caustics || (commands[i].w0 == 0xdf000000 && commands[i].w1 == 0));
-            if (i + 1 != commands.size() || !validatedSetup || (!firstPrimitive && (!caustics || sawVertex))) {
+                tiles == 3 && (!strictSetup || descriptors == 3) &&
+                (!strictSetup || (commands[i].w0 == 0xdf000000 && commands[i].w1 == 0));
+            if (i + 1 != commands.size() || !validatedSetup || (!firstPrimitive && (!materialOnly || sawVertex))) {
                 return std::nullopt;
             }
             return firstPrimitive.value_or(i);
@@ -125,7 +130,7 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
                 if (tile > 1) {
                     return std::nullopt;
                 }
-                if (fountain &&
+                if ((fountain || sagePlatform) &&
                     ((tiles & (1u << tile)) || commands[i].w0 != 0xf2000000 ||
                      commands[i].w1 != ((tile << 24) | (((dimension - 1) * 4) << 12) | ((dimension - 1) * 4))))
                     return std::nullopt;
@@ -151,7 +156,7 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
                 break;
             }
             case 0xf5: {
-                if (!fountain && !caustics)
+                if (!strictSetup)
                     break;
                 const auto descriptor = commands[i].w0;
                 const auto word = commands[i].w1;
@@ -160,8 +165,15 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
                     break; // separate load tile
                 if (tile > 1 || (descriptors & (1u << tile)))
                     return std::nullopt;
-                if (fountain && (((word >> 18) & 3) || ((word >> 8) & 3) || ((word >> 14) & 15) != mask ||
-                                 ((word >> 4) & 15) != mask)) {
+                if ((fountain || sagePlatform) &&
+                    (((word >> 18) & 3) || ((word >> 8) & 3) || ((word >> 14) & 15) != mask ||
+                     ((word >> 4) & 15) != mask)) {
+                    return std::nullopt;
+                }
+                // The main sage platform uses the same RGBA16 image for both
+                // layers: line 8, TMEM 0. Keep authored shifts in the sampler;
+                // the native scroll changes only logical 32x32 tile origins.
+                if (sagePlatform && descriptor != 0xf5101000) {
                     return std::nullopt;
                 }
                 if (caustics) {
@@ -224,6 +236,11 @@ ScrollParameters NativeScrollParameters(NativeMaterialProfile profile, uint32_t 
             // Keep the authored caustic size and do not import the source scene's
             // adult-age stop: this explicit material also serves thawed scenes.
             return { 0, 0, 0, 127u - gameplayFrames % 128u, 32, 32, 0, 0, 0, -1 };
+        case NativeMaterialProfile::ChamberOfSagesPlatform:
+            // func_8009A798 / opaque segment 0A, main sage platform only.
+            // Segments 08 and 09 drive separate translucent effects.
+            return { 127u - gameplayFrames % 128u, gameplayFrames % 128u, gameplayFrames % 128u,
+                     gameplayFrames % 128u, 32, 32, -1, 1, 1, 1 };
         default:
             return {};
     }
