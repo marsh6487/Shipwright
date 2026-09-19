@@ -68,7 +68,7 @@ struct Actor {
     s16 id, params;
     s8 room;
     struct { Vec3f pos; Vec3s rot; } world;
-    struct { Vec3s rot; f32 yOffset; } shape;
+    struct { Vec3s rot; f32 yOffset; void* shadowDraw; } shape;
     Vec3f velocity;
     f32 speedXZ;
     Actor* parent;
@@ -77,13 +77,24 @@ struct Actor {
 };
 typedef struct { int base; } ColliderCylinder;
 typedef struct { int marker; } LinkAnimationHeader;
-typedef struct { LinkAnimationHeader* unk_9C; } PlayerAgeProperties;
+typedef struct { f32 curFrame, endFrame, animLength; LinkAnimationHeader* animation; } SkelAnime;
+typedef struct { u16 unk_00, unk_02; } struct_808551A4;
+typedef struct { u16 sfx; s16 frame; } AnimSfxEntry;
+typedef struct { LinkAnimationHeader* unk_9C; LinkAnimationHeader* unk_A0; } PlayerAgeProperties;
+struct Player;
+typedef void (*PlayerActionFunc)(struct Player*, PlayState*);
 typedef struct Player {
     Actor actor;
     s16 yaw;
     u8 currentSwordItemId, csAction, prevCsAction;
     s8 itemAction, heldItemAction, nextModelGroup;
     u8 heldItemId;
+    u8 leftHandType, rightHandType, sheathType, currentShield;
+    Gfx** leftHandDLists;
+    SkelAnime skelAnime;
+    PlayerActionFunc actionFunc;
+    struct { s16 actionVar1; } av1;
+    struct { s16 actionVar2; } av2;
     u32 stateFlags1;
     f32 linearVelocity;
     Actor* interactRangeActor;
@@ -103,7 +114,7 @@ typedef struct {
 } CutsceneContext;
 typedef struct { struct { u8 bButton; } restrictions; } InterfaceContext;
 struct PlayState {
-    struct { void* gfxCtx; bool running; } state;
+    struct { void* gfxCtx; bool running; struct { struct { u16 button; } press, cur; } input[1]; } state;
     s16 sceneNum, nextEntranceIndex, linkAgeOnLoad;
     u8 transitionTrigger, transitionType;
     struct { struct { s8 num, behaviorType2, echo; } curRoom; u8 unk_74[2]; } roomCtx;
@@ -131,6 +142,8 @@ struct PlayState {
 #define YEARS_CHILD 5
 #define YEARS_ADULT 17
 #define IS_RANDO fixtureRando
+#define CVAR_ENHANCEMENT(name) "gEnhancements." name
+#define CVAR_SETTING(name) "gSettings." name
 #define OWNED_EQUIP_FLAG(type, value) (1U << ((type) * 4 + (value)))
 #define CHECK_OWNED_EQUIP(type, value) (gSaveContext.inventory.equipment & OWNED_EQUIP_FLAG(type, value))
 #define CHECK_OWNED_EQUIP_ALT CHECK_OWNED_EQUIP
@@ -160,6 +173,23 @@ struct PlayState {
 #define VB_INFLICT_VOID_DAMAGE 4
 #define VB_TEMP_B_SHOULD_RESTORE 5
 #define VB_TEMP_B_RESTORE_SWORDLESS 6
+#define VB_PLAYER_OVERRIDE_LIMB_DRAW 7
+#define VB_EXECUTE_PLAYER_STARTMODE_FUNC 8
+#define BTN_B 0x4000
+#define CHECK_BTN_ALL(state, mask) (((state) & (mask)) == (mask))
+#define PAK_DL_STUB ((Gfx*)(uintptr_t)1)
+enum {
+    PLAYER_LIMB_L_HAND = 1, PLAYER_LIMB_R_HAND, PLAYER_LIMB_SHEATH, PLAYER_LIMB_WAIST,
+    PLAYER_MODELTYPE_LH_OPEN, PLAYER_MODELTYPE_LH_CLOSED, PLAYER_MODELTYPE_LH_SWORD,
+    PLAYER_MODELTYPE_LH_SWORD_2, PLAYER_MODELTYPE_LH_BGS, PLAYER_MODELTYPE_LH_HAMMER,
+    PLAYER_MODELTYPE_LH_BOOMERANG, PLAYER_MODELTYPE_LH_BOTTLE,
+    PLAYER_MODELTYPE_RH_OPEN, PLAYER_MODELTYPE_RH_CLOSED, PLAYER_MODELTYPE_RH_SHIELD,
+    PLAYER_MODELTYPE_RH_BOW_SLINGSHOT, PLAYER_MODELTYPE_RH_BOW_SLINGSHOT_2,
+    PLAYER_MODELTYPE_RH_OCARINA, PLAYER_MODELTYPE_RH_OOT, PLAYER_MODELTYPE_RH_HOOKSHOT,
+    PLAYER_MODELTYPE_SHEATH_16, PLAYER_MODELTYPE_SHEATH_17,
+    PLAYER_MODELTYPE_SHEATH_18, PLAYER_MODELTYPE_SHEATH_19,
+    PLAYER_SHIELD_MAX = 4
+};
 #define BTN_ENABLED 0
 #define BTN_DISABLED 0xFF
 #define MOD_NONE 0
@@ -176,12 +206,28 @@ struct PlayState {
 #define ENTR_LOST_WOODS_BRIDGE_EAST_EXIT 0x4DA
 #define NA_BGM_MASTER_SWORD 0x53
 #define NA_SE_IT_SWORD_PUTAWAY_STN 1
+#define NA_SE_IT_SWORD_STICK_STN 2
+#define NA_SE_VO_LI_SWORD_N 3
+#define NA_SE_VO_LI_SWORD_L 4
+#define NA_SE_IT_MASTER_SWORD_SWING 5
+#define NA_SE_VO_LI_AUTO_JUMP 6
+#define ANIMSFX_TYPE_WALKING 0
+#define ANIMSFX_TYPE_GENERAL 1
+#define ANIMSFX_TYPE_VOICE 2
+#define ANIMSFX_TYPE_LANDING 3
+#define ANIMSFX_DATA(type, frame) (frame)
+#define ANIMMODE_ONCE 0
+#define DECR(value) ((value) ? --(value) : 0)
 #define PLAYER_STATE1_IN_CUTSCENE (1U << 29)
 #define PLAYER_STATE1_IN_ITEM_CS (1U << 28)
 #define PLAYER_STATE1_INPUT_DISABLED (1U << 5)
 #define PLAYER_STATE1_CARRYING_ACTOR (1U << 11)
 #define PLAYER_CSACTION_7 7
 #define PLAYER_IA_SWORD_CS 1
+#define PLAYER_IA_NONE 0
+#define PLAYER_START_MODE_IDLE 13
+#define PLAYER_START_MODE_TIME_TRAVEL 1
+#define PLAYER_MODELGROUP_DEFAULT 0
 #define PLAYER_MODELGROUP_SWORD 15
 #define AGE_REQ_NONE 9
 #define AGE_REQ_CHILD LINK_AGE_CHILD
@@ -249,6 +295,39 @@ void Save_SaveFile(void);
 void Interface_LoadItemIcon1(PlayState*, u16);
 void Interface_ChangeHudVisibilityMode(s16);
 void func_808519EC(PlayState*, Player*, CsCmdActorCue*);
+void func_80851A50(PlayState*, Player*, CsCmdActorCue*);
+s32 LinkAnimation_Update(PlayState*, SkelAnime*);
+void LinkAnimation_Change(PlayState*, SkelAnime*, LinkAnimationHeader*, f32, f32, f32, u8, f32);
+void Fixture_PlayerStartMode(PlayState*, s32);
+void Player_StartMode_TimeTravel(PlayState*, Player*);
+void Player_StartMode_Idle(PlayState*, Player*);
+void Player_Action_8084E9AC(Player*, PlayState*);
+void Player_Action_Idle(Player*, PlayState*);
+s32 Player_SetupAction(PlayState*, Player*, PlayerActionFunc, s32);
+void func_8083C0E8(Player*, PlayState*);
+void func_80846720(PlayState*, Player*, s32);
+void Player_AnimPlayOnce(PlayState*, Player*, LinkAnimationHeader*);
+LinkAnimationHeader* Player_GetIdleAnim(Player*);
+s32 LinkAnimation_OnFrame(SkelAnime*, f32);
+void Player_PlaySfx(Player*, u16);
+void Player_PlayVoiceSfx(Player*, u16);
+void Player_ProcessAnimSfxList(Player*, AnimSfxEntry*);
+extern Gfx* gPlayerLeftHandBgsDLs[], *gPlayerLeftHandClosedDLs[];
+extern const char gLinkChildLeftHandHoldingMasterSwordDL[];
+extern const char gLinkAdultLeftHandHoldingMasterSwordNearDL[], gLinkAdultLeftHandHoldingMasterSwordFarDL[];
+void Fixture_ApplyLateHandOverrides(PlayState*, Player*, s32, Gfx**);
+Gfx* Player_ResolveLimbDLForDummyOrLocal(void*);
+Gfx* PakLoader_GetEquipDL(Player*, s32);
+u8 PakLoader_HasActiveModel(void);
+u8 PakLoader_UsedCombinedDL(u8);
+bool GameInteractor_InvisibleLinkActive(void);
+s32 CustomEquipment_OverrideMasterSwordHand(PlayState*, Gfx**);
+extern const char gCustomMasterSwordDL[], gLinkChildLeftFistNearDL[], gLinkAdultLeftHandClosedNearDL[];
+Gfx* ResourceMgr_LoadGfxByName(const char*);
+u8 ResourceMgr_FileAltExists(const char*);
+u8 ResourceGetIsCustomByName(const char*);
+u8 TransformMasks_IsTransformedAny(void);
+void Fixture_BuildHandItemDL(PlayState*, Gfx**, Gfx*, Gfx*, bool);
 void Actor_ProcessInitChain(Actor*, void*);
 void Collider_InitCylinder(PlayState*, ColliderCylinder*);
 void Collider_SetCylinder(PlayState*, ColliderCylinder*, Actor*, void*);

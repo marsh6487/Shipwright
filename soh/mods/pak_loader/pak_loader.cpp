@@ -20,6 +20,7 @@ static void O2rUpdateMounts(void);
 
 #include <libultraship/libultra.h>
 #include "global.h"
+#include "overlays/actors/ovl_Bg_Toki_Swd/z_bg_toki_swd.h"
 #include "z64.h"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/Graphics/PreludeNativeMaterialScroll.h"
@@ -3446,7 +3447,16 @@ extern "C" Gfx* PakLoader_GetEquipDL(Player* player, s32 limbIndex) {
 
     if (limbIndex == PLAYER_LIMB_L_HAND) {
         sPakLeftHandCombined = 0;
-        switch (player->leftHandType) {
+        s32 pedestalHand = BgTokiSwd_GetTimePedestalHandState(gPlayState, player);
+        if (pedestalHand == BG_TOKI_SWD_HAND_CLOSED) {
+            result = FindEquip(eq, 0x50A0); // Closed hand after inserting the sword.
+        } else if (pedestalHand == BG_TOKI_SWD_HAND_MASTER_SWORD) {
+            // Ceremonial Master Sword: use the selected Master slot even when
+            // child Link's B button is empty or has a different sword. This is
+            // a render choice only; no owned/equipped item changes are needed.
+            result = FindEquip(eq, 0x5450); // LFIST_SWORD2
+            sPakLeftHandCombined = result != NULL && result != PAK_DL_STUB;
+        } else switch (player->leftHandType) {
             case PLAYER_MODELTYPE_LH_OPEN:
                 result = FindEquip(eq, 0x5098);
                 break;

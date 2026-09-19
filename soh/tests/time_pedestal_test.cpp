@@ -3,7 +3,18 @@
 #include "time_pedestal_fixture.h"
 #include "test_require.h"
 #include <cstdio>
+#include <cstdarg>
 #include <vector>
+
+std::map<u32, Gfx*> fixturePakEquipment;
+static int skipStorySetting;
+static bool pakActive, altActive, replaceHandHook, invisibleLink;
+static Gfx nativeSword, altSword, pakSword, emptyHand, wrongSword;
+static bool customMasterAsset, altAssetsSetting = true;
+static Gfx customMasterSword, customHandSword;
+static bool animationComplete;
+static int normalSwordEquipCalls, startModeHookCalls;
+static LinkAnimationHeader idleAnimation, childArrivalAnimation, adultArrivalAnimation;
 
 extern "C" {
 SaveContext gSaveContext;
@@ -15,7 +26,62 @@ FixtureNeiSave* Nei_Save(void) { return &neiSave; }
 void ExtEquip_CleanupSlot(s16, u8) {}
 void ExtEquip_ReloadBIcon(void) {}
 void ExtEquip_RefreshPlayer(void) {}
-s32 CVarGetInteger(const char*, s32 fallback) { return fallback; }
+s32 CVarGetInteger(const char* name, s32 fallback) {
+    if (strcmp(name, CVAR_ENHANCEMENT("TimeSavers.SkipCutscene.Story")) == 0 && skipStorySetting >= 0)
+        return skipStorySetting;
+    if (strcmp(name, CVAR_SETTING("AltAssets")) == 0) return altAssetsSetting;
+    return fallback;
+}
+const char gLinkChildLeftHandHoldingMasterSwordDL[] = "__OTR__objects/object_link_child/gLinkChildLeftHandHoldingMasterSwordDL";
+const char gCustomMasterSwordDL[] = "__OTR__objects/object_custom_equip/gCustomMasterSwordDL";
+const char gLinkChildLeftFistNearDL[] = "__OTR__objects/object_link_child/gLinkChildLeftFistNearDL";
+const char gLinkAdultLeftHandClosedNearDL[] = "__OTR__objects/object_link_boy/gLinkAdultLeftHandClosedNearDL";
+const char gLinkAdultLeftHandHoldingMasterSwordNearDL[] = "__OTR__objects/object_link_boy/gLinkAdultLeftHandHoldingMasterSwordNearDL";
+const char gLinkAdultLeftHandHoldingMasterSwordFarDL[] = "__OTR__objects/object_link_boy/gLinkAdultLeftHandHoldingMasterSwordFarDL";
+u8 ResourceMgr_FileAltExists(const char* path) { return customMasterAsset && strcmp(path, gCustomMasterSwordDL) == 0; }
+u8 ResourceGetIsCustomByName(const char*) { return false; }
+u8 TransformMasks_IsTransformedAny(void) { return false; }
+Gfx* ResourceMgr_LoadGfxByName(const char* path) {
+    if (strcmp(path, gCustomMasterSwordDL) == 0) return &customMasterSword;
+    REQUIRE(strcmp(path, LINK_IS_ADULT ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL) == 0);
+    return &emptyHand;
+}
+void Fixture_BuildHandItemDL(PlayState*, Gfx** dl, Gfx* hand, Gfx* sword, bool scale) {
+    REQUIRE(hand == &emptyHand && sword == &customMasterSword && !scale);
+    *dl = &customHandSword;
+}
+Gfx* gPlayerLeftHandBgsDLs[] = { &wrongSword, &nativeSword, &wrongSword, &nativeSword };
+Gfx* gPlayerLeftHandClosedDLs[] = { &emptyHand, &emptyHand, &emptyHand, &emptyHand };
+Gfx* Player_ResolveLimbDLForDummyOrLocal(void* path) {
+    if (path == &emptyHand) return &emptyHand;
+    REQUIRE(strcmp(static_cast<const char*>(path), LINK_IS_ADULT ? gLinkAdultLeftHandHoldingMasterSwordNearDL :
+                                                               gLinkChildLeftHandHoldingMasterSwordDL) == 0);
+    return altActive ? &altSword : &nativeSword;
+}
+u8 PakLoader_HasActiveModel(void) { return pakActive; }
+bool GameInteractor_InvisibleLinkActive(void) { return invisibleLink; }
+s32 LinkAnimation_Update(PlayState*, SkelAnime*) { return animationComplete; }
+void LinkAnimation_Change(PlayState*, SkelAnime* skel, LinkAnimationHeader* anim, f32, f32 start, f32 end, u8, f32) {
+    skel->animation = anim;
+    skel->curFrame = start;
+    skel->endFrame = end;
+    skel->animLength = 180;
+}
+void Player_Action_Idle(Player*, PlayState*) {}
+void Player_StartMode_Idle(PlayState*, Player* player) { player->actionFunc = Player_Action_Idle; }
+s32 Player_SetupAction(PlayState*, Player* player, PlayerActionFunc action, s32) {
+    player->actionFunc = action;
+    player->av1.actionVar1 = player->av2.actionVar2 = 0;
+    player->stateFlags1 &= ~PLAYER_STATE1_IN_CUTSCENE;
+    return true;
+}
+void func_80846720(PlayState*, Player*, s32) { normalSwordEquipCalls++; }
+void Player_AnimPlayOnce(PlayState*, Player*, LinkAnimationHeader*) {}
+LinkAnimationHeader* Player_GetIdleAnim(Player*) { return &idleAnimation; }
+s32 LinkAnimation_OnFrame(SkelAnime* animation, f32 frame) { return animation->curFrame == frame; }
+void Player_PlaySfx(Player*, u16) {}
+void Player_PlayVoiceSfx(Player*, u16) {}
+void Player_ProcessAnimSfxList(Player*, AnimSfxEntry*) {}
 u16 gEquipMasks[4] = { 0xF, 0xF0, 0xF00, 0xF000 };
 u16 gEquipNegMasks[4] = { 0xFFF0, 0xFF0F, 0xF0FF, 0x0FFF };
 u8 gEquipShifts[4] = { 0, 4, 8, 12 };
@@ -44,7 +110,18 @@ s32 Actor_IsFacingPlayer(Actor*, s16) { return facing; }
 s32 Play_InCsMode(PlayState* play) { return play->csCtx.state != CS_STATE_IDLE; }
 s32 Actor_HasParent(Actor* actor, PlayState*) { return actor->parent != nullptr; }
 void Actor_OfferCarry(Actor*, PlayState*) { offered++; }
-bool GameInteractor_Should(int, bool value, ...) { return value; }
+bool GameInteractor_Should(int flag, bool value, ...) {
+    if (flag == VB_EXECUTE_PLAYER_STARTMODE_FUNC) startModeHookCalls++;
+    if (flag == VB_PLAYER_OVERRIDE_LIMB_DRAW && replaceHandHook) {
+        va_list args;
+        va_start(args, value);
+        int limb = va_arg(args, int);
+        auto dl = va_arg(args, Gfx**);
+        if (limb == PLAYER_LIMB_L_HAND) *dl = &emptyHand;
+        va_end(args);
+    }
+    return value;
+}
 void Item_Give(PlayState* play, s16 item) { Fixture_GiveSword(play, item); }
 u8 Return_Item(u8, int, u8 result) { grants++; return result; }
 void GameInteractor_ExecuteOnEquipmentDelete(s16, u16) {}
@@ -69,7 +146,10 @@ f32 Math_CosS(s16 yaw) { return cosf(yaw * (3.14159265358979323846f / 32768.0f))
 void Player_AnimPlayOnceAdjusted(PlayState*, Player*, LinkAnimationHeader*) {}
 void Player_StartAnimMovement(PlayState*, Player*, s32) {}
 void Player_InitItemAction(PlayState*, Player* player, s8 action) { player->itemAction = player->heldItemAction = action; }
-s32 Player_ActionToModelGroup(Player*, s32 action) { REQUIRE(action == PLAYER_IA_SWORD_CS); return PLAYER_MODELGROUP_SWORD; }
+s32 Player_ActionToModelGroup(Player*, s32 action) {
+    REQUIRE(action == PLAYER_IA_SWORD_CS || action == PLAYER_IA_NONE);
+    return action == PLAYER_IA_SWORD_CS ? PLAYER_MODELGROUP_SWORD : PLAYER_MODELGROUP_DEFAULT;
+}
 void Player_SetEquipmentData(PlayState*, Player*) {}
 s32 Player_SetCsAction(PlayState* play, Actor*, u8 action) { play->player.csAction = action; return 1; }
 void Audio_SetCutsceneFlag(s32) {}
@@ -94,6 +174,13 @@ static void Reset(PlayState& play, BgTokiSwd& sword, bool adult = false, bool ra
     neiSave = {};
     metadataStore.data.clear();
     shuffleMasterSword = true;
+    skipStorySetting = 0;
+    pakActive = altActive = replaceHandHook = invisibleLink = false;
+    customMasterAsset = false;
+    altAssetsSetting = true;
+    animationComplete = false;
+    normalSwordEquipCalls = startModeHookCalls = 0;
+    fixturePakEquipment.clear();
     gPlayState = &play;
     play.state.running = true;
     fixtureRando = rando;
@@ -115,6 +202,8 @@ static void Reset(PlayState& play, BgTokiSwd& sword, bool adult = false, bool ra
     play.player.actor.world.pos = { -720.0f, -61.0f, -2368.0f };
     play.player.actor.shape.rot.y = 22000;
     play.player.currentSwordItemId = ITEM_SWORD_KOKIRI;
+    play.player.leftHandType = PLAYER_MODELTYPE_LH_OPEN;
+    play.player.leftHandDLists = &gPlayerLeftHandClosedDLs[gSaveContext.linkAge];
     sword.actor.id = ACTOR_BG_TOKI_SWD;
     sword.actor.params = params;
     sword.actor.room = 10;
@@ -492,7 +581,313 @@ static void CheckSavedAdultWithoutSword() {
     }
 }
 
-int main() {
+static void CheckRequestedSkip(bool adult, bool rando, int setting, bool pressB) {
+    PlayState play;
+    BgTokiSwd sword;
+    Reset(play, sword, adult, rando);
+    skipStorySetting = setting;
+    const auto before = gSaveContext;
+    const auto spawn = play.player.actor.world.pos;
+    const auto yaw = play.player.actor.shape.rot.y;
+    BgTokiSwd_Init(&sword.actor, &play);
+    sword.actor.parent = &play.player.actor;
+    BgTokiSwd_Update(&sword.actor, &play);
+    play.state.input[0].press.button = pressB ? BTN_B : 0;
+    BgTokiSwd_Update(&sword.actor, &play);
+    REQUIRE(play.transitionTrigger == TRANS_TRIGGER_OFF); // Wait for native camera startup.
+    play.csCtx.state = CS_STATE_SKIPPABLE_EXEC;
+    play.csCtx.frames = 20;
+    BgTokiSwd_Update(&sword.actor, &play);
+    REQUIRE(play.transitionTrigger == TRANS_TRIGGER_OFF);
+    play.csCtx.frames = 21;
+    BgTokiSwd_Update(&sword.actor, &play);
+    const bool shouldSkip = pressB || (setting < 0 ? rando : setting != 0);
+    REQUIRE((play.transitionTrigger == TRANS_TRIGGER_START) == shouldSkip);
+    if (shouldSkip) {
+        REQUIRE(play.linkAgeOnLoad == (adult ? LINK_AGE_CHILD : LINK_AGE_ADULT));
+        REQUIRE(gSaveContext.respawn[0].roomIndex == 10);
+        REQUIRE(memcmp(&spawn, &gSaveContext.respawn[0].pos, sizeof(spawn)) == 0);
+        REQUIRE(gSaveContext.respawn[0].yaw == yaw);
+        REQUIRE(play.nextEntranceIndex == before.entranceIndex);
+        REQUIRE(gSaveContext.cutsceneTrigger == 0 && gSaveContext.cutsceneIndex == 0);
+        BgTokiSwd_Update(&sword.actor, &play); // A second update must not reverse the swap.
+        REQUIRE(play.linkAgeOnLoad == (adult ? LINK_AGE_CHILD : LINK_AGE_ADULT));
+    }
+    CheckProgressionUnchanged(before);
+    REQUIRE(memcmp(&before.equips, &gSaveContext.equips, sizeof(ItemEquips)) == 0);
+    BgTokiSwd_Destroy(&sword.actor, &play);
+}
+
+static void CheckChildSwordRendering() {
+    PlayState play;
+    BgTokiSwd sword;
+    Reset(play, sword);
+    const auto before = gSaveContext;
+    BgTokiSwd_Init(&sword.actor, &play);
+    sword.actor.parent = &play.player.actor;
+    BgTokiSwd_Update(&sword.actor, &play);
+    play.csCtx.state = CS_STATE_SKIPPABLE_EXEC;
+    replaceHandHook = true;
+    Gfx* dl = &emptyHand;
+    play.player.skelAnime.curFrame = 86;
+    func_80851A50(&play, &play.player, nullptr);
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &emptyHand); // Sword is still in the pedestal before the real handoff.
+    play.player.skelAnime.curFrame = 87;
+    func_80851A50(&play, &play.player, nullptr);
+    REQUIRE(sword.actor.parent == &play.player.actor);
+    BgTokiSwd_Update(&sword.actor, &play);
+    REQUIRE(sword.actor.draw == nullptr);
+    REQUIRE(play.player.leftHandDLists == &gPlayerLeftHandBgsDLs[LINK_AGE_CHILD]);
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &nativeSword); // Late empty-hand hooks must not erase the ceremony sword.
+    altActive = true;
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &altSword);
+    altActive = false;
+    customMasterAsset = true; // Only the custom-equipment path is replaced, not the legacy child DL.
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &customHandSword);
+    altAssetsSetting = false;
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &nativeSword);
+    altAssetsSetting = true;
+    pakActive = true;
+    fixturePakEquipment = {{0x5098, &emptyHand}, {0x5448, &wrongSword}, {0x5458, &wrongSword}, {0x5450, &pakSword}};
+    // B is empty: the selected Master Sword slot must not depend on ownership or equipped blade.
+    REQUIRE(gSaveContext.equips.buttonItems[0] == ITEM_NONE);
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &pakSword && PakLoader_UsedCombinedDL(true));
+    for (u8 item : {ITEM_SWORD_KOKIRI, ITEM_SWORD_BGS, ITEM_SWORD_MASTER}) {
+        gSaveContext.equips.buttonItems[0] = item;
+        Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+        REQUIRE(dl == &pakSword && gSaveContext.equips.buttonItems[0] == item);
+    }
+    gSaveContext.equips.buttonItems[0] = before.equips.buttonItems[0];
+    customMasterAsset = false;
+    altActive = true;
+    fixturePakEquipment.erase(0x5450);
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &altSword); // Unrelated custom hands/Kokiri/BGS are not a Master Sword fallback.
+    fixturePakEquipment[0x5450] = PAK_DL_STUB;
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &altSword && !PakLoader_UsedCombinedDL(true));
+    invisibleLink = true;
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == nullptr);
+    invisibleLink = false;
+    dl = &wrongSword;
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_R_HAND, &dl);
+    REQUIRE(dl == &wrongSword);
+    Player otherPlayer = play.player;
+    Fixture_ApplyLateHandOverrides(&play, &otherPlayer, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &emptyHand); // Remote/dummy players must not inherit the local ceremony.
+    sword.actor.params = 0;
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &emptyHand); // Stock pedestal remains outside this scoped fix.
+    sword.actor.params = BG_TOKI_SWD_TIME_PEDESTAL;
+    void* script = play.csCtx.segment;
+    play.csCtx.segment = nullptr;
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &emptyHand);
+    play.csCtx.segment = script;
+    gSaveContext.linkAge = LINK_AGE_ADULT;
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &emptyHand);
+    gSaveContext.linkAge = LINK_AGE_CHILD;
+    sword.localCutsceneFinished = true;
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &emptyHand);
+    CheckProgressionUnchanged(before);
+    REQUIRE(memcmp(&before.equips, &gSaveContext.equips, sizeof(ItemEquips)) == 0);
+    BgTokiSwd_Destroy(&sword.actor, &play);
+}
+
+static void CheckAdultSwordRendering() {
+    PlayState play;
+    BgTokiSwd sword;
+    Reset(play, sword, true);
+    const auto before = gSaveContext;
+    BgTokiSwd_Init(&sword.actor, &play);
+    sword.actor.parent = &play.player.actor;
+    BgTokiSwd_Update(&sword.actor, &play);
+    play.csCtx.state = CS_STATE_SKIPPABLE_EXEC;
+    LinkAnimationHeader animation{};
+    PlayerAgeProperties age{&animation, nullptr};
+    play.player.ageProperties = &age;
+    func_808519EC(&play, &play.player, nullptr);
+    REQUIRE(play.player.heldItemAction == PLAYER_IA_SWORD_CS);
+    // Player_InitItemAction's engine boundary supplies the adult sword hand.
+    Gfx* adultSwordHands[] = {&nativeSword, &nativeSword};
+    play.player.leftHandDLists = adultSwordHands;
+    play.player.leftHandType = PLAYER_MODELTYPE_LH_SWORD;
+    replaceHandHook = true;
+    Gfx* dl = &emptyHand;
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &nativeSword);
+    customMasterAsset = true;
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &customHandSword);
+    pakActive = true;
+    fixturePakEquipment = {{0x50A0, &emptyHand}, {0x5448, &wrongSword},
+                          {0x5458, &wrongSword}, {0x5450, &pakSword}};
+    for (u8 item : {ITEM_NONE, ITEM_SWORD_BGS, ITEM_SWORD_MASTER}) {
+        gSaveContext.equips.buttonItems[0] = item;
+        Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+        REQUIRE(dl == &pakSword && gSaveContext.equips.buttonItems[0] == item);
+    }
+    play.player.skelAnime.curFrame = 70;
+    func_80851A50(&play, &play.player, nullptr);
+    BgTokiSwd_Update(&sword.actor, &play);
+    REQUIRE(sword.actor.draw != nullptr);
+    REQUIRE(play.player.leftHandDLists == &gPlayerLeftHandClosedDLs[LINK_AGE_ADULT]);
+    // The native insertion cue must also beat late PAK/custom sword overrides.
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &emptyHand && !PakLoader_UsedCombinedDL(true));
+    fixturePakEquipment.erase(0x50A0);
+    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    REQUIRE(dl == &emptyHand);
+    gSaveContext.equips.buttonItems[0] = before.equips.buttonItems[0];
+    CheckProgressionUnchanged(before);
+    REQUIRE(memcmp(&before.equips, &gSaveContext.equips, sizeof(ItemEquips)) == 0);
+    BgTokiSwd_Destroy(&sword.actor, &play);
+}
+
+static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipExit, bool automaticExit = false,
+                         bool mismatchedScene = false) {
+    PlayState play;
+    BgTokiSwd sword;
+    Reset(play, sword, sourceAdult, rando);
+    const auto before = gSaveContext;
+    const auto returnPos = play.player.actor.world.pos;
+    const auto returnYaw = play.player.actor.shape.rot.y;
+    BgTokiSwd_Init(&sword.actor, &play);
+    sword.actor.parent = &play.player.actor;
+    BgTokiSwd_Update(&sword.actor, &play);
+    play.csCtx.state = CS_STATE_SKIPPABLE_EXEC;
+    play.csCtx.frames = skipMain ? 21 : sword.ageSwapFrame;
+    play.state.input[0].press.button = skipMain ? BTN_B : 0;
+    play.state.input[0].cur.button = skipMain ? BTN_B : 0;
+    BgTokiSwd_Update(&sword.actor, &play);
+    REQUIRE(play.transitionTrigger == TRANS_TRIGGER_START);
+    Fixture_PlayDestroyAgeHandoff(&play);
+    gSaveContext.linkAge = play.linkAgeOnLoad;
+    play.state.running = false;
+    play.playerRemoved = true;
+    BgTokiSwd_Destroy(&sword.actor, &play);
+
+    PlayState arrival{};
+    gPlayState = &arrival;
+    arrival.state.running = true;
+    arrival.linkAgeOnLoad = gSaveContext.linkAge;
+    arrival.sceneNum = SCENE_LOST_WOODS;
+    arrival.roomCtx.curRoom.num = 10;
+    arrival.player.actor.world.pos = gSaveContext.respawn[0].pos;
+    arrival.player.actor.shape.rot.y = gSaveContext.respawn[0].yaw;
+    arrival.player.leftHandType = PLAYER_MODELTYPE_LH_OPEN;
+    PlayerAgeProperties age{nullptr, LINK_IS_ADULT ? &adultArrivalAnimation : &childArrivalAnimation};
+    arrival.player.ageProperties = &age;
+    if (mismatchedScene) arrival.sceneNum++;
+    // The input manager keeps held state, but consumes press edges every frame.
+    arrival.state.input[0] = play.state.input[0];
+    arrival.state.input[0].press.button = 0;
+    Fixture_PlayerStartMode(&arrival, PLAYER_START_MODE_IDLE);
+    if (mismatchedScene) {
+        REQUIRE(arrival.player.actionFunc == Player_Action_Idle && startModeHookCalls == 1);
+        arrival.sceneNum = SCENE_LOST_WOODS;
+        Fixture_PlayerStartMode(&arrival, PLAYER_START_MODE_IDLE);
+        REQUIRE(arrival.player.actionFunc == Player_Action_Idle && startModeHookCalls == 2);
+        CheckProgressionUnchanged(before);
+        return; // A reset or different entrance consumes the continuation instead of leaving it armed.
+    }
+    REQUIRE(arrival.player.actionFunc == Player_Action_8084E9AC);
+    REQUIRE(startModeHookCalls == 0); // Never hit the native rando hook that relocates to Temple of Time.
+    REQUIRE(normalSwordEquipCalls == 0);
+    REQUIRE(arrival.player.skelAnime.animation == age.unk_A0);
+    REQUIRE(fabsf(arrival.player.actor.world.pos.x + 716) < 0.01f);
+    REQUIRE(fabsf(arrival.player.actor.world.pos.y + 62) < 0.01f);
+    REQUIRE(fabsf(arrival.player.actor.world.pos.z + 2395) < 0.01f);
+    REQUIRE(arrival.player.actor.shape.rot.y == -0x4000);
+    REQUIRE(arrival.player.stateFlags1 & PLAYER_STATE1_IN_CUTSCENE);
+    if (LINK_IS_ADULT) {
+        REQUIRE(arrival.player.heldItemAction == PLAYER_IA_SWORD_CS);
+        pakActive = true;
+        fixturePakEquipment = {{0x5098, &emptyHand}, {0x5450, &pakSword}};
+        Gfx* dl = &emptyHand;
+        Fixture_ApplyLateHandOverrides(&arrival, &arrival.player, PLAYER_LIMB_L_HAND, &dl);
+        REQUIRE(dl == &pakSword);
+    }
+    const bool firstFrameSkip = skipExit && !automaticExit;
+    if (firstFrameSkip) {
+        // A release/repress during loading produces a fresh first-update edge,
+        // including after manually skipping departure with B.
+        arrival.state.input[0].press.button = arrival.state.input[0].cur.button = BTN_B;
+    }
+    Player_Action_8084E9AC(&arrival.player, &arrival);
+    if (!firstFrameSkip) {
+        REQUIRE(arrival.player.actionFunc == Player_Action_8084E9AC);
+        arrival.state.input[0] = {};
+        Player_Action_8084E9AC(&arrival.player, &arrival); // Release arms a fresh exit skip.
+    }
+    if (skipExit && !firstFrameSkip) {
+        arrival.state.input[0].press.button = arrival.state.input[0].cur.button = BTN_B;
+        if (automaticExit) {
+            arrival.state.input[0] = {};
+            skipStorySetting = 1;
+        }
+        Player_Action_8084E9AC(&arrival.player, &arrival);
+    } else if (!skipExit) {
+        animationComplete = true;
+        for (int i = 0; i < 20; ++i) Player_Action_8084E9AC(&arrival.player, &arrival);
+        REQUIRE(arrival.player.skelAnime.endFrame == arrival.player.skelAnime.animLength - 1);
+        Player_Action_8084E9AC(&arrival.player, &arrival);
+    }
+    REQUIRE(arrival.player.actionFunc == Player_Action_Idle);
+    REQUIRE(!(arrival.player.stateFlags1 & PLAYER_STATE1_IN_CUTSCENE));
+    REQUIRE(arrival.player.heldItemAction == PLAYER_IA_NONE);
+    REQUIRE(memcmp(&arrival.player.actor.world.pos, &returnPos, sizeof(returnPos)) == 0);
+    REQUIRE(arrival.player.actor.shape.rot.y == returnYaw);
+    CheckProgressionUnchanged(before);
+    REQUIRE(memcmp(&before.equips, &gSaveContext.equips, sizeof(ItemEquips)) == 0);
+    skipStorySetting = 0;
+    Fixture_PlayerStartMode(&arrival, PLAYER_START_MODE_IDLE);
+    REQUIRE(arrival.player.actionFunc == Player_Action_Idle && startModeHookCalls == 1); // One use only.
+}
+
+int main(int argc, char** argv) {
+    if (argc > 1 && strcmp(argv[1], "arrival") == 0) {
+        CheckArrival(false, true, true, false);
+        return 0;
+    }
+    if (argc > 1 && strcmp(argv[1], "render") == 0) {
+        CheckChildSwordRendering();
+        CheckAdultSwordRendering();
+        puts("PASS child/adult handoffs, late overrides, alternate assets and Pak Master Sword selection");
+        return 0;
+    }
+    for (bool adult : {false, true}) {
+        for (bool rando : {false, true}) {
+            for (int setting : {-1, 0, 1}) {
+                CheckRequestedSkip(adult, rando, setting, false);
+                CheckRequestedSkip(adult, rando, setting, true);
+            }
+        }
+    }
+    puts("PASS both ages honor story skip and B, preserving room, position, equipment and progression");
+    CheckChildSwordRendering();
+    CheckAdultSwordRendering();
+    puts("PASS child/adult handoffs, late overrides, alternate assets and Pak Master Sword selection");
+    for (bool sourceAdult : {false, true}) {
+        for (bool rando : {false, true}) {
+            CheckArrival(sourceAdult, rando, false, false, false, true);
+            for (bool skipMain : {false, true}) {
+                CheckArrival(sourceAdult, rando, skipMain, false);
+                CheckArrival(sourceAdult, rando, skipMain, true);
+                CheckArrival(sourceAdult, rando, skipMain, true, true);
+            }
+        }
+    }
+    puts("PASS native arrival animations, independent skips, selected sword and one-use local return");
     PlayState play;
     BgTokiSwd sword;
     // A decorative pedestal must not edit the player's equipment on scene load.

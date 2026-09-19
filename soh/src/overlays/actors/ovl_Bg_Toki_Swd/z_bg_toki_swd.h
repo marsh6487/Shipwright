@@ -9,6 +9,12 @@ struct BgTokiSwd;
 // Exact custom placement. All other parameters retain the Temple of Time actor.
 #define BG_TOKI_SWD_TIME_PEDESTAL 0x4C57
 
+typedef enum {
+    BG_TOKI_SWD_HAND_UNCHANGED,
+    BG_TOKI_SWD_HAND_MASTER_SWORD,
+    BG_TOKI_SWD_HAND_CLOSED,
+} BgTokiSwdHandState;
+
 typedef void (*BgTokiSwdActionFunc)(struct BgTokiSwd*, PlayState*);
 
 typedef struct BgTokiSwd {
@@ -32,6 +38,11 @@ void TimePedestalCutscene_TransformPoint(Vec3f* point, const Vec3f* origin, s16 
 size_t TimePedestalCutscene_Build(CutsceneData* output, size_t capacity, const CutsceneData* source,
                                 size_t wordCount, const Vec3f* origin, s16 yaw, s16* ageSwapFrame);
 s32 BgTokiSwd_RelocateTimePedestalPlayer(PlayState* play, Player* player);
+s32 BgTokiSwd_GetTimePedestalHandState(PlayState* play, Player* player);
+s32 BgTokiSwd_BeginTimePedestalArrival(PlayState* play, Player* player);
+s32 BgTokiSwd_IsTimePedestalArrival(PlayState* play, Player* player);
+s32 BgTokiSwd_SkipTimePedestalArrival(PlayState* play, Player* player);
+s32 BgTokiSwd_EndTimePedestalArrival(PlayState* play, Player* player);
 
 #ifdef __cplusplus
 }

@@ -12204,13 +12204,21 @@ static Vec3f D_808546F4 = { -1.0f, 69.0f, 20.0f };
 void Player_StartMode_TimeTravel(PlayState* play, Player* this) {
     Player_SetupAction(play, this, Player_Action_8084E9AC, 0);
     this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
-    Math_Vec3f_Copy(&this->actor.world.pos, &D_808546F4);
-    this->yaw = this->actor.shape.rot.y = -0x8000;
+    if (!BgTokiSwd_IsTimePedestalArrival(play, this)) {
+        Math_Vec3f_Copy(&this->actor.world.pos, &D_808546F4);
+        this->yaw = this->actor.shape.rot.y = -0x8000;
+    }
     LinkAnimation_Change(play, &this->skelAnime, this->ageProperties->unk_A0, 2.0f / 3.0f, 0.0f, 0.0f, ANIMMODE_ONCE,
                          0.0f);
     Player_StartAnimMovement(play, this, 0x28F);
     if (LINK_IS_ADULT) {
-        func_80846720(play, this, 0);
+        if (BgTokiSwd_IsTimePedestalArrival(play, this)) {
+            this->heldItemId = ITEM_NONE;
+            this->nextModelGroup = Player_ActionToModelGroup(this, PLAYER_IA_SWORD_CS);
+            Player_InitItemAction(play, this, PLAYER_IA_SWORD_CS);
+        } else {
+            func_80846720(play, this, 0);
+        }
     }
     this->av2.actionVar2 = 20;
 }
@@ -12458,7 +12466,9 @@ void Player_Init(Actor* thisx, PlayState* play2) {
         }
     }
 
-    if (GameInteractor_Should(VB_EXECUTE_PLAYER_STARTMODE_FUNC, true, startMode)) {
+    if (BgTokiSwd_BeginTimePedestalArrival(play, this)) {
+        Player_StartMode_TimeTravel(play, this);
+    } else if (GameInteractor_Should(VB_EXECUTE_PLAYER_STARTMODE_FUNC, true, startMode)) {
         sStartModeFuncs[startMode](play, this);
     }
 
@@ -14669,6 +14679,8 @@ void Player_Draw(Actor* thisx, PlayState* play2) {
 void Player_Destroy(Actor* thisx, PlayState* play) {
     Player* this = (Player*)thisx;
 
+    BgTokiSwd_EndTimePedestalArrival(play, this);
+
     Effect_Delete(play, this->meleeWeaponEffectIndex);
 
     Collider_DestroyCylinder(play, &this->cylinder);
@@ -16529,13 +16541,29 @@ static AnimSfxEntry D_808549F4[] = {
     { 0, -ANIMSFX_DATA(ANIMSFX_TYPE_LANDING, 15) },
 };
 
+static void Player_FinishTimePedestalArrival(PlayState* play, Player* this) {
+    this->heldItemId = ITEM_NONE;
+    this->nextModelGroup = Player_ActionToModelGroup(this, PLAYER_IA_NONE);
+    Player_InitItemAction(play, this, PLAYER_IA_NONE);
+    Player_SetEquipmentData(play, this);
+    func_8083C0E8(this, play);
+    // Restore after the idle action finishes the native root movement.
+    BgTokiSwd_EndTimePedestalArrival(play, this);
+}
+
 void Player_Action_8084E9AC(Player* this, PlayState* play) {
+    if (BgTokiSwd_SkipTimePedestalArrival(play, this)) {
+        Player_FinishTimePedestalArrival(play, this);
+        return;
+    }
     if (LinkAnimation_Update(play, &this->skelAnime)) {
         if (this->av1.actionVar1 == 0) {
             if (DECR(this->av2.actionVar2) == 0) {
                 this->av1.actionVar1 = 1;
                 this->skelAnime.endFrame = this->skelAnime.animLength - 1.0f;
             }
+        } else if (BgTokiSwd_IsTimePedestalArrival(play, this)) {
+            Player_FinishTimePedestalArrival(play, this);
         } else {
             func_8083C0E8(this, play);
         }

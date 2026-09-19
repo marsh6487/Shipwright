@@ -11,6 +11,7 @@
 #include "soh/Enhancements/SwitchAge.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #define FLAGS ACTOR_FLAG_UPDATE_CULLING_DISABLED
 
@@ -71,6 +72,18 @@ static CollisionCheckInfoInit sColChkInfoInit = { 10, 35, 100, MASS_IMMOVABLE };
 static InitChainEntry sInitChain[] = {
     ICHAIN_VEC3F_DIV1000(scale, 25, ICHAIN_STOP),
 };
+
+// One local reload only. The next primary player init consumes pending even
+// on a mismatched spawn, so reset/load/another entrance cannot replay it later.
+static struct {
+    PlayState* play;
+    Player* player;
+    Vec3f startPos, returnPos;
+    s16 startYaw, returnYaw, scene, entrance;
+    u16 fileNum;
+    s8 room, age;
+    u8 pending;
+} sTimePedestalArrival;
 
 void BgTokiSwd_SetupAction(BgTokiSwd* this, BgTokiSwdActionFunc actionFunc) {
     this->actionFunc = actionFunc;
@@ -209,6 +222,93 @@ s32 BgTokiSwd_RelocateTimePedestalPlayer(PlayState* play, Player* player) {
     return false;
 }
 
+s32 BgTokiSwd_BeginTimePedestalArrival(PlayState* play, Player* player) {
+    if (play == NULL || player == NULL || player != GET_PLAYER(play)) {
+        return false;
+    }
+    sTimePedestalArrival.play = NULL;
+    sTimePedestalArrival.player = NULL;
+    if (!sTimePedestalArrival.pending) {
+        return false;
+    }
+    sTimePedestalArrival.pending = false;
+    if (!play->state.running || gSaveContext.respawnFlag != 1 ||
+        gSaveContext.fileNum != sTimePedestalArrival.fileNum ||
+        gSaveContext.linkAge != sTimePedestalArrival.age || play->sceneNum != sTimePedestalArrival.scene ||
+        gSaveContext.entranceIndex != sTimePedestalArrival.entrance ||
+        gSaveContext.respawn[RESPAWN_MODE_DOWN].roomIndex != sTimePedestalArrival.room ||
+        player->actor.shape.rot.y != sTimePedestalArrival.returnYaw ||
+        memcmp(&player->actor.world.pos, &sTimePedestalArrival.returnPos, sizeof(Vec3f)) != 0) {
+        return false;
+    }
+    sTimePedestalArrival.play = play;
+    sTimePedestalArrival.player = player;
+    player->actor.world.pos = sTimePedestalArrival.startPos;
+    player->yaw = player->actor.shape.rot.y = sTimePedestalArrival.startYaw;
+    return true;
+}
+
+s32 BgTokiSwd_IsTimePedestalArrival(PlayState* play, Player* player) {
+    return play != NULL && player != NULL && sTimePedestalArrival.play == play &&
+           sTimePedestalArrival.player == player && player == GET_PLAYER(play);
+}
+
+s32 BgTokiSwd_SkipTimePedestalArrival(PlayState* play, Player* player) {
+    if (!BgTokiSwd_IsTimePedestalArrival(play, player)) {
+        return false;
+    }
+    // Read only during the live player update, after GameState_ReqPadData.
+    // PadMgr consumes press edges each frame: a held departure B cannot skip
+    // arrival, while a release/repress during loading is a new valid edge.
+    return CVarGetInteger(CVAR_ENHANCEMENT("TimeSavers.SkipCutscene.Story"), IS_RANDO) ||
+           CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B);
+}
+
+s32 BgTokiSwd_EndTimePedestalArrival(PlayState* play, Player* player) {
+    if (!BgTokiSwd_IsTimePedestalArrival(play, player)) {
+        return false;
+    }
+    player->actor.world.pos = sTimePedestalArrival.returnPos;
+    player->yaw = player->actor.shape.rot.y = sTimePedestalArrival.returnYaw;
+    sTimePedestalArrival.play = NULL;
+    sTimePedestalArrival.player = NULL;
+    return true;
+}
+
+s32 BgTokiSwd_GetTimePedestalHandState(PlayState* play, Player* player) {
+    if (play == NULL || player == NULL || player != GET_PLAYER(play) || !play->state.running ||
+        play->transitionTrigger == TRANS_TRIGGER_START) {
+        return BG_TOKI_SWD_HAND_UNCHANGED;
+    }
+    if (BgTokiSwd_IsTimePedestalArrival(play, player)) {
+        return LINK_IS_ADULT ? BG_TOKI_SWD_HAND_MASTER_SWORD : BG_TOKI_SWD_HAND_UNCHANGED;
+    }
+    if (play->csCtx.state == CS_STATE_IDLE) {
+        return BG_TOKI_SWD_HAND_UNCHANGED;
+    }
+    Actor* actor = player->interactRangeActor;
+    if (actor == NULL || actor->id != ACTOR_BG_TOKI_SWD || actor->params != BG_TOKI_SWD_TIME_PEDESTAL) {
+        return BG_TOKI_SWD_HAND_UNCHANGED;
+    }
+    BgTokiSwd* this = (BgTokiSwd*)actor;
+    if (this->localCutscene == NULL || play->csCtx.segment != this->localCutscene || this->localCutsceneFinished) {
+        return BG_TOKI_SWD_HAND_UNCHANGED;
+    }
+    if (LINK_IS_ADULT) {
+        if (player->heldItemAction != PLAYER_IA_SWORD_CS) {
+            return BG_TOKI_SWD_HAND_UNCHANGED;
+        }
+        // Frame 70 closes the hand without changing leftHandType. Preserve
+        // that insertion cue after the ordinary PAK/custom equipment hooks.
+        return player->leftHandDLists == &gPlayerLeftHandClosedDLs[LINK_AGE_ADULT]
+                   ? BG_TOKI_SWD_HAND_CLOSED : BG_TOKI_SWD_HAND_MASTER_SWORD;
+    }
+    // The native frame-87 handoff selects this child-only Master Sword DL.
+    // Never infer a ceremonial weapon from inventory or another player's pose.
+    return player->leftHandDLists == &gPlayerLeftHandBgsDLs[LINK_AGE_CHILD]
+               ? BG_TOKI_SWD_HAND_MASTER_SWORD : BG_TOKI_SWD_HAND_UNCHANGED;
+}
+
 void BgTokiSwd_FinishTimePedestal(BgTokiSwd* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
     if (!play->state.running || player == NULL || this->localCutsceneFinished ||
@@ -234,6 +334,20 @@ void BgTokiSwd_FinishTimePedestal(BgTokiSwd* this, PlayState* play) {
     gSaveContext.seqId = (u8)NA_BGM_DISABLED;
     gSaveContext.natureAmbienceId = NATURE_ID_DISABLED;
     SwitchAgeWithoutProgression();
+    // Both a completed and a manually skipped departure get their own arrival.
+    // Keep the ordinary respawn contract; only its exact next spawn can consume
+    // this visual continuation, before native story/rando start-mode hooks run.
+    sTimePedestalArrival.pending = play->transitionTrigger == TRANS_TRIGGER_START && gSaveContext.respawnFlag == 1;
+    sTimePedestalArrival.startPos = (Vec3f){ -1.0f, 69.0f, 20.0f };
+    TimePedestalCutscene_TransformPoint(&sTimePedestalArrival.startPos, &this->actor.world.pos, this->actor.shape.rot.y);
+    sTimePedestalArrival.startYaw = this->actor.shape.rot.y + 0x8000;
+    sTimePedestalArrival.returnPos = this->returnPos;
+    sTimePedestalArrival.returnYaw = this->returnYaw;
+    sTimePedestalArrival.scene = play->sceneNum;
+    sTimePedestalArrival.entrance = play->nextEntranceIndex;
+    sTimePedestalArrival.room = play->roomCtx.curRoom.num;
+    sTimePedestalArrival.age = play->linkAgeOnLoad;
+    sTimePedestalArrival.fileNum = gSaveContext.fileNum;
 }
 
 void BgTokiSwd_TimePedestalCutscene(BgTokiSwd* this, PlayState* play) {
@@ -253,6 +367,17 @@ void BgTokiSwd_TimePedestalCutscene(BgTokiSwd* this, PlayState* play) {
         this->actor.parent = NULL;
     }
     GET_PLAYER(play)->interactRangeActor = &this->actor;
+
+    // The copied script deliberately omits the native destination command, so
+    // its automatic story-skip hook never runs. Read the same setting directly:
+    // that hook would also award story flags/items inappropriate for this actor.
+    // B can skip either local ceremony after the native camera has started.
+    if (this->localCutsceneStarted && play->csCtx.frames > 20 &&
+        (CVarGetInteger(CVAR_ENHANCEMENT("TimeSavers.SkipCutscene.Story"), IS_RANDO) ||
+         CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B))) {
+        BgTokiSwd_FinishTimePedestal(this, play);
+        return;
+    }
 
     if (this->localCutsceneStarted &&
         (play->csCtx.frames >= this->ageSwapFrame || play->csCtx.state == CS_STATE_UNSKIPPABLE_INIT ||

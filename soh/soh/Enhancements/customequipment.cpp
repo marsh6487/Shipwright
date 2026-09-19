@@ -7,6 +7,7 @@
 #include "soh/Enhancements/game-interactor/vanilla-behavior/PlayerAnimOverride.h"
 #include "soh/ShipInit.hpp"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/customequipment.h"
 // Skijer's NEI: needed so OPEN_DISPS/CLOSE_DISPS in the draw handler get C linkage (else LNK2001)
 #include "soh/frame_interpolation.h"
 
@@ -268,6 +269,24 @@ static void BuildHandItemDL(PlayState* play, Gfx** dList, Gfx* hand, Gfx* item, 
 static bool IsScalingAdultItemAsChild() {
     return CVarGetInteger(CVAR_ENHANCEMENT("EquipmentAlwaysVisible"), 0) &&
            CVarGetInteger(CVAR_ENHANCEMENT("ScaleAdultEquipmentAsChild"), 0) && !LINK_IS_ADULT;
+}
+
+extern "C" s32 CustomEquipment_OverrideMasterSwordHand(PlayState* play, Gfx** dList) {
+    if (!CVarGetInteger(CVAR_SETTING("AltAssets"), 1) || TransformMasks_IsTransformedAny()) {
+        return false;
+    }
+    Gfx* sword = LoadCustomGfx(gCustomMasterSwordDL);
+    if (sword == nullptr) {
+        return false;
+    }
+    Gfx* hand = LoadGfxByName(LINK_IS_ADULT ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL);
+    if (hand == nullptr) {
+        return false;
+    }
+    // The ceremonial draw does not apply the child equipment scale, so the
+    // normal hand is already the correct size and needs no counter-scale.
+    BuildHandItemDL(play, dList, hand, sword, false);
+    return true;
 }
 
 const char* bottleContentDLs[] = {

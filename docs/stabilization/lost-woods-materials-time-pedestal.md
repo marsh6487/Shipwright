@@ -62,7 +62,32 @@ reloading without the engine granting an unowned Master Sword. Existing saves
 retain the original repair behavior; genuine Master Sword acquisition ends
 the exception. This does not use a quest flag or change the vanilla save layout.
 
-## Verification
+## Independent pedestal animation phases
+
+The local draw/return ceremony honors `TimeSavers.SkipCutscene.Story` and a
+fresh B press after its opening 20 frames. Completing or manually skipping
+that ceremony performs the same local age swap and starts the native arrival
+animation: adult Link's sword flourish or child Link's hop. Arrival can be
+skipped separately with a fresh B press, and also honors automatic story skip.
+Holding B across the reload does not generate a second press. Input is read
+only during the live update, after the engine polls the controller.
+
+The arrival continuation is consumed by the next primary player initialization
+and requires the captured file, age, scene, entrance, room, position and yaw.
+It does not invoke the Temple of Time/randomizer start-mode hooks. Completion
+or skipping restores the captured return position after native root-motion
+cleanup and clears the temporary ceremonial equipment without changing owned
+items or save equipment.
+
+During the child's frame-87 withdrawal handoff, the adult's insertion before
+frame 70, and the adult arrival flourish, the hand uses the selected PAK Master
+Sword slot, then the custom AltAssets Master Sword, then the native/alternate
+age-specific hand display list. This selection does not depend on the weapon
+equipped on B. The adult's frame-70 insertion closes the hand even when a late
+equipment hook would otherwise redraw a sword. The pedestal's world-object
+display list remains the existing scene asset.
+
+## Verification commands
 
 ```sh
 python3 scripts/diagnostics/run_time_pedestal_tests.py

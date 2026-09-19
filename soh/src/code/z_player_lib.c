@@ -4,12 +4,14 @@
 #include "objects/object_link_boy/object_link_boy.h"
 #include "objects/object_link_child/object_link_child.h"
 #include "overlays/actors/ovl_Demo_Effect/z_demo_effect.h"
+#include "overlays/actors/ovl_Bg_Toki_Swd/z_bg_toki_swd.h"
 
 #include <libultraship/bridge/resourcebridge.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/draw.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/customequipment.h"
 #include "mods/items/custom_items.h"
 #include "mods/items/custom_bottles.h" // Net catch-at-blade (Skijer's NEI)
 #include "mods/extended_player.h"
@@ -1732,6 +1734,32 @@ static void Player_ApplyBackEquipmentVisibility(s32 limbIndex, Gfx** dList) {
     }
 }
 
+static void Player_ApplyTimePedestalSword(PlayState* play, Player* player, s32 limbIndex, Gfx** dList) {
+    if (limbIndex != PLAYER_LIMB_L_HAND) {
+        return;
+    }
+    s32 handState = BgTokiSwd_GetTimePedestalHandState(play, player);
+    if (handState != BG_TOKI_SWD_HAND_UNCHANGED) {
+        Gfx* swordDL = PakLoader_GetEquipDL(player, limbIndex);
+        if (handState == BG_TOKI_SWD_HAND_CLOSED) {
+            *dList = (swordDL != NULL && swordDL != PAK_DL_STUB)
+                         ? swordDL
+                         : Player_ResolveLimbDLForDummyOrLocal(player->leftHandDLists[sDListsLodOffset]);
+            return;
+        }
+        if (swordDL == NULL || swordDL == PAK_DL_STUB) {
+            if (CustomEquipment_OverrideMasterSwordHand(play, dList)) {
+                return;
+            }
+            const char* nativeDL = !LINK_IS_ADULT ? gLinkChildLeftHandHoldingMasterSwordDL
+                                   : (sDListsLodOffset == 0) ? gLinkAdultLeftHandHoldingMasterSwordNearDL
+                                                           : gLinkAdultLeftHandHoldingMasterSwordFarDL;
+            swordDL = Player_ResolveLimbDLForDummyOrLocal((void*)nativeDL);
+        }
+        *dList = swordDL;
+    }
+}
+
 s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
                                            void* thisx) {
     Player* this = (Player*)thisx;
@@ -1940,6 +1968,10 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
         }
     }
 
+    // The sword cue changes leftHandDLists without changing the child's open
+    // hand type. Preserve that handoff after ordinary hand/equipment overrides;
+    // resource resolution still honors alternate assets and the selected pak.
+    Player_ApplyTimePedestalSword(play, this, limbIndex, dList);
     Player_ApplyBackEquipmentVisibility(limbIndex, dList);
 
     if (GameInteractor_InvisibleLinkActive()) {
