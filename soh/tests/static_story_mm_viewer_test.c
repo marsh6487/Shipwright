@@ -216,6 +216,16 @@ int StaticStoryKokiri_RequestObjects(EnViewer* a, PlayState* p) {
 void StaticStoryKokiri_Init(EnViewer* a, PlayState* p) {
     REQUIRE(false);
 }
+static EnViewer* expectedKokiri;
+static unsigned kokiriUpdates;
+static float kokiriStep;
+void StaticStoryKokiri_UpdatePose(EnViewer* a, f32 step) {
+    REQUIRE(a == expectedKokiri);
+    /* The base animation must already have sampled this tick. */
+    REQUIRE(a->skin.skelAnime.jointTable[0].x == 7);
+    ++kokiriUpdates;
+    kokiriStep = step;
+}
 s32 SkelAnime_InitFlex(PlayState* p, SkelAnime* s, FlexSkeletonHeader* h, AnimationHeader* a, Vec3s* j, Vec3s* m,
                        s32 n) {
     ++initCalls;
@@ -773,10 +783,36 @@ static void testGreatFairyBlink(PlayState* play) {
     puts("PASS Great Fairy: three poses, 100 ms closure, private timing, safe indices, head/torso tracking and "
          "optional-head fallbacks");
 }
+static void testKokiriUpdateTiming(PlayState* play) {
+    s32 savedRate = R_UPDATE_RATE;
+    for (unsigned type = STATIC_STORY_ACTOR_KOKIRI_GIRL; type <= STATIC_STORY_ACTOR_FADO; ++type) {
+        for (s32 rate = 1; rate <= 3; ++rate) {
+            EnViewer actor;
+            Vec3s joints[16] = { 0 };
+            prepare(&actor, type, 4);
+            actor.staticState.initialized = true;
+            actor.skin.skelAnime.jointTable = joints;
+            actor.skin.skelAnime.limbCount = 16;
+            expectedKokiri = &actor;
+            unsigned before = kokiriUpdates;
+            R_UPDATE_RATE = rate;
+            EnViewerStatic_Update(&actor, play);
+            REQUIRE(kokiriUpdates == before + 1);
+            /* Native normal-animation playback advances one frame per three
+             * update-rate units (Link animations use a different clock). */
+            REQUIRE(fabsf(kokiriStep - (float)rate / 3.0f) < 0.00001f);
+        }
+    }
+    R_UPDATE_RATE = savedRate;
+    expectedKokiri = NULL;
+    puts("PASS Kokiri/Fado update bridge: native normal-animation clock, after base sampling");
+}
+
 int main(void) {
     static PlayState play;
     static GraphicsContext gfx;
     play.state.gfxCtx = &gfx;
+    testKokiriUpdateTiming(&play);
     EnViewer skull = { 0 };
     skull.staticState.type = STATIC_STORY_ACTOR_SKULL_KID;
     for (unsigned model = 0; model < 2; ++model) {

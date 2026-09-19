@@ -836,6 +836,10 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
             this->skin.skelAnime.jointTable[0].z = 0;
         }
     }
+    if (this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL ||
+        this->staticState.type == STATIC_STORY_ACTOR_FADO) {
+        StaticStoryKokiri_UpdatePose(this, R_UPDATE_RATE * (1.0f / 3.0f));
+    }
     if (this->staticState.type == STATIC_STORY_ACTOR_ADULT_RUTO_WATER) {
         canInteract = EnViewerStatic_UpdateRutoWater(this, play, animationEnded);
     }

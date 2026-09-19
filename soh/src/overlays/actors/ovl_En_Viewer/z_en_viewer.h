@@ -87,6 +87,7 @@ typedef struct {
     uint8_t danceStep;
     uint8_t diagnosticDrawLogged;
     uint16_t greatFairyHoverPhase;
+    f32 kokiriLegFrame;
     uint16_t mmHoverPhase;
     uint16_t tatlPulsePhase;
     uint8_t tatlInitialized;

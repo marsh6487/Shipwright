@@ -1,9 +1,13 @@
 #include "static_story_kokiri.h"
 
+#include <math.h>
+
 #include "z_en_viewer.h"
+#include "objects/object_dy_obj/object_dy_obj.h"
 #include "objects/object_fa/object_fa.h"
 #include "objects/object_kw1/object_kw1.h"
 #include "objects/object_os_anime/object_os_anime.h"
+#include "soh/ResourceManagerHelpers.h"
 #include "static_story_actor.h"
 
 s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
@@ -54,6 +58,47 @@ void StaticStoryKokiri_Init(EnViewer* this, PlayState* play) {
     SkelAnime_InitFlex(play, &this->skin.skelAnime, (FlexSkeletonHeader*)gKw1Skel, NULL, NULL, NULL, 0);
     Animation_PlayLoopSetSpeed(&this->skin.skelAnime, StaticStoryKokiri_GetAnimation(pose->animation),
                                pose->playbackSpeed);
+    this->staticState.kokiriLegFrame = 0.0f;
+    StaticStoryKokiri_UpdatePose(this, 0.0f);
+}
+
+void StaticStoryKokiri_UpdatePose(EnViewer* this, f32 step) {
+    Vec3s* joints = this->skin.skelAnime.jointTable;
+
+    if ((this->staticState.type != STATIC_STORY_ACTOR_KOKIRI_GIRL &&
+         this->staticState.type != STATIC_STORY_ACTOR_FADO) ||
+        this->staticState.pose != 4 || joints == NULL || this->skin.skelAnime.limbCount < 16) {
+        return;
+    }
+
+    /* In this native seated pose the root X/Z rotations are -90 degrees.
+     * Root Y, torso Z and head Z therefore compose the forward head pitch.
+     * Cancel that pitch without changing the seated torso, arms or placement. */
+    joints[15].z = (s16)(-0x8000 - (s32)joints[1].y - joints[8].z);
+
+    AnimationHeader* animation = (AnimationHeader*)ResourceMgr_LoadAnimByName(gGreatFairySittingAnim);
+    if (animation == NULL || animation->common.frameCount <= 0 || animation->frameData == NULL ||
+        animation->jointIndices == NULL) {
+        return;
+    }
+
+    /* The two skeletons share leg joint order and axes. Transfer rotations only:
+     * keep Kokiri proportions and leave the fairy's root, torso and hair out. */
+    f32 frameCount = animation->common.frameCount;
+    this->staticState.kokiriLegFrame = fmodf(this->staticState.kokiriLegFrame + step, frameCount);
+    if (this->staticState.kokiriLegFrame < 0.0f) {
+        this->staticState.kokiriLegFrame += frameCount;
+    }
+    s32 frame = (s32)this->staticState.kokiriLegFrame;
+    s32 nextFrame = (frame + 1) % animation->common.frameCount;
+    Vec3s current[8];
+    Vec3s next[8];
+    SkelAnime_GetFrameData(animation, frame, 8, current);
+    SkelAnime_GetFrameData(animation, nextFrame, 8, next);
+    SkelAnime_InterpFrameTable(8, current, current, next, this->staticState.kokiriLegFrame - frame);
+    for (s32 limb = 2; limb <= 7; ++limb) {
+        joints[limb] = current[limb];
+    }
 }
 
 static s32 StaticStoryKokiri_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,

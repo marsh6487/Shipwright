@@ -46,18 +46,42 @@ Prelude Y placement instead of running story logic or searching indefinitely.
 | `0x7F18` | Kokiri Girl | Arms behind back | Soft pushable | Yes | Yes |
 | `0x7F28` | Kokiri Girl | Hands on hips | Soft pushable | Yes | Yes |
 | `0x7F38` | Kokiri Girl | Sitting, head on hand | Soft pushable | Yes | No |
-| `0x7F48` | Kokiri Girl | Sitting cross-legged | Soft pushable | Yes | No |
+| `0x7F48` | Kokiri Girl | Seated Great Fairy leg motion, level head | Soft pushable | Yes | No |
 | `0x7F58` | Kokiri Girl | Sitting, arms and legs crossed | Soft pushable | Yes | No |
 | `0x7F09` | Fado | Idle | Soft pushable | Yes | Yes |
 | `0x7F19` | Fado | Arms behind back | Soft pushable | Yes | Yes |
 | `0x7F29` | Fado | Hands on hips | Soft pushable | Yes | Yes |
 | `0x7F39` | Fado | Sitting, head on hand | Soft pushable | Yes | No |
-| `0x7F49` | Fado | Sitting cross-legged | Soft pushable | Yes | No |
+| `0x7F49` | Fado | Seated Great Fairy leg motion, level head | Soft pushable | Yes | No |
 | `0x7F59` | Fado | Sitting, arms and legs crossed | Soft pushable | Yes | No |
 | `0x7F0A` | Adult Malon | Idle | Soft pushable | Yes | Yes |
 | `0x7F1A` | Adult Malon | Holding basket | Soft pushable | Yes | Yes |
 | `0x7F2A` | Adult Malon | Singing animation | Soft pushable | Yes | No |
 | `0x7F3A` | Adult Malon | Singing animation with vanilla vocal pattern | Soft pushable | Yes | No |
+
+## Kokiri/Fado seated-motion candidate
+
+The September 19 candidate replaces pose 4 (`0x7F48` / `0x7F49`) with the
+Great Fairy's sitting leg loop at native playback speed. It retains the Kokiri
+root, torso and arms and levels the head from the first sampled frame. Only the
+six leg joints take donor rotations; skeleton proportions and actor placement
+remain native. Pose 5 (`0x7F58` / `0x7F59`) retains the original arms-crossed
+static pose. Other poses and actor parameters are unchanged.
+
+Verification commands:
+
+```sh
+python3 scripts/diagnostics/run_kokiri_pose_tests.py /path/to/oot.o2r
+python3 scripts/diagnostics/run_mm_rendering_regression.py --viewer-only
+```
+
+The first command reads the supplied archive without changing or redistributing
+its assets. It exercises the production pose adapter and native sampler through
+initialization, two loops, fractional frames, the wrap seam, independent actor
+state and missing-donor fallback. The second checks the viewer bridge's timing
+and the surrounding actor lifecycle/render callbacks. These are static tests;
+the visible result, feet/clothing intersections and native/Alt parity still need
+an in-game check with both characters and a comparison to their static pose 5.
 
 ## Runtime test priorities
 

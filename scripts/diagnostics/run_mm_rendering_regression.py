@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Verify production MM rendering adapters without a custom game executable."""
+"""Verify production MM rendering adapters without a custom game executable.
+
+Pass --viewer-only for the actor lifecycle/render fixture and viewer syntax check,
+or a path to mm.o2r to include the read-only archive checks.
+"""
 import ctypes as c
 import importlib.util
 import re
@@ -27,16 +31,22 @@ loader=(ROOT/'soh/mods/transformation_masks/assets/mm_asset_loader.cpp').read_te
 fixture=(ROOT/'soh/tests/static_story_mm_viewer_test.c').read_text()
 names=['EnViewer_Update','EnViewer_Destroy','EnViewer_StaticSelectSkullKidModel','EnViewerStatic_WaitForObjects','EnViewerStatic_Update',
        'EnViewer_StaticGreatFairyEyeIndex','EnViewer_StaticGreatFairyOverrideLimbDraw','EnViewer_DrawStaticGreatFairy',
-       'EnViewer_StaticTreasureChestShopGalOverrideLimbDraw','EnViewer_StaticOrdinaryMmOverrideLimbDraw','EnViewer_DrawStaticMmActor','EnViewer_DrawStaticSkullKid']
+       'EnViewer_StaticTreasureChestShopGalOverrideLimbDraw','EnViewer_StaticOrdinaryMmOverrideLimbDraw',
+       'EnViewer_StaticAnjuPostLimbDraw','EnViewer_DrawStaticMmActor','EnViewer_DrawStaticSkullKid','EnViewerStatic_Draw']
 table=re.search(r'static Gfx sMmOpaqueRenderModeDL\[\] = \{.*?\n\};',loader,re.S).group(0)
 fixture=fixture.replace('/* PRODUCTION_OPAQUE_RENDER_MODE */',table+'\n'+function(loader,'MmAssets_GetOpaqueRenderMode'))
-fixture=fixture.replace('/* PRODUCTION_VIEWER_FUNCTIONS */','\n'.join(function(viewer,n) for n in names))
+draw_table=re.search(r'static EnViewerDrawFunc sDrawFuncs\[\] = \{.*?\n\};',viewer,re.S).group(0)
+fixture=fixture.replace('/* PRODUCTION_VIEWER_FUNCTIONS */','\n'.join(function(viewer,n) for n in names)+
+                        draw_table+'\n'+function(viewer,'EnViewer_Draw'))
 p=WORK/'viewer.c';p.write_text(fixture)
 objects=[]
 for source in [p]+[ROOT/f'soh/src/overlays/actors/ovl_En_Viewer/static_story_{n}.c' for n in ['actor','mm_actor','ganon']]:
     out=WORK/(source.stem+'.o');run('cc',*flags,'-c',source,'-o',out);objects.append(out)
 run('cc',*objects,'-Wl,--gc-sections','-lm','-o',WORK/'viewer');run(WORK/'viewer')
 run('cc',*flags,'-fsyntax-only',ROOT/'soh/src/overlays/actors/ovl_En_Viewer/z_en_viewer.c')
+if '--viewer-only' in sys.argv:
+    print('PASS production viewer lifecycle/render fixture and full viewer syntax')
+    sys.exit(0)
 patch=ROOT/'soh/mods/transformation_masks/assets/mm_display_list_patch.cpp'
 run('c++','-std=c++20','-DNDEBUG',ROOT/'soh/tests/mm_display_list_patch_test.cpp',patch,'-o',WORK/'patch');run(WORK/'patch')
 run('c++','-std=c++20','-shared','-fPIC',ROOT/'soh/tests/mm_display_list_patch_bridge.cpp',patch,'-o',WORK/'patch.so')
