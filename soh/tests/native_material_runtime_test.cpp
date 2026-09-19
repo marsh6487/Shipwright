@@ -5,7 +5,6 @@
 #include <iostream>
 
 // A reloadable in-memory archive is the seam for testing provenance refresh.
-// Reload explicitly invalidates metadata, like the host archive/resource hooks.
 // Runtime byte parsing/cache behavior is production code; ZIP I/O is not mocked
 // as a success assertion and real O2Rs are checked separately by the runner.
 namespace Ship {
@@ -21,9 +20,6 @@ class ReloadableArchive : public Ship::Archive {
     ReloadableArchive() : Archive("fixture") {
     }
     nlohmann::json project;
-    void Reload() {
-        PreludeNativeMaterialScroll_InvalidateMetadata();
-    }
     std::shared_ptr<Ship::File> LoadFile(const std::string&) override {
         auto file = std::make_shared<Ship::File>();
         auto text = project.dump();
@@ -117,13 +113,11 @@ static void CheckSagePlatformMetadata() {
         owner->project = { { "edits", { { "lost_woods", nlohmann::json::array({
             { { "data", { { kind, nlohmann::json::array({ platform }) } } } }
         }) } } } };
-        owner->Reload();
         REQUIRE(Prelude::ProfileFor(owner, "custom/prelude/lost_woods/sage_platform") ==
                 Prelude::NativeMaterialProfile::ChamberOfSagesPlatform);
         // Another archive declaring the same resource path must not borrow this binding.
         other->project = owner->project;
         other->project["edits"]["lost_woods"][0]["data"][kind][0].erase("nativeAnimation");
-        other->Reload();
         REQUIRE(Prelude::ProfileFor(other, "custom/prelude/lost_woods/sage_platform") ==
                 Prelude::NativeMaterialProfile::None);
         REQUIRE(Prelude::ProfileFor(owner, "custom/prelude/lost_woods/sage_platform") ==
@@ -132,11 +126,9 @@ static void CheckSagePlatformMetadata() {
         auto conflict = platform;
         conflict["nativeAnimation"]["source"] = "oot.water_temple.caustics";
         data[kind].push_back(conflict);
-        owner->Reload();
         REQUIRE(Prelude::ProfileFor(owner, "custom/prelude/lost_woods/sage_platform") ==
                 Prelude::NativeMaterialProfile::None);
         data[kind] = nlohmann::json::array({ platform });
-        owner->Reload();
         REQUIRE(Prelude::ProfileFor(owner, "custom/prelude/lost_woods/sage_platform") ==
                 Prelude::NativeMaterialProfile::ChamberOfSagesPlatform);
     }
@@ -149,7 +141,6 @@ int main() {
         R"({"edits":{"any_scene":[{"data":{"pastes":[{"newDlPath":"custom/prelude/any/paste0","chain":[{"path":"objects/object_spot06_objects/gLakeHyliaHighWaterDL"}]}]}}]}})");
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/any/paste0") == Prelude::NativeMaterialProfile::LakeHylia);
     archive->project["edits"]["any_scene"][0]["data"]["pastes"][0]["chain"][0]["path"] = "unrelated";
-    archive->Reload();
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/any/paste0") == Prelude::NativeMaterialProfile::None);
     auto& items = archive->project["edits"]["any_scene"][0]["data"]["pastes"];
     auto a = items[0];
@@ -157,38 +148,31 @@ int main() {
     auto b = a;
     b["chain"][0]["path"] = "objects/object_spot01_objects/gKakarikoWellWaterDL";
     items = nlohmann::json::array({ a, b, a });
-    archive->Reload();
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/any/paste0") == Prelude::NativeMaterialProfile::None);
     auto caustic = nlohmann::json::parse(
         R"({"newDlPath":"custom/prelude/water_temple/material0","geometry":"arbitrary","nativeAnimation":{"version":1,"binding":"material-motion","source":"oot.water_temple.caustics","logicalWidth":32,"logicalHeight":32}})");
     archive->project["edits"]["any_scene"][0]["data"] = {
         { "materials", nlohmann::json::array({ caustic }) },
     };
-    archive->Reload();
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material0") ==
             Prelude::NativeMaterialProfile::WaterTempleCaustics);
     archive->project["edits"]["any_scene"][0]["data"]["materials"][0]["nativeAnimation"]["source"] =
         "oot.zoras_domain.caustics";
-    archive->Reload();
     REQUIRE(static_cast<int>(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material0")) == 11);
     archive->project["edits"]["any_scene"][0]["data"]["materials"][0]["nativeAnimation"]["source"] = "bad";
-    archive->Reload();
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material0") ==
             Prelude::NativeMaterialProfile::None);
     auto shapeLikeMaterial = nlohmann::json::parse(
         R"({"newDlPath":"custom/prelude/water_temple/material1","stored":{"textures":[{"label":"spot10_room_1Tex_008030"},{"label":"spot10_room_1Tex_008030"}]}})");
     archive->project["edits"]["any_scene"][0]["data"]["materials"] = nlohmann::json::array({ shapeLikeMaterial });
-    archive->Reload();
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material1") ==
             Prelude::NativeMaterialProfile::None);
     auto conflictingCaustic = caustic;
     conflictingCaustic["nativeAnimation"]["source"] = "mm.bg_keikoku_spr.lower_a";
     archive->project["edits"]["any_scene"][0]["data"]["materials"] = nlohmann::json::array({ caustic, caustic });
-    archive->Reload();
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material0") ==
             Prelude::NativeMaterialProfile::WaterTempleCaustics);
     archive->project["edits"]["any_scene"][0]["data"]["materials"].push_back(conflictingCaustic);
-    archive->Reload();
     REQUIRE(Prelude::ProfileFor(archive, "custom/prelude/water_temple/material0") ==
             Prelude::NativeMaterialProfile::None);
     GraphicsContext ctx;

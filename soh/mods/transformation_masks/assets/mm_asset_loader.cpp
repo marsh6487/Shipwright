@@ -42,7 +42,6 @@ extern "C" {
 #include "soh/OTRGlobals.h"
 #include "soh/GameVersions.h"
 #include "soh/ResourceManagerHelpers.h"
-#include "soh/Enhancements/Graphics/PreludeNativeMaterialScroll.h"
 #include "soh/resource/type/Array.h"
 #include "soh/resource/type/SohResourceType.h"
 #include "soh/resource/type/Text.h"
@@ -236,7 +235,6 @@ static bool LoadMmO2r() {
                     // resources and assertion-crash, then decline MM features and let the
                     // game boot normally with OOT only.
                     archiveManager->RemoveArchive(sMmO2rPath);
-                    PreludeNativeMaterialScroll_InvalidateMetadata();
                     sMmO2rLoaded = false;
                     return false;
                 }
@@ -257,7 +255,6 @@ static bool LoadMmO2r() {
                     }
                 }
                 archiveManager->SetArchives(reordered);
-                PreludeNativeMaterialScroll_InvalidateMetadata();
                 MMASSETS_LOG("[MM Assets] Loaded mm.o2r at lowest priority (pos 0 of %zu archives)", reordered->size());
 
                 // SetArchives → ResetVirtualFileSystem unloads+reloads every archive,
