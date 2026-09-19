@@ -13,11 +13,15 @@ static int sEnabled = 1;
 static int sMode = 0;
 static int sRainVolume = 100;
 static int sOvercast = 1;
+static int sThunder = 1;
+static int sProbeLogs = 0;
 static ConcurrentWeatherAudioState sNatureWeather = {};
 static int sNatureRainWrites = 0;
 GameInteractor* GameInteractor::Instance = nullptr;
 extern "C" {
 PlayState* gPlayState = nullptr;
+LightningStrike gLightningStrike = {};
+void GlobalOutdoorRain_Log(const char*) { ++sProbeLogs; }
 SoundFontSample* ResourceMgr_LoadAudioSample(const char* path) {
     return WeatherAudioFixture(path);
 }
@@ -30,6 +34,8 @@ int32_t CVarGetInteger(const char* name, int32_t fallback) {
         return sRainVolume;
     if (std::strcmp(name, "gAudioEditor.GlobalOutdoorRainOvercast") == 0)
         return sOvercast;
+    if (std::strcmp(name, "gAudioEditor.ProximityWeatherThunder") == 0)
+        return sThunder;
     return fallback;
 }
 Color_RGB8 CVarGetColor24(const char*, Color_RGB8 fallback) {
@@ -116,29 +122,170 @@ static void TestPlacedWeatherRainUsesPrivateLoop() {
     WeatherSfxEngine_Reset();
     WeatherSfxEngine_StartDenseFlameHub();
     SetNatureRain(false);
+    PlayState play = {};
 
-    GlobalOutdoorRain_NotifyNativeRainActive(1, 0);
+    GlobalOutdoorRain_SetNativeRequest(&play, &play, 25, 0);
+    GlobalOutdoorRain_Resolve(&play);
     RequireMixFrame(101);
 
-    GlobalOutdoorRain_NotifyNativeRainActive(0, 0);
+    GlobalOutdoorRain_SetNativeRequest(&play, &play, 0, 0);
+    GlobalOutdoorRain_Resolve(&play);
     RequireMixFrame(100);
 
     // Placed weather relinquishes the unscaled native rain channel and uses
     // the same live slider-controlled private loop as enhanced outdoor rain.
     SetNatureRain(true);
     sNatureRainWrites = 0;
-    GlobalOutdoorRain_NotifyNativeRainActive(1, 0);
+    GlobalOutdoorRain_SetNativeRequest(&play, &play, 25, 0);
+    GlobalOutdoorRain_Resolve(&play);
     REQUIRE(sNatureRainWrites == 1);
     RequireMixFrame(101);
     sRainVolume = 0;
-    GlobalOutdoorRain_NotifyNativeRainActive(1, 0);
+    GlobalOutdoorRain_SetNativeRequest(&play, &play, 25, 0);
+    GlobalOutdoorRain_Resolve(&play);
     RequireMixFrame(100);
     sRainVolume = 100;
-    GlobalOutdoorRain_NotifyNativeRainActive(0, 0);
+    GlobalOutdoorRain_SetNativeRequest(&play, &play, 0, 0);
+    GlobalOutdoorRain_Resolve(&play);
     SetNatureRain(false);
 }
 
+static void TestRemainingNativeOwnerKeepsRain() {
+    for (bool releaseFirst : {false, true}) {
+        WeatherSamplePlayer_Init();
+        GlobalOutdoorRain_Reset();
+        sEnabled = 0;
+        int a, b;
+        PlayState play = {};
+        GlobalOutdoorRain_SetNativeRequest(&play, &a, 30, true);
+        GlobalOutdoorRain_SetNativeRequest(&play, &b, 25, false);
+        GlobalOutdoorRain_Resolve(&play);
+        REQUIRE(play.envCtx.unk_EE[0] == 30);
+        REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_ON);
+        if (releaseFirst) GlobalOutdoorRain_SetNativeRequest(&play, &a, 0, false);
+        GlobalOutdoorRain_SetNativeRequest(&play, &b, 25, false);
+        if (!releaseFirst) GlobalOutdoorRain_SetNativeRequest(&play, &a, 0, false);
+        // Another environment writer cleared the target; the surviving owner
+        // must repair it before particle integration, independent of order.
+        play.envCtx.unk_EE[0] = 0;
+        GlobalOutdoorRain_Resolve(&play);
+        REQUIRE(play.envCtx.unk_EE[0] == 25);
+        REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_OFF);
+        REQUIRE(GlobalOutdoorRain_HasRainIntent());
+        for (int frame = 0; frame < 120; ++frame) GlobalOutdoorRain_Update(&play);
+        REQUIRE(play.envCtx.unk_EE[0] == 25);
+        GlobalOutdoorRain_SetNativeRequest(&play, &b, 0, false);
+        GlobalOutdoorRain_Resolve(&play);
+        REQUIRE(play.envCtx.unk_EE[0] == 0);
+        REQUIRE(!GlobalOutdoorRain_HasRainIntent());
+    }
+    GlobalOutdoorRain_Reset();
+    sEnabled = 1;
+}
+
+static void TestAuthoredSceneRain() {
+    for (int enabled : {0, 1}) for (int mode : {0, 1}) {
+        GlobalOutdoorRain_Reset();
+        sEnabled = enabled;
+        sMode = mode;
+        PlayState play = {};
+        play.sceneNum = 0x5B;
+        GlobalOutdoorRain_BeginScene(&play, 25, true, false);
+        // No native actors: direct entry, room changes, and a whole intermittent
+        // cycle must all leave authored rain active.
+        for (int room : {0, 3, 4, 7, 9, 10, 8, 10}) {
+            play.roomCtx.curRoom.num = room;
+            for (int frame = 0; frame < 1500; ++frame) GlobalOutdoorRain_Update(&play);
+            REQUIRE(play.envCtx.unk_EE[0] == 25);
+        }
+        sThunder = 0;
+        GlobalOutdoorRain_Update(&play);
+        REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_OFF);
+        sThunder = 1;
+        GlobalOutdoorRain_Update(&play);
+        REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_ON);
+        REQUIRE(GlobalOutdoorRain_HasRainIntent());
+        play.csCtx.state = 1;
+        GlobalOutdoorRain_SetScriptedRain(&play, 0);
+        for (int frame = 0; frame < 200; ++frame) GlobalOutdoorRain_Update(&play);
+        REQUIRE(play.envCtx.unk_EE[0] == 0);
+        REQUIRE(!GlobalOutdoorRain_HasRainIntent());
+        GlobalOutdoorRain_SetScriptedRain(&play, 20);
+        GlobalOutdoorRain_Update(&play);
+        REQUIRE(play.envCtx.unk_EE[0] == 20);
+        play.csCtx.state = CS_STATE_IDLE;
+        GlobalOutdoorRain_Update(&play);
+        REQUIRE(play.envCtx.unk_EE[0] == 25);
+        // Same address after reset/age change must discard every old owner.
+        int oldActor;
+        GlobalOutdoorRain_SetNativeRequest(&play, &oldActor, 30, true);
+        GlobalOutdoorRain_BeginScene(&play, 25, true, true);
+        GlobalOutdoorRain_Update(&play);
+        REQUIRE(play.envCtx.unk_EE[0] == 25);
+        sProbeLogs = 0;
+        GlobalOutdoorRain_RecordDraw(&play, 1, 0, -100, 0, -100);
+        GlobalOutdoorRain_RecordDraw(&play, 1, 0, -101, 0, -101);
+        REQUIRE(sProbeLogs == 1); // no per-frame spam as the camera moves
+        GlobalOutdoorRain_RecordDraw(&play, 0, 0, 10, 0, 10);
+        REQUIRE(sProbeLogs == 2);
+        REQUIRE(play.envCtx.unk_EE[0] == 25);
+        sEnabled = 0;
+        GlobalOutdoorRain_OnPlayDestroy();
+        play = {};
+        GlobalOutdoorRain_BeginScene(&play, 0, false, false);
+        GlobalOutdoorRain_Update(&play);
+        REQUIRE(play.envCtx.unk_EE[0] == 0);
+        REQUIRE(!GlobalOutdoorRain_HasRainIntent());
+    }
+    GlobalOutdoorRain_Reset();
+    sEnabled = 1;
+    sMode = 0;
+}
+
+static void TestScriptedClearReleasesOwnedLightning() {
+    GlobalOutdoorRain_Reset();
+    sEnabled = 0;
+    PlayState play = {};
+    int owner;
+    GlobalOutdoorRain_SetNativeRequest(&play, &owner, 25, true);
+    GlobalOutdoorRain_Resolve(&play);
+    REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_ON);
+    play.csCtx.state = 1;
+    GlobalOutdoorRain_SetScriptedRain(&play, 0);
+    GlobalOutdoorRain_Resolve(&play);
+    GlobalOutdoorRain_SetNativeRequest(&play, &owner, 0, false);
+    play.csCtx.state = CS_STATE_IDLE;
+    GlobalOutdoorRain_Update(&play);
+    REQUIRE(play.envCtx.unk_EE[0] == 0);
+    REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_OFF);
+    GlobalOutdoorRain_Reset();
+    sEnabled = 1;
+}
+
+static void TestSkyOwnershipAfterScriptedRestore() {
+    GlobalOutdoorRain_Reset();
+    PlayState play = {};
+    play.skyboxId = SKYBOX_NORMAL_SKY;
+    GlobalOutdoorRain_BeginScene(&play, 25, true, false);
+    GlobalOutdoorRain_Update(&play);
+    REQUIRE(play.envCtx.gloomySkyMode == 1);
+    play.csCtx.state = 1;
+    GlobalOutdoorRain_SetScriptedRain(&play, 0);
+    GlobalOutdoorRain_Update(&play);
+    // The cutscene's own sky restoration has completed.
+    play.envCtx.gloomySkyMode = 0;
+    play.csCtx.state = CS_STATE_IDLE;
+    GlobalOutdoorRain_Update(&play);
+    REQUIRE(play.envCtx.unk_EE[0] == 25);
+    REQUIRE(play.envCtx.gloomySkyMode == 1);
+    GlobalOutdoorRain_Reset();
+}
+
 int main() {
+    TestSkyOwnershipAfterScriptedRestore();
+    TestScriptedClearReleasesOwnedLightning();
+    TestRemainingNativeOwnerKeepsRain();
+    TestAuthoredSceneRain();
     // Live color changes are read during rendering and must never stack update hooks.
     REQUIRE(RegisterShipInitFunc::updatePathCount == 0);
     TestSimultaneousEngineAndWeatherVoices();
@@ -175,7 +322,9 @@ int main() {
     WeatherSfxEngine_Reset();
     WeatherSfxEngine_Start();
     SetNatureRain(false);
-    GlobalOutdoorRain_NotifyNativeRainActive(1, 0);
+    PlayState nativePlay = {};
+    GlobalOutdoorRain_SetNativeRequest(&nativePlay, &nativePlay, 25, false);
+    GlobalOutdoorRain_Resolve(&nativePlay);
     RequireMixFrame(101);
     GlobalOutdoorRain_OnPlayDestroy();
     RequireMixFrame(100);
@@ -203,10 +352,10 @@ int main() {
     sEnabled = 0;
     PlayState actorStormPlay = {};
     actorStormPlay.skyboxId = SKYBOX_NORMAL_SKY;
-    GlobalOutdoorRain_NotifyNativeRainActive(1, 1);
+    GlobalOutdoorRain_SetNativeRequest(&actorStormPlay, &actorStormPlay, 25, true);
     GlobalOutdoorRain_Update(&actorStormPlay);
     REQUIRE(actorStormPlay.envCtx.gloomySkyMode == 1);
-    GlobalOutdoorRain_NotifyNativeRainActive(0, 1);
+    GlobalOutdoorRain_SetNativeRequest(&actorStormPlay, &actorStormPlay, 0, false);
     GlobalOutdoorRain_Update(&actorStormPlay);
     REQUIRE(actorStormPlay.envCtx.gloomySkyMode == 2);
     GlobalOutdoorRain_Reset();
@@ -272,7 +421,7 @@ int main() {
     GlobalOutdoorRain_Update(&play);
     RequireMixFrame(106);
 
-    GlobalOutdoorRain_NotifyNativeRainActive(1, 1);
+    GlobalOutdoorRain_SetNativeRequest(&play, &play, 40, true);
     play.envCtx.lightningMode = LIGHTNING_MODE_ON;
     play.envCtx.unk_EE[0] = 40;
     play.envCtx.indoors = 1;
@@ -289,7 +438,7 @@ int main() {
     GlobalOutdoorRain_Update(&play);
     REQUIRE(play.envCtx.unk_EE[0] == 40);
     RequireMixFrame(108);
-    GlobalOutdoorRain_NotifyNativeRainActive(0, 1);
+    GlobalOutdoorRain_SetNativeRequest(&play, &play, 0, 1);
     play.envCtx.unk_EE[0] = 0;
     GlobalOutdoorRain_Update(&play);
     const bool enhancedHasColor = GlobalOutdoorRain_GetRenderColor(&red, &green, &blue);
@@ -305,7 +454,7 @@ int main() {
     sEnabled = 0;
     GlobalOutdoorRain_Update(&play);
     RequireMixFrame(101);
-    GlobalOutdoorRain_NotifyNativeRainActive(1, 0);
+    GlobalOutdoorRain_SetNativeRequest(&play, &play, 25, 0);
     GlobalOutdoorRain_Update(&play);
     RequireMixFrame(102);
     GlobalOutdoorRain_Reset();
@@ -321,18 +470,18 @@ int main() {
     REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_ON);
 
     // Rain-only placed weather suppresses lightning owned by enhanced rain.
-    GlobalOutdoorRain_NotifyNativeRainActive(1, 0);
+    GlobalOutdoorRain_SetNativeRequest(&play, &play, 25, 0);
     GlobalOutdoorRain_Update(&play);
     REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_OFF);
-    GlobalOutdoorRain_NotifyNativeRainActive(0, 0);
+    GlobalOutdoorRain_SetNativeRequest(&play, &play, 0, 0);
     GlobalOutdoorRain_Update(&play);
     REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_ON);
 
     // A placed thunderstorm takes ownership and preserves its native mode.
-    GlobalOutdoorRain_NotifyNativeRainActive(1, 1);
+    GlobalOutdoorRain_SetNativeRequest(&play, &play, 25, 1);
     GlobalOutdoorRain_Update(&play);
     REQUIRE(play.envCtx.lightningMode == LIGHTNING_MODE_ON);
-    GlobalOutdoorRain_NotifyNativeRainActive(0, 1);
+    GlobalOutdoorRain_SetNativeRequest(&play, &play, 0, 1);
 
     sRainVolume = 0;
     GlobalOutdoorRain_Update(&play);

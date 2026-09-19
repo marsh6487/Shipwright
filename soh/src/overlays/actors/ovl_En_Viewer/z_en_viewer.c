@@ -1778,8 +1778,8 @@ void EnViewer_DrawStaticChildRuto(EnViewer* this, PlayState* play) {
 
     OPEN_DISPS(play->state.gfxCtx);
     gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
-    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(sEyes[this->staticState.eyeIndex]));
-    gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(gRutoChildMouthClosedTex));
+    /* object_ru1 uses 0x09 for the mouth, unlike adult Ruto's 0x0A contract. */
+    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(gRutoChildMouthClosedTex));
     gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
     gSPSegment(POLY_OPA_DISP++, 0x0C, &D_80116280[2]);
     SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, EnViewer_StaticChildRutoOverrideLimbDraw, NULL, this);

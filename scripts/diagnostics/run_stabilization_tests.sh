@@ -9,6 +9,8 @@ cc=${CC:-cc}
 common=(-g -DNDEBUG)
 audio_inc=(-Isoh/tests/audio_sequence_stubs -Isoh/include -Isoh)
 weather_inc=(-Isoh/tests/weather_audio_stubs -Isoh/src -Isoh)
+json_inc=()
+if [[ -n ${SOH_TEST_JSON_INCLUDE:-} ]]; then json_inc=(-I"$SOH_TEST_JSON_INCLUDE"); fi
 weather_defs=('-DCVAR_PREFIX_SETTING="gSettings"' '-DCVAR_PREFIX_AUDIO="gAudioEditor"')
 
 "$cc" -std=c11 "${common[@]}" "${audio_inc[@]}" soh/tests/audio_font_id_test.c \
@@ -52,6 +54,12 @@ done
     soh/tests/global_outdoor_rain_audio_test.cpp soh/soh/Enhancements/audio/GlobalOutdoorRain.cpp \
     soh/soh/Enhancements/audio/WeatherSamplePlayer.cpp "$stabilization_build/"*.c.o \
     -o "$stabilization_build/global_outdoor_rain_audio_test"
+"$cxx" -std=c++20 "${common[@]}" -DSCENE_RAIN_POLICY_TEST -Isoh "${json_inc[@]}" \
+    soh/tests/scene_rain_policy_test.cpp soh/soh/Enhancements/audio/SceneRainPolicy.cpp \
+    -o "$stabilization_build/scene_rain_policy_test"
+"$cxx" -std=c++20 "${common[@]}" -Isoh/tests/scene_rain_stubs -Isoh/include -Isoh \
+    -Ilibultraship/include "${json_inc[@]}" soh/tests/scene_rain_binding_test.cpp \
+    soh/soh/Enhancements/audio/SceneRainPolicy.cpp -o "$stabilization_build/scene_rain_binding_test"
 for test_binary in "$stabilization_build/"*_test; do
     "$test_binary"
     printf 'PASS %s\n' "$(basename "$test_binary")"
@@ -59,6 +67,9 @@ done
 python3 -B -m unittest discover -s scripts/diagnostics -p 'test_audit_skull_kid.py' -v
 python3 -B scripts/diagnostics/run_audio_runtime_test.py "$stabilization_build" "$cc"
 python3 -B scripts/diagnostics/run_night_combat_test.py "$stabilization_build" "$cc" "$cxx"
+python3 -B scripts/diagnostics/run_rain_runtime_test.py "$stabilization_build/rain" "$cc" "$cxx"
+python3 -B scripts/diagnostics/run_time_gate_chest_tests.py
+python3 -B scripts/diagnostics/run_child_ruto_face_test.py
 
 # Optional read-only real-archive check: pass the path to mm.o2r as argument 1.
 if [[ $# -gt 0 ]]; then

@@ -29,7 +29,12 @@ struct PlayState {
 #define LIGHTNING_MODE_OFF 0
 #define LIGHTNING_MODE_ON 1
 #define LIGHTNING_MODE_LAST 2
+#define LIGHTNING_STRIKE_WAIT 0
+struct LightningStrike {
+    uint8_t state;
+};
 extern "C" {
+extern LightningStrike gLightningStrike;
 Color_RGB8 CVarGetColor24(const char*, Color_RGB8);
 int16_t Rand_S16Offset(int16_t base, int16_t range);
 uint8_t Audio_IsNatureRainEnabled(void);

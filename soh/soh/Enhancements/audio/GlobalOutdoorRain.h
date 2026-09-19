@@ -11,6 +11,7 @@ enum class GlobalOutdoorRainSource {
     None,
     NativePlaced,
     EnhancedOutdoor,
+    AuthoredScene,
 };
 
 enum class GlobalOutdoorRainMode {

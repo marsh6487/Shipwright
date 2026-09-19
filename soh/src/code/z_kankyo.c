@@ -603,7 +603,9 @@ void func_8006FB94(EnvironmentContext* envCtx, u8 unused) {
                     envCtx->unk_20 = 0;
                     D_8011FB34 = 0;
                     envCtx->unk_22 = envCtx->unk_24 = 100;
-                    envCtx->unk_EE[0] = 0;
+                    if (!GlobalOutdoorRain_HasRainIntent()) {
+                        envCtx->unk_EE[0] = 0;
+                    }
                     envCtx->gloomySkyMode = 0;
                     envCtx->unk_DE = 0;
                 }
@@ -909,6 +911,7 @@ void Environment_Update(PlayState* play, EnvironmentContext* envCtx, LightContex
             }
         }
 
+        GlobalOutdoorRain_Resolve(play);
         func_800766C4(play); // increments or decrements unk_EE[1] depending on some condition
         func_80075B44(play); // updates bgm/sfx and other things as the day progresses
 
@@ -1650,6 +1653,8 @@ void Environment_DrawRain(PlayState* play, View* view, GraphicsContext* gfxCtx) 
     Vec3f windDirection = { 0.0f, 0.0f, 0.0f };
     Player* player = GET_PLAYER(play);
 
+    GlobalOutdoorRain_RecordDraw(play, (play->cameraPtrs[0]->unk_14C & 0x100) != 0, play->envCtx.unk_EE[2],
+                                 play->cameraPtrs[0]->eye.y, play->cameraPtrs[0]->waterYPos, view->eye.y);
     if (!(play->cameraPtrs[0]->unk_14C & 0x100) && (play->envCtx.unk_EE[2] == 0)) {
         OPEN_DISPS(gfxCtx);
 

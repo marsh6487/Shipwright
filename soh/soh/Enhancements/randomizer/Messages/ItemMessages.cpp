@@ -273,6 +273,13 @@ void DrawCustomItemIcon(Gfx** p) {
 
 void BuildItemMessage(u16* textId, bool* loadFromMessageTable) {
     Player* player = GET_PLAYER(gPlayState);
+    // Fixed Time Gate rewards use the existing custom-item text in normal saves.
+    // Other vanilla uses of 0xF8 must continue loading their ordinary message.
+    if (*textId == TEXT_RANDOMIZER_CUSTOM_ITEM && !IS_RANDO &&
+        (player->getItemEntry.objectId == OBJECT_INVALID || player->getItemEntry.modIndex != MOD_RANDOMIZER ||
+         player->getItemEntry.getItemId != RG_TIME_GATE)) {
+        return;
+    }
     CustomMessage msg;
 
     if (player->getItemEntry.getItemId == RG_ICE_TRAP) {
@@ -386,7 +393,7 @@ void BuildTimeGateMessage(uint16_t* textId, bool* loadFromMessageTable) {
 }
 
 void RegisterItemMessages() {
-    COND_ID_HOOK(OnOpenText, TEXT_RANDOMIZER_CUSTOM_ITEM, IS_RANDO, BuildItemMessage);
+    COND_ID_HOOK(OnOpenText, TEXT_RANDOMIZER_CUSTOM_ITEM, true, BuildItemMessage);
     COND_ID_HOOK(OnOpenText, TEXT_ITEM_DUNGEON_MAP, DUNGEON_ITEMS_CAN_BE_OUTSIDE_DUNGEON(RSK_SHUFFLE_MAPANDCOMPASS),
                  BuildMapMessage);
     COND_ID_HOOK(OnOpenText, TEXT_ITEM_COMPASS, DUNGEON_ITEMS_CAN_BE_OUTSIDE_DUNGEON(RSK_SHUFFLE_MAPANDCOMPASS),

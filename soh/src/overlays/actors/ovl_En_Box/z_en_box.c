@@ -78,6 +78,15 @@ static InitChainEntry sInitChain[] = {
 
 static UNK_TYPE sUnused;
 
+static bool EnBox_IsTimeGateChest(EnBox* this, PlayState* play) {
+    // Authored adult Zelda/Lullaby chest in Hyrule Field (R3/R4). Keep its
+    // switch 32, treasure flag 5 and original heart-container params intact.
+    Actor* actor = &this->dyna.actor;
+    return LINK_IS_ADULT && play->sceneNum == SCENE_HYRULE_FIELD && actor->room == 0 &&
+           (u16)actor->params == 0xB7A5 && this->switchFlag == 32 && actor->home.pos.x == -1582.0f &&
+           actor->home.pos.y == 220.0f && actor->home.pos.z == 1961.0f;
+}
+
 static Gfx* EnBox_LoadChestDL(const char* dlName, const char* fallbackName) {
     Gfx* dl = ResourceMgr_LoadGfxByName(dlName);
 
@@ -191,7 +200,9 @@ void EnBox_Init(Actor* thisx, PlayState* play2) {
     Animation_Change(&this->skelanime, anim, 1.5f, animFrameStart, endFrame, ANIMMODE_ONCE, 0.0f);
 
     this->getItemEntry = ItemTable_RetrieveEntry(MOD_NONE, this->dyna.actor.params >> 5 & 0x7F);
-    if (IS_RANDO) {
+    if (EnBox_IsTimeGateChest(this, play)) {
+        this->getItemEntry = ItemTable_RetrieveEntry(MOD_RANDOMIZER, RG_TIME_GATE);
+    } else if (IS_RANDO) {
         RandomizerCheck rc = Randomizer_GetCheckFromActor(this->dyna.actor.id, play->sceneNum, this->dyna.actor.params);
         if (rc != RC_UNKNOWN_CHECK) {
             this->getItemEntry = Randomizer_GetItemFromKnownCheck(rc, this->dyna.actor.params >> 5 & 0x7F);
@@ -447,7 +458,15 @@ void EnBox_WaitOpen(EnBox* this, PlayState* play) {
         Actor_WorldToActorCoords(&this->dyna.actor, &sp4C, &player->actor.world.pos);
         if (sp4C.z > -50.0f && sp4C.z < 0.0f && fabsf(sp4C.y) < 10.0f && fabsf(sp4C.x) < 20.0f &&
             Player_IsFacingActor(&this->dyna.actor, 0x3000, play)) {
-            Actor_OfferGetItemNearby(&this->dyna.actor, play, -(this->dyna.actor.params >> 5 & 0x7F));
+            if (EnBox_IsTimeGateChest(this, play)) {
+                GetItemEntry entry = this->getItemEntry;
+                // The native chest handoff negates this again before giving it.
+                entry.getItemId = -entry.getItemId;
+                entry.getItemFrom = ITEM_FROM_CHEST;
+                GiveItemEntryFromActorWithFixedRange(&this->dyna.actor, play, entry);
+            } else {
+                Actor_OfferGetItemNearby(&this->dyna.actor, play, -(this->dyna.actor.params >> 5 & 0x7F));
+            }
         }
         if (Flags_GetTreasure(play, this->dyna.actor.params & 0x1F)) {
             EnBox_SetupAction(this, EnBox_Open);

@@ -191,6 +191,32 @@ if(BUILD_TESTING)
         CVAR_PREFIX_SETTING="gSettings" CVAR_PREFIX_AUDIO="gAudioEditor"
     )
     add_test(NAME global_outdoor_rain_audio_test COMMAND global_outdoor_rain_audio_test)
+
+    find_package(nlohmann_json REQUIRED)
+    add_executable(scene_rain_policy_test tests/scene_rain_policy_test.cpp
+        soh/Enhancements/audio/SceneRainPolicy.cpp)
+    target_include_directories(scene_rain_policy_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(scene_rain_policy_test PRIVATE SCENE_RAIN_POLICY_TEST)
+    target_link_libraries(scene_rain_policy_test PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME scene_rain_policy_test COMMAND scene_rain_policy_test)
+    add_executable(scene_rain_binding_test tests/scene_rain_binding_test.cpp
+        soh/Enhancements/audio/SceneRainPolicy.cpp)
+    target_include_directories(scene_rain_binding_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/scene_rain_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/libultraship/include)
+    target_link_libraries(scene_rain_binding_test PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME scene_rain_binding_test COMMAND scene_rain_binding_test)
+
+
+    # The standalone engine harness uses GNU-style section/linker flags.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME rain_engine_runtime COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_rain_runtime_test.py
+            ${CMAKE_CURRENT_BINARY_DIR}/rain-runtime ${CMAKE_C_COMPILER} ${CMAKE_CXX_COMPILER})
+    endif()
+
 endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")

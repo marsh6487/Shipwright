@@ -2560,6 +2560,11 @@ u8 Item_Give(PlayState* play, u8 item) {
 }
 
 u8 Item_CheckObtainability(u8 item) {
+    // The fixed chest asks before its get-item sequence. Time Gate lives in the
+    // extended inventory, beyond both vanilla item-slot lookup tables below.
+    if (item == ITEM_TIME_GATE) {
+        return ExtInv_GetSlotItem(SLOT_TIME_GATE) == ITEM_TIME_GATE ? ITEM_TIME_GATE : ITEM_NONE;
+    }
     s16 i;
     s16 slot = SLOT(item);
     s32 temp;
