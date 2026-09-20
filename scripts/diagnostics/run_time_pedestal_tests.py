@@ -58,6 +58,10 @@ def main():
             actor_body += arrival_state[0] + "\n"
         actor_body += "\n".join(source.values())
         (build / "actor.c").write_text('#include "time_pedestal_fixture.h"\n' + actor_body)
+        offers = functions((ROOT / "soh/src/code/z_actor.c").read_text())
+        (build / "offers.c").write_text('#include "time_pedestal_fixture.h"\n' + '\n'.join(
+            offers[name] for name in ("Actor_OfferGetItem", "Actor_OfferGetItemNearby", "Actor_OfferCarry")) + '\n' +
+            functions((ROOT / "soh/src/overlays/actors/ovl_En_Viewer/static_story_actor.c").read_text())["StaticStoryActor_GetType"])
         parameter = functions((ROOT / "soh/src/code/z_parameter.c").read_text())
         (build / "parameter.c").write_text('#include "time_pedestal_fixture.h"\n' +
             parameter["Rando_Inventory_SwapAgeEquipment"] + "\n" + parameter["Inventory_SwapAgeEquipment"])
@@ -102,13 +106,16 @@ def main():
             helpers += render["Player_ReverseTimePedestalEquipmentSword"] + "\n"
         if "Player_ApplyTimePedestalSword" in render:
             helpers += render["Player_ApplyTimePedestalSword"] + "\n"
+        post_hand = render["Player_PostLimbDrawGameplay"]
+        post_sword = block_from(post_hand, post_hand.index("        if ((*dList != NULL)"))
         (build / "render.c").write_text('#include "time_pedestal_fixture.h"\n' + helpers +
             "static s32 Fixture_RenderTail(PlayState* play, Player* this, s32 limbIndex, Gfx** dList, Vec3s* rot) {\n"
             "void* thisx = this;\n" + tail + "\n"
             "void Fixture_ApplyLateHandOverrides(PlayState* p, Player* player, s32 limb, Gfx** dl) {\n"
             "Vec3s rot = { 0 }; Fixture_RenderTail(p, player, limb, dl, &rot);\n}\n"
             "void Fixture_ApplyLateHandOverridesWithRot(PlayState* p, Player* player, s32 limb, Gfx** dl, Vec3s* rot) {\n"
-            "Fixture_RenderTail(p, player, limb, dl, rot);\n}\n")
+            "Fixture_RenderTail(p, player, limb, dl, rot);\n}\n"
+            "void Fixture_DrawPostHand(PlayState* play, Player* this, Gfx** dList) {\n" + post_sword + "\n}\n")
         pak_source = (ROOT / "soh/mods/pak_loader/pak_loader.cpp").read_text().replace('extern "C" ', '')
         pak = functions(pak_source, {"FindEquip", "PakLoader_GetEquipDL", "PakLoader_UsedCombinedDL"})
         (build / "pak.cpp").write_text('#include "time_pedestal_fixture.h"\n' +
@@ -122,7 +129,8 @@ def main():
             "#define PAK_LOG(...) ((void)0)\n" + pak["FindEquip"] + "\n" +
             pak["PakLoader_GetEquipDL"] + "\n" + pak["PakLoader_UsedCombinedDL"])
         custom = functions((ROOT / "soh/soh/Enhancements/customequipment.cpp").read_text().replace('extern "C" ', ''),
-                           {"LoadGfxByName", "LoadCustomGfx", "CustomEquipment_OverrideMasterSwordHand"})
+                           {"LoadGfxByName", "LoadCustomGfx", "CustomEquipment_GetTimePedestalSwordDL",
+                            "CustomEquipment_OverrideMasterSwordHand"})
         (build / "custom.cpp").write_text('#include "time_pedestal_fixture.h"\n' +
             "static const char* ResolveCustomFPSHand(const char* path) { return path; }\n"
             "#define BuildHandItemDL Fixture_BuildHandItemDL\n" + "\n".join(custom.values()))
@@ -169,7 +177,7 @@ def main():
         (build / "scripts.c").write_text(arrays)
         includes = ["-I" + str(p) for p in (build, ROOT / "soh/tests", ROOT / "soh/include", ROOT / "soh", ACTOR)]
         sources = [build / name for name in
-                   ("actor.c", "parameter.c", "player.c", "render.c", "scripts.c", "handoff.c", "extended.c", "hud.c", "save.c", "music.c", "reload.c", "ownership.c")]
+                   ("actor.c", "offers.c", "parameter.c", "player.c", "render.c", "scripts.c", "handoff.c", "extended.c", "hud.c", "save.c", "music.c", "reload.c", "ownership.c")]
         helper = ACTOR / "time_pedestal_cutscene.c"
         if helper.exists():
             (build / "cutscene.c").write_text('#include "time_pedestal_fixture.h"\n' + without_includes(helper.read_text()))

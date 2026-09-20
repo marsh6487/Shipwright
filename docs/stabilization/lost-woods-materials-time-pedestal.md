@@ -68,7 +68,7 @@ The local draw/return ceremony honors `TimeSavers.SkipCutscene.Story` and a
 fresh B press after its opening 20 frames. Completing or manually skipping
 that ceremony performs the same local age swap and starts the native arrival
 animation: adult Link's sword flourish or child Link's hop. Arrival can be
-skipped separately with a fresh B press, and also honors automatic story skip.
+skipped separately with a fresh B press; automatic story skip applies to departure.
 Holding B across the reload does not generate a second press. Input is read
 only during the live update, after the engine polls the controller.
 
@@ -81,16 +81,31 @@ items or save equipment.
 
 During the child's frame-87 withdrawal handoff, the adult's insertion before
 frame 70, and the adult arrival flourish, the hand uses the selected PAK Master
-Sword slot, then the custom AltAssets Master Sword, then the native/alternate
-age-specific hand display list. This selection does not depend on the weapon
-equipped on B. The adult's frame-70 insertion closes the hand even when a late
-equipment hook would otherwise redraw a sword. The pedestal's world-object
-display list remains the existing scene asset.
+Sword pieces, then the custom AltAssets Master Sword, then the native/alternate
+age-specific hand display list. Both ages and the local pedestal resolve the
+same weapon pieces, including adult-only equipment packs used during child
+Link's ceremony. Selection follows body, equipment pack, Master Sword slot,
+then forced equipment precedence; within each source, adult pieces take priority
+with a child-piece fallback. The weapon is composed with the current age's hand
+and does not depend on the weapon equipped on B. The adult's frame-70 insertion
+closes the hand even when a late equipment hook would otherwise redraw a sword.
+Without a selected PAK or custom Master Sword resource, the pedestal retains its
+native/alternate world-object display list. Legacy packs replacing only that
+world-object path still need a ceremonial resource replacement for matching hands.
+
+The local pedestal offers its interaction within 100 horizontal units and 40
+vertical units, from any approach angle. It aligns Link for the ceremony and
+keeps the existing Saria/Skull Kid talk suppression while the sword is offered.
+Active dialogue, cutscenes, airborne states and real item offers keep their guards.
+Skipping or completing the departure now uses a fast white fade before the age
+reload and a matching fade-in. Link retains his ceremony pose during departure;
+the saved return position remains the original approach position.
 
 ## Verification commands
 
 ```sh
 python3 scripts/diagnostics/run_time_pedestal_tests.py
+python3 scripts/diagnostics/run_pedestal_sword_selection_tests.py
 python3 scripts/diagnostics/run_native_material_probe.py \
   --json-include /path/to/nlohmann/include \
   --spdlog-include /path/to/spdlog/include
@@ -101,6 +116,20 @@ parser with controlled archive I/O, including physical archive ownership for
 alternate resources. The sword tests compile the relevant production C/C++
 functions and native cutscene data with engine boundary fixtures. Neither is
 an in-game rendering test or a substitute for a complete platform build.
+
+The September 20 candidate is based on `4a16cd05ce904bbc19ef2707ed22454c6d5bfe65`.
+The supplied clips show a frozen last frame during the instant reload, tight
+interaction angles beside Saria, and mismatched pedestal/hand swords. Focused
+tests now cover proximity and talk priority, normal/manual/automatic departure
+and arrival, progression preservation, selected weapon handoffs and age-separated
+PAK source maps. Modified C translation units also pass real-header syntax checks;
+the existing static story talk and viewer integration tests pass.
+
+Runtime acceptance is pending. In particular, verify child grip and downward
+blade direction, the selected sword's placement in the pedestal, no model change
+at either handoff, and fade behavior with Story Skip both on and off. The selected
+pedestal mesh uses Link's weapon scale and places the grip 40 world units above
+the actor anchor; the tests check source selection, not this visual calibration.
 
 In game, verify repeated child/adult cycles, camera clearance, exact room-10
 return placement, reset/skip behavior, owned and unowned sword saves, and music

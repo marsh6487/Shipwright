@@ -3425,6 +3425,57 @@ static std::map<u32, Gfx*>* sGetEquipDLs(void) {
     return sCachedEquipDLs.empty() ? NULL : &sCachedEquipDLs;
 }
 
+static void MergeTimePedestalSwordPieces(std::map<u32, Gfx*>& pieces, s32 modelIndex) {
+    if (modelIndex < 0 || modelIndex >= (s32)sModels.size()) {
+        return;
+    }
+    const auto& adult = sModels[modelIndex].adultEquipDLs;
+    const auto& child = sModels[modelIndex].childEquipDLs;
+    for (u32 alias : { 0x50E0U, 0x50F8U }) {
+        auto it = adult.find(alias);
+        if (it != adult.end()) {
+            pieces[alias] = it->second;
+        } else if ((it = child.find(alias)) != child.end()) {
+            pieces[alias] = it->second;
+        }
+    }
+}
+
+extern "C" Gfx* PakLoader_GetTimePedestalSwordDL(void) {
+    if (PakLoader_IsRemoteRenderActive()) {
+        return nullptr;
+    }
+    EnsureSlotMixLoaded();
+    // One ceremonial Master Sword for both ages and for the pedestal. Using
+    // the ordinary current-age cache loses adult-only equipment as child.
+    // Copy only weapon pieces: never import the adult model's fist or limbs.
+    std::map<u32, Gfx*> pieces;
+    if (CVarGetInteger("gMods.PakLoader.Enabled", 0) || sForcedModelIndex >= 0) {
+        s32 body = sForcedModelIndex >= 0 ? sForcedModelIndex : sSelectedAdultIndex;
+        MergeTimePedestalSwordPieces(pieces, body);
+    }
+    MergeTimePedestalSwordPieces(pieces, sSelectedEquipIndex);
+    MergeTimePedestalSwordPieces(pieces, sSlotMix[1]); // Master Sword slot, above the equipment pack.
+    MergeTimePedestalSwordPieces(pieces, sForcedEquipIndex);
+    Gfx* parts[] = { pieces[0x50E0], pieces[0x50F8] };
+    for (Gfx* part : parts) {
+        if (part == nullptr || part == PAK_DL_STUB || !IsValidGfxPtrOrOtrPath(part)) {
+            return nullptr;
+        }
+    }
+    Gfx* sword = MakeMiniDL(parts, 2);
+    sRuntimeCombinedDLs.push_back(sword); // Retained across the renderer's frame boundary.
+    return sword;
+}
+
+extern "C" Gfx* PakLoader_GetTimePedestalHandDL(void) {
+    if (!PakLoader_HasActiveModel()) {
+        return nullptr;
+    }
+    auto* equipment = sGetEquipDLs();
+    return equipment != nullptr ? FindEquip(*equipment, 0x50A0) : nullptr;
+}
+
 extern "C" Gfx* PakLoader_GetEquipDL(Player* player, s32 limbIndex) {
     // Gate: at least one of body-model toggle, forced body, selected equipment,
     // forced equipment, or a per-slot mix override must be active. Equipment-

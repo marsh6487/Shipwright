@@ -1750,33 +1750,26 @@ static void Player_ApplyTimePedestalSword(PlayState* play, Player* player, s32 l
     s32 handState = BgTokiSwd_GetTimePedestalHandState(play, player);
     if (handState != BG_TOKI_SWD_HAND_UNCHANGED) {
         s32 reverseEquipmentSword = !LINK_IS_ADULT && handState == BG_TOKI_SWD_HAND_MASTER_SWORD;
-        Gfx* swordDL = PakLoader_GetEquipDL(player, limbIndex);
         if (handState == BG_TOKI_SWD_HAND_CLOSED) {
+            Gfx* swordDL = PakLoader_GetEquipDL(player, limbIndex);
             *dList = (swordDL != NULL && swordDL != PAK_DL_STUB)
                          ? swordDL
                          : Player_ResolveLimbDLForDummyOrLocal(player->leftHandDLists[sDListsLodOffset]);
             return;
         }
-        if (swordDL == NULL || swordDL == PAK_DL_STUB) {
-            if (CustomEquipment_OverrideMasterSwordHand(play, dList)) {
-                if (reverseEquipmentSword) {
-                    Player_ReverseTimePedestalEquipmentSword(rot);
-                }
-                return;
+        // Resolve the weapon independently of the current-age equipment cache,
+        // and compose it with this age's hand. The pedestal uses this source too.
+        if (CustomEquipment_OverrideMasterSwordHand(play, dList)) {
+            if (reverseEquipmentSword) {
+                Player_ReverseTimePedestalEquipmentSword(rot);
             }
-            // This is the canonical ceremonial DL (or an alternate replacement
-            // of that exact resource), whose authored orientation already
-            // matches the native child animation.
-            const char* nativeDL = !LINK_IS_ADULT ? gLinkChildLeftHandHoldingMasterSwordDL
-                                   : (sDListsLodOffset == 0) ? gLinkAdultLeftHandHoldingMasterSwordNearDL
-                                                           : gLinkAdultLeftHandHoldingMasterSwordFarDL;
-            swordDL = Player_ResolveLimbDLForDummyOrLocal((void*)nativeDL);
-        } else if (reverseEquipmentSword) {
-            // Pak equipment supplies ordinary LFIST_SWORD2, whose blade axis is
-            // opposite the dedicated child ceremonial hand/sword resource.
-            Player_ReverseTimePedestalEquipmentSword(rot);
+            return;
         }
-        *dList = swordDL;
+        // The native ceremonial resource already has the child animation's grip.
+        const char* nativeDL = !LINK_IS_ADULT ? gLinkChildLeftHandHoldingMasterSwordDL
+                               : (sDListsLodOffset == 0) ? gLinkAdultLeftHandHoldingMasterSwordNearDL
+                                                       : gLinkAdultLeftHandHoldingMasterSwordFarDL;
+        *dList = Player_ResolveLimbDLForDummyOrLocal((void*)nativeDL);
     }
 }
 
@@ -2533,7 +2526,8 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
         // closed fist in Player_OverrideLimbDrawGameplayDefault, so *dList != NULL means a hand DL
         // — where a sword would be — is drawing). Self-guards on Odolwa-worn + sword-in-hand; own
         // push/pop + transform. Mirrors the MM 2ship L_HAND post-limb hook.
-        if ((*dList != NULL) && (this->actor.scale.y >= 0.0f)) {
+        if ((*dList != NULL) && (this->actor.scale.y >= 0.0f) &&
+            BgTokiSwd_GetTimePedestalHandState(play, this) == BG_TOKI_SWD_HAND_UNCHANGED) {
             BossRemains_DrawOdolwaSword(play, this);
         }
 

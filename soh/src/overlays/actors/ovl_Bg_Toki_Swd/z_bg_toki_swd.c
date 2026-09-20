@@ -9,6 +9,8 @@
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/SwitchAge.h"
+#include "soh/Enhancements/customequipment.h"
+#include "overlays/actors/ovl_En_Viewer/static_story_actor.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -202,8 +204,24 @@ void BgTokiSwd_TimePedestalWait(BgTokiSwd* this, PlayState* play) {
         gSaveContext.cutsceneTrigger = 1;
         BgTokiSwd_SetupAction(this, BgTokiSwd_TimePedestalCutscene);
     } else if (play->transitionTrigger == TRANS_TRIGGER_OFF && !Play_InCsMode(play) &&
-               Actor_IsFacingPlayer(&this->actor, 0x2000)) {
-        Actor_OfferCarry(&this->actor, play);
+               !(player->stateFlags1 & PLAYER_STATE1_TALKING) &&
+               (player->interactRangeActor == NULL || player->getItemId == GI_NONE)) {
+        // This local ceremony aligns Link itself. Let either age approach from
+        // any side of the stump, without squeezing through a nearby NPC's
+        // collision or satisfying the ordinary carry offer's 45-degree cone.
+        if (Actor_OfferGetItem(&this->actor, play, GI_NONE, 100.0f, 40.0f)) {
+            // Withdraw any pending offer from these nearby static NPCs.
+            // Their later ITEMACTION update also suppresses new talk offers
+            // while this PROP has the sword interaction reserved.
+            Actor* talkActor = player->talkActor;
+            if (talkActor != NULL && talkActor->id == ACTOR_EN_VIEWER) {
+                StaticStoryActorType type = StaticStoryActor_GetType(talkActor->params);
+                if (type == STATIC_STORY_ACTOR_SARIA || type == STATIC_STORY_ACTOR_SKULL_KID) {
+                    player->talkActor = NULL;
+                    player->stateFlags2 &= ~PLAYER_STATE2_CAN_ACCEPT_TALK_OFFER;
+                }
+            }
+        }
     }
 }
 
@@ -280,8 +298,7 @@ s32 BgTokiSwd_EndTimePedestalArrival(PlayState* play, Player* player) {
 }
 
 s32 BgTokiSwd_GetTimePedestalHandState(PlayState* play, Player* player) {
-    if (play == NULL || player == NULL || player != GET_PLAYER(play) || !play->state.running ||
-        play->transitionTrigger == TRANS_TRIGGER_START) {
+    if (play == NULL || player == NULL || player != GET_PLAYER(play) || !play->state.running) {
         return BG_TOKI_SWD_HAND_UNCHANGED;
     }
     if (BgTokiSwd_IsTimePedestalArrival(play, player)) {
@@ -295,7 +312,8 @@ s32 BgTokiSwd_GetTimePedestalHandState(PlayState* play, Player* player) {
         return BG_TOKI_SWD_HAND_UNCHANGED;
     }
     BgTokiSwd* this = (BgTokiSwd*)actor;
-    if (this->localCutscene == NULL || play->csCtx.segment != this->localCutscene || this->localCutsceneFinished) {
+    if (this->localCutscene == NULL || play->csCtx.segment != this->localCutscene ||
+        (this->localCutsceneFinished && play->transitionTrigger != TRANS_TRIGGER_START)) {
         return BG_TOKI_SWD_HAND_UNCHANGED;
     }
     if (LINK_IS_ADULT) {
@@ -320,6 +338,8 @@ void BgTokiSwd_FinishTimePedestal(BgTokiSwd* this, PlayState* play) {
         return;
     }
 
+    Vec3f ceremonyPos = player->actor.world.pos;
+    s16 ceremonyYaw = player->actor.shape.rot.y;
     this->localCutsceneFinished = true;
     player->actor.world.pos = this->returnPos;
     player->actor.shape.rot.y = this->returnYaw;
@@ -338,6 +358,15 @@ void BgTokiSwd_FinishTimePedestal(BgTokiSwd* this, PlayState* play) {
     gSaveContext.seqId = (u8)NA_BGM_DISABLED;
     gSaveContext.natureAmbienceId = NATURE_ID_DISABLED;
     SwitchAgeWithoutProgression();
+    // SwitchAge's instant reload exposes the last camera image for the entire
+    // synchronous load. Finish a visible fade first, then fade back into the
+    // independent exit animation. Keep the safe respawn recorded above, but
+    // do not visibly snap Link back to his approach position during fade-out.
+    play->transitionType = TRANS_TYPE_FADE_WHITE_FAST;
+    gSaveContext.nextTransitionType = TRANS_TYPE_FADE_WHITE_FAST;
+    player->actor.world.pos = ceremonyPos;
+    player->yaw = player->actor.shape.rot.y = ceremonyYaw;
+    player->interactRangeActor = &this->actor;
     // Both a completed and a manually skipped departure get their own arrival.
     // Keep the ordinary respawn contract; only its exact next spawn can consume
     // this visual continuation, before native story/rando start-mode hooks run.
@@ -473,6 +502,7 @@ void BgTokiSwd_Draw(Actor* thisx, PlayState* play2) {
     PlayState* play = play2;
     BgTokiSwd* this = (BgTokiSwd*)thisx;
     s32 pad[3];
+    Gfx* selectedSword = NULL;
 
     // Do not draw the Master Sword in the pedestal if the player has not found it yet
     if (this->actor.params != BG_TOKI_SWD_TIME_PEDESTAL && IS_RANDO &&
@@ -487,10 +517,25 @@ void BgTokiSwd_Draw(Actor* thisx, PlayState* play2) {
 
     func_8002EBCC(&this->actor, play, 0);
 
+    if (this->actor.params == BG_TOKI_SWD_TIME_PEDESTAL) {
+        selectedSword = CustomEquipment_GetTimePedestalSwordDL();
+    }
+    Matrix_Push();
+    if (selectedSword != NULL) {
+        // Weapon pieces are authored at Link's 0.01 scale with their grip at
+        // the origin and blade along -X. The actor uses 0.025, with a 20-unit
+        // shape offset. Place the grip 40 units above the pedestal anchor and
+        // turn the blade down without importing a hand or changing collision.
+        Matrix_Translate(0.0f, 800.0f, 0.0f, MTXMODE_APPLY);
+        Matrix_Scale(0.4f, 0.4f, 0.4f, MTXMODE_APPLY);
+        Matrix_RotateZ(M_PI / 2.0f, MTXMODE_APPLY);
+    }
+
     gSPSegment(POLY_OPA_DISP++, 0x08,
                Gfx_TexScrollEx(play->state.gfxCtx, 0, -(play->gameplayFrames % 0x80), 32, 32, 0, -1));
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, object_toki_objects_DL_001BD0);
+    gSPDisplayList(POLY_OPA_DISP++, selectedSword != NULL ? selectedSword : (Gfx*)object_toki_objects_DL_001BD0);
+    Matrix_Pop();
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

@@ -69,8 +69,10 @@ struct Actor {
     s8 room;
     struct { Vec3f pos; Vec3s rot; } world;
     struct { Vec3s rot; f32 yOffset; void* shadowDraw; } shape;
-    Vec3f velocity;
+    Vec3f velocity, scale;
     f32 speedXZ;
+    f32 xzDistToPlayer, yDistToPlayer;
+    s16 yawTowardsPlayer;
     Actor* parent;
     ActorFunc draw;
     int colChkInfo;
@@ -95,9 +97,13 @@ typedef struct Player {
     PlayerActionFunc actionFunc;
     struct { s16 actionVar1; } av1;
     struct { s16 actionVar2; } av2;
-    u32 stateFlags1;
+    u32 stateFlags1, stateFlags2;
+    s16 getItemId;
+    u16 getItemDirection;
     f32 linearVelocity;
     Actor* interactRangeActor;
+    Actor* heldActor;
+    Actor* talkActor;
     const PlayerAgeProperties* ageProperties;
 } Player;
 typedef struct {
@@ -156,10 +162,12 @@ struct PlayState {
 #define TRANS_TRIGGER_START 1
 #define TRANS_TYPE_INSTANT 11
 #define TRANS_TYPE_FADE_BLACK_FAST 6
+#define TRANS_TYPE_FADE_WHITE_FAST 7
 #define SCENE_LOST_WOODS 0x5B
 #define SCENE_HYRULE_CASTLE 0x5F
 #define SCENE_OUTSIDE_GANONS_CASTLE 0x64
 #define ACTOR_BG_TOKI_SWD 0x6C
+#define ACTOR_EN_VIEWER 0x2A
 #define ENTR_CASTLE_GROUNDS_SOUTH_EXIT 0x0138
 #define ENTR_HYRULE_FIELD_10 0x0282
 #define ENTR_LINKS_HOUSE_CHILD_SPAWN 0x00BB
@@ -223,6 +231,19 @@ enum {
 #define PLAYER_STATE1_IN_ITEM_CS (1U << 28)
 #define PLAYER_STATE1_INPUT_DISABLED (1U << 5)
 #define PLAYER_STATE1_CARRYING_ACTOR (1U << 11)
+#define PLAYER_STATE1_TALKING (1U << 6)
+#define PLAYER_STATE1_DEAD (1U << 7)
+#define PLAYER_STATE1_CHARGING_SPIN_ATTACK (1U << 12)
+#define PLAYER_STATE1_HANGING_OFF_LEDGE (1U << 13)
+#define PLAYER_STATE1_CLIMBING_LEDGE (1U << 14)
+#define PLAYER_STATE1_JUMPING (1U << 18)
+#define PLAYER_STATE1_FREEFALL (1U << 19)
+#define PLAYER_STATE1_FIRST_PERSON (1U << 20)
+#define PLAYER_STATE1_CLIMBING_LADDER (1U << 21)
+#define PLAYER_STATE2_CAN_ACCEPT_TALK_OFFER (1U << 1)
+#define ABS(x) ((x) < 0 ? -(x) : (x))
+#define M_PI 3.14159265358979323846
+#define MTXMODE_APPLY 1
 #define PLAYER_CSACTION_7 7
 #define PLAYER_IA_SWORD_CS 1
 #define PLAYER_IA_NONE 0
@@ -241,10 +262,11 @@ enum {
 #define CLOSE_DISPS(ctx) ((void)0)
 #define gSPSegment(...) ((void)0)
 #define gSPMatrix(...) ((void)0)
-#define gSPDisplayList(...) ((void)0)
+#define gSPDisplayList(unused, dl) Fixture_RecordDraw(dl)
 #define osSyncPrintf(...) ((void)0)
 
 #include "time_pedestal_actor.h"
+#include "src/overlays/actors/ovl_En_Viewer/static_story_actor.h"
 #include "soh/Enhancements/SwitchAge.h"
 
 #ifdef __cplusplus
@@ -318,8 +340,20 @@ extern const char gLinkChildLeftHandHoldingMasterSwordDL[];
 extern const char gLinkAdultLeftHandHoldingMasterSwordNearDL[], gLinkAdultLeftHandHoldingMasterSwordFarDL[];
 void Fixture_ApplyLateHandOverrides(PlayState*, Player*, s32, Gfx**);
 void Fixture_ApplyLateHandOverridesWithRot(PlayState*, Player*, s32, Gfx**, Vec3s*);
+void Fixture_DrawPostHand(PlayState*, Player*, Gfx**);
+void BossRemains_DrawOdolwaSword(PlayState*, Player*);
 Gfx* Player_ResolveLimbDLForDummyOrLocal(void*);
 Gfx* PakLoader_GetEquipDL(Player*, s32);
+Gfx* PakLoader_GetTimePedestalSwordDL(void);
+Gfx* PakLoader_GetTimePedestalHandDL(void);
+Gfx* CustomEquipment_GetTimePedestalSwordDL(void);
+void Fixture_RecordDraw(const void*);
+void Matrix_Push(void);
+void Matrix_Pop(void);
+void Matrix_Translate(f32, f32, f32, u8);
+void Matrix_Scale(f32, f32, f32, u8);
+void Matrix_RotateZ(f32, u8);
+extern const char object_toki_objects_DL_001BD0[];
 u8 PakLoader_HasActiveModel(void);
 u8 PakLoader_UsedCombinedDL(u8);
 bool GameInteractor_InvisibleLinkActive(void);
@@ -348,6 +382,8 @@ s32 Actor_IsFacingPlayer(Actor*, s16);
 s32 Play_InCsMode(PlayState*);
 s32 Actor_HasParent(Actor*, PlayState*);
 void Actor_OfferCarry(Actor*, PlayState*);
+s32 Actor_OfferGetItem(Actor*, PlayState*, s32, f32, f32);
+s32 Player_GetExplosiveHeld(Player*);
 bool GameInteractor_Should(int, bool, ...);
 void Item_Give(PlayState*, s16);
 void Entrance_SetEntranceDiscovered(s16, bool);

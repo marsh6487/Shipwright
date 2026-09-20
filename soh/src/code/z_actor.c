@@ -5,6 +5,7 @@
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
 #include "overlays/actors/ovl_En_Part/z_en_part.h"
 #include "overlays/actors/ovl_En_Viewer/static_story_actor.h"
+#include "overlays/actors/ovl_Bg_Toki_Swd/z_bg_toki_swd.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "objects/gameplay_dangeon_keep/gameplay_dangeon_keep.h"
 #include "objects/object_bdoor/object_bdoor.h"
@@ -2163,6 +2164,8 @@ s32 GiveItemEntryFromActorWithFixedRange(Actor* actor, PlayState* play, GetItemE
 // If you're doing something for randomizer, you're probably looking for GiveItemEntryFromActor
 s32 Actor_OfferGetItem(Actor* actor, PlayState* play, s32 getItemId, f32 xzRange, f32 yRange) {
     Player* player = GET_PLAYER(play);
+    s32 localTimePedestal = actor->id == ACTOR_BG_TOKI_SWD && actor->params == BG_TOKI_SWD_TIME_PEDESTAL &&
+                            getItemId == GI_NONE;
 
     // Transformation masks (Skijer's NEI): the Zora swim needs a wider offer window.
     // Vanilla's yRange is 10.0f (Actor_OfferGetItemNearby) — fine on land, where the
@@ -2198,10 +2201,12 @@ s32 Actor_OfferGetItem(Actor* actor, PlayState* play, s32 getItemId, f32 xzRange
                 s16 yawDiff = actor->yawTowardsPlayer - player->actor.shape.rot.y;
                 s32 absYawDiff = ABS(yawDiff);
 
-                if ((getItemId != GI_NONE) || (player->getItemDirection < absYawDiff)) {
+                if (localTimePedestal || (getItemId != GI_NONE) || (player->getItemDirection < absYawDiff)) {
                     player->getItemId = getItemId;
                     player->interactRangeActor = actor;
-                    player->getItemDirection = absYawDiff;
+                    // The custom ceremony handles alignment. Keep its offer
+                    // ahead of ordinary carry actors until the next frame.
+                    player->getItemDirection = localTimePedestal ? 0x8000 : absYawDiff;
                     return true;
                 }
             }

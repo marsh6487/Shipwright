@@ -67,6 +67,10 @@ Gfx* PakLoader_GetDLOverride(const char* otrPath);
  */
 #define PAK_DL_STUB ((Gfx*)(uintptr_t)1)
 Gfx* PakLoader_GetEquipDL(Player* player, s32 limbIndex);
+// Shared sword-only geometry for the local pedestal and both ceremonial hands.
+// Uses the selected Master slot independently of the current age or inventory.
+Gfx* PakLoader_GetTimePedestalSwordDL(void);
+Gfx* PakLoader_GetTimePedestalHandDL(void);
 
 /**
  * Check if the pak model used a combined DL for the given hand (includes weapon geometry).

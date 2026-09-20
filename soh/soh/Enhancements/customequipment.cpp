@@ -271,15 +271,26 @@ static bool IsScalingAdultItemAsChild() {
            CVarGetInteger(CVAR_ENHANCEMENT("ScaleAdultEquipmentAsChild"), 0) && !LINK_IS_ADULT;
 }
 
-extern "C" s32 CustomEquipment_OverrideMasterSwordHand(PlayState* play, Gfx** dList) {
-    if (!CVarGetInteger(CVAR_SETTING("AltAssets"), 1) || TransformMasks_IsTransformedAny()) {
-        return false;
+extern "C" Gfx* CustomEquipment_GetTimePedestalSwordDL(void) {
+    Gfx* sword = PakLoader_GetTimePedestalSwordDL();
+    if (sword != nullptr) {
+        return sword;
     }
-    Gfx* sword = LoadCustomGfx(gCustomMasterSwordDL);
+    if (!CVarGetInteger(CVAR_SETTING("AltAssets"), 1) || TransformMasks_IsTransformedAny()) {
+        return nullptr;
+    }
+    return LoadCustomGfx(gCustomMasterSwordDL);
+}
+
+extern "C" s32 CustomEquipment_OverrideMasterSwordHand(PlayState* play, Gfx** dList) {
+    Gfx* sword = CustomEquipment_GetTimePedestalSwordDL();
     if (sword == nullptr) {
         return false;
     }
-    Gfx* hand = LoadGfxByName(LINK_IS_ADULT ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL);
+    Gfx* hand = PakLoader_GetTimePedestalHandDL();
+    if (hand == nullptr || hand == PAK_DL_STUB) {
+        hand = LoadGfxByName(LINK_IS_ADULT ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL);
+    }
     if (hand == nullptr) {
         return false;
     }
