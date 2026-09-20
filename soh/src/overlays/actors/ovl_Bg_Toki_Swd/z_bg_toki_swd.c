@@ -105,6 +105,15 @@ void BgTokiSwd_Init(Actor* thisx, PlayState* play) {
     this->localCutsceneFinished = false;
 
     if (this->actor.params == BG_TOKI_SWD_TIME_PEDESTAL) {
+        // The authored grip anchor can sit inside the stump. Resolve the
+        // supporting surface above it, rather than treating nearby ground as
+        // part of a broad vertical interaction cylinder.
+        Vec3f floorProbe = this->actor.world.pos;
+        s32 floorBgId;
+        floorProbe.y += 40.0f;
+        this->actor.floorHeight = BgCheck_EntityRaycastFloor5(
+            play, &play->colCtx, &this->actor.floorPoly, &floorBgId, &this->actor, &floorProbe);
+        this->actor.floorBgId = floorBgId;
         BgTokiSwd_SetupAction(this, BgTokiSwd_TimePedestalWait);
         if (LINK_IS_ADULT) {
             this->actor.draw = NULL;
@@ -207,11 +216,14 @@ void BgTokiSwd_TimePedestalWait(BgTokiSwd* this, PlayState* play) {
         BgTokiSwd_SetupAction(this, BgTokiSwd_TimePedestalCutscene);
     } else if (play->transitionTrigger == TRANS_TRIGGER_OFF && !Play_InCsMode(play) &&
                !(player->stateFlags1 & PLAYER_STATE1_TALKING) &&
+               this->actor.floorPoly != NULL && (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
+               player->actor.floorBgId == this->actor.floorBgId &&
+               fabsf(player->actor.floorHeight - this->actor.floorHeight) < 2.0f &&
+               fabsf(player->actor.world.pos.y - this->actor.floorHeight) < 4.0f &&
                (player->interactRangeActor == NULL || player->getItemId == GI_NONE)) {
-        // This local ceremony aligns Link itself. Let either age approach from
-        // any side of the stump, without squeezing through a nearby NPC's
-        // collision or satisfying the ordinary carry offer's 45-degree cone.
-        if (Actor_OfferGetItem(&this->actor, play, GI_NONE, 100.0f, 40.0f)) {
+        // Cover the whole stump top from every heading. The surface checks
+        // above exclude the ground and sloping bark; the ceremony aligns Link.
+        if (Actor_OfferGetItem(&this->actor, play, GI_NONE, 60.0f, 40.0f)) {
             // Withdraw any pending offer from these nearby static NPCs.
             // Their later ITEMACTION update also suppresses new talk offers
             // while this PROP has the sword interaction reserved.
@@ -575,12 +587,12 @@ void BgTokiSwd_Draw(Actor* thisx, PlayState* play2) {
     Matrix_Push();
     if (selectedSword != NULL) {
         // Weapon pieces are authored at Link's 0.01 scale with their grip at
-        // the origin and blade along -X. The actor uses 0.025, with a 20-unit
+        // the origin and blade along +X. The actor uses 0.025, with a 20-unit
         // shape offset. Place the grip 40 units above the pedestal anchor and
         // turn the blade down without importing a hand or changing collision.
         Matrix_Translate(0.0f, 800.0f, 0.0f, MTXMODE_APPLY);
         Matrix_Scale(0.4f, 0.4f, 0.4f, MTXMODE_APPLY);
-        Matrix_RotateZ(M_PI / 2.0f, MTXMODE_APPLY);
+        Matrix_RotateZ(-M_PI / 2.0f, MTXMODE_APPLY);
     }
 
     gSPSegment(POLY_OPA_DISP++, 0x08,

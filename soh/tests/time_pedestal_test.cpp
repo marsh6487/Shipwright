@@ -19,6 +19,7 @@ static int cutsceneAudioFlag;
 static int postSwordDrawCalls;
 static int cameraCreates, cameraCopies, cameraClears, letterboxSize;
 static bool failSubCamera;
+static float restingSwordRotation;
 static LinkAnimationHeader idleAnimation, childArrivalAnimation, adultArrivalAnimation;
 
 static Vec3f RotateZYX(Vec3s rot, Vec3f vector) {
@@ -69,7 +70,14 @@ void Matrix_Push(void) {}
 void Matrix_Pop(void) {}
 void Matrix_Translate(f32, f32, f32, u8) {}
 void Matrix_Scale(f32, f32, f32, u8) {}
-void Matrix_RotateZ(f32, u8) {}
+void Matrix_RotateZ(f32 angle, u8) { restingSwordRotation = angle; }
+f32 BgCheck_EntityRaycastFloor5(PlayState*, void*, void** poly, s32* bgId, Actor* actor, Vec3f* point) {
+    REQUIRE(point->x == actor->world.pos.x && point->z == actor->world.pos.z);
+    REQUIRE(point->y > -56.0f && point->y < 100.0f);
+    *poly = actor;
+    *bgId = 0;
+    return -56.0f; // Authored room-10 stump; its actor anchor is seven units lower.
+}
 s16 Play_CreateSubCamera(PlayState* play) {
     cameraCreates++;
     if (failSubCamera) return SUBCAM_NONE;
@@ -162,6 +170,19 @@ void LinkAnimation_Change(PlayState*, SkelAnime* skel, LinkAnimationHeader* anim
     skel->animLength = 180;
 }
 void Player_Action_Idle(Player*, PlayState*) {}
+s32 Player_UpdateUpperBody(Player*, PlayState*) { return false; }
+s32 func_8008F128(Player*) { return false; }
+void Player_Action_8084E604(Player*, PlayState*) {}
+void Player_UpperAction_ChangeHeldItem(Player*, PlayState*) {}
+s32 Fixture_TurnActionHandler(Player*, PlayState*) { return false; }
+s32 Player_ActionHandler_2(Player* player, PlayState* play) {
+    // The grab action boundary accepts only a fresh A edge. Exercise the real
+    // action-list dispatch above it, including its held-item and cutscene guards.
+    if (!(play->state.input[0].press.button & BTN_A)) return false;
+    REQUIRE(player->interactRangeActor != nullptr);
+    player->interactRangeActor->parent = &player->actor;
+    return true;
+}
 void Player_StartMode_Idle(PlayState*, Player* player) { player->actionFunc = Player_Action_Idle; }
 s32 Player_SetupAction(PlayState*, Player* player, PlayerActionFunc action, s32) {
     player->actionFunc = action;
@@ -298,7 +319,9 @@ static void Reset(PlayState& play, BgTokiSwd& sword, bool adult = false, bool ra
     gSaveContext.childEquips.equipment = gSaveContext.adultEquips.equipment = 0;
     play.sceneNum = SCENE_LOST_WOODS;
     play.roomCtx.curRoom.num = 10;
-    play.player.actor.world.pos = { -720.0f, -61.0f, -2368.0f };
+    play.player.actor.world.pos = { -720.0f, -56.0f, -2368.0f };
+    play.player.actor.floorHeight = -56.0f;
+    play.player.actor.bgCheckFlags = BGCHECKFLAG_GROUND;
     play.player.actor.shape.rot.y = 22000;
     play.player.currentSwordItemId = ITEM_SWORD_KOKIRI;
     play.player.leftHandType = PLAYER_MODELTYPE_LH_OPEN;
@@ -310,7 +333,7 @@ static void Reset(PlayState& play, BgTokiSwd& sword, bool adult = false, bool ra
     sword.actor.shape.rot.y = 0x4000; // Quarter-turn makes expected positions hand-checkable.
     sword.actor.draw = BgTokiSwd_Draw;
     sword.actor.xzDistToPlayer = 31.0f;
-    sword.actor.yDistToPlayer = 2.0f;
+    sword.actor.yDistToPlayer = 7.0f;
     sword.actor.yawTowardsPlayer = play.player.actor.shape.rot.y + 0x8000;
     play.player.getItemDirection = 0x6000;
 }
@@ -1081,14 +1104,14 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
 static void CheckPedestalProximity() {
     for (bool adult : {false, true}) {
         for (s16 npcParams : {0x7F23, 0x7E08}) {
-            for (s16 yaw : {0, 0x2000, 0x4000, 0x6000}) {
+            for (int yaw = 0; yaw < 0x10000; yaw += 0x2000) {
                 PlayState play;
                 BgTokiSwd sword;
                 Reset(play, sword, adult);
                 BgTokiSwd_Init(&sword.actor, &play);
                 facing = false; // Approach outside the stock actor's front wedge.
-                sword.actor.xzDistToPlayer = 85.0f;
-                sword.actor.yDistToPlayer = 25.0f;
+                sword.actor.xzDistToPlayer = 40.0f;
+                sword.actor.yDistToPlayer = 7.0f;
                 sword.actor.yawTowardsPlayer = yaw;
                 play.player.actor.shape.rot.y = 0;
                 Actor npc{};
@@ -1101,11 +1124,20 @@ static void CheckPedestalProximity() {
                 REQUIRE(play.player.getItemId == GI_NONE);
                 REQUIRE(play.player.talkActor == nullptr);
                 REQUIRE(!(play.player.stateFlags2 & PLAYER_STATE2_CAN_ACCEPT_TALK_OFFER));
+                Actor carry{};
+                carry.yawTowardsPlayer = -0x8000;
+                REQUIRE(!Actor_OfferGetItem(&carry, &play, GI_NONE, 50.0f, 10.0f));
+                REQUIRE(play.player.interactRangeActor == &sword.actor);
+                REQUIRE(!Fixture_TryTurnInPlace(&play, &play.player));
+                REQUIRE(sword.actor.parent == nullptr);
+                play.state.input[0].press.button = BTN_A;
+                REQUIRE(Fixture_TryTurnInPlace(&play, &play.player));
+                REQUIRE(sword.actor.parent == &play.player.actor);
                 BgTokiSwd_Destroy(&sword.actor, &play);
             }
         }
     }
-    for (int blocked = 0; blocked < 5; ++blocked) {
+    for (int blocked = 0; blocked < 10; ++blocked) {
         PlayState play;
         BgTokiSwd sword;
         Reset(play, sword);
@@ -1115,12 +1147,45 @@ static void CheckPedestalProximity() {
         if (blocked == 2) play.player.stateFlags1 |= PLAYER_STATE1_JUMPING;
         if (blocked == 3) play.player.stateFlags1 |= PLAYER_STATE1_TALKING;
         if (blocked == 4) play.player.stateFlags1 |= PLAYER_STATE1_FIRST_PERSON;
+        if (blocked == 5) { // Nearby ground is inside the old 40-unit vertical offer.
+            play.player.actor.world.pos.y = play.player.actor.floorHeight = -96.0f;
+            sword.actor.yDistToPlayer = -33.0f;
+        }
+        if (blocked == 6) play.player.actor.bgCheckFlags = 0;
+        if (blocked == 7) { // Sloping bark below the flat top is not the interaction surface.
+            play.player.actor.world.pos.y = play.player.actor.floorHeight = -64.0f;
+            sword.actor.yDistToPlayer = -1.0f;
+        }
+        if (blocked == 8) { // A jump crossing the top's height must not offer the sword.
+            play.player.actor.world.pos.y = -50.0f;
+            sword.actor.yDistToPlayer = 13.0f;
+        }
+        if (blocked == 9) play.player.actor.floorBgId = 1;
         BgTokiSwd_Update(&sword.actor, &play);
         REQUIRE(play.player.interactRangeActor == nullptr);
         REQUIRE(play.player.getItemDirection == 0x6000);
         BgTokiSwd_Destroy(&sword.actor, &play);
     }
-    puts("PASS custom proximity from all sides, dialogue priority, height and player-state guards");
+    for (int blocked = 0; blocked < 8; ++blocked) {
+        PlayState play;
+        BgTokiSwd sword;
+        Reset(play, sword);
+        BgTokiSwd_Init(&sword.actor, &play);
+        BgTokiSwd_Update(&sword.actor, &play);
+        play.state.input[0].press.button = BTN_A;
+        if (blocked == 0) play.player.stateFlags1 |= PLAYER_STATE1_LOADING;
+        if (blocked == 1) play.player.stateFlags1 |= PLAYER_STATE1_DEAD;
+        if (blocked == 2) play.player.stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
+        if (blocked == 3) play.player.stateFlags1 |= PLAYER_STATE1_START_CHANGING_HELD_ITEM;
+        if (blocked == 4) play.player.upperActionFunc = Player_UpperAction_ChangeHeldItem;
+        if (blocked == 5) sword.actor.params = 0; // Native Temple sword keeps its action list.
+        if (blocked == 6) play.player.getItemId = GI_RUPEE_BLUE;
+        if (blocked == 7) play.player.interactRangeActor = nullptr;
+        REQUIRE(!Fixture_TryTurnInPlace(&play, &play.player));
+        REQUIRE(sword.actor.parent == nullptr);
+        BgTokiSwd_Destroy(&sword.actor, &play);
+    }
+    puts("PASS stump-top offers, A while turning, talk priority, ground/slope/airborne and action guards");
 }
 
 static void CheckPedestalSwordSource() {
@@ -1132,6 +1197,9 @@ static void CheckPedestalSwordSource() {
     fixturePakEquipment = {{0x5450, &pakSword}};
     BgTokiSwd_Draw(&sword.actor, &play);
     REQUIRE(drawnSword == &pakSword);
+    // The selected raw blade extends along +X in the supplied pack. Its tip
+    // must end below the grip, not stand upward out of the stump.
+    REQUIRE(sinf(restingSwordRotation) < -0.99f);
     // The same weapon remains authoritative after adult insertion and while
     // the skip fade is running; changing age must not select a different mesh.
     gSaveContext.linkAge = LINK_AGE_ADULT;

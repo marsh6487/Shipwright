@@ -1569,6 +1569,7 @@ s16 Play_ChangeCameraStatus(PlayState* play, s16 camId, s16 status);
 void Play_ClearCamera(PlayState* play, s16 camId);
 void Play_ClearAllSubCameras(PlayState* play);
 Camera* Play_GetCamera(PlayState* play, s16 camId);
+s16 Play_CameraGetUID(PlayState* play, s16 camId);
 s32 Play_CameraSetAtEye(PlayState* play, s16 camId, Vec3f* at, Vec3f* eye);
 s32 Play_CameraSetAtEyeUp(PlayState* play, s16 camId, Vec3f* at, Vec3f* eye, Vec3f* up);
 s32 Play_CameraSetFov(PlayState* play, s16 camId, f32 fov);

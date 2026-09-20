@@ -755,12 +755,14 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
     Actor_SetScale(&this->actor, definition->scale);
     const StaticStoryGanonPresentation* ganonPresentation =
         StaticStoryGanon_GetPresentation((StaticStoryActorType)this->staticState.type);
+    // Saria's narrower interaction collider should not shrink her visual shadow.
     ActorShape_Init(
         &this->actor.shape,
         ganonPresentation != NULL
             ? ganonPresentation->shapeYOffset
             : StaticStoryMm_GetShapeYOffset((StaticStoryActorType)this->staticState.type, this->staticState.pose),
-        ActorShadow_DrawCircle, definition->colliderRadius);
+        ActorShadow_DrawCircle,
+        this->staticState.type == STATIC_STORY_ACTOR_SARIA ? 20.0f : definition->colliderRadius);
     if (!usesMmAssets) {
         gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[this->animObjBankIndex].segment);
     }

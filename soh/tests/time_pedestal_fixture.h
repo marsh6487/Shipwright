@@ -75,6 +75,10 @@ struct Actor {
     s16 yawTowardsPlayer;
     Actor* parent;
     ActorFunc draw;
+    u16 bgCheckFlags;
+    f32 floorHeight;
+    void* floorPoly;
+    u8 floorBgId;
     int colChkInfo;
 };
 typedef struct { int base; } ColliderCylinder;
@@ -95,6 +99,8 @@ typedef struct Player {
     Gfx** leftHandDLists;
     SkelAnime skelAnime;
     PlayerActionFunc actionFunc;
+    PlayerActionFunc upperActionFunc;
+    s16 unk_6AE_rotFlags;
     struct { s16 actionVar1; } av1;
     struct { s16 actionVar2; } av2;
     u32 stateFlags1, stateFlags2;
@@ -131,6 +137,7 @@ struct PlayState {
     CutsceneContext csCtx;
     InterfaceContext interfaceCtx;
     int colChkCtx;
+    int colCtx;
     u32 gameplayFrames;
     Player player;
     bool playerRemoved;
@@ -191,6 +198,12 @@ struct PlayState {
 #define VB_PLAYER_OVERRIDE_LIMB_DRAW 7
 #define VB_EXECUTE_PLAYER_STARTMODE_FUNC 8
 #define BTN_B 0x4000
+#define BTN_A 0x8000
+#define PLAYER_ACTION_HANDLER_7 7
+#define PLAYER_STATE1_LOADING (1U << 0)
+#define PLAYER_STATE1_START_CHANGING_HELD_ITEM (1U << 1)
+#define UNK6AE_ROT_FOCUS_X 1
+#define UNK6AE_ROT_UPPER_X 2
 #define CHECK_BTN_ALL(state, mask) (((state) & (mask)) == (mask))
 #define PAK_DL_STUB ((Gfx*)(uintptr_t)1)
 enum {
@@ -251,6 +264,7 @@ enum {
 #define ABS(x) ((x) < 0 ? -(x) : (x))
 #define M_PI 3.14159265358979323846
 #define MTXMODE_APPLY 1
+#define BGCHECKFLAG_GROUND 1
 #define PLAYER_CSACTION_7 7
 #define PLAYER_IA_SWORD_CS 1
 #define PLAYER_IA_NONE 0
@@ -401,6 +415,14 @@ s32 Play_InCsMode(PlayState*);
 s32 Actor_HasParent(Actor*, PlayState*);
 void Actor_OfferCarry(Actor*, PlayState*);
 s32 Actor_OfferGetItem(Actor*, PlayState*, s32, f32, f32);
+s32 Player_ActionHandler_2(Player*, PlayState*);
+s32 Player_UpdateUpperBody(Player*, PlayState*);
+s32 func_8008F128(Player*);
+void Player_Action_8084E604(Player*, PlayState*);
+void Player_UpperAction_ChangeHeldItem(Player*, PlayState*);
+s32 Fixture_TurnActionHandler(Player*, PlayState*);
+s32 Fixture_TryTurnInPlace(PlayState*, Player*);
+f32 BgCheck_EntityRaycastFloor5(PlayState*, void*, void**, s32*, Actor*, Vec3f*);
 s32 Player_GetExplosiveHeld(Player*);
 bool GameInteractor_Should(int, bool, ...);
 void Item_Give(PlayState*, s16);

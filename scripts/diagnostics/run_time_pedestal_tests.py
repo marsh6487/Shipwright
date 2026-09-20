@@ -75,6 +75,14 @@ def main():
             hud_zero + " else " + hud_one + "\n}\n" + parameter["func_80084BF4"])
         player_source = (ROOT / "soh/src/overlays/actors/ovl_player_actor/z_player.c").read_text()
         player = functions(player_source)
+        turn_list = re.search(r"static s8 sActionHandlerListTurnInPlace\[\] = \{.*?^};", player_source, re.M | re.S)[0]
+        (build / "interaction.c").write_text('#include "time_pedestal_fixture.h"\n' + turn_list + '\n' +
+            'static s32 sUpperBodyIsBusy;\n' +
+            'static s32 (*sActionHandlerFuncs[8])(Player*, PlayState*) = {\n'
+            '    [PLAYER_ACTION_HANDLER_7] = Fixture_TurnActionHandler };\n' +
+            player['Player_TryActionHandlerList'] + '\n' +
+            's32 Fixture_TryTurnInPlace(PlayState* play, Player* player) {\n'
+            '    return Player_TryActionHandlerList(play, player, sActionHandlerListTurnInPlace, true);\n}\n')
         player_body = ('#include "time_pedestal_fixture.h"\n' +
             "static Vec3f D_80855198 = { -1.0f, 70.0f, 20.0f };\n" + player["func_808519EC"] + "\n" +
             re.search(r"static struct_808551A4 D_808551A4\[\] = \{.*?^};", player_source, re.M | re.S)[0] + "\n" +
@@ -177,7 +185,7 @@ def main():
         (build / "scripts.c").write_text(arrays)
         includes = ["-I" + str(p) for p in (build, ROOT / "soh/tests", ROOT / "soh/include", ROOT / "soh", ACTOR)]
         sources = [build / name for name in
-                   ("actor.c", "offers.c", "parameter.c", "player.c", "render.c", "scripts.c", "handoff.c", "extended.c", "hud.c", "save.c", "music.c", "reload.c", "ownership.c")]
+                   ("actor.c", "offers.c", "interaction.c", "parameter.c", "player.c", "render.c", "scripts.c", "handoff.c", "extended.c", "hud.c", "save.c", "music.c", "reload.c", "ownership.c")]
         helper = ACTOR / "time_pedestal_cutscene.c"
         if helper.exists():
             (build / "cutscene.c").write_text('#include "time_pedestal_fixture.h"\n' + without_includes(helper.read_text()))

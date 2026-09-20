@@ -93,9 +93,13 @@ Without a selected PAK or custom Master Sword resource, the pedestal retains its
 native/alternate world-object display list. Legacy packs replacing only that
 world-object path still need a ceremonial resource replacement for matching hands.
 
-The local pedestal offers its interaction within 100 horizontal units and 40
-vertical units, from any approach angle. It aligns Link for the ceremony and
-keeps the existing Saria/Skull Kid talk suppression while the sword is offered.
+The local pedestal resolves the supporting stump surface at initialization and
+offers within 60 horizontal units only when Link is grounded on that surface
+(same collision owner, floor height within 2 units, feet within 4 units).
+The existing 40-unit actor-height check remains a backstop. Any heading works;
+the ceremony aligns Link. The turn-in-place state also checks the native grab
+handler for this exact custom pedestal, so orienting the stick does not discard A.
+It keeps the existing Saria/Skull Kid talk suppression while the sword is offered.
 Active dialogue, cutscenes, airborne states and real item offers keep their guards.
 Skipping or completing the departure now uses a fast white fade before the age
 reload and a matching fade-in. Link retains his ceremony pose during departure;
@@ -106,6 +110,7 @@ the saved return position remains the original approach position.
 ```sh
 python3 scripts/diagnostics/run_time_pedestal_tests.py
 python3 scripts/diagnostics/run_pedestal_sword_selection_tests.py
+python3 scripts/diagnostics/check_time_pedestal_syntax.py
 python3 scripts/diagnostics/run_native_material_probe.py \
   --json-include /path/to/nlohmann/include \
   --spdlog-include /path/to/spdlog/include
@@ -161,3 +166,39 @@ In game, verify repeated child/adult cycles, camera clearance, exact room-10
 return placement, reset/skip behavior, owned and unowned sword saves, and music
 resumption. Check the Sages tunnel with alternate assets both enabled and
 disabled, and evaluate the authored caustic brightness against water clarity.
+
+## Stump clearance follow-up
+
+The user accepted the skip/fade and reported the selected pedestal weapon is
+correct, but its resting blade points upward and interacting still requires
+too much repositioning. Run `35537908841` was cancelled at their request.
+This follow-up preserves the previous fixed exit camera and shared sword source.
+Only the resting selected mesh changes from +90 to -90 degrees around Z.
+
+The scene's pedestal anchor is Y=-63, its flat stump top is Y=-56, and nearby
+ground is Y=-96. The former 100x40 offer included that ground. The new floor
+checks cover the stump while excluding ground, bark below the top and airborne
+players. Native turn-in-place only tries item use; the custom offer now reaches
+the existing A grab handler through the ordinary cutscene/held-item guards.
+Tests reproduce the old off-stump offer and swallowed turn-in-place A, then
+exercise both ages, eight headings, talk priority and the state exclusions.
+The grab handler itself is an engine boundary in this dispatch test.
+
+Static Saria's cylinder radius is reduced from 20 to 8, preserving height and
+the original shadow size. With Link's 12-unit radius, this clears the nominal
+ceremony center even after the cylinder coordinates are rounded to integers.
+The scene candidate moves only room-10 Saria from `(-710,-68,-2373)` to
+`(-710,-68,-2371)`, two world units toward the left edge as approached in the clip.
+
+`Lost_Woods_Stump_Clearance_POC4.prelude.o2r` is built from the exact Continuous
+Rain POC3 archive by `scripts/diagnostics/build_stump_clearance_poc.py`. Its two
+normal/Alt compiled room records and retained Prelude actor placement agree;
+all other 6,410 archive members are byte-identical. Candidate SHA-256:
+`f89b1efd8f918de33454076f082cf97487c3059f374ff4868477efaa4fd71bfe`.
+Use it as the replacement Lost Woods archive, together with the new executable.
+
+The real-header C23 check also exposed a missing declaration for
+`Play_CameraGetUID` in the prior camera candidate. Its existing implementation
+now has the matching public declaration. Focused tests and syntax checks are
+implementation evidence; actual prompt stability, the downward resting model,
+Saria clearance and camera framing still require the user's runtime check.

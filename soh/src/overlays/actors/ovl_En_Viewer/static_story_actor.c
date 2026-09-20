@@ -15,7 +15,7 @@ static const StaticStoryActorDefinition sDefinitions[STATIC_STORY_ACTOR_MAX] = {
                                   STATIC_TRACKING_IMPA, 12, 4.0f },
     [STATIC_STORY_ACTOR_CHILD_MALON] = { 2, 1, OBJECT_MA1, STATIC_ADAPTER_MALON, 0.01f, 42.0f, 18, 46, 0, 30, 30, 70.0f,
                                          STATIC_TRACKING_CHILD_MALON, 0, 0.0f, 10.0f },
-    [STATIC_STORY_ACTOR_SARIA] = { 3, 1, OBJECT_SA, STATIC_ADAPTER_SARIA, 0.01f, 40.0f, 20, 46, 0, 30, 30, 70.0f,
+    [STATIC_STORY_ACTOR_SARIA] = { 3, 1, OBJECT_SA, STATIC_ADAPTER_SARIA, 0.01f, 40.0f, 8, 46, 0, 30, 30, 70.0f,
                                    STATIC_TRACKING_SARIA, 2, 4.0f },
     [STATIC_STORY_ACTOR_ADULT_ZELDA] = { 1, 1, OBJECT_ZL2, STATIC_ADAPTER_ADULT_ZELDA, 0.01f, 60.0f, 25, 80, 0, 30, 30,
                                          90.0f, STATIC_TRACKING_ADULT_ZELDA, 12, -3.0f, 0.0f,

@@ -4964,6 +4964,15 @@ s32 Player_TryActionHandlerList(PlayState* play, Player* this, s8* actionHandler
 
         if (!(this->stateFlags1 & PLAYER_STATE1_START_CHANGING_HELD_ITEM) &&
             (Player_UpperAction_ChangeHeldItem != this->upperActionFunc)) {
+            // Turning in place normally checks only item use, so A can be
+            // ignored while lining up at the stump. This ceremony aligns Link
+            // itself; allow its valid offer through the usual grab handler.
+            Actor* interaction = this->interactRangeActor;
+            if (actionHandlerList == sActionHandlerListTurnInPlace && interaction != NULL &&
+                interaction->id == ACTOR_BG_TOKI_SWD && interaction->params == BG_TOKI_SWD_TIME_PEDESTAL &&
+                this->getItemId == GI_NONE && Player_ActionHandler_2(this, play)) {
+                return true;
+            }
             // Process all entries in the Action Handler List with a positive index
             while (*actionHandlerList >= 0) {
                 if (sActionHandlerFuncs[*actionHandlerList](this, play)) {
