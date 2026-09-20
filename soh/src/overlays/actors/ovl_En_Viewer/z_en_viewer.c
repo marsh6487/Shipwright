@@ -39,6 +39,7 @@
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/frame_interpolation.h"
 #include <assert.h>
+#include <string.h>
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_ATTENTION_ENABLED)
 
