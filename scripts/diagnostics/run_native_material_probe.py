@@ -94,11 +94,12 @@ def main():
     core = ROOT / 'soh/soh/Enhancements/Graphics/NativeMaterialProfile.cpp'
     with tempfile.TemporaryDirectory(prefix='prelude-native-probe-') as temp:
         temp = Path(temp)
-        common = [args.cxx, '-std=c++20', '-g', '-ffunction-sections', '-fdata-sections',
+        common = [args.cxx, '-std=c++20', '-pthread', '-g', '-ffunction-sections', '-fdata-sections',
                   '-Wl,--gc-sections', '-I' + args.json_include]
-        for test in ('native_material_scroll_test', 'native_material_export_probe'):
+        for test in ('native_material_scroll_test', 'native_material_export_probe', 'prelude_load_probe_test'):
             run(common + [ROOT / f'soh/tests/{test}.cpp', core, '-o', temp / test])
         run([temp / 'native_material_scroll_test'])
+        run([temp / 'prelude_load_probe_test'])
         native = (ROOT / 'soh/src/code/z_rcp.c').read_text()
         match = re.search(r'Gfx\* Gfx_TwoTexScrollEx\([^}]+\n}', native)
         if not match:

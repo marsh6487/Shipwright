@@ -188,7 +188,8 @@ enum {
     PLAYER_MODELTYPE_RH_OCARINA, PLAYER_MODELTYPE_RH_OOT, PLAYER_MODELTYPE_RH_HOOKSHOT,
     PLAYER_MODELTYPE_SHEATH_16, PLAYER_MODELTYPE_SHEATH_17,
     PLAYER_MODELTYPE_SHEATH_18, PLAYER_MODELTYPE_SHEATH_19,
-    PLAYER_SHIELD_MAX = 4
+    PLAYER_SHIELD_MAX = 4,
+    PLAYER_LIMB_L_FOREARM = 0x40
 };
 #define BTN_ENABLED 0
 #define BTN_DISABLED 0xFF
@@ -316,6 +317,7 @@ extern Gfx* gPlayerLeftHandBgsDLs[], *gPlayerLeftHandClosedDLs[];
 extern const char gLinkChildLeftHandHoldingMasterSwordDL[];
 extern const char gLinkAdultLeftHandHoldingMasterSwordNearDL[], gLinkAdultLeftHandHoldingMasterSwordFarDL[];
 void Fixture_ApplyLateHandOverrides(PlayState*, Player*, s32, Gfx**);
+void Fixture_ApplyLateHandOverridesWithRot(PlayState*, Player*, s32, Gfx**, Vec3s*);
 Gfx* Player_ResolveLimbDLForDummyOrLocal(void*);
 Gfx* PakLoader_GetEquipDL(Player*, s32);
 u8 PakLoader_HasActiveModel(void);

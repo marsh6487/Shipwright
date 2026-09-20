@@ -260,8 +260,10 @@ s32 BgTokiSwd_SkipTimePedestalArrival(PlayState* play, Player* player) {
     // Read only during the live player update, after GameState_ReqPadData.
     // PadMgr consumes press edges each frame: a held departure B cannot skip
     // arrival, while a release/repress during loading is a new valid edge.
-    return CVarGetInteger(CVAR_ENHANCEMENT("TimeSavers.SkipCutscene.Story"), IS_RANDO) ||
-           CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B);
+    // The arrival is the player's local exit movement, not a story cutscene.
+    // Keep the global story skip scoped to the departure ceremony above; only
+    // a fresh B edge skips this independent phase.
+    return CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B);
 }
 
 s32 BgTokiSwd_EndTimePedestalArrival(PlayState* play, Player* player) {
@@ -269,7 +271,9 @@ s32 BgTokiSwd_EndTimePedestalArrival(PlayState* play, Player* player) {
         return false;
     }
     player->actor.world.pos = sTimePedestalArrival.returnPos;
-    player->yaw = player->actor.shape.rot.y = sTimePedestalArrival.returnYaw;
+    // Keep the native animation's pedestal-facing finish. Restoring the saved
+    // pre-swap yaw here visibly twists the whole character as control returns;
+    // the saved position is still restored to keep the actor on safe ground.
     sTimePedestalArrival.play = NULL;
     sTimePedestalArrival.player = NULL;
     return true;

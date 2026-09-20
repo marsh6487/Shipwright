@@ -8,8 +8,8 @@ static void StaticStoryTalk_RestorePlacementPose(StaticStoryTalkSession* session
 }
 
 void StaticStoryTalk_Update(StaticStoryActorType type, const StaticStoryProgression* progression, float talkDistance,
-                            StaticStoryTalkSession* session, const StaticStoryTalkOperations* operations,
-                            void* context) {
+                            bool timePedestalOffered, StaticStoryTalkSession* session,
+                            const StaticStoryTalkOperations* operations, void* context) {
     StaticStoryTalkMessageState messageState;
 
     if (session == NULL || operations == NULL) {
@@ -40,6 +40,9 @@ void StaticStoryTalk_Update(StaticStoryActorType type, const StaticStoryProgress
     if (operations->processTalkRequest != NULL && operations->processTalkRequest(context)) {
         session->talking = true;
         session->tracking = true;
+    } else if (timePedestalOffered &&
+               (type == STATIC_STORY_ACTOR_SARIA || type == STATIC_STORY_ACTOR_SKULL_KID)) {
+        session->tracking = false;
     } else {
         session->tracking = operations->offerTalk != NULL && operations->offerTalk(talkDistance, context);
     }

@@ -5,6 +5,7 @@
 #include "macros.h"
 #include "cvar_prefixes.h"
 #include "Enhancements/enhancementTypes.h"
+#include "Enhancements/Graphics/PreludeNativeMaterialScroll.h"
 #include "Enhancements/randomizer/dungeon.h"
 #include "soh/Enhancements/randomizer/SeedContext.h"
 #include <soh/GameVersions.h>
@@ -240,6 +241,7 @@ extern "C" void ResourceMgr_LoadDirectory(const char* resName) {
 }
 
 extern "C" void ResourceMgr_DirtyDirectory(const char* resName) {
+    PreludeNativeMaterialScroll_InvalidateMetadata("dirty directory");
     Ship::Context::GetRawInstance()->GetResourceManager()->DirtyResources(resName);
 }
 
@@ -247,6 +249,9 @@ extern "C" void ResourceMgr_UnloadResource(const char* resName) {
     std::string path = resName;
     if (path.substr(0, 7) == "__OTR__") {
         path = path.substr(7);
+    }
+    if (path == "prelude/project/edits.json") {
+        PreludeNativeMaterialScroll_InvalidateMetadata("metadata resource unload");
     }
     auto res = Ship::Context::GetRawInstance()->GetResourceManager()->UnloadResource(path);
 }

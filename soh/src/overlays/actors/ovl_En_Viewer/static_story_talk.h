@@ -28,7 +28,7 @@ typedef struct {
 } StaticStoryTalkOperations;
 
 void StaticStoryTalk_Update(StaticStoryActorType type, const StaticStoryProgression* progression, float talkDistance,
-                            StaticStoryTalkSession* session, const StaticStoryTalkOperations* operations,
-                            void* context);
+                            bool timePedestalOffered, StaticStoryTalkSession* session,
+                            const StaticStoryTalkOperations* operations, void* context);
 
 #endif

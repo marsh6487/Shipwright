@@ -1,9 +1,12 @@
 ﻿#include "OTRGlobals.h"
 #include "OTRAudio.h"
+#include "Enhancements/Graphics/PreludeLoadProbe.h"
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <vector>
 #include <chrono>
 #include <optional>
@@ -2012,7 +2015,60 @@ static void CrossoverHotkey_Tick() {
     sHeld = pressed;
 }
 
+extern "C" void PreludeLoadProbe_BeginStateReload() {
+    Prelude::LoadProbe::BeginStateReload(gPlayState ? gPlayState->sceneNum : -1,
+                                        gPlayState ? gPlayState->roomCtx.curRoom.num : -1,
+                                        CVarGetInteger(CVAR_SETTING("AltAssets"), 1) != 0,
+                                        CVarGetInteger(CVAR_DEVELOPER_TOOLS("PreludeLoadProbe"), 1) != 0);
+}
+
+static nlohmann::json PreludeLoadProbe_ActorSnapshot(PlayState* play, bool& truncated) {
+    constexpr size_t kMaxActors = 4096;
+    std::map<std::array<int, 3>, uint64_t> groups;
+    size_t visited = 0;
+    truncated = false;
+    if (play != nullptr) {
+        for (int category = 0; category < ACTORCAT_MAX && visited < kMaxActors; ++category) {
+            Actor* actor = play->actorCtx.actorLists[category].head;
+            while (actor != nullptr && visited < kMaxActors) {
+                ++groups[{ actor->id, actor->params, actor->room }];
+                ++visited;
+                actor = actor->next;
+            }
+            if (actor != nullptr) {
+                truncated = true;
+            }
+        }
+        if (visited == kMaxActors) {
+            truncated = true;
+        }
+    }
+    auto actors = nlohmann::json::array();
+    for (const auto& [identity, count] : groups) {
+        actors.push_back({ { "actor_id", identity[0] }, { "params", identity[1] }, { "room", identity[2] },
+                           { "count", count } });
+    }
+    return actors;
+}
+
+extern "C" void PreludeLoadProbe_EndStateReload() {
+    const int targetScene = gPlayState ? gPlayState->sceneNum : -1;
+    const int targetRoom = gPlayState ? gPlayState->roomCtx.curRoom.num : -1;
+    if (auto report = Prelude::LoadProbe::EndStateReload(targetScene, targetRoom)) {
+        bool actorSnapshotTruncated = false;
+        (*report)["actors_after_reload"] = PreludeLoadProbe_ActorSnapshot(gPlayState, actorSnapshotTruncated);
+        (*report)["actors_after_reload_truncated"] = actorSnapshotTruncated;
+        SPDLOG_INFO("[PreludeLoadProbe] {}", report->dump());
+    }
+}
+
 extern "C" void Graph_StartFrame() {
+    Prelude::LoadProbe::BeginFrame(gPlayState ? gPlayState->sceneNum : -1,
+                                  gPlayState ? gPlayState->roomCtx.curRoom.num : -1,
+                                  gPlayState ? gPlayState->roomCtx.prevRoom.num : -1,
+                                  gPlayState ? gPlayState->gameplayFrames : 0,
+                                  CVarGetInteger(CVAR_SETTING("AltAssets"), 1) != 0,
+                                  CVarGetInteger(CVAR_DEVELOPER_TOOLS("PreludeLoadProbe"), 1) != 0);
 #ifndef __WIIU__
     using Ship::KbScancode;
 
@@ -2176,6 +2232,8 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
 
 // C->C++ Bridge
 extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
+    Prelude::LoadProbe::BeginRender(gPlayState ? gPlayState->roomCtx.curRoom.num : -1,
+                                   gPlayState ? gPlayState->roomCtx.prevRoom.num : -1);
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
         audio.processing = true;
@@ -2255,6 +2313,13 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
         gfx_texture_cache_clear();
         SOH::SkeletonPatcher::UpdateSkeletons();
         GameInteractor::Instance->ExecuteHooks<GameInteractor::OnAssetAltChange>();
+    }
+
+    if (auto report = Prelude::LoadProbe::EndFrame()) {
+        bool actorSnapshotTruncated = false;
+        (*report)["actors"] = PreludeLoadProbe_ActorSnapshot(gPlayState, actorSnapshotTruncated);
+        (*report)["actors_truncated"] = actorSnapshotTruncated;
+        SPDLOG_INFO("[PreludeLoadProbe] {}", report->dump());
     }
 
     // OTRTODO: FIGURE OUT END FRAME POINT

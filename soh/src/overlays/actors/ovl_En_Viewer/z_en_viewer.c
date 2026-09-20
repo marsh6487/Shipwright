@@ -5,6 +5,7 @@
  */
 
 #include "z_en_viewer.h"
+#include "overlays/actors/ovl_Bg_Toki_Swd/z_bg_toki_swd.h"
 #include "overlays/actors/ovl_En_Ganon_Mant/z_en_ganon_mant.h"
 #include "objects/object_zl4/object_zl4.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
@@ -1027,6 +1028,9 @@ static bool EnViewerStatic_OfferTalkAtDistance(float distance, void* context) {
 void EnViewerStatic_OfferTalk(EnViewer* this, PlayState* play) {
     StaticStoryActorType type = (StaticStoryActorType)this->staticState.type;
     const StaticStoryActorDefinition* definition;
+    Player* player;
+    Actor* interaction;
+    bool timePedestalOffered;
     StaticStoryProgression progression;
     StaticStoryTalkSession session;
     EnViewerStaticTalkContext context;
@@ -1043,6 +1047,10 @@ void EnViewerStatic_OfferTalk(EnViewer* this, PlayState* play) {
         return;
     }
     progression = EnViewerStatic_ReadProgression();
+    player = GET_PLAYER(play);
+    interaction = player != NULL ? player->interactRangeActor : NULL;
+    timePedestalOffered = interaction != NULL && interaction->id == ACTOR_BG_TOKI_SWD &&
+                          interaction->params == BG_TOKI_SWD_TIME_PEDESTAL;
     session = (StaticStoryTalkSession){
         .talking = this->staticState.talking,
         .tracking = this->staticState.tracking,
@@ -1053,7 +1061,8 @@ void EnViewerStatic_OfferTalk(EnViewer* this, PlayState* play) {
         EnViewerStatic_GetTalkMessageState, EnViewerStatic_ShouldAdvanceTalk,   EnViewerStatic_CloseTalk,
         EnViewerStatic_ProcessTalkRequest,  EnViewerStatic_OfferTalkAtDistance,
     };
-    StaticStoryTalk_Update(type, &progression, definition->talkDistance, &session, &operations, &context);
+    StaticStoryTalk_Update(type, &progression, definition->talkDistance, timePedestalOffered, &session, &operations,
+                           &context);
     this->actor.textId = session.textId;
     this->staticState.talking = session.talking;
     this->staticState.tracking = session.tracking;

@@ -1734,12 +1734,22 @@ static void Player_ApplyBackEquipmentVisibility(s32 limbIndex, Gfx** dList) {
     }
 }
 
-static void Player_ApplyTimePedestalSword(PlayState* play, Player* player, s32 limbIndex, Gfx** dList) {
+static void Player_ReverseTimePedestalEquipmentSword(Vec3s* rot) {
+    // Ordinary held-sword DLs point the blade along local -X. SkelAnime
+    // applies Rz * Ry * Rx after this callback; (-x, -y, z + pi) is the
+    // exact ZYX decomposition of (Rz * Ry * Rx) * Rz(pi).
+    rot->x = -rot->x;
+    rot->y = -rot->y;
+    rot->z += 0x8000;
+}
+
+static void Player_ApplyTimePedestalSword(PlayState* play, Player* player, s32 limbIndex, Gfx** dList, Vec3s* rot) {
     if (limbIndex != PLAYER_LIMB_L_HAND) {
         return;
     }
     s32 handState = BgTokiSwd_GetTimePedestalHandState(play, player);
     if (handState != BG_TOKI_SWD_HAND_UNCHANGED) {
+        s32 reverseEquipmentSword = !LINK_IS_ADULT && handState == BG_TOKI_SWD_HAND_MASTER_SWORD;
         Gfx* swordDL = PakLoader_GetEquipDL(player, limbIndex);
         if (handState == BG_TOKI_SWD_HAND_CLOSED) {
             *dList = (swordDL != NULL && swordDL != PAK_DL_STUB)
@@ -1749,12 +1759,22 @@ static void Player_ApplyTimePedestalSword(PlayState* play, Player* player, s32 l
         }
         if (swordDL == NULL || swordDL == PAK_DL_STUB) {
             if (CustomEquipment_OverrideMasterSwordHand(play, dList)) {
+                if (reverseEquipmentSword) {
+                    Player_ReverseTimePedestalEquipmentSword(rot);
+                }
                 return;
             }
+            // This is the canonical ceremonial DL (or an alternate replacement
+            // of that exact resource), whose authored orientation already
+            // matches the native child animation.
             const char* nativeDL = !LINK_IS_ADULT ? gLinkChildLeftHandHoldingMasterSwordDL
                                    : (sDListsLodOffset == 0) ? gLinkAdultLeftHandHoldingMasterSwordNearDL
                                                            : gLinkAdultLeftHandHoldingMasterSwordFarDL;
             swordDL = Player_ResolveLimbDLForDummyOrLocal((void*)nativeDL);
+        } else if (reverseEquipmentSword) {
+            // Pak equipment supplies ordinary LFIST_SWORD2, whose blade axis is
+            // opposite the dedicated child ceremonial hand/sword resource.
+            Player_ReverseTimePedestalEquipmentSword(rot);
         }
         *dList = swordDL;
     }
@@ -1971,7 +1991,7 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
     // The sword cue changes leftHandDLists without changing the child's open
     // hand type. Preserve that handoff after ordinary hand/equipment overrides;
     // resource resolution still honors alternate assets and the selected pak.
-    Player_ApplyTimePedestalSword(play, this, limbIndex, dList);
+    Player_ApplyTimePedestalSword(play, this, limbIndex, dList, rot);
     Player_ApplyBackEquipmentVisibility(limbIndex, dList);
 
     if (GameInteractor_InvisibleLinkActive()) {

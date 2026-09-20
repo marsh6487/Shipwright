@@ -22,6 +22,9 @@ class NativeMaterialDisplayListFactory final : public Ship::ResourceFactoryBinar
 extern "C" {
 #endif
 struct GraphicsContext;
+// Call after reopening archives or before explicitly refreshing resources.
+// Clears only metadata; cached display lists and scroll buffers remain valid.
+void PreludeNativeMaterialScroll_InvalidateMetadata(const char* reason);
 void PreludeNativeMaterialScroll_Update(struct GraphicsContext* gfxCtx, uint32_t stateFrames, uint32_t gameplayFrames);
 #ifdef __cplusplus
 }

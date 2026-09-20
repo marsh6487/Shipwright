@@ -14,7 +14,32 @@ static bool customMasterAsset, altAssetsSetting = true;
 static Gfx customMasterSword, customHandSword;
 static bool animationComplete;
 static int normalSwordEquipCalls, startModeHookCalls;
+static int cutsceneAudioFlag;
 static LinkAnimationHeader idleAnimation, childArrivalAnimation, adultArrivalAnimation;
+
+static Vec3f RotateZYX(Vec3s rot, Vec3f vector) {
+    const float sx = sinf(rot.x * (3.14159265358979323846f / 32768.0f));
+    const float cx = cosf(rot.x * (3.14159265358979323846f / 32768.0f));
+    const float sy = sinf(rot.y * (3.14159265358979323846f / 32768.0f));
+    const float cy = cosf(rot.y * (3.14159265358979323846f / 32768.0f));
+    const float sz = sinf(rot.z * (3.14159265358979323846f / 32768.0f));
+    const float cz = cosf(rot.z * (3.14159265358979323846f / 32768.0f));
+    const Vec3f afterX = { vector.x, cx * vector.y - sx * vector.z, sx * vector.y + cx * vector.z };
+    const Vec3f afterY = { cy * afterX.x + sy * afterX.z, afterX.y, -sy * afterX.x + cy * afterX.z };
+    return { cz * afterY.x - sz * afterY.y, sz * afterY.x + cz * afterY.y, afterY.z };
+}
+
+static void RequireOppositeBladeDirection(Vec3s beforeRot, Vec3s afterRot) {
+    // All compatible hand/sword DLs use the held-equipment convention: the
+    // blade runs from the hand toward local -X. Verify the complete ZYX result,
+    // rather than checking one chosen Euler component.
+    const Vec3f bladeAxis = { -1.0f, 0.0f, 0.0f };
+    const Vec3f before = RotateZYX(beforeRot, bladeAxis);
+    const Vec3f after = RotateZYX(afterRot, bladeAxis);
+    REQUIRE(fabsf(before.x + after.x) < 0.0001f);
+    REQUIRE(fabsf(before.y + after.y) < 0.0001f);
+    REQUIRE(fabsf(before.z + after.z) < 0.0001f);
+}
 
 extern "C" {
 SaveContext gSaveContext;
@@ -152,7 +177,7 @@ s32 Player_ActionToModelGroup(Player*, s32 action) {
 }
 void Player_SetEquipmentData(PlayState*, Player*) {}
 s32 Player_SetCsAction(PlayState* play, Actor*, u8 action) { play->player.csAction = action; return 1; }
-void Audio_SetCutsceneFlag(s32) {}
+void Audio_SetCutsceneFlag(s32 flag) { cutsceneAudioFlag = flag; }
 void func_80068DC0(PlayState*, CutsceneContext* csCtx) { csCtx->state = CS_STATE_IDLE; }
 void func_80083108(PlayState* play) { Fixture_HudRestore(play); }
 void Play_SaveSceneFlags(PlayState*) {}
@@ -180,6 +205,7 @@ static void Reset(PlayState& play, BgTokiSwd& sword, bool adult = false, bool ra
     altAssetsSetting = true;
     animationComplete = false;
     normalSwordEquipCalls = startModeHookCalls = 0;
+    cutsceneAudioFlag = 0;
     fixturePakEquipment.clear();
     gPlayState = &play;
     play.state.running = true;
@@ -641,13 +667,26 @@ static void CheckChildSwordRendering() {
     REQUIRE(play.player.leftHandDLists == &gPlayerLeftHandBgsDLs[LINK_AGE_CHILD]);
     Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
     REQUIRE(dl == &nativeSword); // Late empty-hand hooks must not erase the ceremony sword.
+    const Vec3s originalSwordRot = { 0x1234, 0x2345, 0x3456 };
+    Vec3s swordRot = originalSwordRot;
+    Fixture_ApplyLateHandOverridesWithRot(&play, &play.player, PLAYER_LIMB_L_HAND, &dl, &swordRot);
+    REQUIRE(swordRot.x == originalSwordRot.x && swordRot.y == originalSwordRot.y &&
+            swordRot.z == originalSwordRot.z); // Canonical ceremonial DL already matches the native animation.
+    Vec3s armRot = originalSwordRot;
+    Fixture_ApplyLateHandOverridesWithRot(&play, &play.player, PLAYER_LIMB_L_FOREARM, &dl, &armRot);
+    REQUIRE(armRot.x == originalSwordRot.x && armRot.y == originalSwordRot.y && armRot.z == originalSwordRot.z);
     altActive = true;
-    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    swordRot = originalSwordRot;
+    Fixture_ApplyLateHandOverridesWithRot(&play, &play.player, PLAYER_LIMB_L_HAND, &dl, &swordRot);
     REQUIRE(dl == &altSword);
+    REQUIRE(swordRot.x == originalSwordRot.x && swordRot.y == originalSwordRot.y &&
+            swordRot.z == originalSwordRot.z); // Same ceremonial resource contract.
     altActive = false;
     customMasterAsset = true; // Only the custom-equipment path is replaced, not the legacy child DL.
-    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    swordRot = originalSwordRot;
+    Fixture_ApplyLateHandOverridesWithRot(&play, &play.player, PLAYER_LIMB_L_HAND, &dl, &swordRot);
     REQUIRE(dl == &customHandSword);
+    RequireOppositeBladeDirection(originalSwordRot, swordRot);
     altAssetsSetting = false;
     Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
     REQUIRE(dl == &nativeSword);
@@ -663,6 +702,10 @@ static void CheckChildSwordRendering() {
         Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
         REQUIRE(dl == &pakSword && gSaveContext.equips.buttonItems[0] == item);
     }
+    swordRot = originalSwordRot;
+    Fixture_ApplyLateHandOverridesWithRot(&play, &play.player, PLAYER_LIMB_L_HAND, &dl, &swordRot);
+    REQUIRE(dl == &pakSword);
+    RequireOppositeBladeDirection(originalSwordRot, swordRot);
     gSaveContext.equips.buttonItems[0] = before.equips.buttonItems[0];
     customMasterAsset = false;
     altActive = true;
@@ -696,8 +739,11 @@ static void CheckChildSwordRendering() {
     REQUIRE(dl == &emptyHand);
     gSaveContext.linkAge = LINK_AGE_CHILD;
     sword.localCutsceneFinished = true;
-    Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
+    swordRot = originalSwordRot;
+    Fixture_ApplyLateHandOverridesWithRot(&play, &play.player, PLAYER_LIMB_L_HAND, &dl, &swordRot);
     REQUIRE(dl == &emptyHand);
+    REQUIRE(swordRot.x == originalSwordRot.x && swordRot.y == originalSwordRot.y &&
+            swordRot.z == originalSwordRot.z);
     CheckProgressionUnchanged(before);
     REQUIRE(memcmp(&before.equips, &gSaveContext.equips, sizeof(ItemEquips)) == 0);
     BgTokiSwd_Destroy(&sword.actor, &play);
@@ -725,6 +771,9 @@ static void CheckAdultSwordRendering() {
     Gfx* dl = &emptyHand;
     Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
     REQUIRE(dl == &nativeSword);
+    Vec3s swordRot = { 0x1234, 0x2345, 0x3456 };
+    Fixture_ApplyLateHandOverridesWithRot(&play, &play.player, PLAYER_LIMB_L_HAND, &dl, &swordRot);
+    REQUIRE(swordRot.x == 0x1234 && swordRot.y == 0x2345 && swordRot.z == 0x3456);
     customMasterAsset = true;
     Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
     REQUIRE(dl == &customHandSword);
@@ -753,11 +802,29 @@ static void CheckAdultSwordRendering() {
     BgTokiSwd_Destroy(&sword.actor, &play);
 }
 
-static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipExit, bool automaticExit = false,
+static void CheckNativeTimeTravelHold() {
+    PlayState play;
+    BgTokiSwd sword;
+    Reset(play, sword);
+    PlayerAgeProperties age{ nullptr, &childArrivalAnimation };
+    play.player.ageProperties = &age;
+
+    Player_StartMode_TimeTravel(&play, &play.player);
+
+    REQUIRE(!BgTokiSwd_IsTimePedestalArrival(&play, &play.player));
+    REQUIRE(play.player.av1.actionVar1 == 0);
+    REQUIRE(play.player.av2.actionVar2 == 20);
+    REQUIRE(play.player.skelAnime.endFrame == 0.0f);
+}
+
+static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipExit, bool storySkipEnabled = false,
                          bool mismatchedScene = false) {
     PlayState play;
     BgTokiSwd sword;
     Reset(play, sword, sourceAdult, rando);
+    if (storySkipEnabled) {
+        skipStorySetting = 1;
+    }
     const auto before = gSaveContext;
     const auto returnPos = play.player.actor.world.pos;
     const auto returnYaw = play.player.actor.shape.rot.y;
@@ -770,11 +837,19 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
     play.state.input[0].cur.button = skipMain ? BTN_B : 0;
     BgTokiSwd_Update(&sword.actor, &play);
     REQUIRE(play.transitionTrigger == TRANS_TRIGGER_START);
+    // Departure deliberately holds the terminal cutscene state only until the
+    // instant local reload tears the old PlayState down.
+    REQUIRE(play.csCtx.state == CS_STATE_UNSKIPPABLE_EXEC && play.transitionType == TRANS_TYPE_INSTANT);
     Fixture_PlayDestroyAgeHandoff(&play);
     gSaveContext.linkAge = play.linkAgeOnLoad;
+    cutsceneAudioFlag = 1; // Cutscene engine owns this while the departure camera is live.
     play.state.running = false;
     play.playerRemoved = true;
     BgTokiSwd_Destroy(&sword.actor, &play);
+    REQUIRE(sword.localCutscene == nullptr);
+    REQUIRE(play.csCtx.state == CS_STATE_IDLE && play.csCtx.segment == nullptr && play.csCtx.linkAction == nullptr);
+    REQUIRE(gSaveContext.cutsceneTrigger == 0 && gSaveContext.cutsceneIndex == 0);
+    REQUIRE(cutsceneAudioFlag == 0);
 
     PlayState arrival{};
     gPlayState = &arrival;
@@ -804,6 +879,12 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
     REQUIRE(startModeHookCalls == 0); // Never hit the native rando hook that relocates to Temple of Time.
     REQUIRE(normalSwordEquipCalls == 0);
     REQUIRE(arrival.player.skelAnime.animation == age.unk_A0);
+    // A local age swap has no Temple of Time cutscene to synchronize with.
+    // It must begin the native arrival motion immediately rather than holding
+    // its first pose for the native 20 completed updates.
+    REQUIRE(arrival.player.av1.actionVar1 == 1);
+    REQUIRE(arrival.player.av2.actionVar2 == 0);
+    REQUIRE(arrival.player.skelAnime.endFrame == arrival.player.skelAnime.animLength - 1.0f);
     REQUIRE(fabsf(arrival.player.actor.world.pos.x + 716) < 0.01f);
     REQUIRE(fabsf(arrival.player.actor.world.pos.y + 62) < 0.01f);
     REQUIRE(fabsf(arrival.player.actor.world.pos.z + 2395) < 0.01f);
@@ -817,36 +898,32 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
         Fixture_ApplyLateHandOverrides(&arrival, &arrival.player, PLAYER_LIMB_L_HAND, &dl);
         REQUIRE(dl == &pakSword);
     }
-    const bool firstFrameSkip = skipExit && !automaticExit;
-    if (firstFrameSkip) {
-        // A release/repress during loading produces a fresh first-update edge,
-        // including after manually skipping departure with B.
-        arrival.state.input[0].press.button = arrival.state.input[0].cur.button = BTN_B;
-    }
+    // A held departure B has no press edge after loading. Neither that held
+    // state nor the persistent story-skip setting may cancel the exit action.
     Player_Action_8084E9AC(&arrival.player, &arrival);
-    if (!firstFrameSkip) {
-        REQUIRE(arrival.player.actionFunc == Player_Action_8084E9AC);
-        arrival.state.input[0] = {};
-        Player_Action_8084E9AC(&arrival.player, &arrival); // Release arms a fresh exit skip.
-    }
-    if (skipExit && !firstFrameSkip) {
+    REQUIRE(arrival.player.actionFunc == Player_Action_8084E9AC && !animationComplete);
+    arrival.state.input[0] = {};
+    Player_Action_8084E9AC(&arrival.player, &arrival);
+    REQUIRE(arrival.player.actionFunc == Player_Action_8084E9AC);
+    if (skipExit) {
+        // Release/repress produces the fresh edge that skips this phase, even
+        // while Skip Story Cutscenes remains enabled.
         arrival.state.input[0].press.button = arrival.state.input[0].cur.button = BTN_B;
-        if (automaticExit) {
-            arrival.state.input[0] = {};
-            skipStorySetting = 1;
-        }
         Player_Action_8084E9AC(&arrival.player, &arrival);
-    } else if (!skipExit) {
+    } else {
         animationComplete = true;
-        for (int i = 0; i < 20; ++i) Player_Action_8084E9AC(&arrival.player, &arrival);
-        REQUIRE(arrival.player.skelAnime.endFrame == arrival.player.skelAnime.animLength - 1);
         Player_Action_8084E9AC(&arrival.player, &arrival);
     }
     REQUIRE(arrival.player.actionFunc == Player_Action_Idle);
     REQUIRE(!(arrival.player.stateFlags1 & PLAYER_STATE1_IN_CUTSCENE));
     REQUIRE(arrival.player.heldItemAction == PLAYER_IA_NONE);
+    REQUIRE(!BgTokiSwd_IsTimePedestalArrival(&arrival, &arrival.player));
+    REQUIRE(arrival.csCtx.state == CS_STATE_IDLE);
     REQUIRE(memcmp(&arrival.player.actor.world.pos, &returnPos, sizeof(returnPos)) == 0);
-    REQUIRE(arrival.player.actor.shape.rot.y == returnYaw);
+    // Position restoration keeps the actor on the known safe floor point, but
+    // completion must not twist the whole character back to the pre-swap yaw.
+    REQUIRE(returnYaw != -0x4000);
+    REQUIRE(arrival.player.actor.shape.rot.y == -0x4000 && arrival.player.yaw == -0x4000);
     CheckProgressionUnchanged(before);
     REQUIRE(memcmp(&before.equips, &gSaveContext.equips, sizeof(ItemEquips)) == 0);
     skipStorySetting = 0;
@@ -877,13 +954,15 @@ int main(int argc, char** argv) {
     CheckChildSwordRendering();
     CheckAdultSwordRendering();
     puts("PASS child/adult handoffs, late overrides, alternate assets and Pak Master Sword selection");
+    CheckNativeTimeTravelHold();
     for (bool sourceAdult : {false, true}) {
         for (bool rando : {false, true}) {
             CheckArrival(sourceAdult, rando, false, false, false, true);
             for (bool skipMain : {false, true}) {
-                CheckArrival(sourceAdult, rando, skipMain, false);
-                CheckArrival(sourceAdult, rando, skipMain, true);
-                CheckArrival(sourceAdult, rando, skipMain, true, true);
+                for (bool storySkipEnabled : {false, true}) {
+                    CheckArrival(sourceAdult, rando, skipMain, false, storySkipEnabled);
+                    CheckArrival(sourceAdult, rando, skipMain, true, storySkipEnabled);
+                }
             }
         }
     }

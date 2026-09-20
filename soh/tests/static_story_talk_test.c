@@ -61,7 +61,8 @@ int main(void) {
     };
 
     /* Phantom is rejected before both the active-conversation and offer/request branches. */
-    StaticStoryTalk_Update(STATIC_STORY_ACTOR_PHANTOM_GANON, &progression, 120.0f, &session, &sOperations, &fixture);
+    StaticStoryTalk_Update(STATIC_STORY_ACTOR_PHANTOM_GANON, &progression, 120.0f, false, &session, &sOperations,
+                           &fixture);
     REQUIRE(!session.talking);
     REQUIRE(!session.tracking);
     REQUIRE(session.textId == 0);
@@ -73,7 +74,7 @@ int main(void) {
 
     session = (StaticStoryTalkSession){ 0 };
     fixture = (TalkFixture){ .process = false, .offer = true };
-    StaticStoryTalk_Update(STATIC_STORY_ACTOR_SKULL_KID, &progression, 90.0f, &session, &sOperations, &fixture);
+    StaticStoryTalk_Update(STATIC_STORY_ACTOR_SKULL_KID, &progression, 90.0f, false, &session, &sOperations, &fixture);
     REQUIRE(session.textId == STATIC_STORY_TEXT_SKULL_KID);
     REQUIRE(!session.talking);
     REQUIRE(session.tracking);
@@ -83,14 +84,15 @@ int main(void) {
 
     session = (StaticStoryTalkSession){ 0 };
     fixture = (TalkFixture){ .process = true, .offer = true };
-    StaticStoryTalk_Update(STATIC_STORY_ACTOR_SKULL_KID, &progression, 90.0f, &session, &sOperations, &fixture);
+    /* A request accepted before the pedestal offer remains a real conversation. */
+    StaticStoryTalk_Update(STATIC_STORY_ACTOR_SKULL_KID, &progression, 90.0f, true, &session, &sOperations, &fixture);
     REQUIRE(session.talking);
     REQUIRE(session.tracking);
     REQUIRE(fixture.processCalls == 1);
     REQUIRE(fixture.offerCalls == 0);
 
     fixture = (TalkFixture){ .messageState = STATIC_STORY_TALK_MESSAGE_EVENT, .advance = true };
-    StaticStoryTalk_Update(STATIC_STORY_ACTOR_SKULL_KID, &progression, 90.0f, &session, &sOperations, &fixture);
+    StaticStoryTalk_Update(STATIC_STORY_ACTOR_SKULL_KID, &progression, 90.0f, true, &session, &sOperations, &fixture);
     REQUIRE(!session.talking);
     REQUIRE(!session.tracking);
     REQUIRE(fixture.getStateCalls == 1);
@@ -99,9 +101,41 @@ int main(void) {
 
     session = (StaticStoryTalkSession){ .talking = true };
     fixture = (TalkFixture){ .messageState = STATIC_STORY_TALK_MESSAGE_CLOSING };
-    StaticStoryTalk_Update(STATIC_STORY_ACTOR_SKULL_KID, &progression, 90.0f, &session, &sOperations, &fixture);
+    StaticStoryTalk_Update(STATIC_STORY_ACTOR_SKULL_KID, &progression, 90.0f, false, &session, &sOperations, &fixture);
     REQUIRE(!session.talking);
     REQUIRE(!session.tracking);
     REQUIRE(fixture.closeCalls == 0);
+
+    /* Room-10 Saria and Skull Kid must leave A to the offered time-pedestal interaction. */
+    session = (StaticStoryTalkSession){ 0 };
+    fixture = (TalkFixture){ .offer = true };
+    StaticStoryTalk_Update(STATIC_STORY_ACTOR_SARIA, &progression, 70.0f, true, &session, &sOperations, &fixture);
+    REQUIRE(session.textId == 0x1001);
+    REQUIRE(!session.talking);
+    REQUIRE(!session.tracking);
+    REQUIRE(fixture.processCalls == 1);
+    REQUIRE(fixture.offerCalls == 0);
+
+    session = (StaticStoryTalkSession){ 0 };
+    fixture = (TalkFixture){ .offer = true };
+    StaticStoryTalk_Update(STATIC_STORY_ACTOR_SKULL_KID, &progression, 90.0f, true, &session, &sOperations, &fixture);
+    REQUIRE(session.textId == STATIC_STORY_TEXT_SKULL_KID);
+    REQUIRE(!session.talking);
+    REQUIRE(!session.tracking);
+    REQUIRE(fixture.processCalls == 1);
+    REQUIRE(fixture.offerCalls == 0);
+
+    /* Other catalogue actors and these actors away from a pedestal keep their ordinary talk offers. */
+    session = (StaticStoryTalkSession){ 0 };
+    fixture = (TalkFixture){ .offer = true };
+    StaticStoryTalk_Update(STATIC_STORY_ACTOR_IMPA, &progression, 80.0f, true, &session, &sOperations, &fixture);
+    REQUIRE(session.tracking);
+    REQUIRE(fixture.offerCalls == 1);
+
+    session = (StaticStoryTalkSession){ 0 };
+    fixture = (TalkFixture){ .offer = true };
+    StaticStoryTalk_Update(STATIC_STORY_ACTOR_SARIA, &progression, 70.0f, false, &session, &sOperations, &fixture);
+    REQUIRE(session.tracking);
+    REQUIRE(fixture.offerCalls == 1);
     return 0;
 }

@@ -12202,9 +12202,12 @@ void func_80846720(PlayState* play, Player* this, s32 arg2) {
 static Vec3f D_808546F4 = { -1.0f, 69.0f, 20.0f };
 
 void Player_StartMode_TimeTravel(PlayState* play, Player* this) {
+    s32 isTimePedestalArrival;
+
     Player_SetupAction(play, this, Player_Action_8084E9AC, 0);
     this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
-    if (!BgTokiSwd_IsTimePedestalArrival(play, this)) {
+    isTimePedestalArrival = BgTokiSwd_IsTimePedestalArrival(play, this);
+    if (!isTimePedestalArrival) {
         Math_Vec3f_Copy(&this->actor.world.pos, &D_808546F4);
         this->yaw = this->actor.shape.rot.y = -0x8000;
     }
@@ -12212,7 +12215,7 @@ void Player_StartMode_TimeTravel(PlayState* play, Player* this) {
                          0.0f);
     Player_StartAnimMovement(play, this, 0x28F);
     if (LINK_IS_ADULT) {
-        if (BgTokiSwd_IsTimePedestalArrival(play, this)) {
+        if (isTimePedestalArrival) {
             this->heldItemId = ITEM_NONE;
             this->nextModelGroup = Player_ActionToModelGroup(this, PLAYER_IA_SWORD_CS);
             Player_InitItemAction(play, this, PLAYER_IA_SWORD_CS);
@@ -12220,7 +12223,15 @@ void Player_StartMode_TimeTravel(PlayState* play, Player* this) {
             func_80846720(play, this, 0);
         }
     }
-    this->av2.actionVar2 = 20;
+    if (isTimePedestalArrival) {
+        // The native hold synchronizes this animation with the Temple of Time
+        // cutscene. A local pedestal reload has no matching cue, so begin its
+        // exit movement immediately instead of lingering on the first pose.
+        this->av1.actionVar1 = 1;
+        this->skelAnime.endFrame = this->skelAnime.animLength - 1.0f;
+    } else {
+        this->av2.actionVar2 = 20;
+    }
 }
 
 void Player_StartMode_Door(PlayState* play, Player* this) {
@@ -16547,7 +16558,7 @@ static void Player_FinishTimePedestalArrival(PlayState* play, Player* this) {
     Player_InitItemAction(play, this, PLAYER_IA_NONE);
     Player_SetEquipmentData(play, this);
     func_8083C0E8(this, play);
-    // Restore after the idle action finishes the native root movement.
+    // Restore the floor-safe position after idle setup finishes native root movement.
     BgTokiSwd_EndTimePedestalArrival(play, this);
 }
 
