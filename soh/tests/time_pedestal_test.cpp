@@ -17,6 +17,8 @@ static bool animationComplete;
 static int normalSwordEquipCalls, startModeHookCalls;
 static int cutsceneAudioFlag;
 static int postSwordDrawCalls;
+static int cameraCreates, cameraCopies, cameraClears, letterboxSize;
+static bool failSubCamera;
 static LinkAnimationHeader idleAnimation, childArrivalAnimation, adultArrivalAnimation;
 
 static Vec3f RotateZYX(Vec3s rot, Vec3f vector) {
@@ -68,6 +70,58 @@ void Matrix_Pop(void) {}
 void Matrix_Translate(f32, f32, f32, u8) {}
 void Matrix_Scale(f32, f32, f32, u8) {}
 void Matrix_RotateZ(f32, u8) {}
+s16 Play_CreateSubCamera(PlayState* play) {
+    cameraCreates++;
+    if (failSubCamera) return SUBCAM_NONE;
+    REQUIRE(!play->subCameraAllocated);
+    play->subCameraAllocated = true;
+    play->subCamera.uid = 42;
+    return 1;
+}
+s16 Play_GetActiveCamId(PlayState* play) { return play->activeCamera; }
+Camera* Play_GetCamera(PlayState* play, s16 id) {
+    REQUIRE(id == CAM_ID_MAIN || id == 1);
+    return id == CAM_ID_MAIN ? &play->camera : play->subCameraAllocated ? &play->subCamera : nullptr;
+}
+s16 Play_CameraGetUID(PlayState* play, s16 id) {
+    Camera* camera = Play_GetCamera(play, id);
+    return camera != nullptr ? camera->uid : -1;
+}
+s16 Play_ChangeCameraStatus(PlayState* play, s16 id, s16 status) {
+    Camera* camera = Play_GetCamera(play, id);
+    REQUIRE(camera != nullptr);
+    camera->status = status;
+    if (status == CAM_STAT_ACTIVE) play->activeCamera = id;
+    return status;
+}
+void Play_ClearCamera(PlayState* play, s16 id) {
+    REQUIRE(id == 1 && play->subCameraAllocated);
+    cameraClears++;
+    play->subCameraAllocated = false;
+}
+s32 func_800C0808(PlayState* play, s16 id, Player* player, s16 setting) {
+    REQUIRE(player == GET_PLAYER(play));
+    Play_GetCamera(play, id)->setting = setting;
+    return setting;
+}
+s32 Play_CameraSetAtEye(PlayState* play, s16 id, Vec3f* at, Vec3f* eye) {
+    Play_GetCamera(play, id)->at = *at;
+    Play_GetCamera(play, id)->eye = *eye;
+    return 3;
+}
+s32 Play_CameraSetFov(PlayState* play, s16 id, f32 fov) {
+    Play_GetCamera(play, id)->fov = fov;
+    return 1;
+}
+void Play_CopyCamera(PlayState* play, s16 to, s16 from) {
+    cameraCopies++;
+    Camera* dst = Play_GetCamera(play, to);
+    Camera* src = Play_GetCamera(play, from);
+    dst->at = src->at;
+    dst->eye = src->eye;
+    dst->fov = src->fov;
+}
+void Letterbox_SetSizeTarget(s32 size) { letterboxSize = size; }
 Gfx* PakLoader_GetTimePedestalSwordDL(void) {
     auto it = fixturePakEquipment.find(0x5450);
     return pakActive && it != fixturePakEquipment.end() && it->second != PAK_DL_STUB ? it->second : nullptr;
@@ -223,6 +277,8 @@ static void Reset(PlayState& play, BgTokiSwd& sword, bool adult = false, bool ra
     normalSwordEquipCalls = startModeHookCalls = 0;
     cutsceneAudioFlag = 0;
     postSwordDrawCalls = 0;
+    cameraCreates = cameraCopies = cameraClears = letterboxSize = 0;
+    failSubCamera = false;
     fixturePakEquipment.clear();
     gPlayState = &play;
     play.state.running = true;
@@ -851,8 +907,10 @@ static void CheckNativeTimeTravelHold() {
     REQUIRE(play.player.skelAnime.endFrame == 0.0f);
 }
 
+enum class ArrivalCameraCase { Normal, NoSlot, OtherCamera, ReusedSlot, SceneTeardown, ImmediateSkip };
+
 static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipExit, bool storySkipEnabled = false,
-                         bool mismatchedScene = false) {
+                         bool mismatchedScene = false, ArrivalCameraCase cameraCase = ArrivalCameraCase::Normal) {
     PlayState play;
     BgTokiSwd sword;
     Reset(play, sword, sourceAdult, rando);
@@ -901,6 +959,7 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
     arrival.state.input[0] = play.state.input[0];
     arrival.state.input[0].press.button = 0;
     Fixture_PlayerStartMode(&arrival, PLAYER_START_MODE_IDLE);
+    REQUIRE(cameraCreates == 0); // Camera setup must wait until Play_Init finishes.
     if (mismatchedScene) {
         REQUIRE(arrival.player.actionFunc == Player_Action_Idle && startModeHookCalls == 1);
         arrival.sceneNum = SCENE_LOST_WOODS;
@@ -924,6 +983,9 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
     REQUIRE(fabsf(arrival.player.actor.world.pos.z + 2395) < 0.01f);
     REQUIRE(arrival.player.actor.shape.rot.y == -0x4000);
     REQUIRE(arrival.player.stateFlags1 & PLAYER_STATE1_IN_CUTSCENE);
+    Player otherPlayer = arrival.player;
+    BgTokiSwd_UpdateTimePedestalArrivalCamera(&arrival, &otherPlayer);
+    REQUIRE(cameraCreates == 0); // Never acquire a camera for a remote/dummy player.
     if (LINK_IS_ADULT) {
         REQUIRE(arrival.player.heldItemAction == PLAYER_IA_SWORD_CS);
         pakActive = true;
@@ -934,11 +996,58 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
     }
     // A held departure B has no press edge after loading. Neither that held
     // state nor the persistent story-skip setting may cancel the exit action.
+    if (cameraCase == ArrivalCameraCase::ImmediateSkip) {
+        arrival.state.input[0].press.button = BTN_B;
+        Player_Action_8084E9AC(&arrival.player, &arrival);
+        REQUIRE(arrival.player.actionFunc == Player_Action_Idle && cameraCreates == 0);
+        REQUIRE(!BgTokiSwd_IsTimePedestalArrival(&arrival, &arrival.player));
+        REQUIRE(memcmp(&arrival.player.actor.world.pos, &returnPos, sizeof(returnPos)) == 0);
+        CheckProgressionUnchanged(before);
+        return;
+    }
+    failSubCamera = cameraCase == ArrivalCameraCase::NoSlot;
+    if (cameraCase == ArrivalCameraCase::OtherCamera) arrival.activeCamera = 2;
     Player_Action_8084E9AC(&arrival.player, &arrival);
     REQUIRE(arrival.player.actionFunc == Player_Action_8084E9AC && !animationComplete);
+    if (failSubCamera || cameraCase == ArrivalCameraCase::OtherCamera) {
+        Player_Action_8084E9AC(&arrival.player, &arrival);
+        REQUIRE(cameraCreates == (failSubCamera ? 1 : 0)); // No repeated allocation or camera takeover.
+        REQUIRE(!arrival.subCameraAllocated && cameraCopies == 0 && cameraClears == 0);
+        arrival.state.input[0].press.button = BTN_B;
+        Player_Action_8084E9AC(&arrival.player, &arrival);
+        REQUIRE(arrival.player.actionFunc == Player_Action_Idle);
+        REQUIRE(arrival.activeCamera == (failSubCamera ? CAM_ID_MAIN : 2));
+        REQUIRE(memcmp(&arrival.player.actor.world.pos, &returnPos, sizeof(returnPos)) == 0);
+        CheckProgressionUnchanged(before);
+        return;
+    }
+    REQUIRE(cameraCreates == 1 && arrival.activeCamera == 1 && arrival.subCameraAllocated);
+    REQUIRE(arrival.camera.status == CAM_STAT_WAIT && arrival.subCamera.status == CAM_STAT_ACTIVE);
+    REQUIRE(arrival.subCamera.setting == CAM_SET_FREE0 && letterboxSize == 0x20);
+    const Camera exitCamera = arrival.subCamera;
+    // Both points must live near this transformed pedestal, not Temple of Time's origin.
+    REQUIRE(fabsf(exitCamera.at.x + 736) < 250 && fabsf(exitCamera.at.z + 2395) < 250);
+    REQUIRE(fabsf(exitCamera.eye.x + 736) < 250 && fabsf(exitCamera.eye.z + 2395) < 250);
+    arrival.player.actor.world.pos.x += 12.0f;
     arrival.state.input[0] = {};
     Player_Action_8084E9AC(&arrival.player, &arrival);
     REQUIRE(arrival.player.actionFunc == Player_Action_8084E9AC);
+    REQUIRE(cameraCreates == 1 && memcmp(&arrival.subCamera, &exitCamera, sizeof(Camera)) == 0);
+    if (cameraCase == ArrivalCameraCase::ReusedSlot || cameraCase == ArrivalCameraCase::SceneTeardown) {
+        if (cameraCase == ArrivalCameraCase::ReusedSlot) {
+            arrival.subCamera.uid++; // Another camera has reused this slot.
+        } else {
+            arrival.state.running = false; // Player_Destroy calls this same cleanup.
+        }
+        REQUIRE(BgTokiSwd_EndTimePedestalArrival(&arrival, &arrival.player));
+        REQUIRE(!BgTokiSwd_IsTimePedestalArrival(&arrival, &arrival.player));
+        REQUIRE(cameraCopies == 0);
+        REQUIRE(cameraClears == (cameraCase == ArrivalCameraCase::SceneTeardown ? 1 : 0));
+        REQUIRE(arrival.activeCamera == (cameraCase == ArrivalCameraCase::SceneTeardown ? CAM_ID_MAIN : 1));
+        REQUIRE(!BgTokiSwd_EndTimePedestalArrival(&arrival, &arrival.player)); // Cleanup is one-use.
+        CheckProgressionUnchanged(before);
+        return;
+    }
     if (skipExit) {
         // Release/repress produces the fresh edge that skips this phase, even
         // while Skip Story Cutscenes remains enabled.
@@ -952,6 +1061,10 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
     REQUIRE(!(arrival.player.stateFlags1 & PLAYER_STATE1_IN_CUTSCENE));
     REQUIRE(arrival.player.heldItemAction == PLAYER_IA_NONE);
     REQUIRE(!BgTokiSwd_IsTimePedestalArrival(&arrival, &arrival.player));
+    REQUIRE(arrival.activeCamera == CAM_ID_MAIN && !arrival.subCameraAllocated);
+    REQUIRE(cameraCopies == 1 && cameraClears == 1 && letterboxSize == 0);
+    REQUIRE(memcmp(&arrival.camera.at, &exitCamera.at, sizeof(Vec3f)) == 0);
+    REQUIRE(memcmp(&arrival.camera.eye, &exitCamera.eye, sizeof(Vec3f)) == 0);
     REQUIRE(arrival.csCtx.state == CS_STATE_IDLE);
     REQUIRE(memcmp(&arrival.player.actor.world.pos, &returnPos, sizeof(returnPos)) == 0);
     // Position restoration keeps the actor on the known safe floor point, but
@@ -1085,6 +1198,14 @@ int main(int argc, char** argv) {
         }
     }
     puts("PASS native arrival animations, independent skips, selected sword and one-use local return");
+    for (bool sourceAdult : {false, true}) {
+        for (ArrivalCameraCase cameraCase : {ArrivalCameraCase::NoSlot, ArrivalCameraCase::OtherCamera,
+                                            ArrivalCameraCase::ReusedSlot, ArrivalCameraCase::SceneTeardown,
+                                            ArrivalCameraCase::ImmediateSkip}) {
+            CheckArrival(sourceAdult, false, true, true, false, false, cameraCase);
+        }
+    }
+    puts("PASS fixed exit camera, normal/B release, first-update timing, unavailable/reused cameras and teardown");
     PlayState play;
     BgTokiSwd sword;
     // A decorative pedestal must not edit the player's equipment on scene load.

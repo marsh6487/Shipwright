@@ -111,7 +111,7 @@ typedef struct {
 } FixtureExtendedEquipment;
 #include "mods/nei_save.h"
 typedef NeiSaveData FixtureNeiSave;
-typedef struct { s16 camDataIdx; } Camera;
+typedef struct { s16 camDataIdx, setting, status, uid; Vec3f at, eye; f32 fov; } Camera;
 typedef struct {
     s16 state, frames;
     f32 unk_0C;
@@ -134,13 +134,20 @@ struct PlayState {
     u32 gameplayFrames;
     Player player;
     bool playerRemoved;
-    Camera camera;
+    Camera camera, subCamera;
+    s16 activeCamera;
+    bool subCameraAllocated;
 };
 
 #define ARRAY_COUNT(a) (sizeof(a) / sizeof((a)[0]))
 #define _SHIFTL(v, s, w) (((u32)(v) & ((1U << (w)) - 1U)) << (s))
 #define GET_PLAYER(p) ((p)->playerRemoved ? NULL : &(p)->player)
 #define GET_ACTIVE_CAM(p) (&(p)->camera)
+#define CAM_ID_MAIN 0
+#define SUBCAM_NONE -1
+#define CAM_STAT_WAIT 1
+#define CAM_STAT_ACTIVE 7
+#define CAM_SET_FREE0 0x21
 #define LINK_AGE_ADULT 0
 #define LINK_AGE_CHILD 1
 #define LINK_IS_ADULT (gSaveContext.linkAge == LINK_AGE_ADULT)
@@ -353,6 +360,17 @@ void Matrix_Pop(void);
 void Matrix_Translate(f32, f32, f32, u8);
 void Matrix_Scale(f32, f32, f32, u8);
 void Matrix_RotateZ(f32, u8);
+s16 Play_CreateSubCamera(PlayState*);
+s16 Play_GetActiveCamId(PlayState*);
+s16 Play_ChangeCameraStatus(PlayState*, s16, s16);
+Camera* Play_GetCamera(PlayState*, s16);
+void Play_ClearCamera(PlayState*, s16);
+s16 Play_CameraGetUID(PlayState*, s16);
+s32 func_800C0808(PlayState*, s16, Player*, s16);
+s32 Play_CameraSetAtEye(PlayState*, s16, Vec3f*, Vec3f*);
+s32 Play_CameraSetFov(PlayState*, s16, f32);
+void Play_CopyCamera(PlayState*, s16, s16);
+void Letterbox_SetSizeTarget(s32);
 extern const char object_toki_objects_DL_001BD0[];
 u8 PakLoader_HasActiveModel(void);
 u8 PakLoader_UsedCombinedDL(u8);

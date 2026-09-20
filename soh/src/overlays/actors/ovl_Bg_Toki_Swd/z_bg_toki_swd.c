@@ -81,10 +81,12 @@ static struct {
     PlayState* play;
     Player* player;
     Vec3f startPos, returnPos;
+    Vec3f cameraAt, cameraEye;
     s16 startYaw, returnYaw, scene, entrance;
+    s16 subCamId, subCamUid;
     u16 fileNum;
     s8 room, age;
-    u8 pending;
+    u8 pending, cameraAttempted;
 } sTimePedestalArrival;
 
 void BgTokiSwd_SetupAction(BgTokiSwd* this, BgTokiSwdActionFunc actionFunc) {
@@ -246,6 +248,8 @@ s32 BgTokiSwd_BeginTimePedestalArrival(PlayState* play, Player* player) {
     }
     sTimePedestalArrival.play = NULL;
     sTimePedestalArrival.player = NULL;
+    sTimePedestalArrival.subCamId = SUBCAM_NONE;
+    sTimePedestalArrival.cameraAttempted = false;
     if (!sTimePedestalArrival.pending) {
         return false;
     }
@@ -271,6 +275,32 @@ s32 BgTokiSwd_IsTimePedestalArrival(PlayState* play, Player* player) {
            sTimePedestalArrival.player == player && player == GET_PLAYER(play);
 }
 
+void BgTokiSwd_UpdateTimePedestalArrivalCamera(PlayState* play, Player* player) {
+    if (!BgTokiSwd_IsTimePedestalArrival(play, player) || !play->state.running ||
+        play->transitionTrigger == TRANS_TRIGGER_START || sTimePedestalArrival.cameraAttempted) {
+        return;
+    }
+    // Player_Init runs before Play_Init initializes the main camera. Acquire
+    // the exit shot on its first live update, so the scene's camera setup
+    // cannot replace it with the ordinary behind-Link respawn view.
+    sTimePedestalArrival.cameraAttempted = true;
+    if (Play_GetActiveCamId(play) != CAM_ID_MAIN) {
+        return;
+    }
+    s16 subCamId = Play_CreateSubCamera(play);
+    if (subCamId == SUBCAM_NONE) {
+        return; // Keep the animation and its skip usable if no camera is free.
+    }
+    sTimePedestalArrival.subCamId = subCamId;
+    sTimePedestalArrival.subCamUid = Play_CameraGetUID(play, subCamId);
+    func_800C0808(play, subCamId, player, CAM_SET_FREE0);
+    Play_CameraSetAtEye(play, subCamId, &sTimePedestalArrival.cameraAt, &sTimePedestalArrival.cameraEye);
+    Play_CameraSetFov(play, subCamId, 55.0f);
+    Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_WAIT);
+    Play_ChangeCameraStatus(play, subCamId, CAM_STAT_ACTIVE);
+    Letterbox_SetSizeTarget(0x20);
+}
+
 s32 BgTokiSwd_SkipTimePedestalArrival(PlayState* play, Player* player) {
     if (!BgTokiSwd_IsTimePedestalArrival(play, player)) {
         return false;
@@ -292,6 +322,21 @@ s32 BgTokiSwd_EndTimePedestalArrival(PlayState* play, Player* player) {
     // Keep the native animation's pedestal-facing finish. Restoring the saved
     // pre-swap yaw here visibly twists the whole character as control returns;
     // the saved position is still restored to keep the actor on safe ground.
+    s16 subCamId = sTimePedestalArrival.subCamId;
+    if (subCamId != SUBCAM_NONE && Play_CameraGetUID(play, subCamId) == sTimePedestalArrival.subCamUid) {
+        s32 active = Play_GetActiveCamId(play) == subCamId;
+        if (active && play->state.running) {
+            // Resume normal camera movement from this shot, not the stale
+            // spawn-camera image. Only release the camera owned by this phase.
+            Play_CopyCamera(play, CAM_ID_MAIN, subCamId);
+            Letterbox_SetSizeTarget(0);
+        }
+        Play_ClearCamera(play, subCamId);
+        if (active) {
+            Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_ACTIVE);
+        }
+    }
+    sTimePedestalArrival.subCamId = SUBCAM_NONE;
     sTimePedestalArrival.play = NULL;
     sTimePedestalArrival.player = NULL;
     return true;
@@ -374,6 +419,13 @@ void BgTokiSwd_FinishTimePedestal(BgTokiSwd* this, PlayState* play) {
     sTimePedestalArrival.startPos = (Vec3f){ -1.0f, 69.0f, 20.0f };
     TimePedestalCutscene_TransformPoint(&sTimePedestalArrival.startPos, &this->actor.world.pos, this->actor.shape.rot.y);
     sTimePedestalArrival.startYaw = this->actor.shape.rot.y + 0x8000;
+    // A fixed front-side composition for the local hop/flourish. Author in
+    // the same Temple-of-Time coordinates as the animation, then relocate
+    // both points with the pedestal. Do not follow the animation's root motion.
+    sTimePedestalArrival.cameraAt = (Vec3f){ -1.0f, play->linkAgeOnLoad == LINK_AGE_CHILD ? 103.0f : 118.0f, -10.0f };
+    sTimePedestalArrival.cameraEye = (Vec3f){ 120.0f, play->linkAgeOnLoad == LINK_AGE_CHILD ? 132.0f : 150.0f, -190.0f };
+    TimePedestalCutscene_TransformPoint(&sTimePedestalArrival.cameraAt, &this->actor.world.pos, this->actor.shape.rot.y);
+    TimePedestalCutscene_TransformPoint(&sTimePedestalArrival.cameraEye, &this->actor.world.pos, this->actor.shape.rot.y);
     sTimePedestalArrival.returnPos = this->returnPos;
     sTimePedestalArrival.returnYaw = this->returnYaw;
     sTimePedestalArrival.scene = play->sceneNum;

@@ -41,6 +41,7 @@ s32 BgTokiSwd_RelocateTimePedestalPlayer(PlayState* play, Player* player);
 s32 BgTokiSwd_GetTimePedestalHandState(PlayState* play, Player* player);
 s32 BgTokiSwd_BeginTimePedestalArrival(PlayState* play, Player* player);
 s32 BgTokiSwd_IsTimePedestalArrival(PlayState* play, Player* player);
+void BgTokiSwd_UpdateTimePedestalArrivalCamera(PlayState* play, Player* player);
 s32 BgTokiSwd_SkipTimePedestalArrival(PlayState* play, Player* player);
 s32 BgTokiSwd_EndTimePedestalArrival(PlayState* play, Player* player);
 

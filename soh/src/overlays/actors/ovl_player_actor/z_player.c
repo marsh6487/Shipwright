@@ -16567,6 +16567,7 @@ void Player_Action_8084E9AC(Player* this, PlayState* play) {
         Player_FinishTimePedestalArrival(play, this);
         return;
     }
+    BgTokiSwd_UpdateTimePedestalArrivalCamera(play, this);
     if (LinkAnimation_Update(play, &this->skelAnime)) {
         if (this->av1.actionVar1 == 0) {
             if (DECR(this->av2.actionVar2) == 0) {

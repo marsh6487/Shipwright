@@ -131,6 +131,32 @@ at either handoff, and fade behavior with Story Skip both on and off. The select
 pedestal mesh uses Link's weapon scale and places the grip 40 world units above
 the actor anchor; the tests check source selection, not this visual calibration.
 
+## Fixed exit camera candidate
+
+`poc/pedestal-exit-camera` builds on `a42472291f7fc8df7d329aaa8e0df089bf284621`,
+whose Windows and Linux jobs passed in Actions run `35532669510`. That parent
+contains the wider interaction and shared sword changes; their runtime acceptance
+is still pending. The user reports the fade looks acceptable and requests a fixed
+exit view, like the Temple of Time, instead of the normal respawn follow camera.
+The supplied `20260920151506404.mp4` ends as that follow view becomes visible.
+
+The local exit now acquires a manual subcamera on its first player update, after
+scene initialization finishes configuring the main camera. Its front-side shot
+is fixed to the pedestal's position and yaw, with age-specific height and a
+55-degree field of view. This is an authored local composition, not a copy of the
+Temple's scene camera data. It remains fixed through the hop or flourish. Normal
+completion and a fresh B skip copy the view back to the main camera, release the
+owned subcamera and end letterboxing. Player teardown uses the same cleanup;
+camera identity checks protect a reused slot. An unavailable or already occupied
+camera system leaves animation and skipping usable.
+
+Focused production-function tests cover first-update acquisition, both ages,
+fixed framing despite player movement, normal and B release, immediate B before
+acquisition, allocation failure, another active camera, reused IDs and teardown.
+The fade, interaction reach, equipment handoffs and save/progression rules remain
+unchanged. Runtime framing and clearance with the user's scene and model packs
+still need confirmation; this camera follow-up is a candidate, not a promoted master.
+
 In game, verify repeated child/adult cycles, camera clearance, exact room-10
 return placement, reset/skip behavior, owned and unowned sword saves, and music
 resumption. Check the Sages tunnel with alternate assets both enabled and
