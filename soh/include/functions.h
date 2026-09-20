@@ -871,6 +871,7 @@ void Cutscene_HandleEntranceTriggers(PlayState* play);
 void Cutscene_HandleConditionalTriggers(PlayState* play);
 void Cutscene_SetSegment(PlayState* play, void* segment);
 void GetItem_Draw(PlayState* play, s16 drawId);
+Gfx* GetItem_DrawDListWithCosmetics(Gfx* gfx, const char* dlist, s16 drawId);
 void GetItemEntry_Draw(PlayState* play, GetItemEntry getItemEntry);
 void SoundSource_InitAll(PlayState* play);
 void SoundSource_UpdateAll(PlayState* play);

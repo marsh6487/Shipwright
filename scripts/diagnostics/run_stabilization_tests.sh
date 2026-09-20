@@ -70,6 +70,7 @@ python3 -B scripts/diagnostics/run_night_combat_test.py "$stabilization_build" "
 python3 -B scripts/diagnostics/run_rain_runtime_test.py "$stabilization_build/rain" "$cc" "$cxx"
 python3 -B scripts/diagnostics/run_time_gate_chest_tests.py
 python3 -B scripts/diagnostics/run_child_ruto_face_test.py
+python3 -B scripts/diagnostics/run_custom_item_color_tests.py
 
 # Optional read-only real-archive check: pass the path to mm.o2r as argument 1.
 if [[ $# -gt 0 ]]; then

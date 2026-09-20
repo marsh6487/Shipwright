@@ -391,7 +391,7 @@ extern "C" void Randomizer_DrawDoubleDefense(PlayState* play, GetItemEntry* getI
 
     gSPGrayscale(POLY_XLU_DISP++, false);
 
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gGiHeartContainerDL);
+    POLY_XLU_DISP = GetItem_DrawDListWithCosmetics(POLY_XLU_DISP, gGiHeartContainerDL, GID_HEART_CONTAINER);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
