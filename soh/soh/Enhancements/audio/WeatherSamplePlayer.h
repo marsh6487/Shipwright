@@ -10,8 +10,8 @@ inline float WeatherSamplePlayer_ClampGain(float gain) {
     return std::clamp(gain, 0.0f, 1.0f);
 }
 
-inline size_t WeatherSamplePlayer_TestMixMonoCountClamps(int16_t* destination, const int16_t* source,
-                                                         size_t frameCount, float gain) {
+inline size_t WeatherSamplePlayer_TestMixMonoCountClamps(int16_t* destination, const int16_t* source, size_t frameCount,
+                                                         float gain) {
     const float clampedGain = WeatherSamplePlayer_ClampGain(gain);
     size_t clampCount = 0;
     for (size_t i = 0; i < frameCount; ++i) {
@@ -20,9 +20,9 @@ inline size_t WeatherSamplePlayer_TestMixMonoCountClamps(int16_t* destination, c
             const size_t index = i * 2 + channel;
             const int32_t mixed = static_cast<int32_t>(destination[index]) + sample;
             clampCount += mixed < std::numeric_limits<int16_t>::min() || mixed > std::numeric_limits<int16_t>::max();
-            destination[index] = static_cast<int16_t>(std::clamp(mixed,
-                                                                 static_cast<int32_t>(std::numeric_limits<int16_t>::min()),
-                                                                 static_cast<int32_t>(std::numeric_limits<int16_t>::max())));
+            destination[index] =
+                static_cast<int16_t>(std::clamp(mixed, static_cast<int32_t>(std::numeric_limits<int16_t>::min()),
+                                                static_cast<int32_t>(std::numeric_limits<int16_t>::max())));
         }
     }
     return clampCount;
@@ -34,7 +34,7 @@ inline void WeatherSamplePlayer_TestMixMono(int16_t* destination, const int16_t*
 }
 
 inline size_t WeatherSamplePlayer_AdvanceLoopPosition(size_t position, size_t loopStart, size_t loopEnd,
-                                                       size_t frames) {
+                                                      size_t frames) {
     if (loopEnd <= loopStart) {
         return 0;
     }

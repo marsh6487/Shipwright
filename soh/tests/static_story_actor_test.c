@@ -1,11 +1,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define REQUIRE(condition)                                                                                              \
-    do {                                                                                                                \
-        if (!(condition)) {                                                                                             \
-            return 1;                                                                                                   \
-        }                                                                                                               \
+#define REQUIRE(condition)  \
+    do {                    \
+        if (!(condition)) { \
+            return 1;       \
+        }                   \
     } while (0)
 #define assert(condition) REQUIRE(condition)
 
@@ -109,8 +109,7 @@ int main(void) {
     assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN) ==
            STATIC_STORY_RESOURCE_MM_ARCHIVE);
     assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_PHANTOM_GANON) == STATIC_STORY_RESOURCE_OOT_OBJECT);
-    assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_ADULT_GANONDORF) ==
-           STATIC_STORY_RESOURCE_OOT_OBJECT);
+    assert(StaticStoryActor_GetResourceSource(STATIC_STORY_ACTOR_ADULT_GANONDORF) == STATIC_STORY_RESOURCE_OOT_OBJECT);
     assert(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_ADULT_GANONDORF));
     assert(!StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN));
     assert(StaticStoryActor_IsAvailable(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL));
@@ -151,8 +150,7 @@ int main(void) {
     assert(StaticStoryActor_GetTrackingMode(STATIC_STORY_ACTOR_GREAT_FAIRY, 2) == STATIC_TRACKING_MODE_HEAD_ONLY);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->objectId == OBJECT_DU);
     assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->adapter == STATIC_ADAPTER_DARUNIA);
-    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->drawContract ==
-           STATIC_DRAW_CONTRACT_NPC_FLEX);
+    assert(StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_DARUNIA)->drawContract == STATIC_DRAW_CONTRACT_NPC_FLEX);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_DARUNIA, 0)->animation == STATIC_ANIM_DARUNIA_IDLE);
     assert(StaticStoryActor_ResolvePose(STATIC_STORY_ACTOR_DARUNIA, 1)->animation == STATIC_ANIM_DARUNIA_DANCE_1);
     assert(!StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_DARUNIA, 1));

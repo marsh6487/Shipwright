@@ -39,18 +39,18 @@ static const StaticStoryActorDefinition sDefinitions[STATIC_STORY_ACTOR_MAX] = {
                                               60, 90.0f, STATIC_TRACKING_ADULT_RUTO, 12, -3.0f },
     [STATIC_STORY_ACTOR_GREAT_FAIRY] = { 2, 1, OBJECT_DY_OBJ, STATIC_ADAPTER_GREAT_FAIRY, 0.035f, 262.5f, 45, 220, 0,
                                          20, 60, 180.0f, STATIC_TRACKING_GREAT_FAIRY, 12, 0.0f },
-    [STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL] = {
-        2, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_TREASURE_CHEST_SHOP_GAL, 0.01f, 52.0f, 20, 60, 0, 30, 30, 90.0f,
-        STATIC_TRACKING_TREASURE_CHEST_SHOP_GAL, 12, 0.0f },
-    [STATIC_STORY_ACTOR_ADULT_GANONDORF] = { 0, 0, OBJECT_GANON, STATIC_ADAPTER_ADULT_GANONDORF, 0.01f, 90.0f,
-                                             35, 110, 0, 30, 30, 120.0f, STATIC_TRACKING_NONE, 0, 0.0f },
-    [STATIC_STORY_ACTOR_PHANTOM_GANON] = { 0, 1, OBJECT_GND, STATIC_ADAPTER_PHANTOM_GANON, 0.01f, 80.0f, 35, 100,
-                                           0, 30, 30, 120.0f, STATIC_TRACKING_NONE, 0, 0.0f },
-    [STATIC_STORY_ACTOR_SKULL_KID] = { 1, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_SKULL_KID, 0.01f, 55.0f, 20, 60, 0,
-                                       30, 30, 90.0f, STATIC_TRACKING_NONE, 0, 0.0f },
-    [STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN] = { 2, 0, OBJECT_INVALID, STATIC_ADAPTER_MM_HAPPY_MASK_SALESMAN,
-                                                 0.01f, 60.0f, 22, 70, 0, 30, 30, 100.0f,
-                                                 STATIC_TRACKING_HAPPY_MASK_SALESMAN, 12, 0.0f },
+    [STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL] = { 2, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_TREASURE_CHEST_SHOP_GAL,
+                                                     0.01f, 52.0f, 20, 60, 0, 30, 30, 90.0f,
+                                                     STATIC_TRACKING_TREASURE_CHEST_SHOP_GAL, 12, 0.0f },
+    [STATIC_STORY_ACTOR_ADULT_GANONDORF] = { 0, 0, OBJECT_GANON, STATIC_ADAPTER_ADULT_GANONDORF, 0.01f, 90.0f, 35, 110,
+                                             0, 30, 30, 120.0f, STATIC_TRACKING_NONE, 0, 0.0f },
+    [STATIC_STORY_ACTOR_PHANTOM_GANON] = { 0, 1, OBJECT_GND, STATIC_ADAPTER_PHANTOM_GANON, 0.01f, 80.0f, 35, 100, 0, 30,
+                                           30, 120.0f, STATIC_TRACKING_NONE, 0, 0.0f },
+    [STATIC_STORY_ACTOR_SKULL_KID] = { 1, 1, OBJECT_INVALID, STATIC_ADAPTER_MM_SKULL_KID, 0.01f, 55.0f, 20, 60, 0, 30,
+                                       30, 90.0f, STATIC_TRACKING_NONE, 0, 0.0f },
+    [STATIC_STORY_ACTOR_HAPPY_MASK_SALESMAN] = { 2, 0, OBJECT_INVALID, STATIC_ADAPTER_MM_HAPPY_MASK_SALESMAN, 0.01f,
+                                                 60.0f, 22, 70, 0, 30, 30, 100.0f, STATIC_TRACKING_HAPPY_MASK_SALESMAN,
+                                                 12, 0.0f },
 };
 
 static const StaticStoryPoseDescriptor sPoses[STATIC_STORY_ACTOR_MAX][STATIC_STORY_ACTOR_POSE_COUNT] = {
@@ -364,7 +364,7 @@ StaticStoryTrackingMode StaticStoryActor_GetTrackingMode(StaticStoryActorType ty
         return STATIC_TRACKING_MODE_NONE;
     }
     return poseDescriptor->flags & STATIC_POSE_FLAG_HEAD_ONLY_TRACKING ? STATIC_TRACKING_MODE_HEAD_ONLY
-                                                                      : STATIC_TRACKING_MODE_FULL;
+                                                                       : STATIC_TRACKING_MODE_FULL;
 }
 
 StaticStoryAdultRutoTrackingLimb StaticStoryActor_GetAdultRutoTrackingLimb(int limbIndex) {
@@ -404,10 +404,8 @@ float StaticStoryActor_GetGreatFairyHoverAmplitude(uint8_t pose) {
 
 int8_t StaticStoryActor_GetFixedEyeIndex(StaticStoryActorType type, uint8_t pose) {
     const StaticStoryPoseDescriptor* descriptor = StaticStoryActor_ResolvePose(type, pose);
-    return descriptor != NULL &&
-                   (descriptor->flags & (STATIC_POSE_FLAG_OCARINA | STATIC_POSE_FLAG_CLOSED_EYES))
-               ? 2
-               : -1;
+    return descriptor != NULL && (descriptor->flags & (STATIC_POSE_FLAG_OCARINA | STATIC_POSE_FLAG_CLOSED_EYES)) ? 2
+                                                                                                                 : -1;
 }
 
 StaticStoryFaceProfile StaticStoryActor_GetFaceProfile(StaticStoryActorType type) {
@@ -423,14 +421,12 @@ StaticStoryFaceProfile StaticStoryActor_GetFaceProfile(StaticStoryActorType type
     return STATIC_FACE_PROFILE_STANDARD;
 }
 
-uint8_t StaticStoryActor_ResolveEyeIndex(StaticStoryActorType type, uint8_t requestedEyeIndex,
-                                        bool hasAlternateHead) {
+uint8_t StaticStoryActor_ResolveEyeIndex(StaticStoryActorType type, uint8_t requestedEyeIndex, bool hasAlternateHead) {
     if (requestedEyeIndex >= 3) {
         return 0;
     }
-    if (hasAlternateHead &&
-        (type == STATIC_STORY_ACTOR_IMPA || type == STATIC_STORY_ACTOR_ADULT_RUTO ||
-         type == STATIC_STORY_ACTOR_ADULT_RUTO_WATER)) {
+    if (hasAlternateHead && (type == STATIC_STORY_ACTOR_IMPA || type == STATIC_STORY_ACTOR_ADULT_RUTO ||
+                             type == STATIC_STORY_ACTOR_ADULT_RUTO_WATER)) {
         return 0;
     }
     return requestedEyeIndex;

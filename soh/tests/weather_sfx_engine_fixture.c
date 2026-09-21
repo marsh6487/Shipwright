@@ -111,8 +111,7 @@ static int WeatherSfxEngine_IsPlaying(u16 sfxId) {
         if (index == 0xFF)
             continue;
         SoundBankEntry* entry = &gSoundBanks[bank][index];
-        if (entry->sfxId == sfxId &&
-            (entry->state == SFX_STATE_PLAYING_1 || entry->state == SFX_STATE_PLAYING_2)) {
+        if (entry->sfxId == sfxId && (entry->state == SFX_STATE_PLAYING_1 || entry->state == SFX_STATE_PLAYING_2)) {
             return 1;
         }
     }

@@ -594,8 +594,9 @@ static uintptr_t MmAssets_ResolveDisplayListReference(void* context, MmDisplayLi
     auto* resolve = static_cast<MmDisplayListResolveContext*>(context);
     *resourceSize = 0;
     if (kind == MM_DISPLAY_LIST_REFERENCE_CULL) {
-        return hash == 0 ? reinterpret_cast<uintptr_t>(gCullBackDList)
-                        : hash == 2 ? reinterpret_cast<uintptr_t>(gCullFrontDList) : 0;
+        return hash == 0   ? reinterpret_cast<uintptr_t>(gCullBackDList)
+               : hash == 2 ? reinterpret_cast<uintptr_t>(gCullFrontDList)
+                           : 0;
     }
     auto pathIt = resolve->graph->pathsByHash->find(hash);
     if (pathIt == resolve->graph->pathsByHash->end()) {

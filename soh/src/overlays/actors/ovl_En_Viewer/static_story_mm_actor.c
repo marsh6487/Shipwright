@@ -7,12 +7,12 @@
 #define STATIC_STORY_MM_TAU 6.28318530717958647692f
 
 static const StaticStoryMmPresentation sTreasureChestShopGalPresentations[] = {
-    { "objects/object_bg/gTreasureChestShopGalSkel", "objects/object_bg/object_bg_Anim_009890", NULL, NULL, NULL,
-      NULL, NULL, 23, STATIC_STORY_MM_TRACKING_HEAD_TORSO, false },
-    { "objects/object_bg/gTreasureChestShopGalSkel", "objects/object_bg/object_bg_Anim_001384", NULL, NULL, NULL,
-      NULL, NULL, 23, STATIC_STORY_MM_TRACKING_NONE, false },
-    { "objects/object_bg/gTreasureChestShopGalSkel", "objects/object_bg/object_bg_Anim_009890", NULL, NULL, NULL,
-      NULL, NULL, 23, STATIC_STORY_MM_TRACKING_HEAD_TORSO, false },
+    { "objects/object_bg/gTreasureChestShopGalSkel", "objects/object_bg/object_bg_Anim_009890", NULL, NULL, NULL, NULL,
+      NULL, 23, STATIC_STORY_MM_TRACKING_HEAD_TORSO, false },
+    { "objects/object_bg/gTreasureChestShopGalSkel", "objects/object_bg/object_bg_Anim_001384", NULL, NULL, NULL, NULL,
+      NULL, 23, STATIC_STORY_MM_TRACKING_NONE, false },
+    { "objects/object_bg/gTreasureChestShopGalSkel", "objects/object_bg/object_bg_Anim_009890", NULL, NULL, NULL, NULL,
+      NULL, 23, STATIC_STORY_MM_TRACKING_HEAD_TORSO, false },
 };
 
 static const char* sTreasureChestShopGalEyeTexturePaths[] = {
@@ -43,12 +43,9 @@ static const char* sTatlLimbPaths[] = {
 };
 
 static const char* sTatlDListPaths[] = {
-    "objects/gameplay_keep/gameplay_keep_DL_029990",
-    "objects/gameplay_keep/gameplay_keep_DL_029A58",
-    "objects/gameplay_keep/gameplay_keep_DL_029B20",
-    "objects/gameplay_keep/gameplay_keep_DL_029BE8",
-    "objects/gameplay_keep/gameplay_keep_DL_029CB0",
-    "objects/gameplay_keep/gameplay_keep_DL_029CF0",
+    "objects/gameplay_keep/gameplay_keep_DL_029990", "objects/gameplay_keep/gameplay_keep_DL_029A58",
+    "objects/gameplay_keep/gameplay_keep_DL_029B20", "objects/gameplay_keep/gameplay_keep_DL_029BE8",
+    "objects/gameplay_keep/gameplay_keep_DL_029CB0", "objects/gameplay_keep/gameplay_keep_DL_029CF0",
 };
 
 /* Keep Skull Kid's geometry and vertex buffers in one archive. The skeleton
@@ -143,8 +140,8 @@ bool StaticStoryMm_UsesNativeFairyCompanion(StaticStoryActorType type) {
     return type == STATIC_STORY_ACTOR_SKULL_KID;
 }
 
-bool StaticStoryMm_ResourcesComplete(const StaticStoryMmPresentation* presentation, bool hasSkeleton,
-                                     bool hasAnimation, bool hasSecondarySkeleton) {
+bool StaticStoryMm_ResourcesComplete(const StaticStoryMmPresentation* presentation, bool hasSkeleton, bool hasAnimation,
+                                     bool hasSecondarySkeleton) {
     return presentation != NULL && hasSkeleton && hasAnimation &&
            (!presentation->requiresSecondarySkeleton || hasSecondarySkeleton);
 }

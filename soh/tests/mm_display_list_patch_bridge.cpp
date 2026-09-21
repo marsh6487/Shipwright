@@ -3,7 +3,7 @@
 #include "../mods/transformation_masks/assets/mm_display_list_patch.h"
 
 extern "C" bool Test_PatchMmDisplayList(MmDisplayListCommand* commands, size_t count,
-                                      MmDisplayListResolveResource resolver, void* context,
-                                      MmDisplayListPatchStats* stats) {
+                                        MmDisplayListResolveResource resolver, void* context,
+                                        MmDisplayListPatchStats* stats) {
     return MmDisplayList_PatchCommands(commands, count, resolver, context, stats);
 }

@@ -30,8 +30,7 @@ void Audio_RegisterNightBgm(uint16_t sequence) {
 }
 
 uint8_t Audio_IsNightBgmActive(void) {
-    return sRegisteredNightBgm != NA_BGM_DISABLED &&
-           gActiveSeqs[SEQ_PLAYER_BGM_MAIN].seqId != NA_BGM_DISABLED &&
+    return sRegisteredNightBgm != NA_BGM_DISABLED && gActiveSeqs[SEQ_PLAYER_BGM_MAIN].seqId != NA_BGM_DISABLED &&
            sResolvedMainBgm == sRegisteredNightBgm;
 }
 

@@ -244,8 +244,7 @@ void AudioHeap_PopCache(s32 tableType) {
     if (persistent->numEntries == 0) {
         return;
     }
-    if (tableType == SEQUENCE_TABLE &&
-        AudioHeap_IsSequenceInUse(persistent->entries[persistent->numEntries - 1].id)) {
+    if (tableType == SEQUENCE_TABLE && AudioHeap_IsSequenceInUse(persistent->entries[persistent->numEntries - 1].id)) {
         return;
     }
 

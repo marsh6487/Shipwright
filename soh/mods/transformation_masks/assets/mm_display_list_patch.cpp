@@ -12,8 +12,8 @@ constexpr uint8_t kEndDisplayList = 0xDF;
 constexpr size_t kVertexSize = 16;
 
 bool IsTwoWordCommand(uint8_t opcode) {
-    return opcode == 0x20 || opcode == 0x24 || opcode == 0x25 || opcode == 0x27 || opcode == 0x31 ||
-           opcode == 0x32 || opcode == 0x33 || opcode == 0x35 || opcode == 0x36 || opcode == 0x42;
+    return opcode == 0x20 || opcode == 0x24 || opcode == 0x25 || opcode == 0x27 || opcode == 0x31 || opcode == 0x32 ||
+           opcode == 0x33 || opcode == 0x35 || opcode == 0x36 || opcode == 0x42;
 }
 
 uint64_t ReadHash(const MmDisplayListCommand& payload) {
@@ -79,8 +79,7 @@ bool MmDisplayList_PatchCommands(MmDisplayListCommand* commands, size_t commandC
             if (target == 0) {
                 ++result.unresolved;
             } else {
-                command.w0 = (static_cast<uint32_t>(kDisplayList) << 24) |
-                             (command.w0 & UINT32_C(0x00010000));
+                command.w0 = (static_cast<uint32_t>(kDisplayList) << 24) | (command.w0 & UINT32_C(0x00010000));
                 command.w1 = target;
                 ++result.cullPatched;
             }
@@ -107,13 +106,12 @@ bool MmDisplayList_PatchCommands(MmDisplayListCommand* commands, size_t commandC
         if (opcode == kTextureHash) {
             MmDisplayListCommand& payload = commands[i + 1];
             size_t resourceSize = 0;
-            const uintptr_t texture = resolveResource(context, MM_DISPLAY_LIST_REFERENCE_TEXTURE,
-                                                      ReadHash(payload), &resourceSize);
+            const uintptr_t texture =
+                resolveResource(context, MM_DISPLAY_LIST_REFERENCE_TEXTURE, ReadHash(payload), &resourceSize);
             if (texture == 0) {
                 ++result.unresolved;
             } else {
-                command.w0 = (command.w0 & UINT32_C(0x00FFFFFF)) |
-                             (static_cast<uint32_t>(kSetTextureImage) << 24);
+                command.w0 = (command.w0 & UINT32_C(0x00FFFFFF)) | (static_cast<uint32_t>(kSetTextureImage) << 24);
                 command.w1 = texture;
                 payload = {};
                 ++result.texturesPatched;
@@ -124,8 +122,8 @@ bool MmDisplayList_PatchCommands(MmDisplayListCommand* commands, size_t commandC
         if (opcode == kVertexHash) {
             MmDisplayListCommand& payload = commands[i + 1];
             size_t resourceSize = 0;
-            const uintptr_t vertexBase = resolveResource(context, MM_DISPLAY_LIST_REFERENCE_VERTEX,
-                                                         ReadHash(payload), &resourceSize);
+            const uintptr_t vertexBase =
+                resolveResource(context, MM_DISPLAY_LIST_REFERENCE_VERTEX, ReadHash(payload), &resourceSize);
             const size_t vertexCount = (command.w0 >> 12) & UINT32_C(0xFF);
             if (vertexBase == 0) {
                 ++result.unresolved;
@@ -138,8 +136,7 @@ bool MmDisplayList_PatchCommands(MmDisplayListCommand* commands, size_t commandC
                  * same ordinary G_VTX form as the renderer's hash handler and
                  * consume the payload so it cannot be executed as display-list
                  * commands by a copied graph. */
-                command.w0 = (command.w0 & UINT32_C(0x00FFFFFF)) |
-                             (static_cast<uint32_t>(kVertex) << 24);
+                command.w0 = (command.w0 & UINT32_C(0x00FFFFFF)) | (static_cast<uint32_t>(kVertex) << 24);
                 command.w1 = vertexBase;
                 payload = {};
                 ++result.verticesPatched;

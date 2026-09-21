@@ -1823,11 +1823,10 @@ void Environment_UpdateLightningStrike(PlayState* play) {
     if (play->envCtx.lightningMode != LIGHTNING_MODE_OFF) {
         switch (gLightningStrike.state) {
             case LIGHTNING_STRIKE_WAIT: {
-                f32 thunderFrequencyScale =
-                    CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunder"), 1)
-                        ? ConcurrentWeatherAudio_ThunderFrequencyScale(
-                              CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunderFrequency"), 50))
-                        : 0.0f;
+                f32 thunderFrequencyScale = CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunder"), 1)
+                                                ? ConcurrentWeatherAudio_ThunderFrequencyScale(CVarGetInteger(
+                                                      CVAR_AUDIO("ProximityWeatherThunderFrequency"), 50))
+                                                : 0.0f;
                 // every frame theres a 10% chance of the timer advancing 50 units
                 if (thunderFrequencyScale > 0.0f && Rand_ZeroOne() < 0.1f) {
                     gLightningStrike.delayTimer += 50.0f * thunderFrequencyScale;
@@ -1845,14 +1844,12 @@ void Environment_UpdateLightningStrike(PlayState* play) {
                     Environment_AddLightningBolts(play,
                                                   (u8)(Rand_ZeroOne() * (ARRAY_COUNT(sLightningBolts) - 0.1f)) + 1);
                     sLightningFlashAlpha = 0;
-                    if (!Audio_IsNatureLightningEnabled() &&
-                        CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunder"), 1)) {
+                    if (!Audio_IsNatureLightningEnabled() && CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunder"), 1)) {
                         f32 thunderGain = ConcurrentWeatherAudio_ClampPercent(
                                               CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunderVolume"), 70)) /
                                           100.0f;
                         ConcurrentWeatherThunderStyle thunderStyle = ConcurrentWeatherAudio_ThunderStyle(
-                            CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunderStyle"),
-                                           CONCURRENT_WEATHER_THUNDER_LOW));
+                            CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunderStyle"), CONCURRENT_WEATHER_THUNDER_LOW));
 
                         s32 lowThunderStarted = -1;
                         if (thunderStyle != CONCURRENT_WEATHER_THUNDER_LIGHTNING) {
@@ -1862,11 +1859,9 @@ void Environment_UpdateLightningStrike(PlayState* play) {
                         }
                         s32 lightningStarted = -1;
                         if (thunderStyle != CONCURRENT_WEATHER_THUNDER_LOW) {
-                            lightningStarted =
-                                WeatherSamplePlayer_Play("audio/samples/Lightning_META",
-                                                         thunderStyle == CONCURRENT_WEATHER_THUNDER_LAYERED
-                                                             ? thunderGain * 0.7f
-                                                             : thunderGain);
+                            lightningStarted = WeatherSamplePlayer_Play(
+                                "audio/samples/Lightning_META",
+                                thunderStyle == CONCURRENT_WEATHER_THUNDER_LAYERED ? thunderGain * 0.7f : thunderGain);
                         }
                         if (CVarGetInteger(CVAR_AUDIO("WeatherAudioDiagnostics"), 0)) {
                             osSyncPrintf("[weather-audio] lightning trigger low=%d layer=%d style=%d gain=%.3f\n",

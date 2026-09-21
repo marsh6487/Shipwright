@@ -385,7 +385,7 @@ void EnViewerStatic_Init(EnViewer* this, PlayState* play) {
     StaticStoryObjectRequirements objects = StaticStoryActor_GetObjectRequirements(type);
 
     StaticStoryActor_NormalizePlacementRotation(&this->actor.world.rot.x, &this->actor.world.rot.y,
-                                                 &this->actor.world.rot.z);
+                                                &this->actor.world.rot.z);
     this->actor.shape.rot.x = this->actor.world.rot.x;
     this->actor.shape.rot.z = this->actor.world.rot.z;
     this->actor.home.rot.x = this->actor.world.rot.x;
@@ -470,8 +470,8 @@ static bool EnViewerStatic_UpdateRutoWater(EnViewer* this, PlayState* play, bool
 
         playerNear = this->actor.xzDistToPlayer < 240.0f && yDist < 80.0f;
     }
-    events = StaticRutoWater_Update(&this->staticState.rutoWater, hasWater, surfaceY, playerNear, animationEnded,
-                                    diveDelay);
+    events =
+        StaticRutoWater_Update(&this->staticState.rutoWater, hasWater, surfaceY, playerNear, animationEnded, diveDelay);
     phase = this->staticState.rutoWater.phase;
     if (phase != this->staticState.previousRutoWaterPhase) {
         osSyncPrintf("[ActorCatalogueProbe] Ruto params=%04X phase=%d->%d y=%.2f surface=%.2f water=%d\n",
@@ -542,23 +542,18 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
 
         MmAssets_Init();
         skeleton = (FlexSkeletonHeader*)MmAssets_LoadSkeleton(presentation != NULL ? presentation->skeletonPath : "");
-        animation =
-            (AnimationHeader*)MmAssets_LoadAnimation(presentation != NULL ? presentation->animationPath : "");
+        animation = (AnimationHeader*)MmAssets_LoadAnimation(presentation != NULL ? presentation->animationPath : "");
         if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
             for (int eye = 0; eye < 3; ++eye) {
-                this->staticState.mmEyeTextures[eye] =
-                    MmAssets_LoadResource(StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL,
-                                                                          eye));
+                this->staticState.mmEyeTextures[eye] = MmAssets_LoadResource(
+                    StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, eye));
                 eyeTexturesComplete = eyeTexturesComplete && this->staticState.mmEyeTextures[eye] != NULL;
             }
         }
         if (presentation != NULL && presentation->requiresSecondarySkeleton) {
-            this->staticState.skullKidMaskDL =
-                MmAssets_LoadDisplayListGraphStrict(presentation->maskDisplayListPath);
-            this->staticState.skullKidHeadDL =
-                MmAssets_LoadDisplayListGraphStrict(presentation->headDisplayListPath);
-            this->staticState.skullKidEyesDL =
-                MmAssets_LoadDisplayListGraphStrict(presentation->eyesDisplayListPath);
+            this->staticState.skullKidMaskDL = MmAssets_LoadDisplayListGraphStrict(presentation->maskDisplayListPath);
+            this->staticState.skullKidHeadDL = MmAssets_LoadDisplayListGraphStrict(presentation->headDisplayListPath);
+            this->staticState.skullKidEyesDL = MmAssets_LoadDisplayListGraphStrict(presentation->eyesDisplayListPath);
             secondaryComplete = this->staticState.skullKidMaskDL != NULL && this->staticState.skullKidHeadDL != NULL &&
                                 this->staticState.skullKidEyesDL != NULL;
             for (int limb = 0; limb < 22 && secondaryComplete; ++limb) {
@@ -587,11 +582,10 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
                 }
             }
         }
-        if (!StaticStoryMm_ResourcesComplete(presentation, skeleton != NULL, animation != NULL,
-                                              secondaryComplete) ||
+        if (!StaticStoryMm_ResourcesComplete(presentation, skeleton != NULL, animation != NULL, secondaryComplete) ||
             !eyeTexturesComplete) {
-            osSyncPrintf("Static story actor: MM resources unavailable for type %d pose %d\n",
-                         this->staticState.type, this->staticState.pose);
+            osSyncPrintf("Static story actor: MM resources unavailable for type %d pose %d\n", this->staticState.type,
+                         this->staticState.pose);
             Actor_Kill(&this->actor);
             return;
         }
@@ -659,13 +653,12 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
     }
 
     if (!usesMmAssets) {
-        this->actor.objBankIndex =
-            (this->staticState.type == STATIC_STORY_ACTOR_FADO ||
-             this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL)
-                ? this->staticState.objectSlots[2]
-                : objectSlot;
-        this->animObjBankIndex = (this->staticState.type == STATIC_STORY_ACTOR_FADO ||
+        this->actor.objBankIndex = (this->staticState.type == STATIC_STORY_ACTOR_FADO ||
                                     this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL)
+                                       ? this->staticState.objectSlots[2]
+                                       : objectSlot;
+        this->animObjBankIndex = (this->staticState.type == STATIC_STORY_ACTOR_FADO ||
+                                  this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL)
                                      ? this->staticState.objectSlots[3]
                                      : this->staticState.objectSlots[1];
     }
@@ -702,8 +695,8 @@ void EnViewerStatic_WaitForObjects(EnViewer* this, PlayState* play) {
     this->staticState.collider.dim.yShift = definition->colliderYShift;
     this->actor.colChkInfo.mass = MASS_IMMOVABLE;
     this->staticState.blinkTimer = Rand_S16Offset(definition->blinkMin, definition->blinkRange);
-    int8_t fixedEyeIndex = StaticStoryActor_GetFixedEyeIndex((StaticStoryActorType)this->staticState.type,
-                                                             this->staticState.pose);
+    int8_t fixedEyeIndex =
+        StaticStoryActor_GetFixedEyeIndex((StaticStoryActorType)this->staticState.type, this->staticState.pose);
     this->staticState.eyeIndex = fixedEyeIndex >= 0 ? fixedEyeIndex : 0;
     this->actor.flags |= ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY;
     this->staticState.talking = false;
@@ -738,7 +731,7 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
         poseDescriptor->animation != STATIC_ANIM_ADULT_ZELDA_NEUTRAL) {
         animationEnded = SkelAnime_Update(&this->skin.skelAnime);
         if (StaticStoryActor_LocksRootTranslation((StaticStoryActorType)this->staticState.type,
-                                                   this->staticState.pose)) {
+                                                  this->staticState.pose)) {
             this->skin.skelAnime.jointTable[0].x = 0;
             this->skin.skelAnime.jointTable[0].y = 0;
             this->skin.skelAnime.jointTable[0].z = 0;
@@ -752,21 +745,20 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
     }
     if (this->staticState.type == STATIC_STORY_ACTOR_GREAT_FAIRY) {
         this->staticState.greatFairyHoverPhase += 0x300;
-        this->actor.world.pos.y = this->actor.home.pos.y +
-                                  Math_SinS(this->staticState.greatFairyHoverPhase) *
-                                      StaticStoryActor_GetGreatFairyHoverAmplitude(this->staticState.pose);
+        this->actor.world.pos.y =
+            this->actor.home.pos.y + Math_SinS(this->staticState.greatFairyHoverPhase) *
+                                         StaticStoryActor_GetGreatFairyHoverAmplitude(this->staticState.pose);
     }
     if (this->staticState.type == STATIC_STORY_ACTOR_SKULL_KID) {
         this->staticState.mmHoverPhase += 0x4B0;
         this->staticState.tatlPulsePhase += 0x600;
-        this->actor.world.pos.y = StaticStoryMm_ComposeHoverY(this->actor.home.pos.y,
-                                                              this->staticState.mmHoverPhase);
+        this->actor.world.pos.y = StaticStoryMm_ComposeHoverY(this->actor.home.pos.y, this->staticState.mmHoverPhase);
         if (this->staticState.tatlInitialized) {
             SkelAnime_Update(&this->staticState.tatlSkelAnime);
         }
     }
-    int8_t fixedEyeIndex = StaticStoryActor_GetFixedEyeIndex((StaticStoryActorType)this->staticState.type,
-                                                             this->staticState.pose);
+    int8_t fixedEyeIndex =
+        StaticStoryActor_GetFixedEyeIndex((StaticStoryActorType)this->staticState.type, this->staticState.pose);
     if (fixedEyeIndex >= 0) {
         this->staticState.eyeIndex = fixedEyeIndex;
     } else if (this->staticState.blinkTimer > 0) {
@@ -1394,8 +1386,8 @@ s32 EnViewer_ImpaOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, V
 void EnViewer_DrawImpa(EnViewer* this, PlayState* play) {
     static void* sEyes[] = { gImpaEyeOpenTex, gImpaEyeHalfTex, gImpaEyeClosedTex };
     bool hasAlternateHead = ResourceMgr_IsAltAssetsEnabled() && ResourceMgr_FileAltExists(gImpaSkel);
-    u8 eyeIndex = StaticStoryActor_ResolveEyeIndex(STATIC_STORY_ACTOR_IMPA, this->staticState.eyeIndex,
-                                                   hasAlternateHead);
+    u8 eyeIndex =
+        StaticStoryActor_ResolveEyeIndex(STATIC_STORY_ACTOR_IMPA, this->staticState.eyeIndex, hasAlternateHead);
     void* eye = this->staticState.type != STATIC_STORY_ACTOR_NONE ? sEyes[eyeIndex] : gImpaEyeOpenTex;
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
@@ -1575,8 +1567,8 @@ void EnViewer_DrawStaticAdultRutoXlu(EnViewer* this, PlayState* play) {
     gDPSetEnvColor(POLY_XLU_DISP++, 0, 0, 0, this->staticState.rutoWater.alpha);
     gSPSegment(POLY_XLU_DISP++, 0x0C, &D_80116280[0]);
     POLY_XLU_DISP = SkelAnime_DrawFlex(play, this->skin.skelAnime.skeleton, this->skin.skelAnime.jointTable,
-                                       this->skin.skelAnime.dListCount, EnViewer_StaticAdultRutoOverrideLimbDraw,
-                                       NULL, this, POLY_XLU_DISP);
+                                       this->skin.skelAnime.dListCount, EnViewer_StaticAdultRutoOverrideLimbDraw, NULL,
+                                       this, POLY_XLU_DISP);
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
@@ -1658,8 +1650,7 @@ void EnViewer_DrawStaticAdultMalon(EnViewer* this, PlayState* play) {
 static s32 EnViewer_StaticAdultZeldaOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
                                                      Vec3s* rot, void* thisx, Gfx** gfx) {
     EnViewer* this = (EnViewer*)thisx;
-    const StaticStoryActorDefinition* definition =
-        StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_ZELDA);
+    const StaticStoryActorDefinition* definition = StaticStoryActor_GetDefinition(STATIC_STORY_ACTOR_ADULT_ZELDA);
     Mtx* faceMtx;
 
     (void)dList;
@@ -1725,8 +1716,8 @@ void EnViewer_DrawStaticAdultZelda(EnViewer* this, PlayState* play) {
     gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
     gSPSegment(POLY_OPA_DISP++, 0x0B, &D_80116280[2]);
     POLY_OPA_DISP = SkelAnime_DrawFlex(play, this->skin.skelAnime.skeleton, this->skin.skelAnime.jointTable,
-                                       this->skin.skelAnime.dListCount, EnViewer_StaticAdultZeldaOverrideLimbDraw,
-                                       NULL, this, POLY_OPA_DISP);
+                                       this->skin.skelAnime.dListCount, EnViewer_StaticAdultZeldaOverrideLimbDraw, NULL,
+                                       this, POLY_OPA_DISP);
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
@@ -1794,7 +1785,7 @@ void EnViewer_DrawStaticNabooru(EnViewer* this, PlayState* play) {
 }
 
 static s32 EnViewer_StaticGreatFairyOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
-                                                      Vec3s* rot, void* thisx) {
+                                                     Vec3s* rot, void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
     StaticStoryTrackingMode trackingMode =
         StaticStoryActor_GetTrackingMode(STATIC_STORY_ACTOR_GREAT_FAIRY, this->staticState.pose);
@@ -1802,8 +1793,7 @@ static s32 EnViewer_StaticGreatFairyOverrideLimbDraw(PlayState* play, s32 limbIn
 
     if (trackingMode == STATIC_TRACKING_MODE_FULL && trackingLimb == STATIC_GREAT_FAIRY_TRACKING_LIMB_TORSO) {
         rot->x += this->staticState.interactInfo.torsoRot.y;
-    } else if (trackingMode != STATIC_TRACKING_MODE_NONE &&
-               trackingLimb == STATIC_GREAT_FAIRY_TRACKING_LIMB_HEAD) {
+    } else if (trackingMode != STATIC_TRACKING_MODE_NONE && trackingLimb == STATIC_GREAT_FAIRY_TRACKING_LIMB_HEAD) {
         s16 headY = this->staticState.interactInfo.headRot.y;
         s16 headZ = this->staticState.interactInfo.headRot.x;
 
@@ -1829,8 +1819,8 @@ void EnViewer_DrawStaticGreatFairy(EnViewer* this, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-static s32 EnViewer_StaticTreasureChestShopGalOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList,
-                                                               Vec3f* pos, Vec3s* rot, void* thisx) {
+static s32 EnViewer_StaticTreasureChestShopGalOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
+                                                               Vec3s* rot, void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
 
     if (StaticStoryActor_CanTrack(STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL, this->staticState.pose)) {
@@ -1852,15 +1842,14 @@ static void EnViewer_DrawStaticMmActor(EnViewer* this, PlayState* play) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     if (this->staticState.type == STATIC_STORY_ACTOR_TREASURE_CHEST_SHOP_GAL) {
-        gSPSegment(POLY_OPA_DISP++, 0x08,
-                   (uintptr_t)this->staticState.mmEyeTextures[this->staticState.eyeIndex]);
+        gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)this->staticState.mmEyeTextures[this->staticState.eyeIndex]);
     }
     SkelAnime_DrawSkeletonOpa(play, &this->skin.skelAnime, overrideLimbDraw, NULL, this);
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-static s32 EnViewer_StaticSkullKidOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
-                                                   Vec3s* rot, void* thisx) {
+static s32 EnViewer_StaticSkullKidOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
+                                                   void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
 
     if (limbIndex == 17) {
@@ -1871,14 +1860,12 @@ static s32 EnViewer_StaticSkullKidOverrideLimbDraw(PlayState* play, s32 limbInde
     return false;
 }
 
-static void EnViewer_StaticSkullKidPostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot,
-                                                void* thisx) {
+static void EnViewer_StaticSkullKidPostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, void* thisx) {
     EnViewer* this = (EnViewer*)thisx;
 
     if (limbIndex == 17) {
         OPEN_DISPS(play->state.gfxCtx);
-        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx),
-                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
         gSPDisplayList(POLY_OPA_DISP++, this->staticState.skullKidHeadDL);
         gSPDisplayList(POLY_OPA_DISP++, this->staticState.skullKidEyesDL);
         gSPDisplayList(POLY_OPA_DISP++, this->staticState.skullKidMaskDL);
@@ -1908,8 +1895,7 @@ static void EnViewer_DrawStaticTatl(EnViewer* this, PlayState* play) {
     gSPSegment(POLY_XLU_DISP++, 0x08, sStaticStoryTatlSetupDL);
     gDPSetEnvColor(POLY_XLU_DISP++, 0x5F, 0x25, 0x75, outerAlpha);
     Matrix_Push();
-    Matrix_Translate((anchor.x + orbitX) * 100.0f, anchor.y * 100.0f, (anchor.z + orbitZ) * 100.0f,
-                     MTXMODE_APPLY);
+    Matrix_Translate((anchor.x + orbitX) * 100.0f, anchor.y * 100.0f, (anchor.z + orbitZ) * 100.0f, MTXMODE_APPLY);
     Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
     POLY_XLU_DISP = SkelAnime_Draw(play, this->staticState.tatlSkelAnime.skeleton,
                                    this->staticState.tatlSkelAnime.jointTable, NULL, NULL, this, POLY_XLU_DISP);
@@ -2019,16 +2005,15 @@ void EnViewer_Draw(Actor* thisx, PlayState* play) {
                 StaticStoryObjectRequirements objects =
                     StaticStoryActor_GetObjectRequirements((StaticStoryActorType)this->staticState.type);
 
-                ActorCatalogue_LogLifecycle("draw", this->actor.params, this->staticState.type,
-                                            this->staticState.pose, objects.modelObjectId, this->actor.objBankIndex,
-                                            objects.animationObjectId, this->animObjBankIndex);
-                osSyncPrintf(
-                    "[ActorCatalogueProbe] draw params=%04X type=%d pose=%d modelSlot=%d animSlot=%d limbs=%d "
-                    "pos=(%.2f,%.2f,%.2f) projectedZ=%.2f flags=%08X\n",
-                    (uint16_t)this->actor.params, this->staticState.type, this->staticState.pose,
-                    this->actor.objBankIndex, this->animObjBankIndex, this->skin.skelAnime.dListCount,
-                    this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z,
-                    this->actor.projectedPos.z, this->actor.flags);
+                ActorCatalogue_LogLifecycle("draw", this->actor.params, this->staticState.type, this->staticState.pose,
+                                            objects.modelObjectId, this->actor.objBankIndex, objects.animationObjectId,
+                                            this->animObjBankIndex);
+                osSyncPrintf("[ActorCatalogueProbe] draw params=%04X type=%d pose=%d modelSlot=%d animSlot=%d limbs=%d "
+                             "pos=(%.2f,%.2f,%.2f) projectedZ=%.2f flags=%08X\n",
+                             (uint16_t)this->actor.params, this->staticState.type, this->staticState.pose,
+                             this->actor.objBankIndex, this->animObjBankIndex, this->skin.skelAnime.dListCount,
+                             this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z,
+                             this->actor.projectedPos.z, this->actor.flags);
                 logStaticDrawCompletion = true;
                 staticOpaStart = POLY_OPA_DISP;
                 staticXluStart = POLY_XLU_DISP;

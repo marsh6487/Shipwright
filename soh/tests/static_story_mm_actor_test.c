@@ -3,11 +3,11 @@
 #include <stdint.h>
 #include <string.h>
 
-#define REQUIRE(condition)                                                                                              \
-    do {                                                                                                                \
-        if (!(condition)) {                                                                                             \
-            return 1;                                                                                                   \
-        }                                                                                                               \
+#define REQUIRE(condition)  \
+    do {                    \
+        if (!(condition)) { \
+            return 1;       \
+        }                   \
     } while (0)
 
 #include "../src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.h"
@@ -62,18 +62,13 @@ int main(void) {
     REQUIRE(strcmp(reclining->headDisplayListPath, "objects/object_stk/gSkullKidNormalHeadDL") == 0);
     REQUIRE(strcmp(reclining->eyesDisplayListPath, "objects/object_stk/gSkullKidNormalEyesDL") == 0);
     REQUIRE(StaticStoryMm_GetSkullKidLimbDisplayListPath(1) == NULL);
-    REQUIRE(strcmp(StaticStoryMm_GetSkullKidLimbDisplayListPath(2),
-                   "objects/object_stk/gSkullKidPelvisDL") == 0);
-    REQUIRE(strcmp(StaticStoryMm_GetSkullKidLimbDisplayListPath(9),
-                   "objects/object_stk/gSkullKidTorsoDL") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetSkullKidLimbDisplayListPath(2), "objects/object_stk/gSkullKidPelvisDL") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetSkullKidLimbDisplayListPath(9), "objects/object_stk/gSkullKidTorsoDL") == 0);
     REQUIRE(StaticStoryMm_GetSkullKidLimbDisplayListPath(17) == NULL);
-    REQUIRE(strcmp(StaticStoryMm_GetSkullKidLimbDisplayListPath(21),
-                   "objects/object_stk/gSkullKidHatTopDL") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetSkullKidLimbDisplayListPath(21), "objects/object_stk/gSkullKidHatTopDL") == 0);
     REQUIRE(StaticStoryMm_GetSkullKidLimbDisplayListPath(22) == NULL);
-    REQUIRE(strcmp(StaticStoryMm_GetTatlLimbPath(0),
-                   "objects/gameplay_keep/gameplay_keep_Standardlimb_02AEF8") == 0);
-    REQUIRE(strcmp(StaticStoryMm_GetTatlLimbPath(5),
-                   "objects/gameplay_keep/gameplay_keep_Standardlimb_02AF34") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetTatlLimbPath(0), "objects/gameplay_keep/gameplay_keep_Standardlimb_02AEF8") == 0);
+    REQUIRE(strcmp(StaticStoryMm_GetTatlLimbPath(5), "objects/gameplay_keep/gameplay_keep_Standardlimb_02AF34") == 0);
     REQUIRE(strcmp(StaticStoryMm_GetTatlDListPath(0), "objects/gameplay_keep/gameplay_keep_DL_029990") == 0);
     REQUIRE(strcmp(StaticStoryMm_GetTatlDListPath(5), "objects/gameplay_keep/gameplay_keep_DL_029CF0") == 0);
     REQUIRE(StaticStoryMm_GetTatlLimbPath(6) == NULL);
