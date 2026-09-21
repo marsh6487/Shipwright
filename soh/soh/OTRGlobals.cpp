@@ -108,6 +108,7 @@
 #include <fast/resource/factory/DisplayListFactory.h>
 #include <fast/resource/factory/MatrixFactory.h>
 #include <fast/resource/factory/TextureFactory.h>
+#include "soh/resource/importer/SpinEffectTextureFactory.h"
 #include <fast/resource/factory/VertexFactory.h>
 #include "soh/resource/importer/ArrayFactory.h"
 #include "soh/resource/importer/AnimationFactory.h"
@@ -985,9 +986,9 @@ void OTRGlobals::Initialize() {
                 (char*)gGitBranch, (char*)gGitCommitHash);
 
     auto loader = context->GetResourceManager()->GetResourceLoader();
-    loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryTextureV0>(), RESOURCE_FORMAT_BINARY,
+    loader->RegisterResourceFactory(std::make_shared<SOH::SpinEffectTextureFactoryV0>(), RESOURCE_FORMAT_BINARY,
                                     "Texture", static_cast<uint32_t>(Fast::ResourceType::Texture), 0);
-    loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryTextureV1>(), RESOURCE_FORMAT_BINARY,
+    loader->RegisterResourceFactory(std::make_shared<SOH::SpinEffectTextureFactoryV1>(), RESOURCE_FORMAT_BINARY,
                                     "Texture", static_cast<uint32_t>(Fast::ResourceType::Texture), 1);
     loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryVertexV0>(), RESOURCE_FORMAT_BINARY,
                                     "Vertex", static_cast<uint32_t>(Fast::ResourceType::Vertex), 0);
