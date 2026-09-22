@@ -4,5 +4,6 @@ struct GameInteractor {
     struct OnPlayDestroy {};
     struct OnExitGame {};
     static GameInteractor* Instance;
-    template <class Hook, class Callback> void RegisterGameHook(Callback) {}
+    template <class Hook, class Callback> void RegisterGameHook(Callback) {
+    }
 };

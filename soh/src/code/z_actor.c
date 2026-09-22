@@ -2164,8 +2164,8 @@ s32 GiveItemEntryFromActorWithFixedRange(Actor* actor, PlayState* play, GetItemE
 // If you're doing something for randomizer, you're probably looking for GiveItemEntryFromActor
 s32 Actor_OfferGetItem(Actor* actor, PlayState* play, s32 getItemId, f32 xzRange, f32 yRange) {
     Player* player = GET_PLAYER(play);
-    s32 localTimePedestal = actor->id == ACTOR_BG_TOKI_SWD && actor->params == BG_TOKI_SWD_TIME_PEDESTAL &&
-                            getItemId == GI_NONE;
+    s32 localTimePedestal =
+        actor->id == ACTOR_BG_TOKI_SWD && actor->params == BG_TOKI_SWD_TIME_PEDESTAL && getItemId == GI_NONE;
 
     // Transformation masks (Skijer's NEI): the Zora swim needs a wider offer window.
     // Vanilla's yRange is 10.0f (Actor_OfferGetItemNearby) — fine on land, where the

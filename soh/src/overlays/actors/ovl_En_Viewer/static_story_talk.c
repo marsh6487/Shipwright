@@ -40,8 +40,7 @@ void StaticStoryTalk_Update(StaticStoryActorType type, const StaticStoryProgress
     if (operations->processTalkRequest != NULL && operations->processTalkRequest(context)) {
         session->talking = true;
         session->tracking = true;
-    } else if (timePedestalOffered &&
-               (type == STATIC_STORY_ACTOR_SARIA || type == STATIC_STORY_ACTOR_SKULL_KID)) {
+    } else if (timePedestalOffered && (type == STATIC_STORY_ACTOR_SARIA || type == STATIC_STORY_ACTOR_SKULL_KID)) {
         session->tracking = false;
     } else {
         session->tracking = operations->offerTalk != NULL && operations->offerTalk(talkDistance, context);

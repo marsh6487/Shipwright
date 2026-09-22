@@ -111,8 +111,8 @@ void BgTokiSwd_Init(Actor* thisx, PlayState* play) {
         Vec3f floorProbe = this->actor.world.pos;
         s32 floorBgId;
         floorProbe.y += 40.0f;
-        this->actor.floorHeight = BgCheck_EntityRaycastFloor5(
-            play, &play->colCtx, &this->actor.floorPoly, &floorBgId, &this->actor, &floorProbe);
+        this->actor.floorHeight = BgCheck_EntityRaycastFloor5(play, &play->colCtx, &this->actor.floorPoly, &floorBgId,
+                                                              &this->actor, &floorProbe);
         this->actor.floorBgId = floorBgId;
         BgTokiSwd_SetupAction(this, BgTokiSwd_TimePedestalWait);
         if (LINK_IS_ADULT) {
@@ -196,7 +196,7 @@ void BgTokiSwd_TimePedestalWait(BgTokiSwd* this, PlayState* play) {
         this->localCutscene = malloc(count * sizeof(CutsceneData));
         if (this->localCutscene == NULL ||
             !TimePedestalCutscene_Build(this->localCutscene, count, source, count, &this->actor.world.pos,
-                                      this->actor.shape.rot.y, &this->ageSwapFrame)) {
+                                        this->actor.shape.rot.y, &this->ageSwapFrame)) {
             free(this->localCutscene);
             this->localCutscene = NULL;
             this->actor.parent = NULL;
@@ -215,9 +215,8 @@ void BgTokiSwd_TimePedestalWait(BgTokiSwd* this, PlayState* play) {
         gSaveContext.cutsceneTrigger = 1;
         BgTokiSwd_SetupAction(this, BgTokiSwd_TimePedestalCutscene);
     } else if (play->transitionTrigger == TRANS_TRIGGER_OFF && !Play_InCsMode(play) &&
-               !(player->stateFlags1 & PLAYER_STATE1_TALKING) &&
-               this->actor.floorPoly != NULL && (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
-               player->actor.floorBgId == this->actor.floorBgId &&
+               !(player->stateFlags1 & PLAYER_STATE1_TALKING) && this->actor.floorPoly != NULL &&
+               (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && player->actor.floorBgId == this->actor.floorBgId &&
                fabsf(player->actor.floorHeight - this->actor.floorHeight) < 2.0f &&
                fabsf(player->actor.world.pos.y - this->actor.floorHeight) < 4.0f &&
                (player->interactRangeActor == NULL || player->getItemId == GI_NONE)) {
@@ -266,8 +265,7 @@ s32 BgTokiSwd_BeginTimePedestalArrival(PlayState* play, Player* player) {
         return false;
     }
     sTimePedestalArrival.pending = false;
-    if (!play->state.running || gSaveContext.respawnFlag != 1 ||
-        gSaveContext.fileNum != sTimePedestalArrival.fileNum ||
+    if (!play->state.running || gSaveContext.respawnFlag != 1 || gSaveContext.fileNum != sTimePedestalArrival.fileNum ||
         gSaveContext.linkAge != sTimePedestalArrival.age || play->sceneNum != sTimePedestalArrival.scene ||
         gSaveContext.entranceIndex != sTimePedestalArrival.entrance ||
         gSaveContext.respawn[RESPAWN_MODE_DOWN].roomIndex != sTimePedestalArrival.room ||
@@ -379,13 +377,13 @@ s32 BgTokiSwd_GetTimePedestalHandState(PlayState* play, Player* player) {
         }
         // Frame 70 closes the hand without changing leftHandType. Preserve
         // that insertion cue after the ordinary PAK/custom equipment hooks.
-        return player->leftHandDLists == &gPlayerLeftHandClosedDLs[LINK_AGE_ADULT]
-                   ? BG_TOKI_SWD_HAND_CLOSED : BG_TOKI_SWD_HAND_MASTER_SWORD;
+        return player->leftHandDLists == &gPlayerLeftHandClosedDLs[LINK_AGE_ADULT] ? BG_TOKI_SWD_HAND_CLOSED
+                                                                                   : BG_TOKI_SWD_HAND_MASTER_SWORD;
     }
     // The native frame-87 handoff selects this child-only Master Sword DL.
     // Never infer a ceremonial weapon from inventory or another player's pose.
-    return player->leftHandDLists == &gPlayerLeftHandBgsDLs[LINK_AGE_CHILD]
-               ? BG_TOKI_SWD_HAND_MASTER_SWORD : BG_TOKI_SWD_HAND_UNCHANGED;
+    return player->leftHandDLists == &gPlayerLeftHandBgsDLs[LINK_AGE_CHILD] ? BG_TOKI_SWD_HAND_MASTER_SWORD
+                                                                            : BG_TOKI_SWD_HAND_UNCHANGED;
 }
 
 void BgTokiSwd_FinishTimePedestal(BgTokiSwd* this, PlayState* play) {
@@ -429,15 +427,19 @@ void BgTokiSwd_FinishTimePedestal(BgTokiSwd* this, PlayState* play) {
     // this visual continuation, before native story/rando start-mode hooks run.
     sTimePedestalArrival.pending = play->transitionTrigger == TRANS_TRIGGER_START && gSaveContext.respawnFlag == 1;
     sTimePedestalArrival.startPos = (Vec3f){ -1.0f, 69.0f, 20.0f };
-    TimePedestalCutscene_TransformPoint(&sTimePedestalArrival.startPos, &this->actor.world.pos, this->actor.shape.rot.y);
+    TimePedestalCutscene_TransformPoint(&sTimePedestalArrival.startPos, &this->actor.world.pos,
+                                        this->actor.shape.rot.y);
     sTimePedestalArrival.startYaw = this->actor.shape.rot.y + 0x8000;
     // A fixed front-side composition for the local hop/flourish. Author in
     // the same Temple-of-Time coordinates as the animation, then relocate
     // both points with the pedestal. Do not follow the animation's root motion.
     sTimePedestalArrival.cameraAt = (Vec3f){ -1.0f, play->linkAgeOnLoad == LINK_AGE_CHILD ? 103.0f : 118.0f, -10.0f };
-    sTimePedestalArrival.cameraEye = (Vec3f){ 120.0f, play->linkAgeOnLoad == LINK_AGE_CHILD ? 132.0f : 150.0f, -190.0f };
-    TimePedestalCutscene_TransformPoint(&sTimePedestalArrival.cameraAt, &this->actor.world.pos, this->actor.shape.rot.y);
-    TimePedestalCutscene_TransformPoint(&sTimePedestalArrival.cameraEye, &this->actor.world.pos, this->actor.shape.rot.y);
+    sTimePedestalArrival.cameraEye =
+        (Vec3f){ 120.0f, play->linkAgeOnLoad == LINK_AGE_CHILD ? 132.0f : 150.0f, -190.0f };
+    TimePedestalCutscene_TransformPoint(&sTimePedestalArrival.cameraAt, &this->actor.world.pos,
+                                        this->actor.shape.rot.y);
+    TimePedestalCutscene_TransformPoint(&sTimePedestalArrival.cameraEye, &this->actor.world.pos,
+                                        this->actor.shape.rot.y);
     sTimePedestalArrival.returnPos = this->returnPos;
     sTimePedestalArrival.returnYaw = this->returnYaw;
     sTimePedestalArrival.scene = play->sceneNum;

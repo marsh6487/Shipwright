@@ -80,8 +80,8 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
                                                 NativeMaterialProfile profile) {
     const bool fountain =
         profile >= NativeMaterialProfile::FountainLowerA32 && profile <= NativeMaterialProfile::FountainCentral64;
-    const bool caustics = profile == NativeMaterialProfile::WaterTempleCaustics ||
-                          profile == NativeMaterialProfile::ZorasDomainCaustics;
+    const bool caustics =
+        profile == NativeMaterialProfile::WaterTempleCaustics || profile == NativeMaterialProfile::ZorasDomainCaustics;
     const bool sagePlatform = profile == NativeMaterialProfile::ChamberOfSagesPlatform;
     const bool strictSetup = fountain || caustics || sagePlatform;
     const bool materialOnly = caustics || sagePlatform;
@@ -94,9 +94,8 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
     for (size_t i = 0; i < commands.size(); ++i) {
         auto opcode = static_cast<uint8_t>(commands[i].w0 >> 24);
         if (opcode == 0xdf) { // F3DEX2 ENDDL
-            const bool validatedSetup =
-                tiles == 3 && (!strictSetup || descriptors == 3) &&
-                (!strictSetup || (commands[i].w0 == 0xdf000000 && commands[i].w1 == 0));
+            const bool validatedSetup = tiles == 3 && (!strictSetup || descriptors == 3) &&
+                                        (!strictSetup || (commands[i].w0 == 0xdf000000 && commands[i].w1 == 0));
             if (i + 1 != commands.size() || !validatedSetup || (!firstPrimitive && (!materialOnly || sawVertex))) {
                 return std::nullopt;
             }
@@ -165,9 +164,8 @@ std::optional<size_t> FindNativeScrollInsertion(const std::vector<NativeMaterial
                     break; // separate load tile
                 if (tile > 1 || (descriptors & (1u << tile)))
                     return std::nullopt;
-                if ((fountain || sagePlatform) &&
-                    (((word >> 18) & 3) || ((word >> 8) & 3) || ((word >> 14) & 15) != mask ||
-                     ((word >> 4) & 15) != mask)) {
+                if ((fountain || sagePlatform) && (((word >> 18) & 3) || ((word >> 8) & 3) ||
+                                                   ((word >> 14) & 15) != mask || ((word >> 4) & 15) != mask)) {
                     return std::nullopt;
                 }
                 // The main sage platform uses the same RGBA16 image for both
@@ -239,8 +237,16 @@ ScrollParameters NativeScrollParameters(NativeMaterialProfile profile, uint32_t 
         case NativeMaterialProfile::ChamberOfSagesPlatform:
             // func_8009A798 / opaque segment 0A, main sage platform only.
             // Segments 08 and 09 drive separate translucent effects.
-            return { 127u - gameplayFrames % 128u, gameplayFrames % 128u, gameplayFrames % 128u,
-                     gameplayFrames % 128u, 32, 32, -1, 1, 1, 1 };
+            return { 127u - gameplayFrames % 128u,
+                     gameplayFrames % 128u,
+                     gameplayFrames % 128u,
+                     gameplayFrames % 128u,
+                     32,
+                     32,
+                     -1,
+                     1,
+                     1,
+                     1 };
         default:
             return {};
     }

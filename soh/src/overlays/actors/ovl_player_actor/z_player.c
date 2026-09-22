@@ -8866,9 +8866,8 @@ s32 Player_ActionHandler_2(Player* this, PlayState* play) {
                     this->heldItemAction = this->itemAction;
                     Player_SetupWaitForPutAway(play, this, func_8083A0F4);
 
-                    if (sp24 == PLAYER_IA_SWORD_MASTER ||
-                        (interactedActor->id == ACTOR_BG_TOKI_SWD &&
-                         interactedActor->params == BG_TOKI_SWD_TIME_PEDESTAL)) {
+                    if (sp24 == PLAYER_IA_SWORD_MASTER || (interactedActor->id == ACTOR_BG_TOKI_SWD &&
+                                                           interactedActor->params == BG_TOKI_SWD_TIME_PEDESTAL)) {
                         this->nextModelGroup = Player_ActionToModelGroup(this, PLAYER_IA_SWORD_CS);
                         Player_InitItemAction(play, this, PLAYER_IA_SWORD_CS);
                     } else {

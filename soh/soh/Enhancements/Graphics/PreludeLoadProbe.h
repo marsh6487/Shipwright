@@ -70,8 +70,8 @@ inline thread_local uint64_t serial = 0;
 inline thread_local int lastScene = -1;
 inline thread_local int lastRoom = -1;
 // Process-wide generation also exposes invalidations performed by a worker.
-inline std::atomic<uint64_t> metadataGeneration{0};
-inline std::atomic<bool> collectCompletedWork{false};
+inline std::atomic<uint64_t> metadataGeneration{ 0 };
+inline std::atomic<bool> collectCompletedWork{ false };
 inline std::mutex completedWorkMutex;
 inline CompletedWork cumulativeCompletedWork;
 
@@ -107,8 +107,7 @@ inline CompletedWork CompletedWorkDelta(const CompletedWork& end, const Complete
     for (const auto& [path, current] : end.archives) {
         const auto previous = start.archives.find(path);
         const ArchiveReads before = previous == start.archives.end() ? ArchiveReads{} : previous->second;
-        ArchiveReads change{ current.count - before.count, current.bytes - before.bytes,
-                             current.nanos - before.nanos };
+        ArchiveReads change{ current.count - before.count, current.bytes - before.bytes, current.nanos - before.nanos };
         if (change.count != 0 || change.bytes != 0 || change.nanos != 0) {
             delta.archives.emplace(path, change);
         }
@@ -127,13 +126,16 @@ inline nlohmann::json CompletedWorkReport(const CompletedWork& completed) {
         reads += record.count;
         bytes += record.bytes;
         readNanos += record.nanos;
-        archives.push_back({ { "archive", path }, { "reads", record.count }, { "bytes", record.bytes },
+        archives.push_back({ { "archive", path },
+                             { "reads", record.count },
+                             { "bytes", record.bytes },
                              { "read_work_ms", record.nanos / 1000000.0 } });
     }
     return {
         { "timing_semantics", "elapsed work for operations completed during the measured interval; operations may "
                               "overlap and durations are not additive interval attribution" },
-        { "metadata_reads", reads }, { "metadata_bytes", bytes },
+        { "metadata_reads", reads },
+        { "metadata_bytes", bytes },
         { "metadata_read_work_ms", readNanos / 1000000.0 },
         { "metadata_parses", completed.parses },
         { "metadata_parse_work_ms", completed.parseNanos / 1000000.0 },
@@ -141,7 +143,8 @@ inline nlohmann::json CompletedWorkReport(const CompletedWork& completed) {
         { "material_lookup_work_ms", completed.lookupNanos / 1000000.0 },
         { "binary_decodes", completed.decodes },
         { "binary_decode_work_ms", completed.decodeNanos / 1000000.0 },
-        { "metadata_cache_hits", completed.cacheHits }, { "metadata_cache_misses", completed.cacheMisses },
+        { "metadata_cache_hits", completed.cacheHits },
+        { "metadata_cache_misses", completed.cacheMisses },
         { "archives", archives },
     };
 }
@@ -201,7 +204,8 @@ inline void BeginStateReload(int sourceScene, int sourceRoom, bool altAssets, bo
 class Scope {
   public:
     explicit Scope(uint64_t Frame::*field)
-        : field(field), mainThreadActive(frame.active), epoch(frame.epoch), start(Clock::now()) {}
+        : field(field), mainThreadActive(frame.active), epoch(frame.epoch), start(Clock::now()) {
+    }
     ~Scope() {
         const bool collect = collectCompletedWork.load(std::memory_order_acquire);
         if (!mainThreadActive && !collect) {
@@ -232,8 +236,13 @@ class Scope {
             ++cumulativeCompletedWork.decodes;
         }
     }
-    void MarkCacheHit() { cacheHit = 1; }
-    void MarkCacheMiss() { cacheMiss = 1; }
+    void MarkCacheHit() {
+        cacheHit = 1;
+    }
+    void MarkCacheMiss() {
+        cacheMiss = 1;
+    }
+
   private:
     uint64_t Frame::*field;
     bool mainThreadActive;
@@ -246,8 +255,11 @@ class Scope {
 class MetadataRead {
   public:
     explicit MetadataRead(std::string_view archive)
-        : mainThreadActive(frame.active), epoch(frame.epoch), archive(archive), start(Clock::now()) {}
-    void SetBytes(uint64_t value) { bytes = value; }
+        : mainThreadActive(frame.active), epoch(frame.epoch), archive(archive), start(Clock::now()) {
+    }
+    void SetBytes(uint64_t value) {
+        bytes = value;
+    }
     ~MetadataRead() {
         const bool collect = collectCompletedWork.load(std::memory_order_acquire);
         if (!mainThreadActive && !collect) {
@@ -273,6 +285,7 @@ class MetadataRead {
         completed.bytes += bytes;
         completed.nanos += elapsed;
     }
+
   private:
     bool mainThreadActive;
     uint64_t epoch;
@@ -298,9 +311,8 @@ inline std::optional<nlohmann::json> EndFrame() {
         generation == frame.startGeneration && wallMs < 250.0) {
         return std::nullopt;
     }
-    const double updateMs = frame.rendering
-                                ? std::chrono::duration<double, std::milli>(frame.renderStart - frame.start).count()
-                                : wallMs;
+    const double updateMs =
+        frame.rendering ? std::chrono::duration<double, std::milli>(frame.renderStart - frame.start).count() : wallMs;
     const double renderMs =
         frame.rendering ? std::chrono::duration<double, std::milli>(end - frame.renderStart).count() : 0;
     uint64_t reads = 0, bytes = 0, nanos = 0;
@@ -309,24 +321,36 @@ inline std::optional<nlohmann::json> EndFrame() {
         reads += record.count;
         bytes += record.bytes;
         nanos += record.nanos;
-        archives.push_back({{"archive", path}, {"reads", record.count}, {"bytes", record.bytes},
-                            {"read_ms", record.nanos / 1000000.0}});
+        archives.push_back({ { "archive", path },
+                             { "reads", record.count },
+                             { "bytes", record.bytes },
+                             { "read_ms", record.nanos / 1000000.0 } });
     }
-    return nlohmann::json{
-        {"scene", frame.scene}, {"start_room", frame.startRoom}, {"render_room", frame.room},
-        {"previous_room", frame.previousRoom}, {"gameplay_frame", frame.gameplayFrame}, {"alt_assets", frame.altAssets},
-        {"frame_ms", wallMs}, {"update_ms", updateMs}, {"graphics_ms", renderMs},
-        {"metadata_reads", reads}, {"metadata_bytes", bytes}, {"metadata_read_ms", nanos / 1000000.0},
-        {"metadata_parse_ms", frame.parseNanos / 1000000.0}, {"material_lookup_ms", frame.lookupNanos / 1000000.0},
-        {"binary_decode_ms", frame.decodeNanos / 1000000.0}, {"material_lookups", frame.lookups},
-        {"metadata_cache_hits", frame.cacheHits}, {"metadata_cache_misses", frame.cacheMisses},
-        {"metadata_cache_generation", generation},
-        {"metadata_invalidations_during_frame", generation - frame.startGeneration},
-        {"main_thread_only", true},
-        {"main_thread_measurement_scope", "frame/update/graphics and root-level import fields only"},
-        {"archives", archives},
-        {"all_threads_completed_work", CompletedWorkReport(completed)}
-    };
+    return nlohmann::json{ { "scene", frame.scene },
+                           { "start_room", frame.startRoom },
+                           { "render_room", frame.room },
+                           { "previous_room", frame.previousRoom },
+                           { "gameplay_frame", frame.gameplayFrame },
+                           { "alt_assets", frame.altAssets },
+                           { "frame_ms", wallMs },
+                           { "update_ms", updateMs },
+                           { "graphics_ms", renderMs },
+                           { "metadata_reads", reads },
+                           { "metadata_bytes", bytes },
+                           { "metadata_read_ms", nanos / 1000000.0 },
+                           { "metadata_parse_ms", frame.parseNanos / 1000000.0 },
+                           { "material_lookup_ms", frame.lookupNanos / 1000000.0 },
+                           { "binary_decode_ms", frame.decodeNanos / 1000000.0 },
+                           { "material_lookups", frame.lookups },
+                           { "metadata_cache_hits", frame.cacheHits },
+                           { "metadata_cache_misses", frame.cacheMisses },
+                           { "metadata_cache_generation", generation },
+                           { "metadata_invalidations_during_frame", generation - frame.startGeneration },
+                           { "main_thread_only", true },
+                           { "main_thread_measurement_scope",
+                             "frame/update/graphics and root-level import fields only" },
+                           { "archives", archives },
+                           { "all_threads_completed_work", CompletedWorkReport(completed) } };
 }
 
 inline std::optional<nlohmann::json> EndStateReload(int targetScene, int targetRoom) {
@@ -335,8 +359,7 @@ inline std::optional<nlohmann::json> EndStateReload(int targetScene, int targetR
     }
     const auto completedSnapshot = EndCompletedWorkCollection();
     const auto completed = CompletedWorkDelta(completedSnapshot.work, frame.completedAtStart);
-    const double reloadMs =
-        std::chrono::duration<double, std::milli>(completedSnapshot.boundary - frame.start).count();
+    const double reloadMs = std::chrono::duration<double, std::milli>(completedSnapshot.boundary - frame.start).count();
     const auto generation = metadataGeneration.load(std::memory_order_relaxed);
     frame.active = false;
     stateReload.active = false;
@@ -347,23 +370,34 @@ inline std::optional<nlohmann::json> EndStateReload(int targetScene, int targetR
         reads += record.count;
         bytes += record.bytes;
         nanos += record.nanos;
-        archives.push_back({ { "archive", path }, { "reads", record.count }, { "bytes", record.bytes },
+        archives.push_back({ { "archive", path },
+                             { "reads", record.count },
+                             { "bytes", record.bytes },
                              { "read_ms", record.nanos / 1000000.0 } });
     }
     return nlohmann::json{
-        { "kind", "state_reload" }, { "source_scene", stateReload.sourceScene },
-        { "source_room", stateReload.sourceRoom }, { "target_scene", targetScene }, { "target_room", targetRoom },
-        { "alt_assets", frame.altAssets }, { "state_reload_ms", reloadMs },
-        { "metadata_reads", reads }, { "metadata_bytes", bytes }, { "metadata_read_ms", nanos / 1000000.0 },
+        { "kind", "state_reload" },
+        { "source_scene", stateReload.sourceScene },
+        { "source_room", stateReload.sourceRoom },
+        { "target_scene", targetScene },
+        { "target_room", targetRoom },
+        { "alt_assets", frame.altAssets },
+        { "state_reload_ms", reloadMs },
+        { "metadata_reads", reads },
+        { "metadata_bytes", bytes },
+        { "metadata_read_ms", nanos / 1000000.0 },
         { "metadata_parse_ms", frame.parseNanos / 1000000.0 },
         { "material_lookup_ms", frame.lookupNanos / 1000000.0 },
-        { "binary_decode_ms", frame.decodeNanos / 1000000.0 }, { "material_lookups", frame.lookups },
-        { "metadata_cache_hits", frame.cacheHits }, { "metadata_cache_misses", frame.cacheMisses },
+        { "binary_decode_ms", frame.decodeNanos / 1000000.0 },
+        { "material_lookups", frame.lookups },
+        { "metadata_cache_hits", frame.cacheHits },
+        { "metadata_cache_misses", frame.cacheMisses },
         { "metadata_cache_generation", generation },
         { "metadata_invalidations_during_reload", generation - frame.startGeneration },
         { "main_thread_only", true },
         { "main_thread_measurement_scope", "state_reload_ms and root-level import fields only" },
-        { "archives", archives }, { "all_threads_completed_work", CompletedWorkReport(completed) },
+        { "archives", archives },
+        { "all_threads_completed_work", CompletedWorkReport(completed) },
     };
 }
 } // namespace Prelude::LoadProbe

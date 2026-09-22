@@ -19,8 +19,8 @@ void TimePedestalCutscene_TransformPoint(Vec3f* point, const Vec3f* origin, s16 
 
 // Only the two native sword scripts are accepted. Unknown command types fail
 // closed, so adding a native script command cannot silently introduce logic.
-size_t TimePedestalCutscene_Build(CutsceneData* output, size_t capacity, const CutsceneData* source,
-                                size_t wordCount, const Vec3f* origin, s16 yaw, s16* ageSwapFrame) {
+size_t TimePedestalCutscene_Build(CutsceneData* output, size_t capacity, const CutsceneData* source, size_t wordCount,
+                                  const Vec3f* origin, s16 yaw, s16* ageSwapFrame) {
     size_t read = 2;
     size_t write = 2;
     s32 entries = 0;
@@ -83,8 +83,8 @@ size_t TimePedestalCutscene_Build(CutsceneData* output, size_t capacity, const C
             for (size_t point = write + 3; point < write + length; point += 4) {
                 Vec3f pos = { output[point + 2].s[0], output[point + 2].s[1], output[point + 3].s[0] };
                 TimePedestalCutscene_TransformPoint(&pos, origin, yaw);
-                if (pos.x < SHRT_MIN || pos.x > SHRT_MAX || pos.y < SHRT_MIN || pos.y > SHRT_MAX ||
-                    pos.z < SHRT_MIN || pos.z > SHRT_MAX) {
+                if (pos.x < SHRT_MIN || pos.x > SHRT_MAX || pos.y < SHRT_MIN || pos.y > SHRT_MAX || pos.z < SHRT_MIN ||
+                    pos.z > SHRT_MAX) {
                     return 0;
                 }
                 output[point + 2].s[0] = (s16)roundf(pos.x);

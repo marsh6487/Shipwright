@@ -56,6 +56,7 @@
 #include "mods/actors/deku_flower_assets.h"
 // C++ header (no extern "C"): OnOcarinaNote hook registration for the gakki note driver.
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/cosmetics/CosmeticsEditor.h"
 
 // Static helpers (all functions are static, no linkage issue)
 // NOTE: mm_form_combat.c is text-included LATER in this file (after the
@@ -11408,6 +11409,57 @@ static void MmForm_Action_SwimUnderwaterWalk(Player* player, PlayState* play) {
     MmForm_SwimMovement(player, speedTarget, yawTarget);
 }
 
+// The native barrier has two layers: primary/glow, then highlights/primary.
+// Edit only the frame's copy, preserving alpha and the primitive LOD fields.
+// An unfamiliar mod shader keeps its own tagged cosmetic controls.
+static void MmForm_PatchZoraBarrierColors(Gfx* commands, size_t count) {
+    const bool primaryChanged = CVarGetInteger(CVAR_COSMETIC("Custom.ZoraMagicShield.Changed"), 0);
+    const bool glowChanged = CVarGetInteger(CVAR_COSMETIC("Custom.ZoraMagicShieldGlow.Changed"), 0);
+    const bool highlightsChanged = CVarGetInteger(CVAR_COSMETIC("Custom.ZoraMagicShieldHighlights.Changed"), 0);
+    if (!primaryChanged && !glowChanged && !highlightsChanged) {
+        return;
+    }
+
+    size_t colorIndices[4];
+    size_t colorCount = 0;
+    bool foundEnd = false;
+    for (size_t i = 0; i < count; ++i) {
+        const u8 opcode = commands[i].words.w0 >> 24;
+        if (opcode == G_ENDDL) {
+            foundEnd = true;
+            break;
+        }
+        if (opcode == G_SETPRIMCOLOR || opcode == G_SETENVCOLOR) {
+            if (colorCount == 4 || opcode != (colorCount % 2 == 0 ? G_SETPRIMCOLOR : G_SETENVCOLOR)) {
+                return;
+            }
+            colorIndices[colorCount++] = i;
+        }
+        // Expanded OTR commands have a second word containing data, not an opcode.
+        if (opcode == 0x20 || opcode == 0x24 || opcode == 0x31 || opcode == 0x32 || opcode == 0x33 || opcode == 0x35 ||
+            opcode == 0x36 || opcode == 0x42) {
+            ++i;
+        }
+    }
+    if (!foundEnd || colorCount != 4) {
+        return;
+    }
+
+    const Color_RGB8 primary = CVarGetColor24(CVAR_COSMETIC("Custom.ZoraMagicShield.Value"), { 0, 150, 255 });
+    const Color_RGB8 glow = CVarGetColor24(CVAR_COSMETIC("Custom.ZoraMagicShieldGlow.Value"), { 0, 0, 100 });
+    const Color_RGB8 highlights =
+        CVarGetColor24(CVAR_COSMETIC("Custom.ZoraMagicShieldHighlights.Value"), { 170, 255, 255 });
+    const Color_RGB8 colors[] = { primary, glow, highlights, primary };
+    const bool changed[] = { primaryChanged, glowChanged, highlightsChanged, primaryChanged };
+    for (size_t i = 0; i < 4; ++i) {
+        if (changed[i]) {
+            Gfx& command = commands[colorIndices[i]];
+            command.words.w1 = (static_cast<uint32_t>(colors[i].r) << 24) | (static_cast<uint32_t>(colors[i].g) << 16) |
+                               (static_cast<uint32_t>(colors[i].b) << 8) | (command.words.w1 & 0xFF);
+        }
+    }
+}
+
 // Draw barrier visual (from 2Ship Player_DrawZoraShield, z_player_lib.c:2316)
 // TWO draw modes depending on whether Zora is fast-swimming or not:
 //
@@ -11426,10 +11478,9 @@ static void MmForm_DrawZoraBarrier(Player* player, PlayState* play) {
 
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
 
-    // Scale based on intensity (from 2Ship z_player_lib.c:2320: scale = unk_B62 * (10.0f / 51.0f))
-    // MM original: 10.0f/51.0f (max ~50) but that's for underwater fast swim only.
-    // Ground barrier is custom (MM doesn't draw barrier on ground), so use smaller scale.
-    f32 scale;
+    // MM uses the same scale for land guarding and swimming. Convert its model
+    // scale (10/51) through the 0.01 actor scale because we draw in world space.
+    const f32 scale = gFormState.barrierIntensity * (0.1f / 51.0f);
 
     Matrix_Push();
 
@@ -11437,7 +11488,6 @@ static void MmForm_DrawZoraBarrier(Player* player, PlayState* play) {
     // Our barrier is drawn in world space, so all offsets must be ×0.01 of MM's model-space values.
     // MM scale: unk_B62 * (10.0f / 51.0f) in model space = unk_B62 * (0.1f / 51.0f) in world space.
     if (gFormState.fastSwimActive) {
-        scale = gFormState.barrierIntensity * (0.1f / 51.0f); // MM: 10.0f/51.0f model → 0.1f/51.0f world
         // === Mode B: Fast swim barrier (from 2Ship z_player_lib.c:2430-2443) ===
         f32 yAdj = (Math_CosS(gFormState.swimPitch) - 1.0f) * 2.0f; // MM: 200 model → 2 world
         Matrix_Translate(player->actor.world.pos.x, yAdj + player->actor.world.pos.y + 40.0f, player->actor.world.pos.z,
@@ -11448,7 +11498,6 @@ static void MmForm_DrawZoraBarrier(Player* player, PlayState* play) {
         Matrix_RotateX(M_PI, MTXMODE_APPLY);                 // 180 deg flip (-0x8000)
         Matrix_Translate(0.0f, 0.0f, -40.0f, MTXMODE_APPLY); // MM: -4000 model → -40 world
     } else {
-        scale = gFormState.barrierIntensity * (0.05f / 51.0f); // Ground: smaller (no MM reference)
         // === Mode A: Ground barrier with R+B (from 2Ship z_player.c:13203-13209) ===
         Matrix_Translate(player->actor.world.pos.x, player->actor.world.pos.y + 40.0f, player->actor.world.pos.z,
                          MTXMODE_NEW);
@@ -11487,6 +11536,8 @@ static void MmForm_DrawZoraBarrier(Player* player, PlayState* play) {
         size_t totalCount = sBarrierDLCount + DL_PADDING;
         Gfx* dlCopy = (Gfx*)Graph_Alloc(play->state.gfxCtx, totalCount * sizeof(Gfx));
         memcpy(dlCopy, sBarrierDLSafeCopy.data(), sBarrierDLCount * sizeof(Gfx));
+        ApplyCustomCosmeticsToDisplayListCopy(gLinkZoraBarrierDL, dlCopy, sBarrierDLCount);
+        MmForm_PatchZoraBarrierColors(dlCopy, sBarrierDLCount);
         for (size_t p = 0; p < DL_PADDING; p++) {
             dlCopy[sBarrierDLCount + p].words.w0 = (uintptr_t)0xDF << 24;
             dlCopy[sBarrierDLCount + p].words.w1 = 0;

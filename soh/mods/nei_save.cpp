@@ -354,7 +354,7 @@ void NeiSave_Load() {
     // memset first so a save lacking this section loads as a clean new game.
     memset(&gNeiSave, 0, sizeof(gNeiSave));
     SaveManager::Instance->LoadData("timePedestalNoMasterSwordRepair", gNeiSave.timePedestalNoMasterSwordRepair,
-                                  (uint8_t)0);
+                                    (uint8_t)0);
     // ownedItems is u16 now, so memset(0xFF) would write 0xFFFF per entry — and the empty marker
     // is ITEM_NONE (0xFF), not 0xFFFF. Fill it element by element. Skijer's NEI
     for (int i = 0; i < (int)(sizeof(gNeiSave.ownedItems) / sizeof(gNeiSave.ownedItems[0])); i++) {

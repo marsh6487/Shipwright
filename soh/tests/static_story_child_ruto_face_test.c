@@ -32,11 +32,11 @@ static uintptr_t segmentAtDraw(const PlayState* play, unsigned segment) {
     return address;
 }
 
-static s32 EnViewer_StaticChildRutoOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos,
-                                                  Vec3s* rot, void* thisx);
+static s32 EnViewer_StaticChildRutoOverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
+                                                    void* thisx);
 
 void SkelAnime_DrawSkeletonOpa(PlayState* play, SkelAnime* skelAnime, OverrideLimbDrawOpa overrideLimbDraw,
-                              PostLimbDrawOpa postLimbDraw, void* actorPointer) {
+                               PostLimbDrawOpa postLimbDraw, void* actorPointer) {
     EnViewer* actor = actorPointer;
     const char* eye = (const char*)segmentAtDraw(play, 0x08);
     const char* mouth = (const char*)segmentAtDraw(play, 0x09);
@@ -74,8 +74,8 @@ int main(void) {
             expectedEye = eyes[eye];
             gfx.polyOpa.p = commands;
             /* A preceding actor's face must not leak into this placement. */
-            gSPSegment(gfx.polyOpa.p++, 0x08, (uintptr_t)"previous actor eye");
-            gSPSegment(gfx.polyOpa.p++, 0x09, (uintptr_t)"previous actor mouth");
+            gSPSegment(gfx.polyOpa.p++, 0x08, (uintptr_t) "previous actor eye");
+            gSPSegment(gfx.polyOpa.p++, 0x09, (uintptr_t) "previous actor mouth");
             EnViewer_DrawStaticChildRuto(&actor, &play);
             REQUIRE(memcmp(&actor, &before, sizeof(actor)) == 0);
         }

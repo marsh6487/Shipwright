@@ -1825,8 +1825,7 @@ void func_80084BF4(PlayState* play, u16 flag) {
             }
         } else if (gSaveContext.equips.buttonItems[0] == ITEM_NONE) {
             if ((gSaveContext.equips.buttonItems[0] != ITEM_NONE) ||
-                (gSaveContext.infTable[29] == 0 &&
-                 CUR_EQUIP_VALUE(EQUIP_TYPE_SWORD) != EQUIP_VALUE_SWORD_NONE)) {
+                (gSaveContext.infTable[29] == 0 && CUR_EQUIP_VALUE(EQUIP_TYPE_SWORD) != EQUIP_VALUE_SWORD_NONE)) {
                 gSaveContext.equips.buttonItems[0] = gSaveContext.buttonStatus[0];
                 GameInteractor_Should(VB_TEMP_B_RESTORE_SWORDLESS, true);
                 Interface_LoadItemIcon1(play, 0);

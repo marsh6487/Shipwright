@@ -15,10 +15,18 @@ typedef int16_t s16;
 typedef uint32_t u32;
 typedef int32_t s32;
 typedef float f32;
-typedef struct { f32 x, y, z; } Vec3f;
-typedef struct { s16 x, y, z; } Vec3s;
-typedef struct { u16 x, y, z; } Vec3us;
-typedef struct { s32 x, y, z; } Vec3i;
+typedef struct {
+    f32 x, y, z;
+} Vec3f;
+typedef struct {
+    s16 x, y, z;
+} Vec3s;
+typedef struct {
+    u16 x, y, z;
+} Vec3us;
+typedef struct {
+    s32 x, y, z;
+} Vec3i;
 #include "z64item.h"
 #include "z64cutscene.h"
 
@@ -62,13 +70,22 @@ typedef struct {
     Inventory inventory;
     u16 eventChkInf[14], itemGetInf[4], infTable[30];
     RespawnData respawn[3];
-    struct { u8 maskMemory; } ship;
+    struct {
+        u8 maskMemory;
+    } ship;
 } SaveContext;
 struct Actor {
     s16 id, params;
     s8 room;
-    struct { Vec3f pos; Vec3s rot; } world;
-    struct { Vec3s rot; f32 yOffset; void* shadowDraw; } shape;
+    struct {
+        Vec3f pos;
+        Vec3s rot;
+    } world;
+    struct {
+        Vec3s rot;
+        f32 yOffset;
+        void* shadowDraw;
+    } shape;
     Vec3f velocity, scale;
     f32 speedXZ;
     f32 xzDistToPlayer, yDistToPlayer;
@@ -81,12 +98,27 @@ struct Actor {
     u8 floorBgId;
     int colChkInfo;
 };
-typedef struct { int base; } ColliderCylinder;
-typedef struct { int marker; } LinkAnimationHeader;
-typedef struct { f32 curFrame, endFrame, animLength; LinkAnimationHeader* animation; } SkelAnime;
-typedef struct { u16 unk_00, unk_02; } struct_808551A4;
-typedef struct { u16 sfx; s16 frame; } AnimSfxEntry;
-typedef struct { LinkAnimationHeader* unk_9C; LinkAnimationHeader* unk_A0; } PlayerAgeProperties;
+typedef struct {
+    int base;
+} ColliderCylinder;
+typedef struct {
+    int marker;
+} LinkAnimationHeader;
+typedef struct {
+    f32 curFrame, endFrame, animLength;
+    LinkAnimationHeader* animation;
+} SkelAnime;
+typedef struct {
+    u16 unk_00, unk_02;
+} struct_808551A4;
+typedef struct {
+    u16 sfx;
+    s16 frame;
+} AnimSfxEntry;
+typedef struct {
+    LinkAnimationHeader* unk_9C;
+    LinkAnimationHeader* unk_A0;
+} PlayerAgeProperties;
 struct Player;
 typedef void (*PlayerActionFunc)(struct Player*, PlayState*);
 typedef struct Player {
@@ -101,8 +133,12 @@ typedef struct Player {
     PlayerActionFunc actionFunc;
     PlayerActionFunc upperActionFunc;
     s16 unk_6AE_rotFlags;
-    struct { s16 actionVar1; } av1;
-    struct { s16 actionVar2; } av2;
+    struct {
+        s16 actionVar1;
+    } av1;
+    struct {
+        s16 actionVar2;
+    } av2;
     u32 stateFlags1, stateFlags2;
     s16 getItemId;
     u16 getItemDirection;
@@ -117,23 +153,54 @@ typedef struct {
 } FixtureExtendedEquipment;
 #include "mods/nei_save.h"
 typedef NeiSaveData FixtureNeiSave;
-typedef struct { s16 camDataIdx, setting, status, uid; Vec3f at, eye; f32 fov; } Camera;
+typedef struct {
+    s16 camDataIdx, setting, status, uid;
+    Vec3f at, eye;
+    f32 fov;
+} Camera;
 typedef struct {
     s16 state, frames;
     f32 unk_0C;
     void* segment;
     CsCmdActorCue* linkAction;
 } CutsceneContext;
-typedef struct { struct { u8 bButton; } restrictions; } InterfaceContext;
+typedef struct {
+    struct {
+        u8 bButton;
+    } restrictions;
+} InterfaceContext;
 struct PlayState {
-    struct { void* gfxCtx; bool running; struct { struct { u16 button; } press, cur; } input[1]; } state;
+    struct {
+        void* gfxCtx;
+        bool running;
+        struct {
+            struct {
+                u16 button;
+            } press, cur;
+        } input[1];
+    } state;
     s16 sceneNum, nextEntranceIndex, linkAgeOnLoad;
     u8 transitionTrigger, transitionType;
-    struct { struct { s8 num, behaviorType2, echo; } curRoom; u8 unk_74[2]; } roomCtx;
-    struct { u8 seqId, natureAmbienceId; } sequenceCtx;
-    struct { u8 unk_E0; } envCtx;
-    struct { int state, cursorSpecialPos; } pauseCtx;
-    struct { struct { u32 tempSwch, tempCollect; } flags; } actorCtx;
+    struct {
+        struct {
+            s8 num, behaviorType2, echo;
+        } curRoom;
+        u8 unk_74[2];
+    } roomCtx;
+    struct {
+        u8 seqId, natureAmbienceId;
+    } sequenceCtx;
+    struct {
+        u8 unk_E0;
+    } envCtx;
+    struct {
+        int state, cursorSpecialPos;
+    } pauseCtx;
+    struct {
+        struct {
+            u32 tempSwch, tempCollect;
+        } flags;
+    } actorCtx;
     CutsceneContext csCtx;
     InterfaceContext interfaceCtx;
     int colChkCtx;
@@ -164,13 +231,13 @@ struct PlayState {
 #define IS_RANDO fixtureRando
 #define CVAR_ENHANCEMENT(name) "gEnhancements." name
 #define CVAR_SETTING(name) "gSettings." name
-#define OWNED_EQUIP_FLAG(type, value) (1U << ((type) * 4 + (value)))
+#define OWNED_EQUIP_FLAG(type, value) (1U << ((type)*4 + (value)))
 #define CHECK_OWNED_EQUIP(type, value) (gSaveContext.inventory.equipment & OWNED_EQUIP_FLAG(type, value))
 #define CHECK_OWNED_EQUIP_ALT CHECK_OWNED_EQUIP
 #define OWNED_EQUIP_FLAG_ALT OWNED_EQUIP_FLAG
-#define ALL_EQUIP_VALUE(type) ((gSaveContext.inventory.equipment >> ((type) * 4)) & 0xF)
+#define ALL_EQUIP_VALUE(type) ((gSaveContext.inventory.equipment >> ((type)*4)) & 0xF)
 #define CUR_UPG_VALUE(type) (gSaveContext.inventory.upgrades & 7)
-#define CUR_EQUIP_VALUE(type) ((gSaveContext.equips.equipment >> ((type) * 4)) & 0xF)
+#define CUR_EQUIP_VALUE(type) ((gSaveContext.equips.equipment >> ((type)*4)) & 0xF)
 #define RESPAWN_MODE_DOWN 0
 #define TRANS_TRIGGER_OFF 0
 #define TRANS_TRIGGER_START 1
@@ -207,15 +274,30 @@ struct PlayState {
 #define CHECK_BTN_ALL(state, mask) (((state) & (mask)) == (mask))
 #define PAK_DL_STUB ((Gfx*)(uintptr_t)1)
 enum {
-    PLAYER_LIMB_L_HAND = 1, PLAYER_LIMB_R_HAND, PLAYER_LIMB_SHEATH, PLAYER_LIMB_WAIST,
-    PLAYER_MODELTYPE_LH_OPEN, PLAYER_MODELTYPE_LH_CLOSED, PLAYER_MODELTYPE_LH_SWORD,
-    PLAYER_MODELTYPE_LH_SWORD_2, PLAYER_MODELTYPE_LH_BGS, PLAYER_MODELTYPE_LH_HAMMER,
-    PLAYER_MODELTYPE_LH_BOOMERANG, PLAYER_MODELTYPE_LH_BOTTLE,
-    PLAYER_MODELTYPE_RH_OPEN, PLAYER_MODELTYPE_RH_CLOSED, PLAYER_MODELTYPE_RH_SHIELD,
-    PLAYER_MODELTYPE_RH_BOW_SLINGSHOT, PLAYER_MODELTYPE_RH_BOW_SLINGSHOT_2,
-    PLAYER_MODELTYPE_RH_OCARINA, PLAYER_MODELTYPE_RH_OOT, PLAYER_MODELTYPE_RH_HOOKSHOT,
-    PLAYER_MODELTYPE_SHEATH_16, PLAYER_MODELTYPE_SHEATH_17,
-    PLAYER_MODELTYPE_SHEATH_18, PLAYER_MODELTYPE_SHEATH_19,
+    PLAYER_LIMB_L_HAND = 1,
+    PLAYER_LIMB_R_HAND,
+    PLAYER_LIMB_SHEATH,
+    PLAYER_LIMB_WAIST,
+    PLAYER_MODELTYPE_LH_OPEN,
+    PLAYER_MODELTYPE_LH_CLOSED,
+    PLAYER_MODELTYPE_LH_SWORD,
+    PLAYER_MODELTYPE_LH_SWORD_2,
+    PLAYER_MODELTYPE_LH_BGS,
+    PLAYER_MODELTYPE_LH_HAMMER,
+    PLAYER_MODELTYPE_LH_BOOMERANG,
+    PLAYER_MODELTYPE_LH_BOTTLE,
+    PLAYER_MODELTYPE_RH_OPEN,
+    PLAYER_MODELTYPE_RH_CLOSED,
+    PLAYER_MODELTYPE_RH_SHIELD,
+    PLAYER_MODELTYPE_RH_BOW_SLINGSHOT,
+    PLAYER_MODELTYPE_RH_BOW_SLINGSHOT_2,
+    PLAYER_MODELTYPE_RH_OCARINA,
+    PLAYER_MODELTYPE_RH_OOT,
+    PLAYER_MODELTYPE_RH_HOOKSHOT,
+    PLAYER_MODELTYPE_SHEATH_16,
+    PLAYER_MODELTYPE_SHEATH_17,
+    PLAYER_MODELTYPE_SHEATH_18,
+    PLAYER_MODELTYPE_SHEATH_19,
     PLAYER_SHIELD_MAX = 4,
     PLAYER_LIMB_L_FOREARM = 0x40
 };
@@ -356,7 +438,7 @@ s32 LinkAnimation_OnFrame(SkelAnime*, f32);
 void Player_PlaySfx(Player*, u16);
 void Player_PlayVoiceSfx(Player*, u16);
 void Player_ProcessAnimSfxList(Player*, AnimSfxEntry*);
-extern Gfx* gPlayerLeftHandBgsDLs[], *gPlayerLeftHandClosedDLs[];
+extern Gfx *gPlayerLeftHandBgsDLs[], *gPlayerLeftHandClosedDLs[];
 extern const char gLinkChildLeftHandHoldingMasterSwordDL[];
 extern const char gLinkAdultLeftHandHoldingMasterSwordNearDL[], gLinkAdultLeftHandHoldingMasterSwordFarDL[];
 void Fixture_ApplyLateHandOverrides(PlayState*, Player*, s32, Gfx**);
@@ -454,7 +536,9 @@ class SaveManager {
     static SaveManager* Instance;
     std::map<std::string, uint64_t> data;
     std::string prefix;
-    template <typename T> void SaveData(const char* key, T value) { data[prefix + key] = value; }
+    template <typename T> void SaveData(const char* key, T value) {
+        data[prefix + key] = value;
+    }
     template <typename T> void LoadData(const char* key, T& value, T fallback) {
         auto found = data.find(prefix + key);
         value = found == data.end() ? fallback : static_cast<T>(found->second);
@@ -467,7 +551,9 @@ class SaveManager {
         }
         prefix = parent;
     }
-    template <typename F> void LoadArray(const char* key, size_t count, F fn) { SaveArray(key, count, fn); }
+    template <typename F> void LoadArray(const char* key, size_t count, F fn) {
+        SaveArray(key, count, fn);
+    }
 };
 using HOOK_ID = unsigned;
 class GameInteractor {
@@ -476,8 +562,13 @@ class GameInteractor {
     static GameInteractor* Instance;
     std::map<unsigned, std::function<void(bool*)>> hooks;
     unsigned next = 1;
-    unsigned Add(std::function<void(bool*)> fn) { hooks[next] = fn; return next++; }
-    template <typename T> void UnregisterGameHookForID(unsigned id) { hooks.erase(id); }
+    unsigned Add(std::function<void(bool*)> fn) {
+        hooks[next] = fn;
+        return next++;
+    }
+    template <typename T> void UnregisterGameHookForID(unsigned id) {
+        hooks.erase(id);
+    }
 };
 #define REGISTER_VB_SHOULD(flag, body) GameInteractor::Instance->Add([](bool* should) body)
 #endif

@@ -186,6 +186,10 @@ Color_RGBA8 ColorRGBA8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     colors were darker than the gDPSetPrimColor. You will see many more examples of this below in the `ApplyOrResetCustomGfxPatches` method
 */
 std::map<std::string, CosmeticOption> cosmeticOptions = {
+    // Share the tagged shield mod's keys so its controls and the native effect agree.
+    COSMETIC_OPTION("Custom.ZoraMagicShield",          "Zora Magic Shield",        COSMETICS_GROUP_MAGIC,        ColorRGBA8(  0, 150, 255, 255), false, true, false),
+    COSMETIC_OPTION("Custom.ZoraMagicShieldGlow",             "Zora Shield Glow",         COSMETICS_GROUP_MAGIC,        ColorRGBA8(  0,   0, 100, 255), false, true, false),
+    COSMETIC_OPTION("Custom.ZoraMagicShieldHighlights",       "Zora Shield Highlights",   COSMETICS_GROUP_MAGIC,        ColorRGBA8(170, 255, 255, 255), false, true, false),
     COSMETIC_OPTION("Link.KokiriTunic",             "Kokiri Tunic",             COSMETICS_GROUP_LINK,         ColorRGBA8( 30, 105,  27, 255), false, true, false),
     COSMETIC_OPTION("Link.GoronTunic",              "Goron Tunic",              COSMETICS_GROUP_LINK,         ColorRGBA8(100,  20,   0, 255), false, true, false),
     COSMETIC_OPTION("Link.ZoraTunic",               "Zora Tunic",               COSMETICS_GROUP_LINK,         ColorRGBA8(  0,  60, 100, 255), false, true, false),
@@ -2053,7 +2057,7 @@ void ToggleRainbow(CosmeticOption& cosmeticOption, bool state) {
 }
 
 void ApplySideEffects(CosmeticOption& cosmeticOption) {
-    if (CVarGetInteger(CVAR_COSMETIC("AdvancedMode"), 0)) {
+    if (cosmeticOption.group == COSMETICS_GROUP_MAX || CVarGetInteger(CVAR_COSMETIC("AdvancedMode"), 0)) {
         return;
     }
 
@@ -2080,7 +2084,7 @@ void ApplySideEffects(CosmeticOption& cosmeticOption) {
     }
 }
 
-void RandomizeColor(CosmeticOption& cosmeticOption, bool manual = true) {
+void RandomizeColor(CosmeticOption& cosmeticOption, bool manual) {
     ImVec4 randomColor;
 
     uint64_t local_seed_state = 0;
@@ -2373,6 +2377,7 @@ void CosmeticsEditorWindow::DrawElement() {
                 CVarSetInteger(cosmeticOption.lockedCvar, 1);
             }
         }
+        SetAllCustomCosmeticsLocked(true);
     }
     ImGui::SameLine();
     if (UIWidgets::Button("Unlock All", UIWidgets::ButtonOptions().Size(ImVec2(250.0f, 0.0f)).Color(THEME_COLOR))) {
@@ -2381,6 +2386,7 @@ void CosmeticsEditorWindow::DrawElement() {
                 CVarSetInteger(cosmeticOption.lockedCvar, 0);
             }
         }
+        SetAllCustomCosmeticsLocked(false);
     }
 
     ImGui::BeginDisabled(CVarGetInteger(CVAR_SETTING("DisableChanges"), 0));
@@ -2392,6 +2398,7 @@ void CosmeticsEditorWindow::DrawElement() {
                 CVarSetInteger(cosmeticOption.changedCvar, 1);
             }
         }
+        SetAllCustomCosmeticsRainbow(true);
     }
     ImGui::EndDisabled();
 
@@ -2403,6 +2410,7 @@ void CosmeticsEditorWindow::DrawElement() {
                 CVarSetInteger(cosmeticOption.rainbowCvar, 0);
             }
         }
+        SetAllCustomCosmeticsRainbow(false);
     }
 
     UIWidgets::Spacer(3.0f);
@@ -2560,6 +2568,7 @@ void CosmeticsEditor_RandomizeAll() {
 
     Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     ApplyOrResetCustomGfxPatches();
+    RandomizeAllCustomCosmetics(true);
 }
 
 void CosmeticsEditor_AutoRandomizeAll() {
@@ -2572,7 +2581,7 @@ void CosmeticsEditor_AutoRandomizeAll() {
 
     Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     ApplyOrResetCustomGfxPatches();
-    ApplyCustomCosmetics();
+    RandomizeAllCustomCosmetics(false);
 }
 
 void CosmeticsEditor_RandomizeGroup(CosmeticGroup group) {
@@ -2597,6 +2606,7 @@ void CosmeticsEditor_ResetAll() {
 
     Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     ApplyOrResetCustomGfxPatches();
+    ResetAllCustomCosmetics();
 }
 
 void CosmeticsEditor_ResetGroup(CosmeticGroup group) {
@@ -2635,7 +2645,11 @@ void RegisterCosmeticHooks() {
               [](s16 sceneNum) { CosmeticsEditor_AutoRandomizeAll(); });
 
     COND_HOOK(OnGameFrameUpdate, true, CosmeticsUpdateTick);
-    COND_HOOK(OnAssetAltChange, true, []() { ApplyOrResetCustomGfxPatches(true); });
+    COND_HOOK(OnAssetAltChange, true, []() {
+        ScanCustomCosmetics();
+        ApplyOrResetCustomGfxPatches(true);
+        ApplyCustomCosmetics();
+    });
 }
 
 void RegisterCosmeticWidgets() {

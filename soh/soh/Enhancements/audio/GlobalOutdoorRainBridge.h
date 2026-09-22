@@ -14,8 +14,8 @@ void GlobalOutdoorRain_BeginScene(struct PlayState* play, int32_t density, int32
 void GlobalOutdoorRain_Resolve(struct PlayState* play);
 void GlobalOutdoorRain_SetScriptedRain(struct PlayState* play, int32_t density);
 int32_t GlobalOutdoorRain_HasRainIntent(void);
-void GlobalOutdoorRain_RecordDraw(struct PlayState* play, int32_t underwater, int32_t suppressed,
-                                 float cameraY, float waterY, float viewY);
+void GlobalOutdoorRain_RecordDraw(struct PlayState* play, int32_t underwater, int32_t suppressed, float cameraY,
+                                  float waterY, float viewY);
 // Implemented by the regular game logger, not stderr.
 void GlobalOutdoorRain_Log(const char* message);
 

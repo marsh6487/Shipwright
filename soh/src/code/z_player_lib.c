@@ -1766,9 +1766,9 @@ static void Player_ApplyTimePedestalSword(PlayState* play, Player* player, s32 l
             return;
         }
         // The native ceremonial resource already has the child animation's grip.
-        const char* nativeDL = !LINK_IS_ADULT ? gLinkChildLeftHandHoldingMasterSwordDL
+        const char* nativeDL = !LINK_IS_ADULT            ? gLinkChildLeftHandHoldingMasterSwordDL
                                : (sDListsLodOffset == 0) ? gLinkAdultLeftHandHoldingMasterSwordNearDL
-                                                       : gLinkAdultLeftHandHoldingMasterSwordFarDL;
+                                                         : gLinkAdultLeftHandHoldingMasterSwordFarDL;
         *dList = Player_ResolveLimbDLForDummyOrLocal((void*)nativeDL);
     }
 }

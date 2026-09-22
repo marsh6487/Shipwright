@@ -52,25 +52,42 @@ PlayState* gPlayState;
 bool fixtureRando;
 FixtureExtendedEquipment gExtEquipState;
 static FixtureNeiSave neiSave;
-FixtureNeiSave* Nei_Save(void) { return &neiSave; }
-void ExtEquip_CleanupSlot(s16, u8) {}
-void ExtEquip_ReloadBIcon(void) {}
-void ExtEquip_RefreshPlayer(void) {}
+FixtureNeiSave* Nei_Save(void) {
+    return &neiSave;
+}
+void ExtEquip_CleanupSlot(s16, u8) {
+}
+void ExtEquip_ReloadBIcon(void) {
+}
+void ExtEquip_RefreshPlayer(void) {
+}
 s32 CVarGetInteger(const char* name, s32 fallback) {
     if (strcmp(name, CVAR_ENHANCEMENT("TimeSavers.SkipCutscene.Story")) == 0 && skipStorySetting >= 0)
         return skipStorySetting;
-    if (strcmp(name, CVAR_SETTING("AltAssets")) == 0) return altAssetsSetting;
+    if (strcmp(name, CVAR_SETTING("AltAssets")) == 0)
+        return altAssetsSetting;
     return fallback;
 }
-const char gLinkChildLeftHandHoldingMasterSwordDL[] = "__OTR__objects/object_link_child/gLinkChildLeftHandHoldingMasterSwordDL";
+const char gLinkChildLeftHandHoldingMasterSwordDL[] =
+    "__OTR__objects/object_link_child/gLinkChildLeftHandHoldingMasterSwordDL";
 const char object_toki_objects_DL_001BD0[] = "__OTR__objects/object_toki_objects/object_toki_objects_DL_001BD0";
-void Fixture_RecordDraw(const void* dl) { drawnSword = dl; }
-void BossRemains_DrawOdolwaSword(PlayState*, Player*) { postSwordDrawCalls++; }
-void Matrix_Push(void) {}
-void Matrix_Pop(void) {}
-void Matrix_Translate(f32, f32, f32, u8) {}
-void Matrix_Scale(f32, f32, f32, u8) {}
-void Matrix_RotateZ(f32 angle, u8) { restingSwordRotation = angle; }
+void Fixture_RecordDraw(const void* dl) {
+    drawnSword = dl;
+}
+void BossRemains_DrawOdolwaSword(PlayState*, Player*) {
+    postSwordDrawCalls++;
+}
+void Matrix_Push(void) {
+}
+void Matrix_Pop(void) {
+}
+void Matrix_Translate(f32, f32, f32, u8) {
+}
+void Matrix_Scale(f32, f32, f32, u8) {
+}
+void Matrix_RotateZ(f32 angle, u8) {
+    restingSwordRotation = angle;
+}
 f32 BgCheck_EntityRaycastFloor5(PlayState*, void*, void** poly, s32* bgId, Actor* actor, Vec3f* point) {
     REQUIRE(point->x == actor->world.pos.x && point->z == actor->world.pos.z);
     REQUIRE(point->y > -56.0f && point->y < 100.0f);
@@ -80,13 +97,16 @@ f32 BgCheck_EntityRaycastFloor5(PlayState*, void*, void** poly, s32* bgId, Actor
 }
 s16 Play_CreateSubCamera(PlayState* play) {
     cameraCreates++;
-    if (failSubCamera) return SUBCAM_NONE;
+    if (failSubCamera)
+        return SUBCAM_NONE;
     REQUIRE(!play->subCameraAllocated);
     play->subCameraAllocated = true;
     play->subCamera.uid = 42;
     return 1;
 }
-s16 Play_GetActiveCamId(PlayState* play) { return play->activeCamera; }
+s16 Play_GetActiveCamId(PlayState* play) {
+    return play->activeCamera;
+}
 Camera* Play_GetCamera(PlayState* play, s16 id) {
     REQUIRE(id == CAM_ID_MAIN || id == 1);
     return id == CAM_ID_MAIN ? &play->camera : play->subCameraAllocated ? &play->subCamera : nullptr;
@@ -99,7 +119,8 @@ s16 Play_ChangeCameraStatus(PlayState* play, s16 id, s16 status) {
     Camera* camera = Play_GetCamera(play, id);
     REQUIRE(camera != nullptr);
     camera->status = status;
-    if (status == CAM_STAT_ACTIVE) play->activeCamera = id;
+    if (status == CAM_STAT_ACTIVE)
+        play->activeCamera = id;
     return status;
 }
 void Play_ClearCamera(PlayState* play, s16 id) {
@@ -129,22 +150,35 @@ void Play_CopyCamera(PlayState* play, s16 to, s16 from) {
     dst->eye = src->eye;
     dst->fov = src->fov;
 }
-void Letterbox_SetSizeTarget(s32 size) { letterboxSize = size; }
+void Letterbox_SetSizeTarget(s32 size) {
+    letterboxSize = size;
+}
 Gfx* PakLoader_GetTimePedestalSwordDL(void) {
     auto it = fixturePakEquipment.find(0x5450);
     return pakActive && it != fixturePakEquipment.end() && it->second != PAK_DL_STUB ? it->second : nullptr;
 }
-Gfx* PakLoader_GetTimePedestalHandDL(void) { return pakActive ? &emptyHand : nullptr; }
+Gfx* PakLoader_GetTimePedestalHandDL(void) {
+    return pakActive ? &emptyHand : nullptr;
+}
 const char gCustomMasterSwordDL[] = "__OTR__objects/object_custom_equip/gCustomMasterSwordDL";
 const char gLinkChildLeftFistNearDL[] = "__OTR__objects/object_link_child/gLinkChildLeftFistNearDL";
 const char gLinkAdultLeftHandClosedNearDL[] = "__OTR__objects/object_link_boy/gLinkAdultLeftHandClosedNearDL";
-const char gLinkAdultLeftHandHoldingMasterSwordNearDL[] = "__OTR__objects/object_link_boy/gLinkAdultLeftHandHoldingMasterSwordNearDL";
-const char gLinkAdultLeftHandHoldingMasterSwordFarDL[] = "__OTR__objects/object_link_boy/gLinkAdultLeftHandHoldingMasterSwordFarDL";
-u8 ResourceMgr_FileAltExists(const char* path) { return customMasterAsset && strcmp(path, gCustomMasterSwordDL) == 0; }
-u8 ResourceGetIsCustomByName(const char*) { return false; }
-u8 TransformMasks_IsTransformedAny(void) { return false; }
+const char gLinkAdultLeftHandHoldingMasterSwordNearDL[] =
+    "__OTR__objects/object_link_boy/gLinkAdultLeftHandHoldingMasterSwordNearDL";
+const char gLinkAdultLeftHandHoldingMasterSwordFarDL[] =
+    "__OTR__objects/object_link_boy/gLinkAdultLeftHandHoldingMasterSwordFarDL";
+u8 ResourceMgr_FileAltExists(const char* path) {
+    return customMasterAsset && strcmp(path, gCustomMasterSwordDL) == 0;
+}
+u8 ResourceGetIsCustomByName(const char*) {
+    return false;
+}
+u8 TransformMasks_IsTransformedAny(void) {
+    return false;
+}
 Gfx* ResourceMgr_LoadGfxByName(const char* path) {
-    if (strcmp(path, gCustomMasterSwordDL) == 0) return &customMasterSword;
+    if (strcmp(path, gCustomMasterSwordDL) == 0)
+        return &customMasterSword;
     REQUIRE(strcmp(path, LINK_IS_ADULT ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL) == 0);
     return &emptyHand;
 }
@@ -155,48 +189,77 @@ void Fixture_BuildHandItemDL(PlayState*, Gfx** dl, Gfx* hand, Gfx* sword, bool s
 Gfx* gPlayerLeftHandBgsDLs[] = { &wrongSword, &nativeSword, &wrongSword, &nativeSword };
 Gfx* gPlayerLeftHandClosedDLs[] = { &emptyHand, &emptyHand, &emptyHand, &emptyHand };
 Gfx* Player_ResolveLimbDLForDummyOrLocal(void* path) {
-    if (path == &emptyHand) return &emptyHand;
-    REQUIRE(strcmp(static_cast<const char*>(path), LINK_IS_ADULT ? gLinkAdultLeftHandHoldingMasterSwordNearDL :
-                                                               gLinkChildLeftHandHoldingMasterSwordDL) == 0);
+    if (path == &emptyHand)
+        return &emptyHand;
+    REQUIRE(strcmp(static_cast<const char*>(path), LINK_IS_ADULT ? gLinkAdultLeftHandHoldingMasterSwordNearDL
+                                                                 : gLinkChildLeftHandHoldingMasterSwordDL) == 0);
     return altActive ? &altSword : &nativeSword;
 }
-u8 PakLoader_HasActiveModel(void) { return pakActive; }
-bool GameInteractor_InvisibleLinkActive(void) { return invisibleLink; }
-s32 LinkAnimation_Update(PlayState*, SkelAnime*) { return animationComplete; }
+u8 PakLoader_HasActiveModel(void) {
+    return pakActive;
+}
+bool GameInteractor_InvisibleLinkActive(void) {
+    return invisibleLink;
+}
+s32 LinkAnimation_Update(PlayState*, SkelAnime*) {
+    return animationComplete;
+}
 void LinkAnimation_Change(PlayState*, SkelAnime* skel, LinkAnimationHeader* anim, f32, f32 start, f32 end, u8, f32) {
     skel->animation = anim;
     skel->curFrame = start;
     skel->endFrame = end;
     skel->animLength = 180;
 }
-void Player_Action_Idle(Player*, PlayState*) {}
-s32 Player_UpdateUpperBody(Player*, PlayState*) { return false; }
-s32 func_8008F128(Player*) { return false; }
-void Player_Action_8084E604(Player*, PlayState*) {}
-void Player_UpperAction_ChangeHeldItem(Player*, PlayState*) {}
-s32 Fixture_TurnActionHandler(Player*, PlayState*) { return false; }
+void Player_Action_Idle(Player*, PlayState*) {
+}
+s32 Player_UpdateUpperBody(Player*, PlayState*) {
+    return false;
+}
+s32 func_8008F128(Player*) {
+    return false;
+}
+void Player_Action_8084E604(Player*, PlayState*) {
+}
+void Player_UpperAction_ChangeHeldItem(Player*, PlayState*) {
+}
+s32 Fixture_TurnActionHandler(Player*, PlayState*) {
+    return false;
+}
 s32 Player_ActionHandler_2(Player* player, PlayState* play) {
     // The grab action boundary accepts only a fresh A edge. Exercise the real
     // action-list dispatch above it, including its held-item and cutscene guards.
-    if (!(play->state.input[0].press.button & BTN_A)) return false;
+    if (!(play->state.input[0].press.button & BTN_A))
+        return false;
     REQUIRE(player->interactRangeActor != nullptr);
     player->interactRangeActor->parent = &player->actor;
     return true;
 }
-void Player_StartMode_Idle(PlayState*, Player* player) { player->actionFunc = Player_Action_Idle; }
+void Player_StartMode_Idle(PlayState*, Player* player) {
+    player->actionFunc = Player_Action_Idle;
+}
 s32 Player_SetupAction(PlayState*, Player* player, PlayerActionFunc action, s32) {
     player->actionFunc = action;
     player->av1.actionVar1 = player->av2.actionVar2 = 0;
     player->stateFlags1 &= ~PLAYER_STATE1_IN_CUTSCENE;
     return true;
 }
-void func_80846720(PlayState*, Player*, s32) { normalSwordEquipCalls++; }
-void Player_AnimPlayOnce(PlayState*, Player*, LinkAnimationHeader*) {}
-LinkAnimationHeader* Player_GetIdleAnim(Player*) { return &idleAnimation; }
-s32 LinkAnimation_OnFrame(SkelAnime* animation, f32 frame) { return animation->curFrame == frame; }
-void Player_PlaySfx(Player*, u16) {}
-void Player_PlayVoiceSfx(Player*, u16) {}
-void Player_ProcessAnimSfxList(Player*, AnimSfxEntry*) {}
+void func_80846720(PlayState*, Player*, s32) {
+    normalSwordEquipCalls++;
+}
+void Player_AnimPlayOnce(PlayState*, Player*, LinkAnimationHeader*) {
+}
+LinkAnimationHeader* Player_GetIdleAnim(Player*) {
+    return &idleAnimation;
+}
+s32 LinkAnimation_OnFrame(SkelAnime* animation, f32 frame) {
+    return animation->curFrame == frame;
+}
+void Player_PlaySfx(Player*, u16) {
+}
+void Player_PlayVoiceSfx(Player*, u16) {
+}
+void Player_ProcessAnimSfxList(Player*, AnimSfxEntry*) {
+}
 u16 gEquipMasks[4] = { 0xF, 0xF0, 0xF00, 0xF000 };
 u16 gEquipNegMasks[4] = { 0xFFF0, 0xFF0F, 0xF0FF, 0x0FFF };
 u8 gEquipShifts[4] = { 0, 4, 8, 12 };
@@ -205,76 +268,163 @@ static bool facing = true;
 static u8 savedB;
 static u16 playingBgm;
 static bool shuffleMasterSword;
-void Actor_ProcessInitChain(Actor*, void*) {}
-void Collider_InitCylinder(PlayState*, ColliderCylinder*) {}
-void Collider_SetCylinder(PlayState*, ColliderCylinder*, Actor*, void*) {}
-void Collider_UpdateCylinder(Actor*, ColliderCylinder*) {}
-void CollisionCheck_SetInfo(void*, void*, void*) {}
-void Collider_DestroyCylinder(PlayState*, ColliderCylinder*) {}
-void CollisionCheck_SetOC(PlayState*, void*, void*) {}
+void Actor_ProcessInitChain(Actor*, void*) {
+}
+void Collider_InitCylinder(PlayState*, ColliderCylinder*) {
+}
+void Collider_SetCylinder(PlayState*, ColliderCylinder*, Actor*, void*) {
+}
+void Collider_UpdateCylinder(Actor*, ColliderCylinder*) {
+}
+void CollisionCheck_SetInfo(void*, void*, void*) {
+}
+void Collider_DestroyCylinder(PlayState*, ColliderCylinder*) {
+}
+void CollisionCheck_SetOC(PlayState*, void*, void*) {
+}
 void Inventory_ChangeEquipment(s16 type, u16 value) {
     gSaveContext.equips.equipment = (gSaveContext.equips.equipment & gEquipNegMasks[type]) | (value << (type * 4));
 }
-s32 Flags_GetEventChkInf(s32 flag) { return gSaveContext.eventChkInf[flag >> 4] & (1 << (flag & 15)); }
-s32 Flags_GetInfTable(s32 flag) { return gSaveContext.infTable[flag >> 4] & (1 << (flag & 15)); }
-void Flags_SetEventChkInf(s32 flag) { storyWrites++; gSaveContext.eventChkInf[flag >> 4] |= 1 << (flag & 15); }
-void Flags_SetInfTable(s32 flag) { infoWrites++; gSaveContext.infTable[flag >> 4] |= 1 << (flag & 15); }
-void Flags_UnsetInfTable(s32 flag) { infoWrites++; gSaveContext.infTable[flag >> 4] &= ~(1 << (flag & 15)); }
-s32 Actor_IsFacingAndNearPlayer(Actor*, f32, s16) { return facing; }
-s32 Actor_IsFacingPlayer(Actor*, s16) { return facing; }
-s32 Play_InCsMode(PlayState* play) { return play->csCtx.state != CS_STATE_IDLE; }
-s32 Actor_HasParent(Actor* actor, PlayState*) { return actor->parent != nullptr; }
-s32 Player_GetExplosiveHeld(Player*) { return -1; }
-u8 MmForm_IsZoraSwimming(Player*) { return false; }
+s32 Flags_GetEventChkInf(s32 flag) {
+    return gSaveContext.eventChkInf[flag >> 4] & (1 << (flag & 15));
+}
+s32 Flags_GetInfTable(s32 flag) {
+    return gSaveContext.infTable[flag >> 4] & (1 << (flag & 15));
+}
+void Flags_SetEventChkInf(s32 flag) {
+    storyWrites++;
+    gSaveContext.eventChkInf[flag >> 4] |= 1 << (flag & 15);
+}
+void Flags_SetInfTable(s32 flag) {
+    infoWrites++;
+    gSaveContext.infTable[flag >> 4] |= 1 << (flag & 15);
+}
+void Flags_UnsetInfTable(s32 flag) {
+    infoWrites++;
+    gSaveContext.infTable[flag >> 4] &= ~(1 << (flag & 15));
+}
+s32 Actor_IsFacingAndNearPlayer(Actor*, f32, s16) {
+    return facing;
+}
+s32 Actor_IsFacingPlayer(Actor*, s16) {
+    return facing;
+}
+s32 Play_InCsMode(PlayState* play) {
+    return play->csCtx.state != CS_STATE_IDLE;
+}
+s32 Actor_HasParent(Actor* actor, PlayState*) {
+    return actor->parent != nullptr;
+}
+s32 Player_GetExplosiveHeld(Player*) {
+    return -1;
+}
+u8 MmForm_IsZoraSwimming(Player*) {
+    return false;
+}
 bool GameInteractor_Should(int flag, bool value, ...) {
-    if (flag == VB_EXECUTE_PLAYER_STARTMODE_FUNC) startModeHookCalls++;
+    if (flag == VB_EXECUTE_PLAYER_STARTMODE_FUNC)
+        startModeHookCalls++;
     if (flag == VB_PLAYER_OVERRIDE_LIMB_DRAW && replaceHandHook) {
         va_list args;
         va_start(args, value);
         int limb = va_arg(args, int);
         auto dl = va_arg(args, Gfx**);
-        if (limb == PLAYER_LIMB_L_HAND) *dl = &emptyHand;
+        if (limb == PLAYER_LIMB_L_HAND)
+            *dl = &emptyHand;
         va_end(args);
     }
     return value;
 }
-void Item_Give(PlayState* play, s16 item) { Fixture_GiveSword(play, item); }
-u8 Return_Item(u8, int, u8 result) { grants++; return result; }
-void GameInteractor_ExecuteOnEquipmentDelete(s16, u16) {}
-void TradeItems_SyncWrite(void) {}
-void TradeItems_SyncRead(void) {}
-void Picto_SyncRead(void) {}
-void Bottle_WheelResetTracking(void) {}
-void Entrance_SetEntranceDiscovered(s16, bool) { discoveries++; }
-void Audio_QueueSeqCmd(u32 command) { playingBgm = command & 0xFFFF; }
-void Audio_PlaySceneSequence(u16 sequence) { playingBgm = sequence; }
-void Audio_PlayNatureAmbienceSequence(u8) {}
-void Audio_SetEnvReverb(s8) {}
-s32 Environment_IsForcedSequenceDisabled(void) { return 0; }
-void Audio_PlayActorSound2(Actor*, u16) {}
-s32 Flags_GetEnv(PlayState*, s16) { return 0; }
-s32 Randomizer_GetSettingValue(s32) { return shuffleMasterSword; }
-void Gfx_SetupDL_25Opa(void*) { rendered++; }
-void func_8002EBCC(Actor*, PlayState*, s32) {}
-void Math_Vec3f_Copy(Vec3f* dst, Vec3f* src) { *dst = *src; }
-f32 Math_SinS(s16 yaw) { return sinf(yaw * (3.14159265358979323846f / 32768.0f)); }
-f32 Math_CosS(s16 yaw) { return cosf(yaw * (3.14159265358979323846f / 32768.0f)); }
-void Player_AnimPlayOnceAdjusted(PlayState*, Player*, LinkAnimationHeader*) {}
-void Player_StartAnimMovement(PlayState*, Player*, s32) {}
-void Player_InitItemAction(PlayState*, Player* player, s8 action) { player->itemAction = player->heldItemAction = action; }
+void Item_Give(PlayState* play, s16 item) {
+    Fixture_GiveSword(play, item);
+}
+u8 Return_Item(u8, int, u8 result) {
+    grants++;
+    return result;
+}
+void GameInteractor_ExecuteOnEquipmentDelete(s16, u16) {
+}
+void TradeItems_SyncWrite(void) {
+}
+void TradeItems_SyncRead(void) {
+}
+void Picto_SyncRead(void) {
+}
+void Bottle_WheelResetTracking(void) {
+}
+void Entrance_SetEntranceDiscovered(s16, bool) {
+    discoveries++;
+}
+void Audio_QueueSeqCmd(u32 command) {
+    playingBgm = command & 0xFFFF;
+}
+void Audio_PlaySceneSequence(u16 sequence) {
+    playingBgm = sequence;
+}
+void Audio_PlayNatureAmbienceSequence(u8) {
+}
+void Audio_SetEnvReverb(s8) {
+}
+s32 Environment_IsForcedSequenceDisabled(void) {
+    return 0;
+}
+void Audio_PlayActorSound2(Actor*, u16) {
+}
+s32 Flags_GetEnv(PlayState*, s16) {
+    return 0;
+}
+s32 Randomizer_GetSettingValue(s32) {
+    return shuffleMasterSword;
+}
+void Gfx_SetupDL_25Opa(void*) {
+    rendered++;
+}
+void func_8002EBCC(Actor*, PlayState*, s32) {
+}
+void Math_Vec3f_Copy(Vec3f* dst, Vec3f* src) {
+    *dst = *src;
+}
+f32 Math_SinS(s16 yaw) {
+    return sinf(yaw * (3.14159265358979323846f / 32768.0f));
+}
+f32 Math_CosS(s16 yaw) {
+    return cosf(yaw * (3.14159265358979323846f / 32768.0f));
+}
+void Player_AnimPlayOnceAdjusted(PlayState*, Player*, LinkAnimationHeader*) {
+}
+void Player_StartAnimMovement(PlayState*, Player*, s32) {
+}
+void Player_InitItemAction(PlayState*, Player* player, s8 action) {
+    player->itemAction = player->heldItemAction = action;
+}
 s32 Player_ActionToModelGroup(Player*, s32 action) {
     REQUIRE(action == PLAYER_IA_SWORD_CS || action == PLAYER_IA_NONE);
     return action == PLAYER_IA_SWORD_CS ? PLAYER_MODELGROUP_SWORD : PLAYER_MODELGROUP_DEFAULT;
 }
-void Player_SetEquipmentData(PlayState*, Player*) {}
-s32 Player_SetCsAction(PlayState* play, Actor*, u8 action) { play->player.csAction = action; return 1; }
-void Audio_SetCutsceneFlag(s32 flag) { cutsceneAudioFlag = flag; }
-void func_80068DC0(PlayState*, CutsceneContext* csCtx) { csCtx->state = CS_STATE_IDLE; }
-void func_80083108(PlayState* play) { Fixture_HudRestore(play); }
-void Play_SaveSceneFlags(PlayState*) {}
-void Save_SaveFile(void) { savedB = gSaveContext.equips.buttonItems[0]; }
-void Interface_LoadItemIcon1(PlayState*, u16) {}
-void Interface_ChangeHudVisibilityMode(s16) {}
+void Player_SetEquipmentData(PlayState*, Player*) {
+}
+s32 Player_SetCsAction(PlayState* play, Actor*, u8 action) {
+    play->player.csAction = action;
+    return 1;
+}
+void Audio_SetCutsceneFlag(s32 flag) {
+    cutsceneAudioFlag = flag;
+}
+void func_80068DC0(PlayState*, CutsceneContext* csCtx) {
+    csCtx->state = CS_STATE_IDLE;
+}
+void func_80083108(PlayState* play) {
+    Fixture_HudRestore(play);
+}
+void Play_SaveSceneFlags(PlayState*) {
+}
+void Save_SaveFile(void) {
+    savedB = gSaveContext.equips.buttonItems[0];
+}
+void Interface_LoadItemIcon1(PlayState*, u16) {
+}
+void Interface_ChangeHudVisibilityMode(s16) {
+}
 }
 static GameInteractor interactor;
 GameInteractor* GameInteractor::Instance = &interactor;
@@ -366,7 +516,10 @@ static void CheckLocalScript(CutsceneData* script, bool adult) {
                 REQUIRE(word < 512);
             }
             word += 4;
-            if (type == CS_CMD_CAM_EYE) eyes++; else ats++;
+            if (type == CS_CMD_CAM_EYE)
+                eyes++;
+            else
+                ats++;
         } else if (type == CS_CMD_SET_PLAYER_ACTION) {
             REQUIRE(script[word++].i == 1);
             REQUIRE(script[word].s[0] == 0xC); // Native sword cue, not a substitute action.
@@ -435,8 +588,10 @@ static void RunInteraction(bool adult, bool rando, bool skip = false, s16 entran
     play.csCtx.frames = adult ? 209 : 229;
     BgTokiSwd_Update(&sword.actor, &play);
     REQUIRE(play.transitionTrigger == TRANS_TRIGGER_OFF);
-    if (skip) play.csCtx.state = CS_STATE_UNSKIPPABLE_INIT;
-    else play.csCtx.frames++;
+    if (skip)
+        play.csCtx.state = CS_STATE_UNSKIPPABLE_INIT;
+    else
+        play.csCtx.frames++;
     BgTokiSwd_Update(&sword.actor, &play);
     REQUIRE(play.transitionTrigger == TRANS_TRIGGER_START);
     REQUIRE(play.linkAgeOnLoad == (adult ? LINK_AGE_CHILD : LINK_AGE_ADULT));
@@ -609,15 +764,15 @@ static void CheckRejectedScripts() {
     Vec3f origin = { -736, -63, -2395 };
     s16 frame = -1;
     REQUIRE(TimePedestalCutscene_Build(output.data(), output.size() - 1, source.data(), source.size(), &origin, 0,
-                                      &frame) == 0);
+                                       &frame) == 0);
     source[2].i = CS_CMD_PLAYBGM; // A new, unsupported command cannot silently acquire behavior.
     REQUIRE(TimePedestalCutscene_Build(output.data(), output.size(), source.data(), source.size(), &origin, 0,
-                                      &frame) == 0);
+                                       &frame) == 0);
     source.assign(D_808BB2F0, D_808BB2F0 + gMasterSwordChildCutsceneWordCount);
     REQUIRE(TimePedestalCutscene_Build(output.data(), output.size(), source.data(), 8, &origin, 0, &frame) == 0);
     origin.x = 40000;
     REQUIRE(TimePedestalCutscene_Build(output.data(), output.size(), source.data(), source.size(), &origin, 0,
-                                      &frame) == 0);
+                                       &frame) == 0);
     REQUIRE(memcmp(source.data(), D_808BB2F0, source.size() * sizeof(CutsceneData)) == 0);
 }
 
@@ -797,12 +952,14 @@ static void CheckChildSwordRendering() {
     REQUIRE(dl == &nativeSword);
     altAssetsSetting = true;
     pakActive = true;
-    fixturePakEquipment = {{0x5098, &emptyHand}, {0x5448, &wrongSword}, {0x5458, &wrongSword}, {0x5450, &pakSword}};
+    fixturePakEquipment = {
+        { 0x5098, &emptyHand }, { 0x5448, &wrongSword }, { 0x5458, &wrongSword }, { 0x5450, &pakSword }
+    };
     // B is empty: the selected Master Sword slot must not depend on ownership or equipped blade.
     REQUIRE(gSaveContext.equips.buttonItems[0] == ITEM_NONE);
     Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
     REQUIRE(dl == &pakHandSword);
-    for (u8 item : {ITEM_SWORD_KOKIRI, ITEM_SWORD_BGS, ITEM_SWORD_MASTER}) {
+    for (u8 item : { ITEM_SWORD_KOKIRI, ITEM_SWORD_BGS, ITEM_SWORD_MASTER }) {
         gSaveContext.equips.buttonItems[0] = item;
         Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
         REQUIRE(dl == &pakHandSword && gSaveContext.equips.buttonItems[0] == item);
@@ -847,8 +1004,7 @@ static void CheckChildSwordRendering() {
     swordRot = originalSwordRot;
     Fixture_ApplyLateHandOverridesWithRot(&play, &play.player, PLAYER_LIMB_L_HAND, &dl, &swordRot);
     REQUIRE(dl == &emptyHand);
-    REQUIRE(swordRot.x == originalSwordRot.x && swordRot.y == originalSwordRot.y &&
-            swordRot.z == originalSwordRot.z);
+    REQUIRE(swordRot.x == originalSwordRot.x && swordRot.y == originalSwordRot.y && swordRot.z == originalSwordRot.z);
     CheckProgressionUnchanged(before);
     REQUIRE(memcmp(&before.equips, &gSaveContext.equips, sizeof(ItemEquips)) == 0);
     BgTokiSwd_Destroy(&sword.actor, &play);
@@ -864,12 +1020,12 @@ static void CheckAdultSwordRendering() {
     BgTokiSwd_Update(&sword.actor, &play);
     play.csCtx.state = CS_STATE_SKIPPABLE_EXEC;
     LinkAnimationHeader animation{};
-    PlayerAgeProperties age{&animation, nullptr};
+    PlayerAgeProperties age{ &animation, nullptr };
     play.player.ageProperties = &age;
     func_808519EC(&play, &play.player, nullptr);
     REQUIRE(play.player.heldItemAction == PLAYER_IA_SWORD_CS);
     // Player_InitItemAction's engine boundary supplies the adult sword hand.
-    Gfx* adultSwordHands[] = {&nativeSword, &nativeSword};
+    Gfx* adultSwordHands[] = { &nativeSword, &nativeSword };
     play.player.leftHandDLists = adultSwordHands;
     play.player.leftHandType = PLAYER_MODELTYPE_LH_SWORD;
     replaceHandHook = true;
@@ -883,9 +1039,10 @@ static void CheckAdultSwordRendering() {
     Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
     REQUIRE(dl == &customHandSword);
     pakActive = true;
-    fixturePakEquipment = {{0x50A0, &emptyHand}, {0x5448, &wrongSword},
-                          {0x5458, &wrongSword}, {0x5450, &pakSword}};
-    for (u8 item : {ITEM_NONE, ITEM_SWORD_BGS, ITEM_SWORD_MASTER}) {
+    fixturePakEquipment = {
+        { 0x50A0, &emptyHand }, { 0x5448, &wrongSword }, { 0x5458, &wrongSword }, { 0x5450, &pakSword }
+    };
+    for (u8 item : { ITEM_NONE, ITEM_SWORD_BGS, ITEM_SWORD_MASTER }) {
         gSaveContext.equips.buttonItems[0] = item;
         Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
         REQUIRE(dl == &pakHandSword && gSaveContext.equips.buttonItems[0] == item);
@@ -975,9 +1132,10 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
     arrival.player.actor.world.pos = gSaveContext.respawn[0].pos;
     arrival.player.actor.shape.rot.y = gSaveContext.respawn[0].yaw;
     arrival.player.leftHandType = PLAYER_MODELTYPE_LH_OPEN;
-    PlayerAgeProperties age{nullptr, LINK_IS_ADULT ? &adultArrivalAnimation : &childArrivalAnimation};
+    PlayerAgeProperties age{ nullptr, LINK_IS_ADULT ? &adultArrivalAnimation : &childArrivalAnimation };
     arrival.player.ageProperties = &age;
-    if (mismatchedScene) arrival.sceneNum++;
+    if (mismatchedScene)
+        arrival.sceneNum++;
     // The input manager keeps held state, but consumes press edges every frame.
     arrival.state.input[0] = play.state.input[0];
     arrival.state.input[0].press.button = 0;
@@ -1012,7 +1170,7 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
     if (LINK_IS_ADULT) {
         REQUIRE(arrival.player.heldItemAction == PLAYER_IA_SWORD_CS);
         pakActive = true;
-        fixturePakEquipment = {{0x5098, &emptyHand}, {0x5450, &pakSword}};
+        fixturePakEquipment = { { 0x5098, &emptyHand }, { 0x5450, &pakSword } };
         Gfx* dl = &emptyHand;
         Fixture_ApplyLateHandOverrides(&arrival, &arrival.player, PLAYER_LIMB_L_HAND, &dl);
         REQUIRE(dl == &pakHandSword);
@@ -1029,7 +1187,8 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
         return;
     }
     failSubCamera = cameraCase == ArrivalCameraCase::NoSlot;
-    if (cameraCase == ArrivalCameraCase::OtherCamera) arrival.activeCamera = 2;
+    if (cameraCase == ArrivalCameraCase::OtherCamera)
+        arrival.activeCamera = 2;
     Player_Action_8084E9AC(&arrival.player, &arrival);
     REQUIRE(arrival.player.actionFunc == Player_Action_8084E9AC && !animationComplete);
     if (failSubCamera || cameraCase == ArrivalCameraCase::OtherCamera) {
@@ -1102,8 +1261,8 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
 }
 
 static void CheckPedestalProximity() {
-    for (bool adult : {false, true}) {
-        for (s16 npcParams : {0x7F23, 0x7E08}) {
+    for (bool adult : { false, true }) {
+        for (s16 npcParams : { 0x7F23, 0x7E08 }) {
             for (int yaw = 0; yaw < 0x10000; yaw += 0x2000) {
                 PlayState play;
                 BgTokiSwd sword;
@@ -1142,16 +1301,22 @@ static void CheckPedestalProximity() {
         BgTokiSwd sword;
         Reset(play, sword);
         BgTokiSwd_Init(&sword.actor, &play);
-        if (blocked == 0) sword.actor.xzDistToPlayer = 110.0f;
-        if (blocked == 1) sword.actor.yDistToPlayer = 50.0f;
-        if (blocked == 2) play.player.stateFlags1 |= PLAYER_STATE1_JUMPING;
-        if (blocked == 3) play.player.stateFlags1 |= PLAYER_STATE1_TALKING;
-        if (blocked == 4) play.player.stateFlags1 |= PLAYER_STATE1_FIRST_PERSON;
+        if (blocked == 0)
+            sword.actor.xzDistToPlayer = 110.0f;
+        if (blocked == 1)
+            sword.actor.yDistToPlayer = 50.0f;
+        if (blocked == 2)
+            play.player.stateFlags1 |= PLAYER_STATE1_JUMPING;
+        if (blocked == 3)
+            play.player.stateFlags1 |= PLAYER_STATE1_TALKING;
+        if (blocked == 4)
+            play.player.stateFlags1 |= PLAYER_STATE1_FIRST_PERSON;
         if (blocked == 5) { // Nearby ground is inside the old 40-unit vertical offer.
             play.player.actor.world.pos.y = play.player.actor.floorHeight = -96.0f;
             sword.actor.yDistToPlayer = -33.0f;
         }
-        if (blocked == 6) play.player.actor.bgCheckFlags = 0;
+        if (blocked == 6)
+            play.player.actor.bgCheckFlags = 0;
         if (blocked == 7) { // Sloping bark below the flat top is not the interaction surface.
             play.player.actor.world.pos.y = play.player.actor.floorHeight = -64.0f;
             sword.actor.yDistToPlayer = -1.0f;
@@ -1160,7 +1325,8 @@ static void CheckPedestalProximity() {
             play.player.actor.world.pos.y = -50.0f;
             sword.actor.yDistToPlayer = 13.0f;
         }
-        if (blocked == 9) play.player.actor.floorBgId = 1;
+        if (blocked == 9)
+            play.player.actor.floorBgId = 1;
         BgTokiSwd_Update(&sword.actor, &play);
         REQUIRE(play.player.interactRangeActor == nullptr);
         REQUIRE(play.player.getItemDirection == 0x6000);
@@ -1173,14 +1339,22 @@ static void CheckPedestalProximity() {
         BgTokiSwd_Init(&sword.actor, &play);
         BgTokiSwd_Update(&sword.actor, &play);
         play.state.input[0].press.button = BTN_A;
-        if (blocked == 0) play.player.stateFlags1 |= PLAYER_STATE1_LOADING;
-        if (blocked == 1) play.player.stateFlags1 |= PLAYER_STATE1_DEAD;
-        if (blocked == 2) play.player.stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
-        if (blocked == 3) play.player.stateFlags1 |= PLAYER_STATE1_START_CHANGING_HELD_ITEM;
-        if (blocked == 4) play.player.upperActionFunc = Player_UpperAction_ChangeHeldItem;
-        if (blocked == 5) sword.actor.params = 0; // Native Temple sword keeps its action list.
-        if (blocked == 6) play.player.getItemId = GI_RUPEE_BLUE;
-        if (blocked == 7) play.player.interactRangeActor = nullptr;
+        if (blocked == 0)
+            play.player.stateFlags1 |= PLAYER_STATE1_LOADING;
+        if (blocked == 1)
+            play.player.stateFlags1 |= PLAYER_STATE1_DEAD;
+        if (blocked == 2)
+            play.player.stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
+        if (blocked == 3)
+            play.player.stateFlags1 |= PLAYER_STATE1_START_CHANGING_HELD_ITEM;
+        if (blocked == 4)
+            play.player.upperActionFunc = Player_UpperAction_ChangeHeldItem;
+        if (blocked == 5)
+            sword.actor.params = 0; // Native Temple sword keeps its action list.
+        if (blocked == 6)
+            play.player.getItemId = GI_RUPEE_BLUE;
+        if (blocked == 7)
+            play.player.interactRangeActor = nullptr;
         REQUIRE(!Fixture_TryTurnInPlace(&play, &play.player));
         REQUIRE(sword.actor.parent == nullptr);
         BgTokiSwd_Destroy(&sword.actor, &play);
@@ -1194,7 +1368,7 @@ static void CheckPedestalSwordSource() {
     Reset(play, sword);
     BgTokiSwd_Init(&sword.actor, &play);
     pakActive = true;
-    fixturePakEquipment = {{0x5450, &pakSword}};
+    fixturePakEquipment = { { 0x5450, &pakSword } };
     BgTokiSwd_Draw(&sword.actor, &play);
     REQUIRE(drawnSword == &pakSword);
     // The selected raw blade extends along +X in the supplied pack. Its tip
@@ -1239,9 +1413,9 @@ int main(int argc, char** argv) {
         puts("PASS child/adult handoffs, late overrides, alternate assets and Pak Master Sword selection");
         return 0;
     }
-    for (bool adult : {false, true}) {
-        for (bool rando : {false, true}) {
-            for (int setting : {-1, 0, 1}) {
+    for (bool adult : { false, true }) {
+        for (bool rando : { false, true }) {
+            for (int setting : { -1, 0, 1 }) {
                 CheckRequestedSkip(adult, rando, setting, false);
                 CheckRequestedSkip(adult, rando, setting, true);
             }
@@ -1254,11 +1428,11 @@ int main(int argc, char** argv) {
     CheckAdultSwordRendering();
     puts("PASS child/adult handoffs, late overrides, alternate assets and Pak Master Sword selection");
     CheckNativeTimeTravelHold();
-    for (bool sourceAdult : {false, true}) {
-        for (bool rando : {false, true}) {
+    for (bool sourceAdult : { false, true }) {
+        for (bool rando : { false, true }) {
             CheckArrival(sourceAdult, rando, false, false, false, true);
-            for (bool skipMain : {false, true}) {
-                for (bool storySkipEnabled : {false, true}) {
+            for (bool skipMain : { false, true }) {
+                for (bool storySkipEnabled : { false, true }) {
                     CheckArrival(sourceAdult, rando, skipMain, false, storySkipEnabled);
                     CheckArrival(sourceAdult, rando, skipMain, true, storySkipEnabled);
                 }
@@ -1266,10 +1440,10 @@ int main(int argc, char** argv) {
         }
     }
     puts("PASS native arrival animations, independent skips, selected sword and one-use local return");
-    for (bool sourceAdult : {false, true}) {
-        for (ArrivalCameraCase cameraCase : {ArrivalCameraCase::NoSlot, ArrivalCameraCase::OtherCamera,
-                                            ArrivalCameraCase::ReusedSlot, ArrivalCameraCase::SceneTeardown,
-                                            ArrivalCameraCase::ImmediateSkip}) {
+    for (bool sourceAdult : { false, true }) {
+        for (ArrivalCameraCase cameraCase :
+             { ArrivalCameraCase::NoSlot, ArrivalCameraCase::OtherCamera, ArrivalCameraCase::ReusedSlot,
+               ArrivalCameraCase::SceneTeardown, ArrivalCameraCase::ImmediateSkip }) {
             CheckArrival(sourceAdult, false, true, true, false, false, cameraCase);
         }
     }

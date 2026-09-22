@@ -16,7 +16,9 @@ namespace Ship {
 Archive::Archive(const std::string& path) : mPath(path) {
 }
 Archive::~Archive() = default;
-const std::string& Archive::GetPath() { return mPath; }
+const std::string& Archive::GetPath() {
+    return mPath;
+}
 bool Archive::HasFile(const std::string& path) {
     return path == "prelude/project/edits.json";
 }
@@ -66,10 +68,11 @@ class MetadataArchive : public Ship::Archive {
     }
 };
 
-static std::shared_ptr<Fast::DisplayList>
-ReadDisplayList(Prelude::NativeMaterialDisplayListFactory& factory, const std::string& path,
-                const std::vector<Prelude::NativeMaterialCommand>& commands,
-                const std::shared_ptr<Ship::Archive>& parent = nullptr, UcodeHandlers ucode = ucode_f3dex2) {
+static std::shared_ptr<Fast::DisplayList> ReadDisplayList(Prelude::NativeMaterialDisplayListFactory& factory,
+                                                          const std::string& path,
+                                                          const std::vector<Prelude::NativeMaterialCommand>& commands,
+                                                          const std::shared_ptr<Ship::Archive>& parent = nullptr,
+                                                          UcodeHandlers ucode = ucode_f3dex2) {
     auto init = std::make_shared<Ship::ResourceInitData>();
     init->Path = path;
     init->Parent = parent;
@@ -125,8 +128,8 @@ static void CheckAlternateOwnership() {
     const std::string path = "custom/prelude/test/sage_platform";
     const std::string altPath = "alt/" + path;
     const std::vector<Prelude::NativeMaterialCommand> material = {
-        { 0xf5101000, 0x00017c5e }, { 0xf2000000, 0x0007c07c },
-        { 0xf5101000, 0x0101785f }, { 0xf2000000, 0x0107c07c }, { 0xdf000000, 0 },
+        { 0xf5101000, 0x00017c5e }, { 0xf2000000, 0x0007c07c }, { 0xf5101000, 0x0101785f },
+        { 0xf2000000, 0x0107c07c }, { 0xdf000000, 0 },
     };
     const auto profile = Prelude::NativeMaterialProfile::ChamberOfSagesPlatform;
     auto bound = std::make_shared<MetadataArchive>();
@@ -172,13 +175,15 @@ static void ProbeArchive(const char* fixturePath) {
             commands.push_back({ pair[0].get<uintptr_t>(), pair[1].get<uintptr_t>() });
         }
         const auto profile = static_cast<Prelude::NativeMaterialProfile>(item["profile"].get<int>());
-        const auto insertion = item["insertion"].is_null() ? std::nullopt
-                                                         : std::optional<size_t>(item["insertion"].get<size_t>());
-        auto result = ReadDisplayList(factory, path, commands, nullptr,
-                                       static_cast<UcodeHandlers>(item["ucode"].get<int>()));
+        const auto insertion =
+            item["insertion"].is_null() ? std::nullopt : std::optional<size_t>(item["insertion"].get<size_t>());
+        auto result =
+            ReadDisplayList(factory, path, commands, nullptr, static_cast<UcodeHandlers>(item["ucode"].get<int>()));
         CheckBinding(result, commands, profile, insertion);
-        output.push_back({ { "path", path }, { "profile", static_cast<int>(profile) },
-                           { "insertion", item["insertion"] }, { "instruction_count", result->Instructions.size() },
+        output.push_back({ { "path", path },
+                           { "profile", static_cast<int>(profile) },
+                           { "insertion", item["insertion"] },
+                           { "instruction_count", result->Instructions.size() },
                            { "adapter_verified", true } });
     }
     REQUIRE(owner->metadataReads <= 1);
@@ -191,8 +196,8 @@ static void ProbeArchive(const char* fixturePath) {
 static void CheckMetadataReadReuse() {
     const std::string path = "custom/prelude/test/sage_platform";
     const std::vector<Prelude::NativeMaterialCommand> material = {
-        { 0xf5101000, 0x00017c5e }, { 0xf2000000, 0x0007c07c },
-        { 0xf5101000, 0x0101785f }, { 0xf2000000, 0x0107c07c }, { 0xdf000000, 0 },
+        { 0xf5101000, 0x00017c5e }, { 0xf2000000, 0x0007c07c }, { 0xf5101000, 0x0101785f },
+        { 0xf2000000, 0x0107c07c }, { 0xdf000000, 0 },
     };
     auto owner = std::make_shared<MetadataArchive>();
     owner->project = nlohmann::json::parse(
@@ -265,8 +270,8 @@ static void CheckRepeatedMetadataReads() {
     Prelude::NativeMaterialDisplayListFactory factory(std::make_shared<Ship::ArchiveManager>());
     Prelude::LoadProbe::BeginFrame(0x5b, 9, 0, 1, true, true);
     for (size_t i = 0; i < 32; ++i) {
-        REQUIRE(ReadDisplayList(factory, "alt/custom/prelude/test/unbound" + std::to_string(i),
-                                { { 0xdf000000, 0 } }, owner) != nullptr);
+        REQUIRE(ReadDisplayList(factory, "alt/custom/prelude/test/unbound" + std::to_string(i), { { 0xdf000000, 0 } },
+                                owner) != nullptr);
     }
     std::cerr << "Unbound imports: 32; metadata reads: " << owner->metadataReads << '\n';
     REQUIRE(owner->metadataReads == 1);
@@ -297,10 +302,8 @@ static void CheckRepeatedMetadataReads() {
     workerOwner->project = { { "edits", nlohmann::json::object() } };
     Prelude::LoadProbe::BeginFrame(0x5b, 9, 0, 3, true, true);
     std::thread worker([&] {
-        REQUIRE(ReadDisplayList(factory, "custom/prelude/test/worker0", { { 0xdf000000, 0 } }, workerOwner) !=
-                nullptr);
-        REQUIRE(ReadDisplayList(factory, "custom/prelude/test/worker1", { { 0xdf000000, 0 } }, workerOwner) !=
-                nullptr);
+        REQUIRE(ReadDisplayList(factory, "custom/prelude/test/worker0", { { 0xdf000000, 0 } }, workerOwner) != nullptr);
+        REQUIRE(ReadDisplayList(factory, "custom/prelude/test/worker1", { { 0xdf000000, 0 } }, workerOwner) != nullptr);
     });
     worker.join();
     report = Prelude::LoadProbe::EndFrame();

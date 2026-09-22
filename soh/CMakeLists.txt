@@ -24,6 +24,16 @@ if(BUILD_TESTING)
     target_include_directories(pak_selection_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     add_test(NAME pak_selection_test COMMAND pak_selection_test)
 
+    add_executable(spin_effect_texture_test
+        tests/spin_effect_texture_test.cpp
+        soh/resource/importer/SpinEffectTextureFactory.cpp
+    )
+    target_link_libraries(spin_effect_texture_test PRIVATE libultraship)
+    # Match the library's static MSVC CRT, including its Debug configuration.
+    set_property(TARGET spin_effect_texture_test PROPERTY MSVC_RUNTIME_LIBRARY
+        "$<TARGET_GENEX_EVAL:libultraship,$<TARGET_PROPERTY:libultraship,MSVC_RUNTIME_LIBRARY>>")
+    add_test(NAME spin_effect_texture_test COMMAND spin_effect_texture_test)
+
     add_executable(static_story_actor_test
         tests/static_story_actor_test.c
         src/overlays/actors/ovl_En_Viewer/static_story_actor.c

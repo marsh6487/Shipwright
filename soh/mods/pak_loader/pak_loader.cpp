@@ -3507,57 +3507,58 @@ extern "C" Gfx* PakLoader_GetEquipDL(Player* player, s32 limbIndex) {
             // a render choice only; no owned/equipped item changes are needed.
             result = FindEquip(eq, 0x5450); // LFIST_SWORD2
             sPakLeftHandCombined = result != NULL && result != PAK_DL_STUB;
-        } else switch (player->leftHandType) {
-            case PLAYER_MODELTYPE_LH_OPEN:
-                result = FindEquip(eq, 0x5098);
-                break;
-            case PLAYER_MODELTYPE_LH_CLOSED:
-                result = FindEquip(eq, 0x50A0);
-                break;
-            case PLAYER_MODELTYPE_LH_SWORD:
-            case PLAYER_MODELTYPE_LH_SWORD_2: {
-                // Vanilla OOT collapses Kokiri Sword and Master Sword into a single
-                // modeltype (LH_SWORD_2 is unused dead code per z64player.h:331) and
-                // resolves the actual blade via gSaveContext.linkAge inside
-                // sPlayerLeftHandSwordDLs[]. Adult+sword → Master; child+sword →
-                // Kokiri. Returning 0x5448 unconditionally repainted Adult's Master
-                // Sword with the pak's Kokiri combo any time the cache held
-                // 0x50D8/0x50F0 (Kokiri pieces). Dispatch by the actually-equipped
-                // sword item instead.
-                u8 item = gSaveContext.equips.buttonItems[0];
-                u32 alias;
-                if (item == ITEM_SWORD_MASTER)
-                    alias = 0x5450; // LFIST_SWORD2
-                else if (item == ITEM_SWORD_BGS)
-                    alias = 0x5458; // LFIST_SWORD3
-                else
-                    alias = 0x5448; // LFIST_SWORD1 (Kokiri/default)
-                result = FindEquip(eq, alias);
-                if (result)
-                    sPakLeftHandCombined = 1;
-                break;
+        } else
+            switch (player->leftHandType) {
+                case PLAYER_MODELTYPE_LH_OPEN:
+                    result = FindEquip(eq, 0x5098);
+                    break;
+                case PLAYER_MODELTYPE_LH_CLOSED:
+                    result = FindEquip(eq, 0x50A0);
+                    break;
+                case PLAYER_MODELTYPE_LH_SWORD:
+                case PLAYER_MODELTYPE_LH_SWORD_2: {
+                    // Vanilla OOT collapses Kokiri Sword and Master Sword into a single
+                    // modeltype (LH_SWORD_2 is unused dead code per z64player.h:331) and
+                    // resolves the actual blade via gSaveContext.linkAge inside
+                    // sPlayerLeftHandSwordDLs[]. Adult+sword → Master; child+sword →
+                    // Kokiri. Returning 0x5448 unconditionally repainted Adult's Master
+                    // Sword with the pak's Kokiri combo any time the cache held
+                    // 0x50D8/0x50F0 (Kokiri pieces). Dispatch by the actually-equipped
+                    // sword item instead.
+                    u8 item = gSaveContext.equips.buttonItems[0];
+                    u32 alias;
+                    if (item == ITEM_SWORD_MASTER)
+                        alias = 0x5450; // LFIST_SWORD2
+                    else if (item == ITEM_SWORD_BGS)
+                        alias = 0x5458; // LFIST_SWORD3
+                    else
+                        alias = 0x5448; // LFIST_SWORD1 (Kokiri/default)
+                    result = FindEquip(eq, alias);
+                    if (result)
+                        sPakLeftHandCombined = 1;
+                    break;
+                }
+                case PLAYER_MODELTYPE_LH_BGS:
+                    // Reached only when PLAYER_MODELGROUP_BGS is active. No Kokiri
+                    // fallback — vanilla shows if pak doesn't ship a Biggoron blade.
+                    result = FindEquip(eq, 0x5458);
+                    if (result)
+                        sPakLeftHandCombined = 1;
+                    break;
+                case PLAYER_MODELTYPE_LH_HAMMER:
+                    result = FindEquip(eq, 0x5460);
+                    if (result)
+                        sPakLeftHandCombined = 1;
+                    break;
+                case PLAYER_MODELTYPE_LH_BOOMERANG:
+                    result = FindEquip(eq, 0x5500);
+                    if (result)
+                        sPakLeftHandCombined = 1;
+                    break;
+                case PLAYER_MODELTYPE_LH_BOTTLE:
+                    result = FindEquip(eq, 0x50A8, 0x5098);
+                    break;
             }
-            case PLAYER_MODELTYPE_LH_BGS:
-                // Reached only when PLAYER_MODELGROUP_BGS is active. No Kokiri
-                // fallback — vanilla shows if pak doesn't ship a Biggoron blade.
-                result = FindEquip(eq, 0x5458);
-                if (result)
-                    sPakLeftHandCombined = 1;
-                break;
-            case PLAYER_MODELTYPE_LH_HAMMER:
-                result = FindEquip(eq, 0x5460);
-                if (result)
-                    sPakLeftHandCombined = 1;
-                break;
-            case PLAYER_MODELTYPE_LH_BOOMERANG:
-                result = FindEquip(eq, 0x5500);
-                if (result)
-                    sPakLeftHandCombined = 1;
-                break;
-            case PLAYER_MODELTYPE_LH_BOTTLE:
-                result = FindEquip(eq, 0x50A8, 0x5098);
-                break;
-        }
     } else if (limbIndex == PLAYER_LIMB_R_HAND) {
         sPakRightHandCombined = 0;
         switch (player->rightHandType) {

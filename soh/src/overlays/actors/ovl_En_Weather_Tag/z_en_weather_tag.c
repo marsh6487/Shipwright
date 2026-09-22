@@ -68,11 +68,10 @@ void EnWeatherTag_Init(Actor* thisx, PlayState* play) {
         (this->actor.params & 0xF) == EN_WEATHER_TAG_TYPE_THUNDERSTORM_GRAVEYARD) {
         Actor* other;
         for (other = play->actorCtx.actorLists[ACTORCAT_PROP].head; other != NULL; other = other->next) {
-            if (other != thisx && other->id == ACTOR_EN_WEATHER_TAG && other->init == NULL &&
-                other->update != NULL && other->room == -1 && other->params == thisx->params &&
-                ((EnWeatherTag*)other)->sourceRoom == this->sourceRoom &&
-                other->home.pos.x == thisx->home.pos.x && other->home.pos.y == thisx->home.pos.y &&
-                other->home.pos.z == thisx->home.pos.z) {
+            if (other != thisx && other->id == ACTOR_EN_WEATHER_TAG && other->init == NULL && other->update != NULL &&
+                other->room == -1 && other->params == thisx->params &&
+                ((EnWeatherTag*)other)->sourceRoom == this->sourceRoom && other->home.pos.x == thisx->home.pos.x &&
+                other->home.pos.y == thisx->home.pos.y && other->home.pos.z == thisx->home.pos.z) {
                 Actor_Kill(thisx);
                 return;
             }

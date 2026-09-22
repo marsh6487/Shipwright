@@ -840,8 +840,7 @@ void EnViewerStatic_Update(EnViewer* this, PlayState* play) {
             this->skin.skelAnime.jointTable[0].z = 0;
         }
     }
-    if (this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL ||
-        this->staticState.type == STATIC_STORY_ACTOR_FADO) {
+    if (this->staticState.type == STATIC_STORY_ACTOR_KOKIRI_GIRL || this->staticState.type == STATIC_STORY_ACTOR_FADO) {
         StaticStoryKokiri_UpdatePose(this, R_UPDATE_RATE * (1.0f / 3.0f));
     }
     if (this->staticState.type == STATIC_STORY_ACTOR_ADULT_RUTO_WATER) {
@@ -1052,8 +1051,8 @@ void EnViewerStatic_OfferTalk(EnViewer* this, PlayState* play) {
     progression = EnViewerStatic_ReadProgression();
     player = GET_PLAYER(play);
     interaction = player != NULL ? player->interactRangeActor : NULL;
-    timePedestalOffered = interaction != NULL && interaction->id == ACTOR_BG_TOKI_SWD &&
-                          interaction->params == BG_TOKI_SWD_TIME_PEDESTAL;
+    timePedestalOffered =
+        interaction != NULL && interaction->id == ACTOR_BG_TOKI_SWD && interaction->params == BG_TOKI_SWD_TIME_PEDESTAL;
     session = (StaticStoryTalkSession){
         .talking = this->staticState.talking,
         .tracking = this->staticState.tracking,

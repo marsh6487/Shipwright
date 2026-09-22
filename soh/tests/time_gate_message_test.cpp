@@ -6,8 +6,12 @@
 #include "tests/test_require.h"
 
 using u16 = uint16_t;
-struct Player { GetItemEntry getItemEntry; };
-struct PlayState { Player* player; };
+struct Player {
+    GetItemEntry getItemEntry;
+};
+struct PlayState {
+    Player* player;
+};
 PlayState* gPlayState;
 static bool fixtureRandomizer;
 #define IS_RANDO fixtureRandomizer
@@ -16,12 +20,25 @@ static bool fixtureRandomizer;
 static int loadedMessages;
 static void (*registeredMessage)(u16*, bool*);
 // The fixture supplies the message renderer; production selects whether to use it.
-struct CustomMessage { void LoadIntoFont() { ++loadedMessages; } };
-void BuildCustomItemMessage(Player*, CustomMessage&) {}
-void BuildTriforcePieceMessage(CustomMessage&) {}
-void BuildTriforceMessage(CustomMessage&) {}
-namespace Rando::Traps { void BuildIceTrapMessage(CustomMessage&, GetItemEntry) {} }
-#define COND_ID_HOOK(hook, id, condition, body) do { registeredMessage = (condition) ? body : nullptr; } while (0)
+struct CustomMessage {
+    void LoadIntoFont() {
+        ++loadedMessages;
+    }
+};
+void BuildCustomItemMessage(Player*, CustomMessage&) {
+}
+void BuildTriforcePieceMessage(CustomMessage&) {
+}
+void BuildTriforceMessage(CustomMessage&) {
+}
+namespace Rando::Traps {
+void BuildIceTrapMessage(CustomMessage&, GetItemEntry) {
+}
+} // namespace Rando::Traps
+#define COND_ID_HOOK(hook, id, condition, body)           \
+    do {                                                  \
+        registeredMessage = (condition) ? body : nullptr; \
+    } while (0)
 #include "time_gate_message_production.inc"
 
 int main() {

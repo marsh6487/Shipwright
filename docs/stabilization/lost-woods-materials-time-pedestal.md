@@ -202,3 +202,12 @@ The real-header C23 check also exposed a missing declaration for
 now has the matching public declaration. Focused tests and syntax checks are
 implementation evidence; actual prompt stability, the downward resting model,
 Saria clearance and camera framing still require the user's runtime check.
+
+## September 22 user feedback
+
+The user still has to reposition repeatedly to obtain the pedestal's A-button
+prompt and reports that its geometry/collision makes the interaction awkward.
+The interaction remains unresolved despite the existing automated checks. Carry
+the current pedestal work forward with the cumulative integration and retain
+this limitation; the publication recovery does not change the interaction or
+claim runtime acceptance of the stump-clearance candidate.

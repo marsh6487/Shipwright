@@ -31,6 +31,7 @@ def main():
     player = functions((ROOT / "soh/src/overlays/actors/ovl_player_actor/z_player.c").read_text())
     parameter_source = (ROOT / "soh/src/code/z_parameter.c").read_text()
     inventory_source = (ROOT / "soh/src/code/z_inventory.c").read_text()
+    kaleido_source = (ROOT / "soh/src/overlays/misc/ovl_kaleido_scope/z_kaleido_scope_PAL.c").read_text()
     messages = functions((ROOT / "soh/soh/Enhancements/randomizer/Messages/ItemMessages.cpp").read_text())
     with tempfile.TemporaryDirectory(prefix="time-gate-chest-") as folder:
         build = pathlib.Path(folder)
@@ -42,6 +43,9 @@ def main():
         preamble += "\n" + re.search(r"static s16 sExtraItemBases\[\] = \{.*?\};", parameter_source, re.S)[0]
         for name in ("gItemSlots", "gBitFlags", "gEquipMasks", "gEquipShifts", "gUpgradeMasks", "gUpgradeShifts"):
             preamble += "\n" + re.search(r"u\d+ " + name + r"\[\] = \{.*?\};", inventory_source, re.S)[0]
+        # The real receipt branch checks equipment age requirements through the
+        # production Kaleido macro; keep its vanilla item table intact too.
+        preamble += "\n" + re.search(r"u8 gItemAgeReqs\[ITEM_NONE\] = \{.*?\};", kaleido_source, re.S)[0]
         selected = [body for name, body in chest.items() if name in {
             "EnBox_IsTimeGateChest", "EnBox_SetupAction", "EnBox_Init", "EnBox_WaitOpen",
             "EnBox_AppearOnSwitchFlag", "EnBox_AppearInit", "EnBox_AppearAnimation"}]
@@ -64,7 +68,8 @@ def main():
             message_body + "\nvoid Fixture_RegisterItemMessage() {\n" + registration + "\n}\n")
         includes = ["-Isoh/include", "-Isoh/src", "-Isoh/assets", "-Isoh", "-Ilibultraship/include", "-I" + str(build)]
         common = ["-O1", "-g", "-ffunction-sections", "-fdata-sections", "-DLOG_LEVEL_GAME_PRINTS=0",
-                  '-DCVAR_PREFIX_ENHANCEMENT="gEnhancements"', *includes, "-Wl,--gc-sections"]
+                  '-DCVAR_PREFIX_ENHANCEMENT="gEnhancements"', '-DCVAR_PREFIX_CHEAT="gCheats"',
+                  *includes, "-Wl,--gc-sections"]
         failures = 0
         for compiler, standard, source in (("cc", "gnu11", "time_gate_chest_test.c"),
                                            ("c++", "c++20", "time_gate_message_test.cpp")):

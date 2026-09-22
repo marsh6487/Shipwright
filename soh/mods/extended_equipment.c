@@ -510,8 +510,8 @@ void ExtEquip_ValidateForAgeWithoutProgression(u8 targetAge) {
         if (current == 0) {
             continue;
         }
-        if (!ExtEquip_HasItem(type, current) ||
-            (!CVarGetInteger("gCheats.TimelessEquipment", 0) && requirement != AGE_REQ_NONE && requirement != targetAge)) {
+        if (!ExtEquip_HasItem(type, current) || (!CVarGetInteger("gCheats.TimelessEquipment", 0) &&
+                                                 requirement != AGE_REQ_NONE && requirement != targetAge)) {
             ExtEquip_CleanupSlot(type, current);
             ExtEquip_SetCurrentByType(type, 0);
             // Scene teardown needs no icon/player refresh. The usual SetSlot

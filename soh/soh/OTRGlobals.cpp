@@ -112,6 +112,7 @@
 #include "soh/Enhancements/Graphics/PreludeNativeMaterialScroll.h"
 #include <fast/resource/factory/MatrixFactory.h>
 #include <fast/resource/factory/TextureFactory.h>
+#include "soh/resource/importer/SpinEffectTextureFactory.h"
 #include <fast/resource/factory/VertexFactory.h>
 #include "soh/resource/importer/ArrayFactory.h"
 #include "soh/resource/importer/AnimationFactory.h"
@@ -989,9 +990,9 @@ void OTRGlobals::Initialize() {
                 (char*)gGitBranch, (char*)gGitCommitHash);
 
     auto loader = context->GetResourceManager()->GetResourceLoader();
-    loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryTextureV0>(), RESOURCE_FORMAT_BINARY,
+    loader->RegisterResourceFactory(std::make_shared<SOH::SpinEffectTextureFactoryV0>(), RESOURCE_FORMAT_BINARY,
                                     "Texture", static_cast<uint32_t>(Fast::ResourceType::Texture), 0);
-    loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryTextureV1>(), RESOURCE_FORMAT_BINARY,
+    loader->RegisterResourceFactory(std::make_shared<SOH::SpinEffectTextureFactoryV1>(), RESOURCE_FORMAT_BINARY,
                                     "Texture", static_cast<uint32_t>(Fast::ResourceType::Texture), 1);
     loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryVertexV0>(), RESOURCE_FORMAT_BINARY,
                                     "Vertex", static_cast<uint32_t>(Fast::ResourceType::Vertex), 0);
@@ -2017,9 +2018,9 @@ static void CrossoverHotkey_Tick() {
 
 extern "C" void PreludeLoadProbe_BeginStateReload() {
     Prelude::LoadProbe::BeginStateReload(gPlayState ? gPlayState->sceneNum : -1,
-                                        gPlayState ? gPlayState->roomCtx.curRoom.num : -1,
-                                        CVarGetInteger(CVAR_SETTING("AltAssets"), 1) != 0,
-                                        CVarGetInteger(CVAR_DEVELOPER_TOOLS("PreludeLoadProbe"), 1) != 0);
+                                         gPlayState ? gPlayState->roomCtx.curRoom.num : -1,
+                                         CVarGetInteger(CVAR_SETTING("AltAssets"), 1) != 0,
+                                         CVarGetInteger(CVAR_DEVELOPER_TOOLS("PreludeLoadProbe"), 1) != 0);
 }
 
 static nlohmann::json PreludeLoadProbe_ActorSnapshot(PlayState* play, bool& truncated) {
@@ -2045,8 +2046,8 @@ static nlohmann::json PreludeLoadProbe_ActorSnapshot(PlayState* play, bool& trun
     }
     auto actors = nlohmann::json::array();
     for (const auto& [identity, count] : groups) {
-        actors.push_back({ { "actor_id", identity[0] }, { "params", identity[1] }, { "room", identity[2] },
-                           { "count", count } });
+        actors.push_back(
+            { { "actor_id", identity[0] }, { "params", identity[1] }, { "room", identity[2] }, { "count", count } });
     }
     return actors;
 }
@@ -2063,12 +2064,11 @@ extern "C" void PreludeLoadProbe_EndStateReload() {
 }
 
 extern "C" void Graph_StartFrame() {
-    Prelude::LoadProbe::BeginFrame(gPlayState ? gPlayState->sceneNum : -1,
-                                  gPlayState ? gPlayState->roomCtx.curRoom.num : -1,
-                                  gPlayState ? gPlayState->roomCtx.prevRoom.num : -1,
-                                  gPlayState ? gPlayState->gameplayFrames : 0,
-                                  CVarGetInteger(CVAR_SETTING("AltAssets"), 1) != 0,
-                                  CVarGetInteger(CVAR_DEVELOPER_TOOLS("PreludeLoadProbe"), 1) != 0);
+    Prelude::LoadProbe::BeginFrame(
+        gPlayState ? gPlayState->sceneNum : -1, gPlayState ? gPlayState->roomCtx.curRoom.num : -1,
+        gPlayState ? gPlayState->roomCtx.prevRoom.num : -1, gPlayState ? gPlayState->gameplayFrames : 0,
+        CVarGetInteger(CVAR_SETTING("AltAssets"), 1) != 0,
+        CVarGetInteger(CVAR_DEVELOPER_TOOLS("PreludeLoadProbe"), 1) != 0);
 #ifndef __WIIU__
     using Ship::KbScancode;
 
@@ -2233,7 +2233,7 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
 // C->C++ Bridge
 extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
     Prelude::LoadProbe::BeginRender(gPlayState ? gPlayState->roomCtx.curRoom.num : -1,
-                                   gPlayState ? gPlayState->roomCtx.prevRoom.num : -1);
+                                    gPlayState ? gPlayState->roomCtx.prevRoom.num : -1);
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
         audio.processing = true;

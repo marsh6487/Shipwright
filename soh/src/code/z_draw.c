@@ -810,7 +810,8 @@ void GetItem_DrawOpa0(PlayState* play, s16 drawId) {
 
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
-    POLY_OPA_DISP = GetItem_DrawDListWithCosmetics(POLY_OPA_DISP, (const char*)sDrawItemTable[drawId].dlists[0], drawId);
+    POLY_OPA_DISP =
+        GetItem_DrawDListWithCosmetics(POLY_OPA_DISP, (const char*)sDrawItemTable[drawId].dlists[0], drawId);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -864,7 +865,8 @@ void GetItem_DrawXlu01(PlayState* play, s16 drawId) {
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
     gSPDisplayList(POLY_XLU_DISP++, sDrawItemTable[drawId].dlists[0]);
-    POLY_XLU_DISP = GetItem_DrawDListWithCosmetics(POLY_XLU_DISP, (const char*)sDrawItemTable[drawId].dlists[1], drawId);
+    POLY_XLU_DISP =
+        GetItem_DrawDListWithCosmetics(POLY_XLU_DISP, (const char*)sDrawItemTable[drawId].dlists[1], drawId);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

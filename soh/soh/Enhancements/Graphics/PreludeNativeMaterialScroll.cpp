@@ -157,9 +157,8 @@ NativeMaterialDisplayListFactory::ReadResource(std::shared_ptr<Ship::File> file,
     }
     // Alternate resources share the export's canonical recipe key. Keep their
     // physical path intact for the owning-archive lookup below.
-    const std::string recipePath = initData->Path.starts_with("alt/custom/prelude/")
-                                       ? initData->Path.substr(4)
-                                       : initData->Path;
+    const std::string recipePath =
+        initData->Path.starts_with("alt/custom/prelude/") ? initData->Path.substr(4) : initData->Path;
     if (!recipePath.starts_with("custom/prelude/")) {
         return resource;
     }

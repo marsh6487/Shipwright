@@ -82,9 +82,9 @@ static bool EnBox_IsTimeGateChest(EnBox* this, PlayState* play) {
     // Authored adult Zelda/Lullaby chest in Hyrule Field (R3/R4). Keep its
     // switch 32, treasure flag 5 and original heart-container params intact.
     Actor* actor = &this->dyna.actor;
-    return LINK_IS_ADULT && play->sceneNum == SCENE_HYRULE_FIELD && actor->room == 0 &&
-           (u16)actor->params == 0xB7A5 && this->switchFlag == 32 && actor->home.pos.x == -1582.0f &&
-           actor->home.pos.y == 220.0f && actor->home.pos.z == 1961.0f;
+    return LINK_IS_ADULT && play->sceneNum == SCENE_HYRULE_FIELD && actor->room == 0 && (u16)actor->params == 0xB7A5 &&
+           this->switchFlag == 32 && actor->home.pos.x == -1582.0f && actor->home.pos.y == 220.0f &&
+           actor->home.pos.z == 1961.0f;
 }
 
 static Gfx* EnBox_LoadChestDL(const char* dlName, const char* fallbackName) {
