@@ -21,30 +21,7 @@ static int cameraCreates, cameraCopies, cameraClears, letterboxSize;
 static bool failSubCamera;
 static float restingSwordRotation;
 static LinkAnimationHeader idleAnimation, childArrivalAnimation, adultArrivalAnimation;
-
-static Vec3f RotateZYX(Vec3s rot, Vec3f vector) {
-    const float sx = sinf(rot.x * (3.14159265358979323846f / 32768.0f));
-    const float cx = cosf(rot.x * (3.14159265358979323846f / 32768.0f));
-    const float sy = sinf(rot.y * (3.14159265358979323846f / 32768.0f));
-    const float cy = cosf(rot.y * (3.14159265358979323846f / 32768.0f));
-    const float sz = sinf(rot.z * (3.14159265358979323846f / 32768.0f));
-    const float cz = cosf(rot.z * (3.14159265358979323846f / 32768.0f));
-    const Vec3f afterX = { vector.x, cx * vector.y - sx * vector.z, sx * vector.y + cx * vector.z };
-    const Vec3f afterY = { cy * afterX.x + sy * afterX.z, afterX.y, -sy * afterX.x + cy * afterX.z };
-    return { cz * afterY.x - sz * afterY.y, sz * afterY.x + cz * afterY.y, afterY.z };
-}
-
-static void RequireOppositeBladeDirection(Vec3s beforeRot, Vec3s afterRot) {
-    // All compatible hand/sword DLs use the held-equipment convention: the
-    // blade runs from the hand toward local -X. Verify the complete ZYX result,
-    // rather than checking one chosen Euler component.
-    const Vec3f bladeAxis = { -1.0f, 0.0f, 0.0f };
-    const Vec3f before = RotateZYX(beforeRot, bladeAxis);
-    const Vec3f after = RotateZYX(afterRot, bladeAxis);
-    REQUIRE(fabsf(before.x + after.x) < 0.0001f);
-    REQUIRE(fabsf(before.y + after.y) < 0.0001f);
-    REQUIRE(fabsf(before.z + after.z) < 0.0001f);
-}
+static std::vector<Collider*> registeredColliders;
 
 extern "C" {
 SaveContext gSaveContext;
@@ -270,17 +247,8 @@ static u16 playingBgm;
 static bool shuffleMasterSword;
 void Actor_ProcessInitChain(Actor*, void*) {
 }
-void Collider_InitCylinder(PlayState*, ColliderCylinder*) {
-}
-void Collider_SetCylinder(PlayState*, ColliderCylinder*, Actor*, void*) {
-}
-void Collider_UpdateCylinder(Actor*, ColliderCylinder*) {
-}
-void CollisionCheck_SetInfo(void*, void*, void*) {
-}
-void Collider_DestroyCylinder(PlayState*, ColliderCylinder*) {
-}
-void CollisionCheck_SetOC(PlayState*, void*, void*) {
+void CollisionCheck_SetOC(PlayState*, CollisionCheckContext*, Collider* collider) {
+    registeredColliders.push_back(collider);
 }
 void Inventory_ChangeEquipment(s16 type, u16 value) {
     gSaveContext.equips.equipment = (gSaveContext.equips.equipment & gEquipNegMasks[type]) | (value << (type * 4));
@@ -451,6 +419,7 @@ static void Reset(PlayState& play, BgTokiSwd& sword, bool adult = false, bool ra
     cameraCreates = cameraCopies = cameraClears = letterboxSize = 0;
     failSubCamera = false;
     fixturePakEquipment.clear();
+    registeredColliders.clear();
     gPlayState = &play;
     play.state.running = true;
     fixtureRando = rando;
@@ -946,7 +915,8 @@ static void CheckChildSwordRendering() {
     swordRot = originalSwordRot;
     Fixture_ApplyLateHandOverridesWithRot(&play, &play.player, PLAYER_LIMB_L_HAND, &dl, &swordRot);
     REQUIRE(dl == &customHandSword);
-    RequireOppositeBladeDirection(originalSwordRot, swordRot);
+    REQUIRE(swordRot.x == originalSwordRot.x && swordRot.y == originalSwordRot.y &&
+            swordRot.z == originalSwordRot.z); // Sword registration must leave the animated fist unchanged.
     altAssetsSetting = false;
     Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
     REQUIRE(dl == &nativeSword);
@@ -967,7 +937,7 @@ static void CheckChildSwordRendering() {
     swordRot = originalSwordRot;
     Fixture_ApplyLateHandOverridesWithRot(&play, &play.player, PLAYER_LIMB_L_HAND, &dl, &swordRot);
     REQUIRE(dl == &pakHandSword);
-    RequireOppositeBladeDirection(originalSwordRot, swordRot);
+    REQUIRE(swordRot.x == originalSwordRot.x && swordRot.y == originalSwordRot.y && swordRot.z == originalSwordRot.z);
     gSaveContext.equips.buttonItems[0] = before.equips.buttonItems[0];
     customMasterAsset = false;
     altActive = true;
@@ -1362,6 +1332,53 @@ static void CheckPedestalProximity() {
     puts("PASS stump-top offers, A while turning, talk priority, ground/slope/airborne and action guards");
 }
 
+static void CheckPedestalCollisionClearance() {
+    // Hand-checked points on the authored Y=-56 cap: center, inward approaches,
+    // and its west/east rims. Its radius is only 28-35 units around the sword.
+    // The inherited 10-unit cylinder plus Link's 12-unit cylinder used to force
+    // him out of the central 22 units and onto that narrow rim.
+    const Vec3f topPoints[] = { { -736, -56, -2395 }, { -728, -56, -2395 }, { -752, -56, -2395 }, { -736, -56, -2379 },
+                                { -736, -56, -2411 }, { -762, -56, -2395 }, { -708, -56, -2386 } };
+    for (bool adult : { false, true }) {
+        for (s16 params : { (s16)-1, (s16)0, (s16)0x4C56, (s16)0x4C58, (s16)BG_TOKI_SWD_TIME_PEDESTAL }) {
+            for (const auto& point : topPoints) {
+                PlayState play;
+                BgTokiSwd sword;
+                Reset(play, sword, adult, false, params);
+                play.player.actor.world.pos = point;
+                const float dx = point.x - sword.actor.world.pos.x;
+                const float dz = point.z - sword.actor.world.pos.z;
+                sword.actor.xzDistToPlayer = sqrtf(dx * dx + dz * dz);
+                BgTokiSwd_Init(&sword.actor, &play);
+                BgTokiSwd_Update(&sword.actor, &play);
+
+                ColliderCylinder playerCollider{};
+                Fixture_InitPlayerCollision(&play, &playerCollider);
+                play.player.actor.colChkInfo.mass = 50;
+                Collider_UpdateCylinder(&play.player.actor, &playerCollider);
+                for (Collider* collider : registeredColliders) {
+                    if (!CollisionCheck_Incompatible(collider, &playerCollider.base)) {
+                        CollisionCheck_OC_CylVsCyl(&play, &play.colChkCtx, collider, &playerCollider.base);
+                    }
+                }
+
+                const Vec3f shove = play.player.actor.colChkInfo.displacement;
+                const float shoveDistance = sqrtf(shove.x * shove.x + shove.z * shove.z);
+                if (params == BG_TOKI_SWD_TIME_PEDESTAL) {
+                    REQUIRE(shoveDistance == 0.0f); // The custom sword cannot block stable footing.
+                    REQUIRE(play.player.interactRangeActor == &sword.actor);
+                } else {
+                    // Native/other parameters retain their actual body collision.
+                    const float expectedShove = fmaxf(22.0f - sword.actor.xzDistToPlayer, 0.0f);
+                    REQUIRE(fabsf(shoveDistance - expectedShove) < 0.001f);
+                }
+                BgTokiSwd_Destroy(&sword.actor, &play);
+            }
+        }
+    }
+    puts("PASS custom stump center/approaches stay clear, both ages, stock pedestal retains native OC shove");
+}
+
 static void CheckPedestalSwordSource() {
     PlayState play;
     BgTokiSwd sword;
@@ -1401,6 +1418,7 @@ int main(int argc, char** argv) {
     }
     if (argc > 1 && strcmp(argv[1], "proximity") == 0) {
         CheckPedestalProximity();
+        CheckPedestalCollisionClearance();
         return 0;
     }
     if (argc > 1 && strcmp(argv[1], "arrival") == 0) {
@@ -1423,6 +1441,7 @@ int main(int argc, char** argv) {
     }
     puts("PASS both ages honor story skip and B, preserving room, position, equipment and progression");
     CheckPedestalProximity();
+    CheckPedestalCollisionClearance();
     CheckPedestalSwordSource();
     CheckChildSwordRendering();
     CheckAdultSwordRendering();

@@ -12,10 +12,10 @@ jobs:
         with:
           fetch-depth: 2
           submodules: true
-      - name: Install clang-format
+      - name: Install formatting and regression dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-format-14
+          sudo apt-get install -y clang-format-14 nlohmann-json3-dev
       - name: Run clang-format
         run: |
           ./run-clang-format.sh
@@ -24,3 +24,8 @@ jobs:
         run: |
           python3 -B scripts/diagnostics/run_oot_custom_cosmetics_tests.py
           python3 -B scripts/diagnostics/run_zora_barrier_cosmetics_tests.py
+      - name: Custom pedestal interaction and sword regressions
+        run: |
+          python3 -B scripts/diagnostics/run_time_pedestal_tests.py
+          python3 -B scripts/diagnostics/run_pedestal_sword_selection_tests.py
+          python3 -B scripts/diagnostics/check_time_pedestal_syntax.py

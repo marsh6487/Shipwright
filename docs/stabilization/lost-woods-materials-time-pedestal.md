@@ -211,3 +211,10 @@ The interaction remains unresolved despite the existing automated checks. Carry
 the current pedestal work forward with the cumulative integration and retain
 this limitation; the publication recovery does not change the interaction or
 claim runtime acceptance of the stump-clearance candidate.
+
+The user subsequently authorized a prompt fix and diagnosis of the child's
+crooked left hand and slanted sword. The
+[prompt and child grip follow-up](pedestal-prompt-child-grip.md) records the
+actual collision and native-model evidence, the scoped corrections, passing
+regressions, and remaining in-game acceptance checks. It starts from the
+complete SoH integration at `74edaf10` and requires no new scene archive.

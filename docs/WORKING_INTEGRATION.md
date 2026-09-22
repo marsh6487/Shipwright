@@ -43,8 +43,14 @@ asset masters. Existing asset-pack requirements still apply.
 The user reports that the pedestal's collision/geometry still makes the A-button
 prompt awkward to obtain. Preserve the existing pedestal work in the cumulative
 build, but keep that interaction issue open. Passing the current automated tests
-does not establish that prompt accessibility is resolved. This publication does
-not redesign the pedestal interaction or change its collision.
+does not establish that prompt accessibility is resolved. The recovery itself
+did not redesign the pedestal interaction or change its collision.
+
+The subsequent [pedestal prompt and child grip follow-up](stabilization/pedestal-prompt-child-grip.md)
+starts from the complete recovery at `74edaf10`. It removes the custom sword's
+blocking cylinder and applies the native child ceremony's placement to the
+selected blade while preserving the animated hand. Focused regressions pass;
+prompt ease and the selected model's appearance still need an in-game check.
 
 ## Verification and future changes
 

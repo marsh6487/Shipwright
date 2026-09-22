@@ -43,21 +43,61 @@ def block_from(source, start):
     return source[start:pos]
 
 
+def struct_typedef(source, name):
+    return re.search(r"typedef struct\s*\{[^{}]*\}\s*" + name + r";", source, re.S)[0]
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="soh-time-pedestal-") as directory:
         build = pathlib.Path(directory)
         (build / "libultraship").mkdir()
         (build / "libultraship/libultra.h").write_text("#pragma once\n")
+        # Use the real cylinder types, initialization and OC displacement. The
+        # previous empty collision boundary could not reveal a solid sword
+        # pushing Link away from the small authored stump top.
+        math_header = (ROOT / "soh/include/z64math.h").read_text()
+        actor_header = (ROOT / "soh/include/z64actor.h").read_text()
+        collision_types = "\n".join(struct_typedef(math_header, name) for name in
+                                    ("Sphere16", "Plane", "TriNorm", "Cylinder16", "Cylinderf", "Linef"))
+        collision_types += '\n#include "z64collision_check.h"\n'
+        collision_types += "\n".join(struct_typedef(actor_header, name) for name in
+                                    ("DamageTable", "CollisionCheckInfoInit", "CollisionCheckInfo"))
+        collision_types += "\n" + struct_typedef((ROOT / "soh/include/z64.h").read_text(), "CollisionCheckContext")
+        (build / "time_pedestal_collision_types.h").write_text(collision_types)
         (build / "time_pedestal_actor.h").write_text(without_includes((ACTOR / "z_bg_toki_swd.h").read_text()))
         actor_source = (ACTOR / "z_bg_toki_swd.c").read_text()
         source = functions(actor_source)
         actor_body = "\n".join(body[:body.index("{")] + ";" for body in source.values())
-        actor_body += "\nstatic int sInitChain[1], sCylinderInit, sColChkInfoInit;\n"
+        actor_body += "\nstatic int sInitChain[1];\n"
+        for name in ("sCylinderInit", "sColChkInfoInit"):
+            actor_body += re.search(r"static [\w]+ " + name + r" = \{.*?\};", actor_source, re.S)[0] + "\n"
         arrival_state = re.search(r"static struct \{.*?\} sTimePedestalArrival;", actor_source, re.S)
         if arrival_state:
             actor_body += arrival_state[0] + "\n"
         actor_body += "\n".join(source.values())
         (build / "actor.c").write_text('#include "time_pedestal_fixture.h"\n' + actor_body)
+        collision_source = (ROOT / "soh/src/code/z_collision_check.c").read_text()
+        collision = functions(collision_source)
+        collision_names = ["Collider_InitBase", "Collider_DestroyBase", "Collider_SetBase",
+                           "Collider_InitTouch", "Collider_DestroyTouch", "Collider_SetTouch",
+                           "Collider_InitBump", "Collider_DestroyBump", "Collider_SetBump",
+                           "Collider_InitInfo", "Collider_DestroyInfo", "Collider_SetInfo",
+                           "Collider_InitCylinderDim", "Collider_DestroyCylinderDim", "Collider_SetCylinderDim",
+                           "Collider_InitCylinder", "Collider_DestroyCylinder", "Collider_SetCylinder",
+                           "Collider_UpdateCylinder", "CollisionCheck_SetInfo", "CollisionCheck_GetMassType",
+                           "CollisionCheck_SetOCvsOC", "CollisionCheck_OC_CylVsCyl", "CollisionCheck_Incompatible"]
+        collision_body = functions((ROOT / "soh/src/code/z_lib.c").read_text())["Math_Vec3s_ToVec3f"] + "\n"
+        collision_math = functions((ROOT / "soh/src/code/sys_math3d.c").read_text())
+        collision_body += "\n".join(collision_math[name] for name in
+                                    ("Math3D_CylOutsideCylDist", "Math3D_CylOutsideCyl")) + "\n"
+        collision_body += re.search(r"typedef enum \{[^{}]*\} ColChkMassType;", collision_source, re.S)[0] + "\n"
+        collision_body += "\n".join(collision[name] for name in collision_names)
+        player_source = (ROOT / "soh/src/overlays/actors/ovl_player_actor/z_player.c").read_text()
+        collision_body += "\n" + re.search(r"static ColliderCylinderInit D_80854624 = \{.*?\};", player_source, re.S)[0]
+        collision_body += "\nvoid Fixture_InitPlayerCollision(PlayState* play, ColliderCylinder* collider) {\n"
+        collision_body += "Collider_InitCylinder(play, collider);\n"
+        collision_body += "Collider_SetCylinder(play, collider, &GET_PLAYER(play)->actor, &D_80854624);\n}\n"
+        (build / "collision.c").write_text('#include "time_pedestal_fixture.h"\n' + collision_body)
         offers = functions((ROOT / "soh/src/code/z_actor.c").read_text())
         (build / "offers.c").write_text('#include "time_pedestal_fixture.h"\n' + '\n'.join(
             offers[name] for name in ("Actor_OfferGetItem", "Actor_OfferGetItemNearby", "Actor_OfferCarry")) + '\n' +
@@ -73,7 +113,6 @@ def main():
         (build / "hud.c").write_text('#include "time_pedestal_fixture.h"\n' +
             "void Fixture_HudRestore(PlayState* play) { InterfaceContext* interfaceCtx = &play->interfaceCtx; s16 sp28 = 0;\n" +
             hud_zero + " else " + hud_one + "\n}\n" + parameter["func_80084BF4"])
-        player_source = (ROOT / "soh/src/overlays/actors/ovl_player_actor/z_player.c").read_text()
         player = functions(player_source)
         turn_list = re.search(r"static s8 sActionHandlerListTurnInPlace\[\] = \{.*?^};", player_source, re.M | re.S)[0]
         (build / "interaction.c").write_text('#include "time_pedestal_fixture.h"\n' + turn_list + '\n' +
@@ -141,7 +180,9 @@ def main():
                             "CustomEquipment_OverrideMasterSwordHand"})
         (build / "custom.cpp").write_text('#include "time_pedestal_fixture.h"\n' +
             "static const char* ResolveCustomFPSHand(const char* path) { return path; }\n"
-            "#define BuildHandItemDL Fixture_BuildHandItemDL\n" + "\n".join(custom.values()))
+            "#define BuildHandItemDL Fixture_BuildHandItemDL\n"
+            "#define BuildTimePedestalHandItemDL(p,d,h,s) Fixture_BuildHandItemDL(p,d,h,s,false)\n" +
+            "\n".join(custom.values()))
         play_destroy = functions((ROOT / "soh/src/code/z_play.c").read_text())["Play_Destroy"]
         start = play_destroy.index("if (gSaveContext.linkAge != play->linkAgeOnLoad)")
         (build / "handoff.c").write_text('#include "time_pedestal_fixture.h"\n' +
@@ -185,7 +226,7 @@ def main():
         (build / "scripts.c").write_text(arrays)
         includes = ["-I" + str(p) for p in (build, ROOT / "soh/tests", ROOT / "soh/include", ROOT / "soh", ACTOR)]
         sources = [build / name for name in
-                   ("actor.c", "offers.c", "interaction.c", "parameter.c", "player.c", "render.c", "scripts.c", "handoff.c", "extended.c", "hud.c", "save.c", "music.c", "reload.c", "ownership.c")]
+                   ("actor.c", "collision.c", "offers.c", "interaction.c", "parameter.c", "player.c", "render.c", "scripts.c", "handoff.c", "extended.c", "hud.c", "save.c", "music.c", "reload.c", "ownership.c")]
         helper = ACTOR / "time_pedestal_cutscene.c"
         if helper.exists():
             (build / "cutscene.c").write_text('#include "time_pedestal_fixture.h"\n' + without_includes(helper.read_text()))

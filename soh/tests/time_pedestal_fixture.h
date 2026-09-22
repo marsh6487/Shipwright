@@ -32,6 +32,7 @@ typedef struct {
 
 typedef struct PlayState PlayState;
 typedef struct Actor Actor;
+#include "time_pedestal_collision_types.h"
 typedef void (*ActorFunc)(Actor*, PlayState*);
 typedef int Gfx;
 typedef struct {
@@ -96,11 +97,8 @@ struct Actor {
     f32 floorHeight;
     void* floorPoly;
     u8 floorBgId;
-    int colChkInfo;
+    CollisionCheckInfo colChkInfo;
 };
-typedef struct {
-    int base;
-} ColliderCylinder;
 typedef struct {
     int marker;
 } LinkAnimationHeader;
@@ -203,7 +201,7 @@ struct PlayState {
     } actorCtx;
     CutsceneContext csCtx;
     InterfaceContext interfaceCtx;
-    int colChkCtx;
+    CollisionCheckContext colChkCtx;
     int colCtx;
     u32 gameplayFrames;
     Player player;
@@ -214,6 +212,10 @@ struct PlayState {
 };
 
 #define ARRAY_COUNT(a) (sizeof(a) / sizeof((a)[0]))
+#define SQ(x) ((x) * (x))
+#define IS_ZERO(f) (fabsf(f) < 0.008f)
+#define MASS_IMMOVABLE 0xFF
+#define MASS_HEAVY 0xFE
 #define _SHIFTL(v, s, w) (((u32)(v) & ((1U << (w)) - 1U)) << (s))
 #define GET_PLAYER(p) ((p)->playerRemoved ? NULL : &(p)->player)
 #define GET_ACTIVE_CAM(p) (&(p)->camera)
@@ -479,12 +481,15 @@ u8 ResourceGetIsCustomByName(const char*);
 u8 TransformMasks_IsTransformedAny(void);
 void Fixture_BuildHandItemDL(PlayState*, Gfx**, Gfx*, Gfx*, bool);
 void Actor_ProcessInitChain(Actor*, void*);
-void Collider_InitCylinder(PlayState*, ColliderCylinder*);
-void Collider_SetCylinder(PlayState*, ColliderCylinder*, Actor*, void*);
+s32 Collider_InitCylinder(PlayState*, ColliderCylinder*);
+s32 Collider_SetCylinder(PlayState*, ColliderCylinder*, Actor*, ColliderCylinderInit*);
 void Collider_UpdateCylinder(Actor*, ColliderCylinder*);
-void CollisionCheck_SetInfo(void*, void*, void*);
-void Collider_DestroyCylinder(PlayState*, ColliderCylinder*);
-void CollisionCheck_SetOC(PlayState*, void*, void*);
+void CollisionCheck_SetInfo(CollisionCheckInfo*, DamageTable*, CollisionCheckInfoInit*);
+s32 Collider_DestroyCylinder(PlayState*, ColliderCylinder*);
+void CollisionCheck_SetOC(PlayState*, CollisionCheckContext*, Collider*);
+void CollisionCheck_OC_CylVsCyl(PlayState*, CollisionCheckContext*, Collider*, Collider*);
+s32 CollisionCheck_Incompatible(Collider*, Collider*);
+void Fixture_InitPlayerCollision(PlayState*, ColliderCylinder*);
 void Inventory_ChangeEquipment(s16, u16);
 s32 Flags_GetEventChkInf(s32);
 s32 Flags_GetInfTable(s32);

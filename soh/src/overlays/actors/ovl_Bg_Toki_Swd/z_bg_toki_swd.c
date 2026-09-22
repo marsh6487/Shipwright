@@ -561,7 +561,11 @@ void BgTokiSwd_Update(Actor* thisx, PlayState* play) {
     BgTokiSwd* this = (BgTokiSwd*)thisx;
 
     this->actionFunc(this, play);
-    CollisionCheck_SetOC(play, &play->colChkCtx, &this->collider.base);
+    // The custom sword sits on scene collision. Its stock body cylinder would
+    // push Link out of the small stump's center and onto the edge of its top.
+    if (this->actor.params != BG_TOKI_SWD_TIME_PEDESTAL) {
+        CollisionCheck_SetOC(play, &play->colChkCtx, &this->collider.base);
+    }
 }
 
 void BgTokiSwd_Draw(Actor* thisx, PlayState* play2) {
