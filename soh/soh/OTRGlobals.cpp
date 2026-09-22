@@ -36,6 +36,7 @@
 #include "Enhancements/controls/SohInputEditorWindow.h"
 #include "Enhancements/audio/AudioCollection.h"
 #include "Enhancements/audio/WeatherSamplePlayer.h"
+#include "Enhancements/audio/MidnaAudio.h"
 #include "Enhancements/debugconsole.h"
 #include "Enhancements/randomizer/randomizer.h"
 #include "Enhancements/randomizer/randomizer_entrance_tracker.h"
@@ -1265,6 +1266,7 @@ void OTRAudio_Thread() {
         }
 
         WeatherSamplePlayer_Mix(audio_buffer, total_frames);
+        MidnaAudio_Mix(audio_buffer, total_frames);
 
         // Fleet Ship Combo: silence OoT's output while it's the inactive game. audio_buffer holds
         // the COMPLETE post-mix output (synth + all mix-ins), so zeroing it mutes everything
@@ -1344,6 +1346,7 @@ void OTRAudio_Init() {
     // Precache all our samples, sequences, etc...
     ResourceMgr_LoadDirectory("audio");
     WeatherSamplePlayer_Init();
+    MidnaAudio_Init();
 
     if (!audio.running) {
         audio.running = true;
@@ -1373,6 +1376,7 @@ extern "C" size_t fontMapSize;
 
 extern "C" void OTRAudio_Exit() {
     WeatherSamplePlayer_Reset();
+    MidnaAudio_Reset();
     // Tell the audio thread to stop
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);

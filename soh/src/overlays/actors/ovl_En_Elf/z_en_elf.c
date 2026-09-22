@@ -9,6 +9,7 @@
 #include <assert.h>
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/audio/MidnaAudio.h"
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED | ACTOR_FLAG_UPDATE_DURING_OCARINA)
 
@@ -436,6 +437,13 @@ void func_80A029A8(EnElf* this, s16 increment) {
     }
 }
 
+// Route by Navi's event, never by replacing a shared sample or global SFX ID.
+static void EnElf_PlayNaviSound(EnElf* this, MidnaAudioEvent event, u16 nativeSfx) {
+    if (this->actor.params != FAIRY_NAVI || !MidnaAudio_TryPlay(event)) {
+        Audio_PlayActorSound2(&this->actor, nativeSfx);
+    }
+}
+
 void EnElf_Destroy(Actor* thisx, PlayState* play) {
     s32 pad;
     EnElf* this = (EnElf*)thisx;
@@ -443,6 +451,9 @@ void EnElf_Destroy(Actor* thisx, PlayState* play) {
     LightContext_RemoveLight(play, &play->lightCtx, this->lightNodeGlow);
     LightContext_RemoveLight(play, &play->lightCtx, this->lightNodeNoGlow);
 
+    if (this->actor.params == FAIRY_NAVI) {
+        MidnaAudio_Reset();
+    }
     ResourceMgr_UnregisterSkeleton(&this->skelAnime);
 }
 
@@ -872,7 +883,7 @@ void func_80A03CF8(EnElf* this, PlayState* play) {
         if ((play->sceneNum == SCENE_LINKS_HOUSE) && (gSaveContext.sceneLayer == 4)) {
             // play dash sound as Navi enters Links house in the intro
             if (play->csCtx.frames == 55) {
-                Audio_PlayActorSound2(&this->actor, NA_SE_EV_FAIRY_DASH);
+                EnElf_PlayNaviSound(this, MIDNA_AUDIO_DASH, NA_SE_EV_FAIRY_DASH);
             }
 
             // play dash sound in intervals as Navi is waking up Link in the intro
@@ -884,7 +895,7 @@ void func_80A03CF8(EnElf* this, PlayState* play) {
                 } else {
                     if (this->actor.world.pos.y < prevPos.y) {
                         this->fairyFlags |= 0x40;
-                        Audio_PlayActorSound2(&this->actor, NA_SE_EV_FAIRY_DASH);
+                        EnElf_PlayNaviSound(this, MIDNA_AUDIO_DASH, NA_SE_EV_FAIRY_DASH);
                     }
                 }
             }
@@ -967,7 +978,7 @@ void func_80A03CF8(EnElf* this, PlayState* play) {
                             this->fairyFlags |= 2;
 
                             if (this->unk_2C7 == 0) {
-                                Audio_PlayActorSound2(&this->actor, NA_SE_EV_FAIRY_DASH);
+                                EnElf_PlayNaviSound(this, MIDNA_AUDIO_DASH, NA_SE_EV_FAIRY_DASH);
                             }
 
                             this->unk_2C0 = 0x64;
@@ -1009,13 +1020,14 @@ void func_80A04414(EnElf* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
     f32 transitionRate;
     u16 targetSound;
+    MidnaAudioEvent targetEvent;
 
     if (play->actorCtx.targetCtx.unk_40 != 0.0f) {
         this->unk_2C6 = 0;
         this->unk_29C = 1.0f;
 
         if (this->unk_2C7 == 0) {
-            Audio_PlayActorSound2(&this->actor, NA_SE_EV_FAIRY_DASH);
+            EnElf_PlayNaviSound(this, MIDNA_AUDIO_DASH, NA_SE_EV_FAIRY_DASH);
         }
 
     } else {
@@ -1046,13 +1058,16 @@ void func_80A04414(EnElf* this, PlayState* play) {
         if ((arrowPointedActor != NULL) && (player->focusActor != NULL)) {
             if (arrowPointedActor->category == ACTORCAT_NPC) {
                 targetSound = NA_SE_VO_NAVY_HELLO;
+                targetEvent = MIDNA_AUDIO_TARGET_NPC;
             } else {
                 targetSound =
                     (arrowPointedActor->category == ACTORCAT_ENEMY) ? NA_SE_VO_NAVY_ENEMY : NA_SE_VO_NAVY_HEAR;
+                targetEvent = (arrowPointedActor->category == ACTORCAT_ENEMY) ? MIDNA_AUDIO_TARGET_ENEMY
+                                                                              : MIDNA_AUDIO_TARGET_OTHER;
             }
 
             if (this->unk_2C7 == 0) {
-                Audio_PlayActorSound2(&this->actor, targetSound);
+                EnElf_PlayNaviSound(this, targetEvent, targetSound);
             }
 
             this->fairyFlags |= 1;
@@ -1105,7 +1120,7 @@ void func_80A0461C(EnElf* this, PlayState* play) {
                             temp = 0;
                         } else {
                             if (this->unk_2C7 == 0) {
-                                Audio_PlayActorSound2(&this->actor, NA_SE_EV_NAVY_VANISH);
+                                EnElf_PlayNaviSound(this, MIDNA_AUDIO_VANISH, NA_SE_EV_NAVY_VANISH);
                             }
                             temp = 7;
                         }
@@ -1149,7 +1164,7 @@ void func_80A0461C(EnElf* this, PlayState* play) {
                 if (!(player->stateFlags2 & PLAYER_STATE2_NAVI_ACTIVE)) {
                     temp = 7;
                     if (this->unk_2C7 == 0) {
-                        Audio_PlayActorSound2(&this->actor, NA_SE_EV_NAVY_VANISH);
+                        EnElf_PlayNaviSound(this, MIDNA_AUDIO_VANISH, NA_SE_EV_NAVY_VANISH);
                     }
                 }
                 break;
@@ -1159,7 +1174,7 @@ void func_80A0461C(EnElf* this, PlayState* play) {
                     this->unk_2C0 = 42;
                     temp = 11;
                     if (this->unk_2C7 == 0) {
-                        Audio_PlayActorSound2(&this->actor, NA_SE_EV_FAIRY_DASH);
+                        EnElf_PlayNaviSound(this, MIDNA_AUDIO_APPEAR, NA_SE_EV_FAIRY_DASH);
                     }
                 }
                 break;
@@ -1392,7 +1407,9 @@ void func_80A053F0(Actor* thisx, PlayState* play) {
     }
 
     if (Actor_ProcessTalkRequest(thisx, play)) {
-        func_800F4524(&gSfxDefaultPos, NA_SE_VO_SK_LAUGH, 0x20);
+        if (this->actor.params != FAIRY_NAVI || !MidnaAudio_TryPlay(MIDNA_AUDIO_TALK)) {
+            func_800F4524(&gSfxDefaultPos, NA_SE_VO_SK_LAUGH, 0x20);
+        }
         thisx->focus.pos = thisx->world.pos;
 
         if (thisx->textId == ElfMessage_GetCUpText(play)) {
@@ -1497,6 +1514,53 @@ s32 EnElf_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* p
     return false;
 }
 
+/* The optional pack owns its mesh/materials. Never replace gameplay_keep's
+ * shared fairy skeleton: bottled, healing and Kokiri fairies use it too. */
+static s32 EnElf_TryDrawMidna(EnElf* this, PlayState* play) {
+    static const char path[] = "objects/midna_navi/poc1/MidnaFloatDL";
+    Gfx* model;
+    f32 alphaScale;
+    f32 cosmeticScale;
+    u8 alpha;
+
+    if (this->actor.params != FAIRY_NAVI || !ResourceMgr_FileExists(path)) {
+        return false;
+    }
+    /* Resolve through the resource manager each draw; retaining a raw pointer
+     * here would outlive cache invalidation when assets are toggled/reloaded. */
+    model = ResourceMgr_LoadGfxByName(path);
+    if (model == NULL) {
+        return false;
+    }
+
+    alphaScale = this->disappearTimer < 0 ? (this->disappearTimer * (7.0f / 6000.0f)) + 1.0f : 1.0f;
+    alphaScale = CLAMP(alphaScale, 0.0f, 1.0f);
+    alpha = (u8)(this->innerColor.a * alphaScale);
+    if (alpha == 0) {
+        return true;
+    }
+    /* One shared child/adult size: 60% of the original export, about 21.46
+     * world units including the helmet. Scale at draw time to preserve every
+     * packed vertex and avoid quantizing away tiny details. */
+    cosmeticScale = 0.6f * CVarGetFloat(CVAR_COSMETIC("Fairies.Size"), 1.0f);
+
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    /* The actor matrix already contains Navi's emergence/vanish scale and
+     * movement. Add presentation-only sway without changing any actor state. */
+    Matrix_Push();
+    Matrix_Scale(cosmeticScale, cosmeticScale, cosmeticScale, MTXMODE_APPLY);
+    Matrix_RotateZ(Math_SinS(this->timer * 0x300) * 0.035f, MTXMODE_APPLY);
+    gDPSetEnvColor(POLY_XLU_DISP++, 255, 255, 255, alpha);
+    /* A partially faded mesh must not write depth over later translucent draws. */
+    gDPSetRenderMode(POLY_XLU_DISP++, G_RM_FOG_SHADE_A, alpha == 255 ? G_RM_AA_ZB_OPA_SURF2 : G_RM_AA_ZB_XLU_SURF2);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_XLU_DISP++, model);
+    Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+    return true;
+}
+
 void EnElf_Draw(Actor* thisx, PlayState* play) {
     s32 pad;
     f32 alphaScale;
@@ -1508,6 +1572,9 @@ void EnElf_Draw(Actor* thisx, PlayState* play) {
 
     if ((this->unk_2A8 != 8) && !(this->fairyFlags & 8)) {
         if (!(player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) || (kREG(90) < this->actor.projectedPos.z)) {
+            if (EnElf_TryDrawMidna(this, play)) {
+                return;
+            }
             dListHead = Graph_Alloc(play->state.gfxCtx, sizeof(Gfx) * 4);
 
             OPEN_DISPS(play->state.gfxCtx);

@@ -225,6 +225,13 @@ if(BUILD_TESTING)
         add_test(NAME rain_engine_runtime COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_rain_runtime_test.py
             ${CMAKE_CURRENT_BINARY_DIR}/rain-runtime ${CMAKE_C_COMPILER} ${CMAKE_CXX_COMPILER})
+        add_test(NAME midna_navi_draw COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_midna_navi_draw_test.py)
+        set_tests_properties(midna_navi_draw PROPERTIES ENVIRONMENT "CC=${CMAKE_C_COMPILER}")
+        add_test(NAME midna_audio COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_midna_audio_test.py)
+        set_tests_properties(midna_audio PROPERTIES
+            ENVIRONMENT "CC=${CMAKE_C_COMPILER};CXX=${CMAKE_CXX_COMPILER}")
     endif()
 
 endif()
