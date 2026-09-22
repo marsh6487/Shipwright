@@ -86,6 +86,8 @@ archive. The focused CI job runs the first three commands.
 The passing checks cover custom-versus-stock cylinder registration,
 stump/ground/airborne interaction, both ages, NPC offer priority, unchanged hand
 joint rotation, sword-only transform scope and native geometry correspondence.
+The grip regression uses the production fixed-point matrix conversion and a
+rotated, translated parent limb to check multiplication order and stack cleanup.
 The existing independent departure/arrival skips, camera, equipment and
 progression checks also pass. Full application builds and runtime acceptance
 remain separate gates.

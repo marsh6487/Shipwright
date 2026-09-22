@@ -89,10 +89,10 @@ static void* Graph_Alloc(void*, size_t size) {
     allocations.push_back(result);
     return result;
 }
+#include "pedestal_matrix.inc"
 static Mtx* Matrix_MtxFToMtx(MtxF* source, Mtx* destination) {
-    // The same float-matrix ABI used by the normal SoH renderer. GBI structures
-    // and command emission above are the real engine headers.
-    *destination = *source;
+    // Pack through the production conversion used by SoH's fixed-point GBI.
+    guMtxF2L(source->mf, destination);
     return destination;
 }
 static void gSPDisplayList(Gfx* command, Gfx* resource) {
@@ -102,9 +102,9 @@ static void gSPDisplayList(Gfx* command, Gfx* resource) {
 }
 #include "pedestal_child_grip.inc"
 
-static MtxF Identity() {
-    MtxF result = {};
-    result.xx = result.yy = result.zz = result.ww = 1.0f;
+static MtxF ParentLimbMatrix() {
+    // A 90-degree Y rotation plus translation exposes reversed multiplication.
+    MtxF result = { { { 0, 0, -1, 0 }, { 0, 1, 0, 0 }, { 1, 0, 0, 0 }, { 5, 9, 13, 1 } } };
     return result;
 }
 static Vec3f Transform(const MtxF& m, Vec3f v) {
@@ -120,10 +120,21 @@ struct Draw {
     Gfx* resource;
     MtxF matrix;
 };
+
+static void MultiplyMatrices(float result[4][4], const float a[4][4], const float b[4][4]) {
+    float tmp[4][4];
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            tmp[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j] + a[i][3] * b[3][j];
+        }
+    }
+    memcpy(result, tmp, sizeof(tmp));
+}
+
 static std::vector<Draw> ExecuteComposite(Gfx* dl) {
     std::vector<Draw> draws;
     std::vector<MtxF> stack;
-    MtxF current = Identity();
+    MtxF current = ParentLimbMatrix();
     for (s32 index = 0; index < 12; ++index) {
         const Gfx& command = dl[index];
         switch (command.words.w0 >> 24) {
@@ -134,10 +145,19 @@ static std::vector<Draw> ExecuteComposite(Gfx* dl) {
                 const u32 flags = (command.words.w0 & 0xFF) ^ G_MTX_PUSH;
                 REQUIRE(flags == (G_MTX_PUSH | G_MTX_MUL | G_MTX_MODELVIEW));
                 stack.push_back(current);
-                // Every composite starts at the actual animated limb matrix;
-                // identity expresses points in that local frame. No production
-                // transform helper is reused to calculate expected landmarks.
-                current = *reinterpret_cast<const MtxF*>(command.words.w1);
+                // Decode the same packed MtxS format consumed by the engine,
+                // then apply the local sword matrix before the parent limb.
+                const int32_t* addr = reinterpret_cast<const int32_t*>(command.words.w1);
+                float matrix[4][4];
+                for (int i = 0; i < 4; ++i) {
+                    for (int j = 0; j < 4; j += 2) {
+                        int32_t intPart = addr[i * 2 + j / 2];
+                        uint32_t fracPart = addr[8 + i * 2 + j / 2];
+                        matrix[i][j] = (int32_t)((intPart & 0xffff0000) | (fracPart >> 16)) / 65536.0f;
+                        matrix[i][j + 1] = (int32_t)((intPart << 16) | (fracPart & 0xffff)) / 65536.0f;
+                    }
+                }
+                MultiplyMatrices(current.mf, matrix, current.mf);
                 break;
             }
             case G_POPMTX:
@@ -147,7 +167,7 @@ static std::vector<Draw> ExecuteComposite(Gfx* dl) {
                 break;
             case G_ENDDL:
                 REQUIRE(stack.empty());
-                ExpectPoint(Transform(current, { 17, 29, 43 }), { 17, 29, 43 }, 0.0001f);
+                ExpectPoint(Transform(current, { 17, 29, 43 }), Transform(ParentLimbMatrix(), { 17, 29, 43 }), 0.0001f);
                 return draws;
             default:
                 REQUIRE(false);
@@ -165,7 +185,7 @@ static void ExpectNativeSwordBasis(const MtxF& matrix) {
     static const Vec3f childPoints[] = { { -3171, -784, -41 }, { 788, 543, -48 },  { -389, -203, 496 },
                                          { -575, 344, -633 },  { -275, 206, -36 }, { -382, 190, -234 } };
     for (size_t i = 0; i < sizeof(adultPoints) / sizeof(adultPoints[0]); ++i)
-        ExpectPoint(Transform(matrix, adultPoints[i]), childPoints[i], 1.1f);
+        ExpectPoint(Transform(matrix, adultPoints[i]), Transform(ParentLimbMatrix(), childPoints[i]), 1.1f);
 }
 static void CheckSelectedSword(Gfx* expectedHand, Gfx* expectedSword) {
     PlayState play = {};
@@ -180,9 +200,10 @@ static void CheckSelectedSword(Gfx* expectedHand, Gfx* expectedSword) {
     REQUIRE(draws[0].resource == expectedHand && draws[1].resource == expectedSword);
     // Actual ordinary child fist fingertip: keep its palm beyond the +Y wrist,
     // as both native fist and native ceremonial hand meshes are authored.
-    ExpectPoint(Transform(draws[0].matrix, { 73, 499, -80 }), { 73, 499, -80 }, 0.0001f);
+    ExpectPoint(Transform(draws[0].matrix, { 73, 499, -80 }), Transform(ParentLimbMatrix(), { 73, 499, -80 }), 0.0001f);
     if (adult)
-        ExpectPoint(Transform(draws[1].matrix, { 3387, 328, -77 }), { 3387, 328, -77 }, 0.0001f);
+        ExpectPoint(Transform(draws[1].matrix, { 3387, 328, -77 }), Transform(ParentLimbMatrix(), { 3387, 328, -77 }),
+                    0.0001f);
     else
         ExpectNativeSwordBasis(draws[1].matrix);
     rot = original;

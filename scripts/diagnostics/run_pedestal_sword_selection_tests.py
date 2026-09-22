@@ -28,8 +28,10 @@ def main():
                                   ("Player_ReverseTimePedestalEquipmentSword", "Player_ApplyTimePedestalSword")
                                   if name in render)
         (directory / "pedestal_child_grip.inc").write_text(body)
+        matrix = functions((ROOT / "soh/soh/gu_pc.c").read_text())["guMtxF2L"]
+        (directory / "pedestal_matrix.inc").write_text(matrix)
         executable = directory / "child_grip_test"
-        subprocess.run(["c++", "-std=c++20", "-Wall", "-Wextra", "-DF3DEX_GBI_2", "-DGBI_FLOATS",
+        subprocess.run(["c++", "-std=c++20", "-Wall", "-Wextra", "-DF3DEX_GBI_2",
                         "-I" + str(directory), "-I" + str(ROOT / "libultraship/include"),
                         str(ROOT / "soh/tests/pedestal_child_grip_test.cpp"), "-o", str(executable)], check=True)
         subprocess.run([str(executable)], check=True)
