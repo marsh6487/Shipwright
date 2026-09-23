@@ -193,6 +193,14 @@ void SohMenu::AddMenuEnhancements() {
             "then asks if you want to Continue, Reset, or Reset to Spawn."));
 
     AddWidget(path, "Containers Match Contents", WIDGET_SEPARATOR_TEXT);
+    AddWidget(path, "Chest Size Matches Contents", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ChestSizeMatchesContents"))
+        .Options(CheckboxOptions().DefaultValue(false).Tooltip(
+            "Restore classic chest sizing in normal and randomizer games.\n"
+            "Major items, lesser items, heart rewards and boss keys use large chests.\n"
+            "Junk, small keys and Skulltula Tokens use small chests.\n"
+            "Works independently of container textures and the Stone of Agony.\n"
+            "Treasure Chest Game guessing rooms keep their original sizes."));
     AddWidget(path, "Containers Match Contents", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("ChestSizeAndTextureMatchContents"))
         .Callback([](WidgetInfo& info) {

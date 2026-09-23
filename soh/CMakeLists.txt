@@ -222,6 +222,9 @@ if(BUILD_TESTING)
     # The standalone engine harness uses GNU-style section/linker flags.
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME chest_size_matches_contents COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_chest_size_tests.py)
+        set_tests_properties(chest_size_matches_contents PROPERTIES ENVIRONMENT "CC=${CMAKE_C_COMPILER}")
         add_test(NAME rain_engine_runtime COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_rain_runtime_test.py
             ${CMAKE_CURRENT_BINARY_DIR}/rain-runtime ${CMAKE_C_COMPILER} ${CMAKE_CXX_COMPILER})
