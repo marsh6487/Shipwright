@@ -102,6 +102,10 @@
     {
       "feature": "Zora shield ground/swim anchoring",
       "commit": "5d0b8384d4885b4e1f54c041afcc432542848257"
+    },
+    {
+      "feature": "Restored Midna/Zora continuity and cumulative regression gates",
+      "commit": "46d01e8ab7e7894102e782a72ba2e4ead65a50c4"
     }
   ]
 }
