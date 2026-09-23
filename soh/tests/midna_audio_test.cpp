@@ -98,6 +98,62 @@ static void movementSpacing() {
     REQUIRE(!MidnaAudio_TryPlay(MIDNA_AUDIO_APPEAR));
 }
 
+// Catch timer consumption while hidden/moving and idle audio stealing a cue.
+static void idleYawn() {
+    files["objects/midna_navi/audio/yawn.wav"] = wav({ 1700, 1800, 1900, 2000 });
+    MidnaAudio_Init();
+    auto tick = [](bool eligible) {
+        MidnaAudio_UpdateIdle(eligible);
+        std::array<int16_t, 2> out = {};
+        MidnaAudio_Mix(out.data(), 1);
+        return out[0];
+    };
+    for (int i = 0; i < 2000; ++i)
+        REQUIRE(tick(false) == 0);
+    int elapsed = 0;
+    while (++elapsed <= 900) {
+        int16_t sample = tick(true);
+        if (sample != 0) {
+            REQUIRE(sample == 1700);
+            break;
+        }
+        if (elapsed % 100 == 0)
+            REQUIRE(tick(false) == 0); // resetting instead of pausing would never reach 20 seconds
+    }
+    REQUIRE(elapsed >= 400 && elapsed <= 900); // 20–45 seconds of eligible 20 Hz updates
+    REQUIRE(tick(true) == 1800);               // continues, never restarts every update
+    REQUIRE(tick(false) == 0);                 // movement/recall interrupts the idle cue
+
+    // After a pause the unspent interval resumes, without a catch-up burst.
+    for (int i = 0; i < 100; ++i)
+        REQUIRE(tick(true) == 0);
+    for (int i = 0; i < 2000; ++i)
+        REQUIRE(tick(false) == 0);
+    elapsed = 0;
+    while (++elapsed <= 800 && tick(true) == 0) {}
+    REQUIRE(elapsed >= 299 && elapsed <= 799);
+    REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_CALL));
+    REQUIRE(tick(true) == 200); // Hey replaces the yawn, without an added voice
+    REQUIRE(tick(true) == 300);
+
+    // Even a missing custom cue must cancel the yawn before native fallback.
+    REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_YAWN));
+    REQUIRE(!MidnaAudio_TryPlay(MIDNA_AUDIO_TALK));
+    REQUIRE(tick(true) == 0);
+    REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_YAWN));
+    REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_VANISH));
+    REQUIRE(tick(true) == 500); // recall stops the yawn rather than layering it
+    REQUIRE(!MidnaAudio_TryPlay(MIDNA_AUDIO_YAWN)); // busy voices beat idle audio
+    REQUIRE(tick(true) == 600);
+    REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_YAWN));
+    MidnaAudio_Reset();
+    REQUIRE(tick(true) == 0);
+    files.erase("objects/midna_navi/audio/yawn.wav");
+    MidnaAudio_Init();
+    for (int i = 0; i < 2000; ++i)
+        REQUIRE(tick(true) == 0); // older packs remain silent, with no native substitute
+}
+
 int main() {
     files["objects/midna_navi/audio/dash.wav"] = wav({ 1000, -2000, 3000, 4000 });
     files["objects/midna_navi/audio/vanish.wav"] = wav({ 500, 600 });
@@ -196,5 +252,6 @@ int main() {
     mixer.join();
     MidnaAudio_Reset();
     movementSpacing();
+    idleYawn();
     puts("PASS: Midna private clips, native fallback, PCM validation, mixing, volume and teardown");
 }

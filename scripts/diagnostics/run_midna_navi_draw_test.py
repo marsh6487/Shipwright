@@ -14,10 +14,15 @@ lights = (ROOT / 'soh/src/code/z_lights.c').read_text()
 production = ''.join(function(lights, name) for name in (
     'Lights_PointSetInfo', 'Lights_PointNoGlowSetInfo', 'Lights_PointGlowSetInfo', 'Lights_PointSetColorAndRadius'))
 production += function(source, 'EnElf_UpdateLights')
+if 'static void EnElf_UpdateMidnaBlink(' in source:
+    production += function(source, 'EnElf_UpdateMidnaBlink')
+production += function(source, 'EnElf_Update')
 if 'static void EnElf_DrawMidnaShimmer(' in source:
     production += function(source, 'EnElf_DrawMidnaShimmer')
 if 'static Gfx* EnElf_GetMidnaBlinkModel(' in source:
     production += function(source, 'EnElf_GetMidnaBlinkModel')
+if 'static void EnElf_TraceMidnaFrame(' in source:
+    production += function(source, 'EnElf_TraceMidnaFrame')
 if 'static s32 EnElf_TryDrawMidna(' in source:
     production += function(source, 'EnElf_TryDrawMidna')
 production += function(source, 'EnElf_Draw')
@@ -27,6 +32,14 @@ flags = ['-std=gnu2x', '-DF3DEX_GBI_2', '-DLOG_LEVEL_GAME_PRINTS=0', '-DNDEBUG',
          '-Werror=implicit-function-declaration', '-Wno-int-conversion',
          '-Wno-incompatible-pointer-types', '-Wno-discarded-qualifiers',
          '-Ilibultraship/include', '-Isoh/include', '-Isoh/src', '-Isoh/assets', '-Isoh', '-Isoh/mods']
+if 'midnaBlinkTimer' in source:
+    flags.append('-DMIDNA_VISIBLE_CLOCK')
+    assert source.count('EnElf_UpdateMidnaBlink(this);') == 3
+    for name in ('func_80A04F94', 'func_80A053F0', 'EnElf_Update'):
+        update = function(source, name)
+        assert update.count('this->timer++;') == 1
+        assert update.count('EnElf_UpdateMidnaBlink(this);') == 1
+    assert 'this->midnaBlinkTimer = 0;' in function(source, 'EnElf_Init')
 for path in ('CMake/soh-cvars.cmake', 'CMake/lus-cvars.cmake'):
     for key, value in re.findall(r'set\((CVAR_PREFIX_\w+)\s+"?([^\s"\)]+)', (ROOT/path).read_text()):
         flags.append(f'-D{key}="{value}"')

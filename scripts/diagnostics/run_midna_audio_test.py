@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 actor = ROOT / 'soh/src/overlays/actors/ovl_En_Elf/z_en_elf.c'
 hud = ROOT / 'soh/src/code/z_parameter.c'
 production = function(hud.read_text(), 'Interface_SetNaviCall')
+production += function(actor.read_text(), 'EnElf_UpdateMidnaIdleAudio')
 fixture = (ROOT / 'soh/tests/midna_audio_routing_test.c').read_text()
 if 'static void EnElf_PlayNaviSound(' in actor.read_text():
     production += function(actor.read_text(), 'EnElf_PlayNaviSound')

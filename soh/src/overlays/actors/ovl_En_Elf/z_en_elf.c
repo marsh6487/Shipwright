@@ -317,6 +317,34 @@ f32 EnElf_GetColorValue(s32 colorFlag) {
     }
 }
 
+static void EnElf_UpdateMidnaIdleAudio(EnElf* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    if (this->actor.params != FAIRY_NAVI) {
+        return;
+    }
+    MidnaAudio_UpdateIdle(this->unk_2A8 == 0 && !(this->fairyFlags & 8) && this->actor.scale.x >= 0.0078f &&
+                         this->innerColor.a > 0.0f && this->unk_2C7 == 0 &&
+                         fabsf(player->actor.speedXZ) < 0.1f && fabsf(player->linearVelocity) < 0.1f &&
+                         (player->actor.bgCheckFlags & 1) &&
+                         !(player->stateFlags1 &
+                           (PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_PARALLEL |
+                            PLAYER_STATE1_FIRST_PERSON)) &&
+                         player->focusActor == NULL && play->actorCtx.targetCtx.arrowPointedActor == NULL &&
+                         play->pauseCtx.state == 0 && Message_GetState(&play->msgCtx) == TEXT_STATE_NONE &&
+                         !Play_InCsMode(play) && play->transitionTrigger == TRANS_TRIGGER_OFF &&
+                         play->transitionMode == TRANS_MODE_OFF && play->gameOverCtx.state == GAMEOVER_INACTIVE);
+}
+
+static void EnElf_UpdateMidnaBlink(EnElf* this) {
+    /* Do not spend the blink interval inside Link or during the tiny part of
+     * emergence/recall. Update time also naturally stops while paused. */
+    if (this->actor.params == FAIRY_NAVI && this->unk_2A8 != 8 && !(this->fairyFlags & 8) &&
+        this->actor.scale.x >= 0.004f && this->innerColor.a > 0.0f) {
+        this->midnaBlinkTimer = (this->midnaBlinkTimer + 1) % 200;
+    }
+}
+
 void EnElf_Init(Actor* thisx, PlayState* play) {
     EnElf* this = (EnElf*)thisx;
     s32 pad;
@@ -338,6 +366,7 @@ void EnElf_Init(Actor* thisx, PlayState* play) {
     this->lightNodeNoGlow = LightContext_InsertLight(play, &play->lightCtx, &this->lightInfoNoGlow);
 
     this->fairyFlags = 0;
+    this->midnaBlinkTimer = 0;
     this->disappearTimer = 600;
     this->unk_2A4 = 0.0f;
     colorConfig = 0;
@@ -1279,6 +1308,8 @@ void func_80A04F94(EnElf* this, PlayState* play) {
 
     Math_SmoothStepToS(&this->actor.shape.rot.y, this->unk_2BC, 5, 0x1000, 0x400);
     this->timer++;
+    EnElf_UpdateMidnaBlink(this);
+    EnElf_UpdateMidnaIdleAudio(this, play);
     Math_StepToF(&this->unk_2A4, 1.0f, 0.05f);
     Environment_AdjustLights(play, SQ(this->unk_2A4), player->actor.projectedPos.z + 780.0f, 0.2f, 0.5f);
 }
@@ -1459,6 +1490,8 @@ void func_80A053F0(Actor* thisx, PlayState* play) {
 
     this->elfMsg = NULL;
     this->timer++;
+    EnElf_UpdateMidnaBlink(this);
+    EnElf_UpdateMidnaIdleAudio(this, play);
 
     if (this->unk_2A4 > 0.0f) {
         Math_StepToF(&this->unk_2A4, 0.0f, 0.05f);
@@ -1486,6 +1519,7 @@ void EnElf_Update(Actor* thisx, PlayState* play) {
     this->actionFunc(this, play);
     this->actor.shape.rot.y = this->unk_2BC;
     this->timer++;
+    EnElf_UpdateMidnaBlink(this);
 
     if (this->fairyFlags & FAIRY_FLAG_BIG) {
         func_80A04D90(this, play);
@@ -1552,12 +1586,13 @@ static void EnElf_DrawMidnaShimmer(EnElf* this, PlayState* play, Gfx* shimmer, u
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-static Gfx* EnElf_GetMidnaBlinkModel(u16 timer, Gfx* openModel) {
-    /* Use the actor's update clock, not draw calls or the shared RNG. At 20 Hz
-     * this is a 200 ms blink with alternating 4.6/5.4 second gaps. */
+static Gfx* EnElf_GetMidnaBlinkModel(u16 timer, Gfx* openModel, s32* blinkState) {
+    /* First blink after 1.2 seconds out, then alternating 4.6/5.4 seconds
+     * out. Six update frames give a readable 300 ms close/reopen. */
     s32 phase = timer % 200;
-    s32 blinkFrame = phase >= 172 ? phase - 172 : phase - 80;
-    if (blinkFrame < 0 || blinkFrame > 3) {
+    s32 blinkFrame = phase >= 116 ? phase - 116 : phase - 24;
+    *blinkState = 0;
+    if (blinkFrame < 0 || blinkFrame > 5) {
         return openModel;
     }
     /* Blink atlases are optional POC2 additions. A partial or failed load
@@ -1571,10 +1606,41 @@ static Gfx* EnElf_GetMidnaBlinkModel(u16 timer, Gfx* openModel) {
         char* halfTexture = ResourceMgr_GetResourceDataByNameHandlingMQ("objects/midna_navi/poc2/DiffuseHalf");
         char* closedTexture = ResourceMgr_GetResourceDataByNameHandlingMQ("objects/midna_navi/poc2/DiffuseClosed");
         if (half != NULL && closed != NULL && halfTexture != NULL && closedTexture != NULL) {
-            return blinkFrame == 0 || blinkFrame == 3 ? half : closed;
+            *blinkState = blinkFrame == 2 || blinkFrame == 3 ? 2 : 1;
+            return *blinkState == 1 ? half : closed;
         }
     }
+    *blinkState = -1;
     return openModel;
+}
+
+static void EnElf_TraceMidnaFrame(EnElf* this, PlayState* play, Vtx* pose, s32 blinkState) {
+    static EnElf* observedActor;
+    static u16 previousTimer;
+    static u16 lastLogTimer;
+    static s32 lastBlinkState;
+    static u8 samples;
+
+    /* A bounded trace records what the live draw actually selected, including
+     * resource fallback. It never advances animation or modifies actor state. */
+    if (observedActor != this || this->timer < previousTimer) {
+        observedActor = this;
+        samples = 0;
+        lastLogTimer = this->timer - 1;
+        lastBlinkState = -2;
+    }
+    previousTimer = this->timer;
+    if (samples < 16 && lastLogTimer != this->timer &&
+        (this->timer % 20 == 0 || blinkState != lastBlinkState)) {
+        LUSLOG_INFO("[Midna] scene=%d alt=%d mode=%s actorTick=%u visibleTick=%u pose=%u blink=%d vertex0=(%d,%d,%d)",
+                    play->sceneNum, ResourceMgr_IsAltAssetsEnabled(), pose != NULL ? "POC2" : "POC1-fallback",
+                    (unsigned)this->timer, (unsigned)this->midnaBlinkTimer, (unsigned)(this->timer & 63), blinkState,
+                    pose != NULL ? pose[0].v.ob[0] : 0, pose != NULL ? pose[0].v.ob[1] : 0,
+                    pose != NULL ? pose[0].v.ob[2] : 0);
+        lastLogTimer = this->timer;
+        ++samples;
+    }
+    lastBlinkState = blinkState;
 }
 
 /* The optional pack owns its mesh/materials. Never replace gameplay_keep's
@@ -1589,6 +1655,7 @@ static s32 EnElf_TryDrawMidna(EnElf* this, PlayState* play) {
     f32 alphaScale;
     f32 cosmeticScale;
     u8 alpha;
+    s32 blinkState = 0;
 
     if (this->actor.params != FAIRY_NAVI || !ResourceMgr_FileExists(path)) {
         return false;
@@ -1649,8 +1716,9 @@ static s32 EnElf_TryDrawMidna(EnElf* this, PlayState* play) {
     gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     if (pose != NULL) {
         gSPSegment(POLY_XLU_DISP++, 0x08, pose);
-        model = EnElf_GetMidnaBlinkModel(this->timer, model);
+        model = EnElf_GetMidnaBlinkModel(this->midnaBlinkTimer, model, &blinkState);
     }
+    EnElf_TraceMidnaFrame(this, play, pose, blinkState);
     gSPDisplayList(POLY_XLU_DISP++, model);
     if (markings != NULL) {
         gDPPipeSync(POLY_XLU_DISP++);

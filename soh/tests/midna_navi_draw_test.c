@@ -14,11 +14,21 @@ static int packPresent, loadSucceeds;
 static int poc2Present, poseMissing, markingsMissing, lastPoseFrame, inputTimer = 17;
 static int shimmerVerticesMissing, shimmerVerticesFailed, textureFailed;
 static int blinkPresent, blinkMissing, blinkFailed, expectedBlink;
+static int inputVisibleTimer;
 static u8 inputAlpha = 255;
 static f32 fairySize = 1.0f;
 static Mtx matrix;
 static GameInfo registers;
 GameInfo* gGameInfo = &registers;
+
+#define FAIRY_FLAG_BIG (1 << 9)
+void func_80A04D90(EnElf* fairy, PlayState* play) {
+}
+bool ResourceMgr_IsAltAssetsEnabled(void) {
+    return false;
+}
+void lusprintf(const char* file, int32_t line, int32_t level, const char* fmt, ...) {
+}
 
 static int blinkResource(const char* path) {
     static const char* paths[] = { "objects/midna_navi/poc2/BlinkHalfDL", "objects/midna_navi/poc2/BlinkClosedDL",
@@ -165,6 +175,9 @@ static void checkCase(int fairyType, int present, int loaded, int hiddenState, i
     fairy.outerColor.g = 101;
     fairy.outerColor.b = 233;
     fairy.timer = inputTimer;
+#ifdef MIDNA_VISIBLE_CLOCK
+    fairy.midnaBlinkTimer = inputVisibleTimer;
+#endif
     packPresent = present;
     loadSucceeds = loaded;
     nativeDraws = midnaSetups = resourceChecks = resourceLoads = pushes = pops = 0;
@@ -225,6 +238,62 @@ static void checkLights(int fairyType, int present, int loaded, int hidden, int 
     REQUIRE(fairy.lightInfoGlow.params.point.radius == (hidden ? 0 : 100));
 }
 
+static void idleAction(EnElf* fairy, PlayState* play) {
+}
+
+static void checkVisibleClock(void) {
+    static PlayState play;
+    EnElf fairy = { 0 };
+    fairy.actor.params = FAIRY_NAVI;
+    fairy.actor.scale.x = 0.008f;
+    fairy.innerColor.a = 255;
+    fairy.actionFunc = idleAction;
+    fairy.unk_2A8 = 8;
+    for (int i = 0; i < 80; ++i)
+        EnElf_Update(&fairy.actor, &play);
+    REQUIRE(fairy.timer == 80);
+    inputTimer = fairy.timer;
+#ifdef MIDNA_VISIBLE_CLOCK
+    REQUIRE(fairy.midnaBlinkTimer == 0);
+    inputVisibleTimer = fairy.midnaBlinkTimer;
+#endif
+    /* Time inside Link must not consume a blink or emerge with a closed eye. */
+    expectedBlink = 0;
+    checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+    fairy.unk_2A8 = 0;
+    for (int i = 1; i <= 230; ++i) {
+        EnElf_Update(&fairy.actor, &play);
+        inputTimer = fairy.timer;
+#ifdef MIDNA_VISIBLE_CLOCK
+        REQUIRE(fairy.midnaBlinkTimer == i % 200);
+        inputVisibleTimer = fairy.midnaBlinkTimer;
+#endif
+        int phase = i % 200;
+        int blink = phase >= 116 ? phase - 116 : phase - 24;
+        expectedBlink = blink < 0 || blink > 5 ? 0 : (blink == 2 || blink == 3 ? 2 : 1);
+        checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+    }
+#ifdef MIDNA_VISIBLE_CLOCK
+    u16 held = fairy.midnaBlinkTimer;
+    fairy.fairyFlags = 8;
+    EnElf_Update(&fairy.actor, &play);
+    REQUIRE(fairy.midnaBlinkTimer == held);
+    fairy.fairyFlags = 0;
+    fairy.actor.scale.x = 0.001f;
+    EnElf_Update(&fairy.actor, &play);
+    REQUIRE(fairy.midnaBlinkTimer == held);
+    fairy.actor.scale.x = 0.008f;
+    fairy.innerColor.a = 0;
+    EnElf_Update(&fairy.actor, &play);
+    REQUIRE(fairy.midnaBlinkTimer == held);
+    fairy.innerColor.a = 255;
+    fairy.actor.params = FAIRY_HEAL;
+    EnElf_Update(&fairy.actor, &play);
+    REQUIRE(fairy.midnaBlinkTimer == held);
+#endif
+    puts("PASS: hidden, zero-alpha and tiny emergence frames do not consume the blink cycle");
+}
+
 int main(void) {
     /* Installed pack selects Midna only for the companion fairy. */
     checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
@@ -282,17 +351,20 @@ int main(void) {
      * calls use the same state; the render path must not advance actor time. */
     inputAlpha = 255;
     blinkPresent = 1;
-    const int blinkSequence[][2] = { { 79, 0 },  { 80, 1 },  { 81, 2 },    { 82, 2 },  { 83, 1 },  { 84, 0 },
-                                     { 171, 0 }, { 172, 1 }, { 173, 2 },   { 174, 2 }, { 175, 1 }, { 176, 0 },
-                                     { 279, 0 }, { 280, 1 }, { 65535, 0 }, { 0, 0 } };
+    checkVisibleClock();
+    const int blinkSequence[][2] = { { 23, 0 },  { 24, 1 },  { 25, 1 },  { 26, 2 },  { 27, 2 },  { 28, 1 },
+                                     { 29, 1 },  { 30, 0 },  { 115, 0 }, { 116, 1 }, { 117, 1 }, { 118, 2 },
+                                     { 119, 2 }, { 120, 1 }, { 121, 1 }, { 122, 0 }, { 199, 0 }, { 0, 0 } };
     for (unsigned i = 0; i < sizeof(blinkSequence) / sizeof(blinkSequence[0]); ++i) {
-        inputTimer = blinkSequence[i][0];
+        inputTimer = 1400 + i;
+        inputVisibleTimer = blinkSequence[i][0];
         expectedBlink = blinkSequence[i][1];
         checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
         checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
     }
     /* Missing or unloadable blink resources leave the open POC2 eye intact. */
-    inputTimer = 81;
+    inputTimer = 1500;
+    inputVisibleTimer = 26;
     expectedBlink = 0;
     blinkPresent = 0;
     checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
