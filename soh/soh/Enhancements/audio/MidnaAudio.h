@@ -18,16 +18,21 @@ typedef enum MidnaAudioEvent {
     MIDNA_AUDIO_CALL,
     MIDNA_AUDIO_HINT,
     MIDNA_AUDIO_TALK,
+    MIDNA_AUDIO_YAWN,
     MIDNA_AUDIO_EVENT_COUNT
 } MidnaAudioEvent;
 
 // Load optional private clips on startup. No original sound-bank entries change.
 void MidnaAudio_Init(void);
 // False means the caller must play its original sound, with its original arguments.
+// True includes an available movement cue intentionally suppressed by its cooldown.
 bool MidnaAudio_TryPlay(MidnaAudioEvent event);
+// One call per 20 Hz Navi update. Only eligible stationary/visible time counts.
+// Ineligible updates cancel idle playback; other cues always take priority.
+void MidnaAudio_UpdateIdle(bool eligible);
 // Adds dry, centered mono clips to the engine's 32 kHz stereo output.
 void MidnaAudio_Mix(int16_t* interleavedStereo, size_t frameCount);
-// Stop only Midna's voices at scene teardown; keep decoded clips for the next scene.
+// Stop Midna's voices at scene teardown; keep clips and remaining cue intervals.
 void MidnaAudio_Reset(void);
 
 #ifdef __cplusplus

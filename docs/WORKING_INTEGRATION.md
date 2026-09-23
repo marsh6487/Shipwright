@@ -54,6 +54,31 @@ prompt ease and the selected model's appearance still need an in-game check.
 
 ## Verification and future changes
 
+The [September 24 continuity audit](stabilization/2026-09-24-feature-continuity.md)
+found two additional published follow-ups missing from `0574f79c`: Midna POC3
+(`822f46b1`) and Zora shield ground/swim anchoring (`5d0b8384`). The repair merges
+both histories into that cumulative tip, retaining chest sizing and RPG pickups.
+The original complete Midna POC3 archive was correct; its newer rendering paths
+were absent from the standalone executable.
+
+[`required-feature-baselines.json`](required-feature-baselines.json) records the
+required published feature milestones. Add each newly integrated feature's
+commit to this inventory when carrying it forward. Run:
+
+```sh
+bash scripts/diagnostics/run_cumulative_regressions.sh
+```
+
+The distribution workflow now requires this check before generating archives or
+platform builds. It uses complete Git history and checks both ancestry and the
+restored production regressions. Ancestry alone cannot detect a later revert,
+and this gate cannot protect an obsolete branch that omits the gate itself.
+Review the source changes and publish from this cumulative branch.
+
+Midna audio content already lives in the mod archive. See
+[interchangeable Midna cues](poc/midna-audio-swaps.md); changing a WAV does not
+require an executable build. Changing event routing or timing still does.
+
 Run the focused PAK/pedestal, native-material, actor/weather/audio, custom-color,
 and Zora barrier checks when their integration boundaries change. Validate the
 published Windows build on the exact cumulative commit. Keep build/static

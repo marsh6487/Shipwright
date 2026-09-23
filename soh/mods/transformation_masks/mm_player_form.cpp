@@ -11465,7 +11465,7 @@ static void MmForm_PatchZoraBarrierColors(Gfx* commands, size_t count) {
 //
 // Mode A - Ground / Iron boots (NOT fast swimming):
 //   From z_player.c:13203-13209: RotateXS(-0x4000) + Translate(0,0,-1800)
-//   Barrier faces FORWARD from player chest
+//   Starts at the actor's feet; the native offset puts its origin below them
 //
 // Mode B - Fast swim (PLAYER_STATE3_8000 / fastSwimActive):
 //   From z_player_lib.c:2392-2399: RotateZS(roll) + RotateXS(-0x8000) + Translate(0,0,-4000)
@@ -11478,17 +11478,37 @@ static void MmForm_DrawZoraBarrier(Player* player, PlayState* play) {
 
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
 
-    // MM uses the same scale for land guarding and swimming. Convert its model
-    // scale (10/51) through the 0.01 actor scale because we draw in world space.
-    const f32 scale = gFormState.barrierIntensity * (0.1f / 51.0f);
+    // MM uses the same scale for land guarding and swimming. World-space paths
+    // include the normal 0.01 actor scale here; the posed path applies it below.
+    f32 scale = gFormState.barrierIntensity * (0.1f / 51.0f);
 
     Matrix_Push();
 
-    // MM draws barrier INSIDE the limb draw callback where skeleton scale (0.01) is active.
-    // Our barrier is drawn in world space, so all offsets must be ×0.01 of MM's model-space values.
-    // MM scale: unk_B62 * (10.0f / 51.0f) in model space = unk_B62 * (0.1f / 51.0f) in world space.
-    if (gFormState.fastSwimActive) {
-        // === Mode B: Fast swim barrier (from 2Ship z_player_lib.c:2430-2443) ===
+    // MM's ground draw uses the actor-root matrix; fast swim uses the body-limb
+    // callback. Include the animated root position AND rotation so the shield
+    // turns with the horizontal swimming pose, not just the actor's heading.
+    if (gFormState.fastSwimActive && gFormState.currentForm == MM_PLAYER_FORM_ZORA && gFormState.skeletonLoaded &&
+        gFormState.formSkelAnime.jointTable != NULL && gFormState.formSkelAnime.limbCount >= 2) {
+        // Match Actor_Draw and MmForm_OverrideLimbDraw's root transform. Native
+        // MM uses smoothed roll for the shield, while the body uses raw roll.
+        Matrix_SetTranslateRotateYXZ(player->actor.world.pos.x,
+                                     player->actor.world.pos.y + player->actor.shape.yOffset * player->actor.scale.y,
+                                     player->actor.world.pos.z, &player->actor.shape.rot);
+        Matrix_Scale(player->actor.scale.x, player->actor.scale.y, player->actor.scale.z, MTXMODE_APPLY);
+        const Vec3s& rootPos = gFormState.formSkelAnime.jointTable[0];
+        const Vec3s& rootRot = gFormState.formSkelAnime.jointTable[1];
+        const f32 rootScale = sFormProps[MM_PLAYER_FORM_ZORA].rootAnimScale;
+        const f32 yAdj = (Math_CosS(gFormState.swimPitch) - 1.0f) * 200.0f;
+        Matrix_Translate(rootPos.x * rootScale, rootPos.y * rootScale + yAdj, rootPos.z * rootScale, MTXMODE_APPLY);
+        Matrix_RotateX(BINANG_TO_RAD(gFormState.swimPitch), MTXMODE_APPLY);
+        Matrix_RotateZ(BINANG_TO_RAD(gFormState.swimRollSmoothed), MTXMODE_APPLY);
+        Matrix_RotateZYX(rootRot.x, rootRot.y, rootRot.z, MTXMODE_APPLY);
+        Matrix_RotateX(M_PI, MTXMODE_APPLY);
+        Matrix_Translate(0.0f, 0.0f, -4000.0f, MTXMODE_APPLY);
+        scale = gFormState.barrierIntensity * (10.0f / 51.0f);
+    } else if (gFormState.fastSwimActive) {
+        // Human Zora-tunic swimming has no active form skeleton. Retain its
+        // existing world-space body anchor and pitch/roll transform.
         f32 yAdj = (Math_CosS(gFormState.swimPitch) - 1.0f) * 2.0f; // MM: 200 model → 2 world
         Matrix_Translate(player->actor.world.pos.x, yAdj + player->actor.world.pos.y + 40.0f, player->actor.world.pos.z,
                          MTXMODE_NEW);
@@ -11499,8 +11519,9 @@ static void MmForm_DrawZoraBarrier(Player* player, PlayState* play) {
         Matrix_Translate(0.0f, 0.0f, -40.0f, MTXMODE_APPLY); // MM: -4000 model → -40 world
     } else {
         // === Mode A: Ground barrier with R+B (from 2Ship z_player.c:13203-13209) ===
-        Matrix_Translate(player->actor.world.pos.x, player->actor.world.pos.y + 40.0f, player->actor.world.pos.z,
-                         MTXMODE_NEW);
+        // A chest-height offset lifts the lower edge above Link's legs. Anchor
+        // at his feet before the native -18 offset and intensity scaling.
+        Matrix_Translate(player->actor.world.pos.x, player->actor.world.pos.y, player->actor.world.pos.z, MTXMODE_NEW);
         Matrix_RotateY(BINANG_TO_RAD(player->actor.shape.rot.y), MTXMODE_APPLY);
         Matrix_RotateX(BINANG_TO_RAD((s16)-0x4000), MTXMODE_APPLY); // -90 deg (forward-facing)
         Matrix_Translate(0.0f, 0.0f, -18.0f, MTXMODE_APPLY);        // MM: -1800 model → -18 world

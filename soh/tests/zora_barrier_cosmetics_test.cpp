@@ -5,19 +5,27 @@ extern "C" {
 #include "macros.h"
 }
 #include "soh/cvar_prefixes.h"
+#include "mods/transformation_masks/transformation_masks.h"
 #include "test_require.h"
+#include <cassert>
 #include <cmath>
 #include <cstring>
 #include <string>
 #include <vector>
 
-// Use the real GBI macros and unchanged production draw body. Matrix/allocator
-// calls are graphics-service boundaries; the game and pixels are not exercised.
+#include "zora_barrier_properties.inc"
+
+// Use the real GBI macros, production draw body and matrix operations. Only
+// graphics allocation, interpolation recording and resource services are stubbed;
+// the game and pixels are not exercised.
 static struct {
     s16 barrierIntensity;
     bool fastSwimActive;
     s16 swimPitch;
     s16 swimRollSmoothed;
+    MmPlayerTransformation currentForm;
+    bool skeletonLoaded;
+    SkelAnime formSkelAnime;
 } gFormState;
 static std::vector<Gfx> sBarrierDLSafeCopy;
 static size_t sBarrierDLCount;
@@ -26,8 +34,10 @@ static Mtx sMatrix;
 static GraphicsContext sGfx;
 static PlayState sPlay;
 static Player sPlayer;
-static float sScale;
-static int sScaleCalls;
+static MtxF sMatrices[2], sDrawMatrix;
+static MtxF* sMatrixStack = sMatrices;
+static MtxF* sCurrentMatrix = sMatrices;
+static int sMatrixCalls;
 static bool sChanged[3];
 static const Color_RGB8 sColors[] = { { 17, 34, 51 }, { 68, 85, 102 }, { 119, 136, 153 } };
 static const char* sNames[] = { "Custom.ZoraMagicShield", "Custom.ZoraMagicShieldGlow",
@@ -54,27 +64,31 @@ Color_RGB8 CVarGetColor24(const char* key, Color_RGB8 fallback) {
     return fallback;
 }
 
-void Matrix_Push(void) {
+void FrameInterpolation_RecordMatrixPush(void) {
 }
-void Matrix_Pop(void) {
+void FrameInterpolation_RecordMatrixPop(void) {
 }
-void Matrix_Translate(f32, f32, f32, u8) {
+void FrameInterpolation_RecordMatrixTranslate(f32, f32, f32, u8) {
 }
-void Matrix_RotateX(f32, u8) {
+void FrameInterpolation_RecordMatrixRotate1Coord(u32, f32, u8) {
 }
-void Matrix_RotateY(f32, u8) {
+void FrameInterpolation_RecordMatrixScale(f32, f32, f32, u8) {
 }
-void Matrix_RotateZ(f32, u8) {
+void FrameInterpolation_RecordMatrixRotateZYX(s16, s16, s16, u8) {
 }
-void Matrix_Scale(f32 x, f32 y, f32 z, u8) {
-    REQUIRE(x == y && y == z);
-    sScale = x;
-    ++sScaleCalls;
+void FrameInterpolation_RecordMatrixSetTranslateRotateYXZ(f32, f32, f32, Vec3s*) {
+}
+#include "zora_barrier_matrix.inc"
+
+f32 Math_SinS(s16 value) {
+    return sinf(BINANG_TO_RAD(value));
 }
 f32 Math_CosS(s16 value) {
     return cosf(BINANG_TO_RAD(value));
 }
 Mtx* Matrix_NewMtx(GraphicsContext*, char*, s32) {
+    sDrawMatrix = *sCurrentMatrix;
+    ++sMatrixCalls;
     return &sMatrix;
 }
 void* Graph_Alloc(GraphicsContext*, size_t size) {
@@ -118,10 +132,34 @@ static void Draw(int intensity, bool swimming) {
     sPlay.state.gfxCtx = &sGfx;
     gFormState.barrierIntensity = intensity;
     gFormState.fastSwimActive = swimming;
-    sScaleCalls = 0;
+    sMatrixCalls = 0;
+    sCurrentMatrix = sMatrixStack;
+    SkinMatrix_SetTranslate(sCurrentMatrix, 12.0f, 34.0f, 56.0f);
+    const MtxF parent = *sCurrentMatrix;
     sBarrierDLSafeCopy = NativeColors();
     sBarrierDLCount = sBarrierDLSafeCopy.size();
     MmForm_DrawZoraBarrier(&sPlayer, &sPlay);
+    REQUIRE(sCurrentMatrix == sMatrixStack);
+    REQUIRE(memcmp(sCurrentMatrix, &parent, sizeof(parent)) == 0);
+}
+
+static Vec3f BarrierPoint(Vec3f point) {
+    return { sDrawMatrix.xw + sDrawMatrix.xx * point.x + sDrawMatrix.xy * point.y + sDrawMatrix.xz * point.z,
+             sDrawMatrix.yw + sDrawMatrix.yx * point.x + sDrawMatrix.yy * point.y + sDrawMatrix.yz * point.z,
+             sDrawMatrix.zw + sDrawMatrix.zx * point.x + sDrawMatrix.zy * point.y + sDrawMatrix.zz * point.z };
+}
+
+static void ExpectPoint(Vec3f point, Vec3f expected) {
+    REQUIRE(fabsf(point.x - expected.x) < 0.001f);
+    REQUIRE(fabsf(point.y - expected.y) < 0.001f);
+    REQUIRE(fabsf(point.z - expected.z) < 0.001f);
+}
+
+static void ExpectNativeScale(int intensity) {
+    const float expectedScale = intensity * (10.0f / 51.0f) * 0.01f;
+    REQUIRE(fabsf(sqrtf(SQ(sDrawMatrix.xx) + SQ(sDrawMatrix.yx) + SQ(sDrawMatrix.zx)) - expectedScale) < 0.00001f);
+    REQUIRE(fabsf(sqrtf(SQ(sDrawMatrix.xy) + SQ(sDrawMatrix.yy) + SQ(sDrawMatrix.zy)) - expectedScale) < 0.00001f);
+    REQUIRE(fabsf(sqrtf(SQ(sDrawMatrix.xz) + SQ(sDrawMatrix.yz) + SQ(sDrawMatrix.zz)) - expectedScale) < 0.00001f);
 }
 
 int main() {
@@ -129,13 +167,95 @@ int main() {
     for (bool swimming : { false, true }) {
         for (int intensity : { 1, 50, 128, 255 }) {
             Draw(intensity, swimming);
-            REQUIRE(sScaleCalls == 1);
-            REQUIRE(fabsf(sScale - intensity * (10.0f / 51.0f) * 0.01f) < 0.00001f);
+            REQUIRE(sMatrixCalls == 1);
+            ExpectNativeScale(intensity);
         }
     }
     Draw(0, false);
-    REQUIRE(sScaleCalls == 0);
+    REQUIRE(sMatrixCalls == 0);
     puts("PASS native MM scale on land and in water, charge/fade, and inactive draw");
+
+    // Ground and idle-water draws start at the feet. Native -1800 model units
+    // become -18 world Y after the quarter-turn, independent of yaw/charge.
+    // The previous +40 chest offset leaves the origin above the feet and fails.
+    sPlayer.actor.world.pos = { 137.0f, 82.0f, -211.0f };
+    for (s16 yaw : { -32768, -16384, 0, 16384 }) {
+        sPlayer.actor.shape.rot.y = yaw;
+        for (int intensity : { 1, 50, 128, 255 }) {
+            Draw(intensity, false);
+            ExpectPoint(BarrierPoint({ 0, 0, 0 }), { 137, 64, -211 });
+            REQUIRE(BarrierPoint({ 0, 0, 0 }).y < sPlayer.actor.world.pos.y);
+        }
+        // At full strength, +36 along the shield's axis reaches the feet plane.
+        ExpectPoint(BarrierPoint({ 0, 0, 36 }), { 137, 82, -211 });
+    }
+    puts("PASS ground/idle shield origin below feet through turns and charge/fade; matrix stack restored");
+
+    // Preserve the fallback used without an active Zora skeleton (human tunic).
+    sPlayer.actor.shape.rot.y = 0;
+    Draw(255, true);
+    ExpectPoint(BarrierPoint({ 0, 0, 0 }), { 137, 122, -171 });
+    gFormState.swimPitch = 0x4000;
+    Draw(255, true);
+    ExpectPoint(BarrierPoint({ 0, 0, 0 }), { 137, 80, -211 });
+    gFormState.swimPitch = 0;
+    gFormState.swimRollSmoothed = 0x4000;
+    sPlayer.actor.shape.rot.y = 0x4000;
+    Draw(255, true);
+    ExpectPoint(BarrierPoint({ 0, 0, 100 }), { 127, 122, -211 });
+    gFormState.swimRollSmoothed = 0;
+    sPlayer.actor.shape.rot.y = 0;
+    puts("PASS existing fast-swim fallback without an active Zora skeleton");
+
+    // Native MM anchors a swimming Zora's shield to the animated root. These
+    // landmarks include a nonzero actor offset, root position and root rotation;
+    // actor yaw/pitch alone cannot place or orient this shield correctly.
+    Vec3s swimJoints[] = { { 100, 3000, 200 }, { 0x4000, 0, 0 } };
+    gFormState.currentForm = MM_PLAYER_FORM_ZORA;
+    gFormState.skeletonLoaded = true;
+    gFormState.formSkelAnime.jointTable = swimJoints;
+    gFormState.formSkelAnime.limbCount = 2;
+    sPlayer.actor.scale = { 0.01f, 0.01f, 0.01f };
+    sPlayer.actor.shape.yOffset = 100;
+    for (int intensity : { 1, 50, 128, 255 }) {
+        Draw(intensity, true);
+        ExpectNativeScale(intensity);
+        ExpectPoint(BarrierPoint({ 0, 0, 0 }), { 138, 73, -209 });
+    }
+    ExpectPoint(BarrierPoint({ 0, 0, 100 }), { 138, 123, -209 });
+    sPlayer.actor.shape.rot.y = 0x4000;
+    Draw(255, true);
+    ExpectPoint(BarrierPoint({ 0, 0, 0 }), { 139, 73, -212 });
+    ExpectPoint(BarrierPoint({ 0, 0, 100 }), { 139, 123, -212 });
+
+    sPlayer.actor.shape.rot.y = 0;
+    gFormState.swimPitch = 0x4000;
+    Draw(255, true);
+    ExpectPoint(BarrierPoint({ 0, 0, 0 }), { 138, 111, -249 });
+    ExpectPoint(BarrierPoint({ 0, 0, 100 }), { 138, 111, -199 });
+    gFormState.swimPitch = -0x4000;
+    Draw(255, true);
+    ExpectPoint(BarrierPoint({ 0, 0, 0 }), { 138, 111, -169 });
+    ExpectPoint(BarrierPoint({ 0, 0, 100 }), { 138, 111, -219 });
+
+    gFormState.swimPitch = 0;
+    gFormState.swimRollSmoothed = 0x4000;
+    sPlayer.actor.shape.rot.y = 0x4000;
+    Draw(255, true);
+    ExpectPoint(BarrierPoint({ 0, 0, 0 }), { 139, 113, -252 });
+    ExpectPoint(BarrierPoint({ 0, 0, 100 }), { 139, 113, -202 });
+
+    // A new animation frame must move the anchor, and leaving fast swim must
+    // return to the feet instead of retaining a cached swimming pose.
+    gFormState.swimRollSmoothed = 0;
+    sPlayer.actor.shape.rot.y = 0;
+    swimJoints[0] = { 300, 3200, -100 };
+    Draw(255, true);
+    ExpectPoint(BarrierPoint({ 0, 0, 0 }), { 140, 75, -212 });
+    ExpectPoint(BarrierPoint({ 0, 0, 100 }), { 140, 125, -212 });
+    Draw(255, false);
+    ExpectPoint(BarrierPoint({ 0, 0, 0 }), { 137, 64, -211 });
+    puts("PASS animated Zora swim root, yaw, dive/rise, roll, charge/fade and return to feet");
 
     auto original = NativeColors();
     auto commands = original;
