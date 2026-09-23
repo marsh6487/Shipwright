@@ -142,7 +142,7 @@ static void idleYawn() {
     REQUIRE(tick(true) == 0);
     REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_YAWN));
     REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_VANISH));
-    REQUIRE(tick(true) == 500); // recall stops the yawn rather than layering it
+    REQUIRE(tick(true) == 500);                     // recall stops the yawn rather than layering it
     REQUIRE(!MidnaAudio_TryPlay(MIDNA_AUDIO_YAWN)); // busy voices beat idle audio
     REQUIRE(tick(true) == 600);
     REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_YAWN));

@@ -71,15 +71,15 @@ static void idleGates(void) {
     player.focusActor = NULL;
     play.actorCtx.targetCtx.arrowPointedActor = NULL;
 
-#define BLOCKED(field, value)                                      \
-    do {                                                          \
-        __typeof__(field) saved = field;                           \
-        field = value;                                            \
-        EnElf_UpdateMidnaIdleAudio(&fairy, &play);                  \
-        REQUIRE(!idleEligible);                                   \
-        field = saved;                                            \
-        EnElf_UpdateMidnaIdleAudio(&fairy, &play);                  \
-        REQUIRE(idleEligible);                                    \
+#define BLOCKED(field, value)                      \
+    do {                                           \
+        __typeof__(field) saved = field;           \
+        field = value;                             \
+        EnElf_UpdateMidnaIdleAudio(&fairy, &play); \
+        REQUIRE(!idleEligible);                    \
+        field = saved;                             \
+        EnElf_UpdateMidnaIdleAudio(&fairy, &play); \
+        REQUIRE(idleEligible);                     \
     } while (0)
     BLOCKED(player.actor.speedXZ, 2.0f);
     BLOCKED(player.actor.speedXZ, -2.0f);
@@ -90,9 +90,9 @@ static void idleGates(void) {
     BLOCKED(player.stateFlags1, PLAYER_STATE1_PARALLEL);
     BLOCKED(player.stateFlags1, PLAYER_STATE1_FIRST_PERSON);
     BLOCKED(player.focusActor, &fairy.actor);
-    BLOCKED(fairy.unk_2A8, 1); // native enemy/non-NPC attention
-    BLOCKED(fairy.unk_2A8, 7); // recall
-    BLOCKED(fairy.unk_2A8, 8); // hidden
+    BLOCKED(fairy.unk_2A8, 1);  // native enemy/non-NPC attention
+    BLOCKED(fairy.unk_2A8, 7);  // recall
+    BLOCKED(fairy.unk_2A8, 8);  // hidden
     BLOCKED(fairy.unk_2A8, 11); // emergence
     BLOCKED(fairy.fairyFlags, 8);
     BLOCKED(fairy.actor.scale.x, .004f);

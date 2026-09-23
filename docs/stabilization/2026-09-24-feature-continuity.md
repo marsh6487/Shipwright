@@ -15,9 +15,11 @@ runtime acceptance of every configuration or an audit of unpublished work.
 | Midna POC2/POC3 | Only POC1 behavior was integrated. The later production test fails because Midna still uses `LIGHT_POINT_GLOW`. | Merge `822f46b15dcae98b0a0564ec469a061f5106d4c4`: glow suppression, Primary/Secondary cosmetics and motes, pose selection, visible-only blink clock, movement cue spacing, idle yawn including passive NPC proximity. |
 | Zora shield anchoring | The later world-space matrix test fails at the grounded origin. | Merge `5d0b8384d4885b4e1f54c041afcc432542848257`: feet anchoring on ground and the animated Zora root while swimming, including pitch and roll; retains size, color and human fallback. |
 
-Both histories merge cleanly onto `0574f79c`. Production changes are identical
-to the donor versions; other production files remain identical to the audited
-integration. Original Midna tests passed on the incomplete tip because they
+Both histories merge cleanly onto `0574f79c`. Production changes match the donor
+versions, with clang-format 14 applied to the restored Midna source and tests;
+all noncomment source tokens are unchanged by formatting. Other production
+files remain identical to the audited integration. Original Midna tests passed
+on the incomplete tip because they
 predated the missing features. Restoring the newer tests reproduces both
 regressions before the source merges and passes after them.
 
@@ -64,6 +66,10 @@ the source repair.
 - Additional real-ImGui PAK/config checks and native-material scroll/profile/
   factory/cache checks pass. HD spin sampling source is retained unchanged;
   this audit does not claim a fresh spin renderer runtime test.
+- Independent review found no substantive issue. GitHub's cumulative regression
+  job passed on `5d934cc6`. The separate formatting job exposed three Midna files
+  needing clang-format 14; the follow-up changes formatting only, with identical
+  noncomment tokens and rerun Midna production diagnostics.
 - `generate-builds` now requires the history inventory and production regression
   runner before archive generation and all platform builds. Full history is
   checked out. Update the inventory with subsequent integrated features.

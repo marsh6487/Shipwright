@@ -324,16 +324,14 @@ static void EnElf_UpdateMidnaIdleAudio(EnElf* this, PlayState* play) {
         return;
     }
     MidnaAudio_UpdateIdle(this->unk_2A8 == 0 && !(this->fairyFlags & 8) && this->actor.scale.x >= 0.0078f &&
-                         this->innerColor.a > 0.0f && this->unk_2C7 == 0 &&
-                         fabsf(player->actor.speedXZ) < 0.1f && fabsf(player->linearVelocity) < 0.1f &&
-                         (player->actor.bgCheckFlags & 1) &&
-                         !(player->stateFlags1 &
-                           (PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_PARALLEL |
-                            PLAYER_STATE1_FIRST_PERSON)) &&
-                         player->focusActor == NULL &&
-                         play->pauseCtx.state == 0 && Message_GetState(&play->msgCtx) == TEXT_STATE_NONE &&
-                         !Play_InCsMode(play) && play->transitionTrigger == TRANS_TRIGGER_OFF &&
-                         play->transitionMode == TRANS_MODE_OFF && play->gameOverCtx.state == GAMEOVER_INACTIVE);
+                          this->innerColor.a > 0.0f && this->unk_2C7 == 0 && fabsf(player->actor.speedXZ) < 0.1f &&
+                          fabsf(player->linearVelocity) < 0.1f && (player->actor.bgCheckFlags & 1) &&
+                          !(player->stateFlags1 & (PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_GETTING_ITEM |
+                                                   PLAYER_STATE1_PARALLEL | PLAYER_STATE1_FIRST_PERSON)) &&
+                          player->focusActor == NULL && play->pauseCtx.state == 0 &&
+                          Message_GetState(&play->msgCtx) == TEXT_STATE_NONE && !Play_InCsMode(play) &&
+                          play->transitionTrigger == TRANS_TRIGGER_OFF && play->transitionMode == TRANS_MODE_OFF &&
+                          play->gameOverCtx.state == GAMEOVER_INACTIVE);
 }
 
 static void EnElf_UpdateMidnaBlink(EnElf* this) {
@@ -1630,8 +1628,7 @@ static void EnElf_TraceMidnaFrame(EnElf* this, PlayState* play, Vtx* pose, s32 b
         lastBlinkState = -2;
     }
     previousTimer = this->timer;
-    if (samples < 16 && lastLogTimer != this->timer &&
-        (this->timer % 20 == 0 || blinkState != lastBlinkState)) {
+    if (samples < 16 && lastLogTimer != this->timer && (this->timer % 20 == 0 || blinkState != lastBlinkState)) {
         LUSLOG_INFO("[Midna] scene=%d alt=%d mode=%s actorTick=%u visibleTick=%u pose=%u blink=%d vertex0=(%d,%d,%d)",
                     play->sceneNum, ResourceMgr_IsAltAssetsEnabled(), pose != NULL ? "POC2" : "POC1-fallback",
                     (unsigned)this->timer, (unsigned)this->midnaBlinkTimer, (unsigned)(this->timer & 63), blinkState,
