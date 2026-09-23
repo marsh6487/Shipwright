@@ -24,10 +24,11 @@ typedef enum MidnaAudioEvent {
 // Load optional private clips on startup. No original sound-bank entries change.
 void MidnaAudio_Init(void);
 // False means the caller must play its original sound, with its original arguments.
+// True includes an available movement cue intentionally suppressed by its cooldown.
 bool MidnaAudio_TryPlay(MidnaAudioEvent event);
 // Adds dry, centered mono clips to the engine's 32 kHz stereo output.
 void MidnaAudio_Mix(int16_t* interleavedStereo, size_t frameCount);
-// Stop only Midna's voices at scene teardown; keep decoded clips for the next scene.
+// Stop Midna's voices at scene teardown; keep decoded clips and movement spacing.
 void MidnaAudio_Reset(void);
 
 #ifdef __cplusplus

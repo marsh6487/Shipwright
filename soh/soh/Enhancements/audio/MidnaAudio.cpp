@@ -19,6 +19,7 @@ constexpr const char* kPaths[MIDNA_AUDIO_EVENT_COUNT] = {
     "objects/midna_navi/audio/talk.wav",
 };
 constexpr size_t kMaxSamples = 32000 * 10;
+constexpr size_t kMovementGapFrames = 32000 * 8;
 
 struct Voice {
     MidnaAudioEvent event = MIDNA_AUDIO_EVENT_COUNT;
@@ -30,6 +31,7 @@ std::array<std::vector<int16_t>, MIDNA_AUDIO_EVENT_COUNT> sClips;
 // Movement and speech each have one independent voice. New cues in the same
 // category replace the old cue, rather than leaving a queue of stale calls.
 std::array<Voice, 2> sVoices;
+size_t sMovementGapRemaining = 0;
 
 uint16_t Read16(const uint8_t* p) {
     return static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8);
@@ -109,6 +111,7 @@ extern "C" void MidnaAudio_Init(void) {
     // Decode and archive I/O stay outside both the mixer and its critical section.
     std::lock_guard<std::mutex> lock(sMutex);
     sVoices = {};
+    sMovementGapRemaining = 0;
     sClips = std::move(clips);
 }
 
@@ -119,6 +122,14 @@ extern "C" bool MidnaAudio_TryPlay(MidnaAudioEvent event) {
     std::lock_guard<std::mutex> lock(sMutex);
     if (sClips[event].empty()) {
         return false;
+    }
+    if (event == MIDNA_AUDIO_DASH || event == MIDNA_AUDIO_APPEAR) {
+        if (sMovementGapRemaining != 0) {
+            // This cue is intentionally silent. Returning false would leak the
+            // native fairy dash through the actor's per-clip fallback.
+            return true;
+        }
+        sMovementGapRemaining = kMovementGapFrames;
     }
     Voice& voice = sVoices[event <= MIDNA_AUDIO_VANISH ? 0 : 1];
     if (voice.event != event) {
@@ -132,6 +143,9 @@ extern "C" void MidnaAudio_Mix(int16_t* output, size_t frames) {
         return;
     }
     std::lock_guard<std::mutex> lock(sMutex);
+    // Use the mixer's 32 kHz timeline so the gap advances during silence and
+    // has no wall-clock jumps, frame-rate dependence, or queued vocal cues.
+    sMovementGapRemaining -= std::min(sMovementGapRemaining, frames);
     if (sVoices[0].event == MIDNA_AUDIO_EVENT_COUNT && sVoices[1].event == MIDNA_AUDIO_EVENT_COUNT) {
         return;
     }

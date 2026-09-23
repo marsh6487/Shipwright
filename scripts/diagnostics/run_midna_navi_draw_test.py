@@ -10,7 +10,14 @@ from run_child_ruto_face_test import function
 ROOT = Path(__file__).resolve().parents[2]
 source_path = ROOT / 'soh/src/overlays/actors/ovl_En_Elf/z_en_elf.c'
 source = source_path.read_text()
-production = ''
+lights = (ROOT / 'soh/src/code/z_lights.c').read_text()
+production = ''.join(function(lights, name) for name in (
+    'Lights_PointSetInfo', 'Lights_PointNoGlowSetInfo', 'Lights_PointGlowSetInfo', 'Lights_PointSetColorAndRadius'))
+production += function(source, 'EnElf_UpdateLights')
+if 'static void EnElf_DrawMidnaShimmer(' in source:
+    production += function(source, 'EnElf_DrawMidnaShimmer')
+if 'static Gfx* EnElf_GetMidnaBlinkModel(' in source:
+    production += function(source, 'EnElf_GetMidnaBlinkModel')
 if 'static s32 EnElf_TryDrawMidna(' in source:
     production += function(source, 'EnElf_TryDrawMidna')
 production += function(source, 'EnElf_Draw')

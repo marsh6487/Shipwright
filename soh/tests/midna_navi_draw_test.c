@@ -6,24 +6,69 @@
 #include "src/overlays/actors/ovl_En_Elf/z_en_elf.h"
 #include "soh/ResourceManagerHelpers.h"
 
-static Gfx commands[64], resource[1], allocated[4];
+static Gfx commands[160], resource[1], body[1], markings[1], shimmer[1], allocated[4];
+static Gfx blinkHalf[1], blinkClosed[1];
+static Vtx pose[1];
 static unsigned nativeDraws, midnaSetups, resourceChecks, resourceLoads, pushes, pops;
 static int packPresent, loadSucceeds;
+static int poc2Present, poseMissing, markingsMissing, lastPoseFrame, inputTimer = 17;
+static int shimmerVerticesMissing, shimmerVerticesFailed, textureFailed;
+static int blinkPresent, blinkMissing, blinkFailed, expectedBlink;
 static u8 inputAlpha = 255;
 static f32 fairySize = 1.0f;
 static Mtx matrix;
 static GameInfo registers;
 GameInfo* gGameInfo = &registers;
 
+static int blinkResource(const char* path) {
+    static const char* paths[] = { "objects/midna_navi/poc2/BlinkHalfDL", "objects/midna_navi/poc2/BlinkClosedDL",
+                                   "objects/midna_navi/poc2/DiffuseHalf", "objects/midna_navi/poc2/DiffuseClosed" };
+    for (int i = 0; i < 4; ++i)
+        if (strcmp(path, paths[i]) == 0)
+            return i + 1;
+    return 0;
+}
+
 uint8_t ResourceMgr_FileExists(const char* path) {
-    REQUIRE(strcmp(path, "objects/midna_navi/poc1/MidnaFloatDL") == 0);
     ++resourceChecks;
-    return packPresent;
+    if (strcmp(path, "objects/midna_navi/poc1/MidnaFloatDL") == 0)
+        return packPresent;
+    int blink = blinkResource(path);
+    if (blink)
+        return blinkPresent && blinkMissing != blink;
+    REQUIRE(strncmp(path, "objects/midna_navi/poc2/", 23) == 0);
+    if (strcmp(path, "objects/midna_navi/poc2/ShimmerVertices") == 0 && shimmerVerticesMissing)
+        return 0;
+    return poc2Present;
 }
 Gfx* ResourceMgr_LoadGfxByName(const char* path) {
-    REQUIRE(strcmp(path, "objects/midna_navi/poc1/MidnaFloatDL") == 0);
     ++resourceLoads;
-    return loadSucceeds ? resource : NULL;
+    int blink = blinkResource(path);
+    if (blink == 1 || blink == 2)
+        return blinkFailed == blink ? NULL : (blink == 1 ? blinkHalf : blinkClosed);
+    if (strcmp(path, "objects/midna_navi/poc1/MidnaFloatDL") == 0)
+        return loadSucceeds ? resource : NULL;
+    if (strcmp(path, "objects/midna_navi/poc2/BodyDL") == 0)
+        return body;
+    if (strcmp(path, "objects/midna_navi/poc2/MarkingsDL") == 0)
+        return markingsMissing ? NULL : markings;
+    REQUIRE(strcmp(path, "objects/midna_navi/poc2/ShimmerDL") == 0);
+    return shimmer;
+}
+Vtx* ResourceMgr_LoadVtxByName(char* path) {
+    if (strcmp(path, "objects/midna_navi/poc2/ShimmerVertices") == 0)
+        return shimmerVerticesFailed ? NULL : pose;
+    REQUIRE(sscanf(path, "objects/midna_navi/poc2/Pose%d", &lastPoseFrame) == 1);
+    REQUIRE(lastPoseFrame >= 0 && lastPoseFrame < 64);
+    return poseMissing ? NULL : pose;
+}
+char* ResourceMgr_GetResourceDataByNameHandlingMQ(const char* path) {
+    int blink = blinkResource(path);
+    if (blink == 3 || blink == 4)
+        return blinkFailed == blink ? NULL : (char*)pose;
+    REQUIRE(strcmp(path, "objects/midna_navi/poc2/DiffuseNeutral") == 0 ||
+            strcmp(path, "objects/midna_navi/poc2/MarkingsMask") == 0);
+    return textureFailed ? NULL : (char*)pose;
 }
 void* Graph_Alloc(GraphicsContext* gfx, size_t size) {
     REQUIRE(size == sizeof(allocated));
@@ -52,6 +97,21 @@ void Matrix_Pop(void) {
 }
 void Matrix_RotateZ(f32 angle, u8 mode) {
     REQUIRE(isfinite(angle) && fabsf(angle) <= 0.04f);
+}
+void Matrix_Translate(f32 x, f32 y, f32 z, u8 mode) {
+    REQUIRE(isfinite(x) && isfinite(y) && isfinite(z));
+    REQUIRE(y < 0); // motes stay below the face/helmet
+}
+void Matrix_ReplaceRotation(MtxF* matrix) {
+}
+f32 Math_CosS(s16 angle) {
+    return cosf(angle * (3.14159265358979323846f / 32768.0f));
+}
+s16 Math_Atan2S(f32 y, f32 x) {
+    return 0;
+}
+void Actor_SetScale(Actor* actor, f32 scale) {
+    actor->scale.x = actor->scale.y = actor->scale.z = scale;
 }
 void Matrix_Scale(f32 x, f32 y, f32 z, u8 mode) {
     /* POC1's packed 4471-unit height becomes 21.4608 world units at
@@ -98,7 +158,13 @@ static void checkCase(int fairyType, int present, int loaded, int hiddenState, i
     fairy.unk_2A8 = hiddenState ? 8 : 0;
     fairy.fairyFlags = hiddenFlag ? 8 : 0;
     fairy.innerColor.a = inputAlpha;
-    fairy.timer = 17;
+    fairy.innerColor.r = 217;
+    fairy.innerColor.g = 43;
+    fairy.innerColor.b = 91;
+    fairy.outerColor.r = 17;
+    fairy.outerColor.g = 101;
+    fairy.outerColor.b = 233;
+    fairy.timer = inputTimer;
     packPresent = present;
     loadSucceeds = loaded;
     nativeDraws = midnaSetups = resourceChecks = resourceLoads = pushes = pops = 0;
@@ -107,22 +173,56 @@ static void checkCase(int fairyType, int present, int loaded, int hiddenState, i
     EnElf_Draw(&fairy.actor, &play);
     REQUIRE(nativeDraws == expectNative);
     REQUIRE(midnaSetups == expectMidna);
-    REQUIRE(pushes == pops && pushes == expectMidna);
+    int enhanced = poc2Present && !poseMissing && !markingsMissing && !shimmerVerticesMissing &&
+                   !shimmerVerticesFailed && !textureFailed && expectMidna;
+    REQUIRE(pushes == pops && pushes == expectMidna + (enhanced ? 6 : 0));
     REQUIRE(memcmp(&before, &fairy, sizeof(fairy)) == 0);
     REQUIRE(memcmp(&playerBefore, &player, sizeof(player)) == 0);
     if (fairyType != FAIRY_NAVI || hiddenState || hiddenFlag || (firstPerson && !inFront)) {
         REQUIRE(resourceChecks == 0 && resourceLoads == 0);
     }
     if (expectMidna) {
-        unsigned found = 0;
+        unsigned found = 0, markingsDraws = 0, shimmerDraws = 0, primary = 0, secondary = 0;
+        Gfx* expectedModel = enhanced ? (expectedBlink == 1   ? blinkHalf
+                                         : expectedBlink == 2 ? blinkClosed
+                                                              : body)
+                                      : resource;
+        uintptr_t renderMode = 0;
         for (Gfx* cmd = commands; cmd < gfx.polyXlu.p; ++cmd) {
-            if ((cmd->words.w0 >> 24) == G_DL && cmd->words.w1 == (uintptr_t)resource)
+            if (cmd->words.w0 == 0xE200001C)
+                renderMode = cmd->words.w1;
+            if ((cmd->words.w0 >> 24) == G_DL && cmd->words.w1 == (uintptr_t)expectedModel)
                 ++found;
+            if ((cmd->words.w0 >> 24) == G_DL && cmd->words.w1 == (uintptr_t)markings)
+                ++markingsDraws;
+            if ((cmd->words.w0 >> 24) == G_DL && cmd->words.w1 == (uintptr_t)shimmer) {
+                REQUIRE(renderMode == (G_RM_PASS | G_RM_AA_ZB_XLU_SURF2));
+                ++shimmerDraws;
+            }
+            if ((cmd->words.w0 >> 24) == G_SETPRIMCOLOR && (cmd->words.w1 >> 8) == 0xD92B5B)
+                ++primary;
+            if ((cmd->words.w0 >> 24) == G_SETPRIMCOLOR && (cmd->words.w1 >> 8) == 0x1165E9)
+                ++secondary;
             if (cmd->words.w0 == 0xE200001C && inputAlpha < 255)
                 REQUIRE(!(cmd->words.w1 & Z_UPD));
         }
         REQUIRE(found == 1);
+        REQUIRE(markingsDraws == enhanced && shimmerDraws == (enhanced ? 6 : 0));
+        if (enhanced)
+            REQUIRE(primary == 1 && secondary == 1);
     }
+}
+
+static void checkLights(int fairyType, int present, int loaded, int hidden, int expectType) {
+    static PlayState play;
+    EnElf fairy = { 0 };
+    fairy.actor.params = fairyType;
+    fairy.unk_2A8 = hidden ? 8 : 0;
+    packPresent = present;
+    loadSucceeds = loaded;
+    EnElf_UpdateLights(&fairy, &play);
+    REQUIRE(fairy.lightInfoGlow.type == expectType);
+    REQUIRE(fairy.lightInfoGlow.params.point.radius == (hidden ? 0 : 100));
 }
 
 int main(void) {
@@ -148,6 +248,64 @@ int main(void) {
     checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
     inputAlpha = 0;
     checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 0, 0);
+    inputAlpha = 255;
+    poc2Present = 1;
+    checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+    REQUIRE(lastPoseFrame == 17);
+    inputTimer = 33;
+    checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+    REQUIRE(lastPoseFrame == 33);
+    poseMissing = 1;
+    checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+    poseMissing = 0;
+    markingsMissing = 1;
+    checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+    markingsMissing = 0;
+    shimmerVerticesMissing = 1;
+    checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+    shimmerVerticesMissing = 0;
+    shimmerVerticesFailed = 1;
+    checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+    shimmerVerticesFailed = 0;
+    textureFailed = 1;
+    checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+    textureFailed = 0;
+    checkCase(FAIRY_HEAL, 1, 1, 0, 0, 0, 1, 0, 1);
+    inputAlpha = 128;
+    checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+    checkLights(FAIRY_NAVI, 1, 1, 0, LIGHT_POINT_NOGLOW);
+    checkLights(FAIRY_NAVI, 1, 1, 1, LIGHT_POINT_NOGLOW);
+    checkLights(FAIRY_NAVI, 0, 0, 0, LIGHT_POINT_GLOW);
+    checkLights(FAIRY_NAVI, 1, 0, 0, LIGHT_POINT_GLOW);
+    checkLights(FAIRY_HEAL, 1, 1, 0, LIGHT_POINT_GLOW);
+    /* A complete blink is brief, then the original eye returns. Repeated draw
+     * calls use the same state; the render path must not advance actor time. */
+    inputAlpha = 255;
+    blinkPresent = 1;
+    const int blinkSequence[][2] = { { 79, 0 },  { 80, 1 },  { 81, 2 },    { 82, 2 },  { 83, 1 },  { 84, 0 },
+                                     { 171, 0 }, { 172, 1 }, { 173, 2 },   { 174, 2 }, { 175, 1 }, { 176, 0 },
+                                     { 279, 0 }, { 280, 1 }, { 65535, 0 }, { 0, 0 } };
+    for (unsigned i = 0; i < sizeof(blinkSequence) / sizeof(blinkSequence[0]); ++i) {
+        inputTimer = blinkSequence[i][0];
+        expectedBlink = blinkSequence[i][1];
+        checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+        checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+    }
+    /* Missing or unloadable blink resources leave the open POC2 eye intact. */
+    inputTimer = 81;
+    expectedBlink = 0;
+    blinkPresent = 0;
+    checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+    blinkPresent = 1;
+    for (int i = 1; i <= 4; ++i) {
+        blinkMissing = i;
+        checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+        blinkMissing = 0;
+        blinkFailed = i;
+        checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+        blinkFailed = 0;
+    }
+    puts("PASS: occasional blink sequence, unchanged actor clock, and open-eye fallback");
     puts("PASS: Midna is Navi-only; fallback, visibility, fade depth, actor state and matrix balance");
     return 0;
 }

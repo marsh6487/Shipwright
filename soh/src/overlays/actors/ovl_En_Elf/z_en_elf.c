@@ -7,6 +7,7 @@
 #include "z_en_elf.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include <assert.h>
+#include <stdio.h>
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/audio/MidnaAudio.h"
@@ -844,8 +845,17 @@ void EnElf_UpdateLights(EnElf* this, PlayState* play) {
                                   this->actor.world.pos.z, 255, 255, 255, -1);
     }
 
-    Lights_PointGlowSetInfo(&this->lightInfoGlow, this->actor.world.pos.x, this->actor.world.pos.y,
-                            this->actor.world.pos.z, 255, 255, 255, glowLightRadius);
+    /* The light context draws its spherical halo separately from EnElf_Draw.
+     * Keep local illumination, but remove that halo only for a usable Midna
+     * model. Native Navi and all other fairy types retain their usual light. */
+    if (this->actor.params == FAIRY_NAVI && ResourceMgr_FileExists("objects/midna_navi/poc1/MidnaFloatDL") &&
+        ResourceMgr_LoadGfxByName("objects/midna_navi/poc1/MidnaFloatDL") != NULL) {
+        Lights_PointNoGlowSetInfo(&this->lightInfoGlow, this->actor.world.pos.x, this->actor.world.pos.y,
+                                  this->actor.world.pos.z, 255, 255, 255, glowLightRadius);
+    } else {
+        Lights_PointGlowSetInfo(&this->lightInfoGlow, this->actor.world.pos.x, this->actor.world.pos.y,
+                                this->actor.world.pos.z, 255, 255, 255, glowLightRadius);
+    }
 
     this->unk_2BC = Math_Atan2S(this->actor.velocity.z, this->actor.velocity.x);
 
@@ -1514,11 +1524,68 @@ s32 EnElf_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* p
     return false;
 }
 
+static void EnElf_DrawMidnaShimmer(EnElf* this, PlayState* play, Gfx* shimmer, u8 alpha) {
+    s32 i;
+
+    OPEN_DISPS(play->state.gfxCtx);
+    gDPPipeSync(POLY_XLU_DISP++);
+    /* Vertex alpha shapes each mote. The fog blender would consume that
+     * channel as fog distance and flatten the mote's transparent edges. */
+    gDPSetRenderMode(POLY_XLU_DISP++, G_RM_PASS, G_RM_AA_ZB_XLU_SURF2);
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, (u8)this->outerColor.r, (u8)this->outerColor.g, (u8)this->outerColor.b, 255);
+    for (i = 0; i < 6; ++i) {
+        s16 orbit = this->timer * 0x100 + i * 0x2AAA;
+        f32 pulse = 0.5f + 0.5f * Math_SinS(this->timer * 0x500 + i * 0x2AAA);
+        u8 moteAlpha = (u8)(alpha * 0.35f * pulse);
+
+        Matrix_Push();
+        /* The torso/legs carry the motes; the face and helmet stay clear.
+         * ReplaceRotation preserves the current emergence/cosmetic scale. */
+        Matrix_Translate(Math_CosS(orbit) * 1050.0f, -1650.0f + i * 255.0f + pulse * 70.0f, Math_SinS(orbit) * 650.0f,
+                         MTXMODE_APPLY);
+        Matrix_ReplaceRotation(&play->billboardMtxF);
+        gDPSetEnvColor(POLY_XLU_DISP++, 255, 255, 255, moteAlpha);
+        gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_XLU_DISP++, shimmer);
+        Matrix_Pop();
+    }
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static Gfx* EnElf_GetMidnaBlinkModel(u16 timer, Gfx* openModel) {
+    /* Use the actor's update clock, not draw calls or the shared RNG. At 20 Hz
+     * this is a 200 ms blink with alternating 4.6/5.4 second gaps. */
+    s32 phase = timer % 200;
+    s32 blinkFrame = phase >= 172 ? phase - 172 : phase - 80;
+    if (blinkFrame < 0 || blinkFrame > 3) {
+        return openModel;
+    }
+    /* Blink atlases are optional POC2 additions. A partial or failed load
+     * retains the original open eye and all existing POC2 presentation. */
+    if (ResourceMgr_FileExists("objects/midna_navi/poc2/BlinkHalfDL") &&
+        ResourceMgr_FileExists("objects/midna_navi/poc2/BlinkClosedDL") &&
+        ResourceMgr_FileExists("objects/midna_navi/poc2/DiffuseHalf") &&
+        ResourceMgr_FileExists("objects/midna_navi/poc2/DiffuseClosed")) {
+        Gfx* half = ResourceMgr_LoadGfxByName("objects/midna_navi/poc2/BlinkHalfDL");
+        Gfx* closed = ResourceMgr_LoadGfxByName("objects/midna_navi/poc2/BlinkClosedDL");
+        char* halfTexture = ResourceMgr_GetResourceDataByNameHandlingMQ("objects/midna_navi/poc2/DiffuseHalf");
+        char* closedTexture = ResourceMgr_GetResourceDataByNameHandlingMQ("objects/midna_navi/poc2/DiffuseClosed");
+        if (half != NULL && closed != NULL && halfTexture != NULL && closedTexture != NULL) {
+            return blinkFrame == 0 || blinkFrame == 3 ? half : closed;
+        }
+    }
+    return openModel;
+}
+
 /* The optional pack owns its mesh/materials. Never replace gameplay_keep's
  * shared fairy skeleton: bottled, healing and Kokiri fairies use it too. */
 static s32 EnElf_TryDrawMidna(EnElf* this, PlayState* play) {
     static const char path[] = "objects/midna_navi/poc1/MidnaFloatDL";
     Gfx* model;
+    Gfx* markings = NULL;
+    Gfx* shimmer = NULL;
+    Vtx* pose = NULL;
+    char posePath[64];
     f32 alphaScale;
     f32 cosmeticScale;
     u8 alpha;
@@ -1539,6 +1606,31 @@ static s32 EnElf_TryDrawMidna(EnElf* this, PlayState* play) {
     if (alpha == 0) {
         return true;
     }
+    /* Versioned POC2 additions are optional. Resolve every pointer through the
+     * resource manager on each draw so Alt/cache reloads cannot leave stale
+     * geometry. Partial packs fall back to the preserved POC1 mesh. */
+    snprintf(posePath, sizeof(posePath), "objects/midna_navi/poc2/Pose%02u", (u16)this->timer & 63);
+    if (ResourceMgr_FileExists("objects/midna_navi/poc2/BodyDL") &&
+        ResourceMgr_FileExists("objects/midna_navi/poc2/MarkingsDL") &&
+        ResourceMgr_FileExists("objects/midna_navi/poc2/ShimmerDL") &&
+        ResourceMgr_FileExists("objects/midna_navi/poc2/ShimmerVertices") &&
+        ResourceMgr_FileExists("objects/midna_navi/poc2/DiffuseNeutral") &&
+        ResourceMgr_FileExists("objects/midna_navi/poc2/MarkingsMask") && ResourceMgr_FileExists(posePath)) {
+        Gfx* animatedModel = ResourceMgr_LoadGfxByName("objects/midna_navi/poc2/BodyDL");
+        Gfx* animatedMarkings = ResourceMgr_LoadGfxByName("objects/midna_navi/poc2/MarkingsDL");
+        Gfx* animatedShimmer = ResourceMgr_LoadGfxByName("objects/midna_navi/poc2/ShimmerDL");
+        Vtx* animatedPose = ResourceMgr_LoadVtxByName(posePath);
+        Vtx* shimmerVertices = ResourceMgr_LoadVtxByName("objects/midna_navi/poc2/ShimmerVertices");
+        char* diffuse = ResourceMgr_GetResourceDataByNameHandlingMQ("objects/midna_navi/poc2/DiffuseNeutral");
+        char* mask = ResourceMgr_GetResourceDataByNameHandlingMQ("objects/midna_navi/poc2/MarkingsMask");
+        if (animatedModel != NULL && animatedMarkings != NULL && animatedShimmer != NULL && animatedPose != NULL &&
+            shimmerVertices != NULL && diffuse != NULL && mask != NULL) {
+            model = animatedModel;
+            markings = animatedMarkings;
+            shimmer = animatedShimmer;
+            pose = animatedPose;
+        }
+    }
     /* One shared child/adult size: 60% of the original export, about 21.46
      * world units including the helmet. Scale at draw time to preserve every
      * packed vertex and avoid quantizing away tiny details. */
@@ -1555,7 +1647,21 @@ static s32 EnElf_TryDrawMidna(EnElf* this, PlayState* play) {
     /* A partially faded mesh must not write depth over later translucent draws. */
     gDPSetRenderMode(POLY_XLU_DISP++, G_RM_FOG_SHADE_A, alpha == 255 ? G_RM_AA_ZB_OPA_SURF2 : G_RM_AA_ZB_XLU_SURF2);
     gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    if (pose != NULL) {
+        gSPSegment(POLY_XLU_DISP++, 0x08, pose);
+        model = EnElf_GetMidnaBlinkModel(this->timer, model);
+    }
     gSPDisplayList(POLY_XLU_DISP++, model);
+    if (markings != NULL) {
+        gDPPipeSync(POLY_XLU_DISP++);
+        /* Identical animated vertices and decal depth avoid detached markings
+         * or z fighting. Only the source's cyan circuitry is in this mask. */
+        gDPSetRenderMode(POLY_XLU_DISP++, G_RM_FOG_SHADE_A, G_RM_AA_ZB_XLU_DECAL2);
+        gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, (u8)this->innerColor.r, (u8)this->innerColor.g, (u8)this->innerColor.b,
+                        255);
+        gSPDisplayList(POLY_XLU_DISP++, markings);
+        EnElf_DrawMidnaShimmer(this, play, shimmer, alpha);
+    }
     Matrix_Pop();
     CLOSE_DISPS(play->state.gfxCtx);
     return true;
