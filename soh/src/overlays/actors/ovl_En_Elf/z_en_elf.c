@@ -330,7 +330,7 @@ static void EnElf_UpdateMidnaIdleAudio(EnElf* this, PlayState* play) {
                          !(player->stateFlags1 &
                            (PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_PARALLEL |
                             PLAYER_STATE1_FIRST_PERSON)) &&
-                         player->focusActor == NULL && play->actorCtx.targetCtx.arrowPointedActor == NULL &&
+                         player->focusActor == NULL &&
                          play->pauseCtx.state == 0 && Message_GetState(&play->msgCtx) == TEXT_STATE_NONE &&
                          !Play_InCsMode(play) && play->transitionTrigger == TRANS_TRIGGER_OFF &&
                          play->transitionMode == TRANS_MODE_OFF && play->gameOverCtx.state == GAMEOVER_INACTIVE);

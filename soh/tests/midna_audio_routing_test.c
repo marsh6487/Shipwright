@@ -53,6 +53,8 @@ static void idleGates(void) {
     static PlayState play;
     Player player = { 0 };
     EnElf fairy = { 0 };
+    Actor npc = { 0 };
+    npc.category = ACTORCAT_NPC;
     play.actorCtx.actorLists[ACTORCAT_PLAYER].head = &player.actor;
     player.actor.bgCheckFlags = 1;
     fairy.actor.params = FAIRY_NAVI;
@@ -60,6 +62,14 @@ static void idleGates(void) {
     fairy.innerColor.a = 255;
     EnElf_UpdateMidnaIdleAudio(&fairy, &play);
     REQUIRE(idleUpdates == 1 && idleEligible);
+    play.actorCtx.targetCtx.arrowPointedActor = &npc;
+    EnElf_UpdateMidnaIdleAudio(&fairy, &play);
+    REQUIRE(idleEligible); // passive NPC proximity keeps Navi out in native mode 0
+    player.focusActor = &npc;
+    EnElf_UpdateMidnaIdleAudio(&fairy, &play);
+    REQUIRE(!idleEligible); // actively locking onto that same NPC pauses idle time
+    player.focusActor = NULL;
+    play.actorCtx.targetCtx.arrowPointedActor = NULL;
 
 #define BLOCKED(field, value)                                      \
     do {                                                          \
@@ -80,7 +90,7 @@ static void idleGates(void) {
     BLOCKED(player.stateFlags1, PLAYER_STATE1_PARALLEL);
     BLOCKED(player.stateFlags1, PLAYER_STATE1_FIRST_PERSON);
     BLOCKED(player.focusActor, &fairy.actor);
-    BLOCKED(play.actorCtx.targetCtx.arrowPointedActor, &fairy.actor);
+    BLOCKED(fairy.unk_2A8, 1); // native enemy/non-NPC attention
     BLOCKED(fairy.unk_2A8, 7); // recall
     BLOCKED(fairy.unk_2A8, 8); // hidden
     BLOCKED(fairy.unk_2A8, 11); // emergence
