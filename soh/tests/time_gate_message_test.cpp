@@ -31,6 +31,22 @@ void BuildTriforcePieceMessage(CustomMessage&) {
 }
 void BuildTriforceMessage(CustomMessage&) {
 }
+void BuildQuarterHeartMessage(CustomMessage&) {
+}
+void BuildDefenseUpgradeMessage(CustomMessage&) {
+}
+void BuildSpeedUpgradeMessage(CustomMessage&) {
+}
+void BuildPowerUpgradeMessage(CustomMessage&) {
+}
+void BuildMagicStatUpgradeMessage(CustomMessage&) {
+}
+void BuildCrawlSpeedUpgradeMessage(CustomMessage&) {
+}
+void BuildClimbSpeedUpgradeMessage(CustomMessage&) {
+}
+void BuildPushSpeedUpgradeMessage(CustomMessage&) {
+}
 namespace Rando::Traps {
 void BuildIceTrapMessage(CustomMessage&, GetItemEntry) {
 }

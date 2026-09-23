@@ -2,6 +2,7 @@
 #include "vt.h"
 #include "overlays/effects/ovl_Effect_Ss_HitMark/z_eff_ss_hitmark.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include <assert.h>
 
 // Skijer's NEI: damage scaled by ivanDamageMultiplier (Ivan co-op or SM64 Mario)
@@ -3059,7 +3060,10 @@ void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCt
         damage = (f32)info->acHitInfo->toucher.damage;
     }
     if (!(collider->acFlags & AC_HARD)) {
-        collider->actor->colChkInfo.damage += damage;
+        // Scale this hit before accumulation; actors can have several hit collider elements.
+        u8 hitDamage = (u8)damage;
+        GameInteractor_Should(VB_PLAYER_ATTACK_DAMAGE_MULTIPLIER, true, play, &hitDamage, collider->actor);
+        collider->actor->colChkInfo.damage += hitDamage;
     }
 
     if (NEI_PlayerDamageBoostActive()) {

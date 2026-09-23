@@ -148,6 +148,13 @@ void Randomizer_DrawMmGsToken(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawMmFrog(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawMmGoldDustBottle(PlayState* play, GetItemEntry* getItemEntry);
 
+void Randomizer_DrawDefenseUpgrade(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawSpeedUpgrade(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawPowerUpgrade(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawCrawlSpeedUpgrade(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawClimbSpeedUpgrade(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawPushSpeedUpgrade(PlayState* play, GetItemEntry* getItemEntry);
+
 #define GET_ITEM_MYSTERY                                                                                 \
     {                                                                                                    \
         ITEM_NONE_FE, 0, 0, 0, 0, MOD_RANDOMIZER, MOD_RANDOMIZER, ITEM_NONE_FE, 0, false, ITEM_FROM_NPC, \

@@ -30,6 +30,7 @@
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/enhancementTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/randomizer/randostatupgrade.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
 #include "soh/Enhancements/randomizer/randomizer_grotto.h"
@@ -4736,6 +4737,7 @@ s32 Player_CalcSpeedAndYawFromControlStick(PlayState* play, Player* this, f32* o
 
             *outSpeedTarget = (*outSpeedTarget * 0.14f) - (8.0f * floorPitchInfluence * floorPitchInfluence);
             *outSpeedTarget = CLAMP(*outSpeedTarget, 0.0f, speedCap);
+            GameInteractor_Should(VB_PLAYER_SPEED_MULTIPLIER, true, this, outSpeedTarget);
 
             return true;
         }
@@ -15396,8 +15398,10 @@ void Player_Action_8084BF1C(Player* this, PlayState* play) {
         phi_f2 = -1.0f;
     }
 
-    this->skelAnime.playSpeed = phi_f2 * phi_f0 + phi_f2 * CVarGetInteger(CVAR_ENHANCEMENT("ClimbSpeed"), 0) +
-                                phi_f2 * (SpiritualStone_GoronClimbActive() ? 2 : 0);
+    this->skelAnime.playSpeed =
+        phi_f2 * phi_f0 +
+        phi_f2 * (IsClimbStatActive() ? GetClimbStatValue() : CVarGetInteger(CVAR_ENHANCEMENT("ClimbSpeed"), 0)) +
+        phi_f2 * (SpiritualStone_GoronClimbActive() ? 2 : 0);
 
     if (this->av2.actionVar2 >= 0) {
         if ((this->actor.wallPoly != NULL) && (this->actor.wallBgId != BGCHECK_SCENE)) {
