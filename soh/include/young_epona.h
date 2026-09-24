@@ -9,6 +9,7 @@ extern "C" {
 
 #define ENHORSE_YOUNG_PARAM 0x4000
 
+s32 Horse_CanSpawnYoung(s32 scene);
 s32 Horse_YoungEponaAssetsAvailable(void);
 s32 Horse_CanUseYoungEpona(void);
 Actor* Horse_FindYoungEpona(PlayState* play);

@@ -9,7 +9,7 @@ from run_time_pedestal_tests import functions
 
 ROOT = Path(__file__).resolve().parents[2]
 source = functions((ROOT / 'soh/src/code/z_horse.c').read_text())
-names = ('Horse_CanSpawn', 'Horse_YoungEponaAssetsAvailable', 'Horse_CanUseYoungEpona',
+names = ('Horse_CanSpawn', 'Horse_CanSpawnYoung', 'Horse_YoungEponaAssetsAvailable', 'Horse_CanUseYoungEpona',
          'Horse_FindYoungEpona', 'Horse_GetActorSaveData', 'Horse_SaveYoungEpona',
          'Horse_SpawnYoungEpona', 'Horse_TrySummonYoungEpona', 'Horse_InitPlayerHorse')
 fixture = (ROOT / 'soh/tests/young_epona_test.c').read_text().replace(

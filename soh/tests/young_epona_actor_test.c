@@ -32,6 +32,8 @@ static f32 obstacleTop, obstacleBehind, obstacleDistance;
 static CollisionPoly* blockedPoly;
 static CollisionPoly* specialFloorPoly;
 static int raycastCount, wallPresent = 1;
+static int childObjectMissing;
+static int spawnedChildObject;
 
 s32 Horse_CanUseYoungEpona(void) {
     return canUseYoung;
@@ -52,7 +54,15 @@ void ActorShape_Init(ActorShape* shape, f32 offset, ActorShadowFunc shadowDraw, 
 void Actor_SetObjectDependency(PlayState* play, Actor* actor) {
 }
 s32 Object_GetIndex(ObjectContext* context, s16 object) {
+    if (object == OBJECT_HORSE_LINK_CHILD && childObjectMissing) {
+        return -1;
+    }
     return 1;
+}
+s32 Object_Spawn(ObjectContext* context, s16 object) {
+    CHECK(object == OBJECT_HORSE_LINK_CHILD);
+    spawnedChildObject++;
+    return 2;
 }
 s32 Object_IsLoaded(ObjectContext* context, s32 index) {
     return 1;
@@ -285,10 +295,19 @@ static void test_variant_initialization(void) {
         CHECK(horse.type == HORSE_YOUNG_EPONA);
         CHECK(horse.actor.params == (params[i] <= 2 || params[i] == 9 ? params[i] : 0));
         CHECK(selectedSkeleton == (SkeletonHeader*)gChildEponaSkel);
+        CHECK(horse.actor.objBankIndex == 1);
         CHECK(horse.action == (params[i] == 2 ? ENHORSE_ACT_INACTIVE : ENHORSE_ACT_IDLE));
         NEAR(horse.actor.scale.y, 0.00648f);
         CHECK(horse.boostSpeed == 14);
     }
+    EnHorse missingObjectHorse = { 0 };
+    missingObjectHorse.actor.params = ENHORSE_YOUNG_PARAM;
+    childObjectMissing = 1;
+    spawnedChildObject = 0;
+    EnHorse_Init(&missingObjectHorse.actor, &play);
+    CHECK(spawnedChildObject == 1);
+    CHECK(missingObjectHorse.actor.objBankIndex == 2);
+    childObjectMissing = 0;
     EnHorse horse = { 0 };
     horse.actor.params = -1;
     EnHorse_Init(&horse.actor, &play);

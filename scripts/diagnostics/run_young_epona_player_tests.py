@@ -38,7 +38,7 @@ def main():
     if "static struct_80854578 sYoungEponaMountInfo" in source:
         tables += declaration(source, "sYoungEponaMountInfo")
     production = function(actor, "Actor_MountHorse")
-    production += function(horse, "Horse_CanSpawn") + function(horse, "Horse_SaveYoungEpona")
+    production += function(horse, "Horse_CanSpawnYoung") + function(horse, "Horse_SaveYoungEpona")
     production += "".join(function(source, name) for name in (
         "Player_SetupActionPreserveAnimMovement", "Player_SetupWaitForPutAway", "Player_Action_WaitForPutAway",
         "func_8083A360", "func_8083C0E8", "Player_ActionHandler_3",

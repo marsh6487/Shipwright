@@ -22,6 +22,44 @@ s32 Horse_CanSpawn(s32 scene) {
     return 0;
 }
 
+s32 Horse_CanSpawnYoung(s32 scene) {
+    // Child riding has its own outdoor gate; adult Epona keeps the original scene list.
+    switch (scene) {
+        case SCENE_HYRULE_FIELD:
+        case SCENE_LAKE_HYLIA:
+        case SCENE_GERUDO_VALLEY:
+        case SCENE_GERUDOS_FORTRESS:
+        case SCENE_LON_LON_RANCH:
+        case SCENE_KAKARIKO_VILLAGE:
+        case SCENE_GRAVEYARD:
+        case SCENE_ZORAS_RIVER:
+        case SCENE_KOKIRI_FOREST:
+        case SCENE_SACRED_FOREST_MEADOW:
+        case SCENE_ZORAS_FOUNTAIN:
+        case SCENE_LOST_WOODS:
+        case SCENE_DESERT_COLOSSUS:
+        case SCENE_HAUNTED_WASTELAND:
+        case SCENE_HYRULE_CASTLE:
+        case SCENE_DEATH_MOUNTAIN_TRAIL:
+        case SCENE_DEATH_MOUNTAIN_CRATER:
+        case SCENE_OUTSIDE_GANONS_CASTLE:
+        case SCENE_MARKET_ENTRANCE_DAY:
+        case SCENE_MARKET_ENTRANCE_NIGHT:
+        case SCENE_MARKET_ENTRANCE_RUINS:
+        case SCENE_MARKET_DAY:
+        case SCENE_MARKET_NIGHT:
+        case SCENE_MARKET_RUINS:
+        case SCENE_BACK_ALLEY_DAY:
+        case SCENE_BACK_ALLEY_NIGHT:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_DAY:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_NIGHT:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_RUINS:
+            return true;
+        default:
+            return false;
+    }
+}
+
 s32 Horse_YoungEponaAssetsAvailable(void) {
     const char* resources[] = { gYoungEponaStopAnim,          gYoungEponaRearAnim,          gYoungEponaLowJumpAnim,
                                 gYoungEponaHighJumpAnim,      gYoungEponaMountLeftAnim,     gYoungEponaMountRightAnim,
@@ -61,7 +99,7 @@ HorseData* Horse_GetActorSaveData(Actor* actor) {
 
 void Horse_SaveYoungEpona(PlayState* play, Actor* actor) {
     if (LINK_IS_ADULT || actor == NULL || actor->id != ACTOR_EN_HORSE || ((EnHorse*)actor)->type != HORSE_YOUNG_EPONA ||
-        ((EnHorse*)actor)->action == ENHORSE_ACT_INACTIVE || !Horse_CanSpawn(play->sceneNum)) {
+        ((EnHorse*)actor)->action == ENHORSE_ACT_INACTIVE || !Horse_CanSpawnYoung(play->sceneNum)) {
         return;
     }
     HorseData* data = &gSaveContext.ship.youngHorseData;
@@ -74,7 +112,7 @@ void Horse_SaveYoungEpona(PlayState* play, Actor* actor) {
 }
 
 static Actor* Horse_SpawnYoungEpona(PlayState* play, Player* player, s32 mounted) {
-    if (!Horse_CanUseYoungEpona() || !Horse_CanSpawn(play->sceneNum) || gSaveContext.sceneLayer > 3) {
+    if (!Horse_CanUseYoungEpona() || !Horse_CanSpawnYoung(play->sceneNum) || gSaveContext.sceneLayer > 3) {
         return NULL;
     }
     Actor* actor = Horse_FindYoungEpona(play);

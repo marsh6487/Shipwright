@@ -20,6 +20,8 @@
 typedef void (*EnHorseCsFunc)(EnHorse*, PlayState*, CsCmdActorCue*);
 typedef void (*EnHorseActionFunc)(EnHorse*, PlayState*);
 
+s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
+
 void EnHorse_Init(Actor* thisx, PlayState* play);
 void EnHorse_Destroy(Actor* thisx, PlayState* play);
 void EnHorse_Update(Actor* thisx, PlayState* play);
@@ -779,6 +781,16 @@ void EnHorse_Init(Actor* thisx, PlayState* play2) {
             Actor_Kill(&this->actor);
             return;
         }
+        this->bankIndex = Object_GetIndex(&play->objectCtx, OBJECT_HORSE_LINK_CHILD);
+        if (this->bankIndex < 0) {
+            this->bankIndex = Object_Spawn(&play->objectCtx, OBJECT_HORSE_LINK_CHILD);
+        }
+        if (this->bankIndex < 0) {
+            Actor_Kill(&this->actor);
+            return;
+        }
+        this->actor.objBankIndex = this->bankIndex;
+        Actor_SetObjectDependency(play, &this->actor);
         // Keep native mounted scene entry (9), but never enter adult races or quest cutscenes.
         if (this->actor.params > 2 && this->actor.params != 9) {
             this->actor.params = 0;
