@@ -15,6 +15,7 @@ python3 -B scripts/diagnostics/run_zora_barrier_cosmetics_tests.py
 python3 -B scripts/diagnostics/run_oot_custom_cosmetics_tests.py
 python3 -B scripts/diagnostics/run_stat_upgrade_tests.py
 python3 -B scripts/diagnostics/run_chest_size_tests.py
+python3 -B scripts/diagnostics/run_pak_equipment_cache_tests.py
 python3 -B scripts/diagnostics/run_time_pedestal_tests.py
 python3 -B scripts/diagnostics/run_pedestal_sword_selection_tests.py
 python3 -B scripts/diagnostics/check_time_pedestal_syntax.py

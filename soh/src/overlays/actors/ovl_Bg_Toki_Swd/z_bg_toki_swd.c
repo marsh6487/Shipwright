@@ -557,10 +557,62 @@ void func_808BB128(BgTokiSwd* this, PlayState* play) {
     }
 }
 
+// Observe the existing decision without relaxing its top-only or native state
+// guards. This runs after the PROP update, after PLAYER consumed/cleared the
+// previous frame's offer; "offered" therefore describes the next frame's offer.
+static void BgTokiSwd_LogInteraction(BgTokiSwd* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+    if (this->actor.params != BG_TOKI_SWD_TIME_PEDESTAL || player == NULL ||
+        !CHECK_BTN_ALL(play->state.input[0].press.button, BTN_A) || this->actor.xzDistToPlayer > 100.0f ||
+        !CVarGetInteger(CVAR_DEVELOPER_TOOLS("PreludeLoadProbe"), 1)) {
+        return;
+    }
+    Actor* interaction = player->interactRangeActor;
+    Actor* talk = player->talkActor;
+    u32 blockedStates = PLAYER_STATE1_DEAD | PLAYER_STATE1_CHARGING_SPIN_ATTACK | PLAYER_STATE1_HANGING_OFF_LEDGE |
+                        PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_JUMPING | PLAYER_STATE1_FREEFALL |
+                        PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_CLIMBING_LADDER;
+    s32 explosive = Player_GetExplosiveHeld(player);
+    u32 gates = (play->transitionTrigger != TRANS_TRIGGER_OFF) | (Play_InCsMode(play) ? 1U << 1 : 0) |
+                ((player->stateFlags1 & PLAYER_STATE1_TALKING) ? 1U << 2 : 0) |
+                (this->actor.floorPoly == NULL ? 1U << 3 : 0) |
+                (!(player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) ? 1U << 4 : 0) |
+                (player->actor.floorBgId != this->actor.floorBgId ? 1U << 5 : 0) |
+                (!(fabsf(player->actor.floorHeight - this->actor.floorHeight) < 2.0f) ? 1U << 6 : 0) |
+                (!(fabsf(player->actor.world.pos.y - this->actor.floorHeight) < 4.0f) ? 1U << 7 : 0) |
+                (interaction != NULL && player->getItemId != GI_NONE ? 1U << 8 : 0) |
+                (!(this->actor.xzDistToPlayer < 60.0f) ? 1U << 9 : 0) |
+                (!(fabsf(this->actor.yDistToPlayer) < 40.0f) ? 1U << 10 : 0) |
+                ((player->stateFlags1 & blockedStates) ? 1U << 11 : 0) | (explosive >= 0 ? 1U << 12 : 0) |
+                ((player->stateFlags1 & (PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_IN_CUTSCENE)) ? 1U << 13 : 0) |
+                (!play->state.running ? 1U << 14 : 0);
+    LUSLOG_INFO("[TimePedestalProbe] status=%s gates=%08x scene=%d room=%d age=%d "
+                "player=(%.3f,%.3f,%.3f) pedestal=(%.3f,%.3f,%.3f) xz=%.3f dy=%.3f "
+                "floor=(%.3f,%d,%p) pedestalFloor=(%.3f,%d,%p) ground=%04x states=%08x/%08x "
+                "item=%d direction=%04x interaction=(%d,%04x) talk=(%d,%04x) held=%d explosive=%d transition=%d",
+                this->actionFunc == BgTokiSwd_TimePedestalCutscene ? "ceremony"
+                : interaction == &this->actor                      ? "offered"
+                                                                   : "not-offered",
+                (unsigned)gates, play->sceneNum, play->roomCtx.curRoom.num, gSaveContext.linkAge,
+                player->actor.world.pos.x, player->actor.world.pos.y, player->actor.world.pos.z,
+                this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z, this->actor.xzDistToPlayer,
+                this->actor.yDistToPlayer, player->actor.floorHeight, player->actor.floorBgId,
+                (void*)player->actor.floorPoly, this->actor.floorHeight, this->actor.floorBgId,
+                (void*)this->actor.floorPoly, player->actor.bgCheckFlags, (unsigned)player->stateFlags1,
+                (unsigned)player->stateFlags2, player->getItemId, player->getItemDirection,
+                interaction != NULL ? interaction->id : -1, interaction != NULL ? (u16)interaction->params : 0,
+                talk != NULL ? talk->id : -1, talk != NULL ? (u16)talk->params : 0,
+                player->heldActor != NULL ? player->heldActor->id : -1, explosive, play->transitionTrigger);
+}
+
 void BgTokiSwd_Update(Actor* thisx, PlayState* play) {
     BgTokiSwd* this = (BgTokiSwd*)thisx;
+    s32 wasWaiting = this->actionFunc == BgTokiSwd_TimePedestalWait;
 
     this->actionFunc(this, play);
+    if (wasWaiting) {
+        BgTokiSwd_LogInteraction(this, play);
+    }
     // The custom sword sits on scene collision. Its stock body cylinder would
     // push Link out of the small stump's center and onto the edge of its top.
     if (this->actor.params != BG_TOKI_SWD_TIME_PEDESTAL) {

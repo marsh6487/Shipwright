@@ -2715,6 +2715,7 @@ static s32 sCacheBodyIdx = -2;
 static s32 sCacheEquipIdx = -2;
 static s32 sCacheForcedIdx = -2;
 static u8 sCacheAge = 0xFF;
+static bool sCacheRemoteRender = false;
 // Set when fist DL resolution failed (assets not loaded yet).
 // PakLoader_FrameBegin reads and clears this to force a rebuild on the following frame.
 static bool sCacheFistIncomplete = false;
@@ -2724,10 +2725,13 @@ static bool sCacheFistIncomplete = false;
 // per-frame pointer-validation below in PakLoader_FrameBegin.
 static s32 sLastSceneNum = -1;
 static s32 sLastEntranceIndex = -1;
-// Shadow map of vanilla-auto-loaded pointers. Used to detect OTR resource relocation:
+// Shadow map of native vanilla pointers, keyed by the exact path used to load them.
+// Track sheaths as well as hands, including opposite-age sheath dependencies.
+// Deferred wrappers own no resource pointer and must not enter this map.
+// Used to detect OTR resource relocation:
 // if ResourceMgr_LoadGfxByName returns a different pointer than what we cached, the
 // old pointer is stale (memory freed/reloaded) and the cache must be rebuilt.
-static std::map<u32, Gfx*> sCachedVanillaPtrs;
+static std::map<const char*, Gfx*> sCachedVanillaPtrs;
 
 static void CleanupRuntimeDLs(void) {
     // Free the PREVIOUS frame's per-frame GbiWrap DLs (they've been executed by now)
@@ -2777,38 +2781,20 @@ extern "C" void PakLoader_FrameBegin(void) {
             sCacheBodyIdx = -2; // Stale key → rebuild on next sGetEquipDLs call
         }
     }
-    // Vanilla-pointer validation. Compare each cached vanilla hand/fist pointer with a
+    // Vanilla-pointer validation. Compare each cached vanilla hand/fist/sheath pointer with a
     // fresh ResourceMgr_LoadGfxByName result. If the ResourceMgr relocated the resource,
     // the pointer differs → invalidate cache so the next rebuild captures the fresh one.
-    if (!sCachedVanillaPtrs.empty()) {
-        u8 isAdult = (LINK_AGE_IN_YEARS == YEARS_ADULT);
-        struct VanillaAlias {
-            u32 alias;
-            const char* adultPath;
-            const char* childPath;
-        };
-        static const VanillaAlias vanillas[] = {
-            { 0x50A0, gLinkAdultLeftHandClosedNearDL, gLinkChildLeftFistNearDL },
-            { 0x50B8, gLinkAdultRightHandClosedNearDL, gLinkChildRightHandClosedNearDL },
-            { 0x5098, gLinkAdultLeftHandNearDL, gLinkChildLeftHandNearDL },
-            { 0x50B0, gLinkAdultRightHandNearDL, gLinkChildRightHandNearDL },
-        };
-        for (const auto& v : vanillas) {
-            auto it = sCachedVanillaPtrs.find(v.alias);
-            if (it == sCachedVanillaPtrs.end())
-                continue;
-            const char* path = isAdult ? v.adultPath : v.childPath;
-            Gfx* fresh = ResourceMgr_LoadGfxByName(path);
-            if (fresh != it->second) {
-                sCacheBodyIdx = -2; // pointer moved → rebuild
-                break;
-            }
+    for (const auto& [path, cached] : sCachedVanillaPtrs) {
+        Gfx* fresh = ResourceMgr_LoadGfxByName(path);
+        if (fresh != cached) {
+            sCacheBodyIdx = -2; // pointer moved → rebuild
+            break;
         }
     }
 }
 
-// Check that a pointer is a real native Gfx*, not a string or vertex/texture data.
-// ResourceMgr_LoadGfxByName can return the path string itself when the asset isn't loaded.
+// Reject path strings and implausible first commands before composing native DLs.
+// This is a format sanity check, not a proof of pointer ownership or lifetime.
 // Equipment paks with broken alias tables may also have offsets that point into vertex or
 // texture data instead of DL headers — executing those crashes the RSP interpreter.
 //
@@ -2823,7 +2809,8 @@ extern "C" void PakLoader_FrameBegin(void) {
 //
 // Valid F3DEX2 + SoH OTR opcodes:
 //  - 0x00-0x07: G_NOOP, G_VTX, G_MODIFYVTX, G_CULLDL, G_BRANCH_Z, G_TRI1, G_TRI2, G_QUAD
-//  - 0x20-0x31: SoH OTR extensions (DL_OTR_FILEPATH, PUSHCD, MTX_OTR, DL_OTR_HASH, ...)
+//  - 0x20-0x29, 0x31-0x40, 0x42-0x48: registered SoH OTR extensions
+//    (including the resource marker and hashed vertex commands in vanilla DLs)
 //  - 0xD3-0xFF: RSP/RDP commands (G_MTX, G_DL, G_ENDDL, G_SETCIMG, ...)
 static bool IsValidGfxPtr(Gfx* ptr) {
     if (!ptr || ptr == PAK_DL_STUB)
@@ -2836,11 +2823,12 @@ static bool IsValidGfxPtr(Gfx* ptr) {
     uint8_t opcode = bytes[3]; // GBI opcode on LE (high byte of w0)
     if (opcode <= 0x07)
         return true; // basic commands
-    if (opcode >= 0x20 && opcode <= 0x31)
+    if ((opcode >= G_SETTIMG_OTR_HASH && opcode <= G_MTX_OTR_FILEPATH) ||
+        (opcode >= G_DL_OTR_HASH && opcode <= G_SETINTENSITY) || (opcode >= G_MOVEMEM_OTR && opcode <= G_VTX_WIDE))
         return true; // SoH OTR extensions
     if (opcode >= 0xD3)
         return true; // RSP/RDP commands
-    return false;    // 0x08-0x1F, 0x32-0xD2 are invalid → not a real DL
+    return false;
 }
 
 // Like IsValidGfxPtr, but ALSO accepts OTR path strings (Fast3D's GbiWrap
@@ -3146,7 +3134,7 @@ static void RebuildCachedEquipDLs(void) {
             Gfx* dl = ResourceMgr_LoadGfxByName(path);
             if (IsValidGfxPtr(dl)) {
                 sCachedEquipDLs[alias] = dl;
-                sCachedVanillaPtrs[alias] = dl;
+                sCachedVanillaPtrs[path] = dl;
                 return;
             }
             // Deferred OTR resolution: allocate a [OTR_G_DL_OTR_FILEPATH(path), G_ENDDL] wrapper.
@@ -3156,7 +3144,6 @@ static void RebuildCachedEquipDLs(void) {
             wrapper[1].words.w0 = (uintptr_t)0xDF000000; // G_ENDDL
             wrapper[1].words.w1 = 0;
             sCachedEquipDLs[alias] = wrapper;
-            sCachedVanillaPtrs[alias] = wrapper;
             sEquipCombinedDLs.push_back(wrapper); // pool ownership; freed on rotation
         };
         if (!sCachedEquipDLs.count(0x50A0) &&
@@ -3373,6 +3360,7 @@ static void RebuildCachedEquipDLs(void) {
     sCacheEquipIdx = sSelectedEquipIndex;
     sCacheForcedIdx = sForcedEquipIndex;
     sCacheAge = isAdult;
+    sCacheRemoteRender = PakLoader_IsRemoteRenderActive();
     sCacheSlotMixHash = SlotMixHash(); // commit current slot mix into the cache key
     if (anyFistMissing) {
         sCacheFistIncomplete = true;
@@ -3418,7 +3406,8 @@ static std::map<u32, Gfx*>* sGetEquipDLs(void) {
 
     // Rebuild cache if selection changed (any cache-key component differs)
     if (bodyIdx != sCacheBodyIdx || sSelectedEquipIndex != sCacheEquipIdx || sForcedEquipIndex != sCacheForcedIdx ||
-        isAdult != sCacheAge || mixHash != sCacheSlotMixHash) {
+        isAdult != sCacheAge || mixHash != sCacheSlotMixHash ||
+        PakLoader_IsRemoteRenderActive() != sCacheRemoteRender) {
         RebuildCachedEquipDLs();
     }
 
