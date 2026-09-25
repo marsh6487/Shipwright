@@ -55,6 +55,11 @@ const char object_toki_objects_DL_001BD0[] = "__OTR__objects/object_toki_objects
 void Fixture_RecordDraw(const void* dl) {
     drawnSword = dl;
 }
+static int firePedestalDraws;
+void DinFireSword_DrawPedestal(PlayState*) {
+    ++firePedestalDraws;
+}
+
 void BossRemains_DrawOdolwaSword(PlayState*, Player*) {
     postSwordDrawCalls++;
 }
@@ -1548,8 +1553,10 @@ static void CheckPedestalSwordSource() {
     BgTokiSwd_Init(&sword.actor, &play);
     pakActive = true;
     fixturePakEquipment = { { 0x5450, &pakSword } };
+    firePedestalDraws = 0;
     BgTokiSwd_Draw(&sword.actor, &play);
     REQUIRE(drawnSword == &pakSword);
+    REQUIRE(firePedestalDraws == 1);
     // The selected raw blade extends along +X in the supplied pack. Its tip
     // must end below the grip, not stand upward out of the stump.
     REQUIRE(sinf(restingSwordRotation) < -0.99f);
@@ -1563,12 +1570,14 @@ static void CheckPedestalSwordSource() {
     BgTokiSwd_Draw(&sword.actor, &play);
     REQUIRE(drawnSword == &customMasterSword);
     altAssetsSetting = false;
+    firePedestalDraws = 0;
     BgTokiSwd_Draw(&sword.actor, &play);
     REQUIRE(drawnSword == object_toki_objects_DL_001BD0);
     pakActive = true;
     sword.actor.params = 0;
     BgTokiSwd_Draw(&sword.actor, &play);
     REQUIRE(drawnSword == object_toki_objects_DL_001BD0); // Stock actor is unaffected.
+    REQUIRE(firePedestalDraws == 0);
     BgTokiSwd_Destroy(&sword.actor, &play);
     puts("PASS pedestal and ceremonial hands share selected geometry, with Alt and stock fallbacks");
 }

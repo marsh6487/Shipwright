@@ -43,14 +43,14 @@ typedef struct {
 } FireResources;
 
 static s32 DinFireShield_OptionEnabled(void) {
-    return CVarGetInteger(CVAR_ENHANCEMENT("DinFireShield"), 0) &&
-           CVarGetInteger(CVAR_SETTING("AltAssets"), 1);
+    return CVarGetInteger(CVAR_ENHANCEMENT("DinFireShield"), 0) && CVarGetInteger(CVAR_SETTING("AltAssets"), 1);
 }
 
 static s32 DinFireShield_Load(FireResources* resources) {
     const char* paths[] = { sSurfacePath, sRimPath, sTexturePath, sFlowPath, sSurfaceVertices, sRimVertices };
     for (size_t i = 0; i < ARRAY_COUNT(paths); ++i) {
-        if (!ResourceMgr_FileExists(paths[i])) return false;
+        if (!ResourceMgr_FileExists(paths[i]))
+            return false;
     }
     // Resolve manager-owned resources every draw; this module retains no raw
     // pointers across frames. Hashed lists require their vertex dependencies to
@@ -65,21 +65,22 @@ static s32 DinFireShield_Load(FireResources* resources) {
 }
 
 static s32 DinFireShield_ItemEnabled(u16 itemId) {
-    if (itemId != ITEM_SHIELD_DEKU && itemId != ITEM_SHIELD_HYLIAN) return false;
+    if (itemId != ITEM_SHIELD_DEKU && itemId != ITEM_SHIELD_HYLIAN)
+        return false;
     return DinFireShield_OptionEnabled() &&
            ResourceMgr_FileExists(itemId == ITEM_SHIELD_DEKU ? sChildBracer : sAdultBracer);
 }
 
 void* DinFireShield_ItemIcon(u16 itemId) {
-    if (!DinFireShield_ItemEnabled(itemId) || !ResourceMgr_FileExists(sIcon)) return NULL;
+    if (!DinFireShield_ItemEnabled(itemId) || !ResourceMgr_FileExists(sIcon))
+        return NULL;
     return ResourceGetDataByName(sIcon) != NULL ? (void*)sIconTextureRef : NULL;
 }
 
 // The option and the matching bracer pack are both required. This effect owns
 // no equipment or collision state and never substitutes for owning a shield.
 static s32 DinFireShield_Eligible(PlayState* play, Player* player) {
-    if (play == NULL || player == NULL || player != GET_PLAYER(play) ||
-        !DinFireShield_OptionEnabled() ||
+    if (play == NULL || player == NULL || player != GET_PLAYER(play) || !DinFireShield_OptionEnabled() ||
         TransformMasks_IsTransformedAny() || GameInteractor_InvisibleLinkActive() || player->actor.scale.y <= 0.0f ||
         (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_WATER)) ||
         (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW) || player->csAction != 0 ||
@@ -124,14 +125,13 @@ void DinFireShield_Update(PlayState* play, Player* player) {
         sFire.scene = play->sceneNum;
         sFire.age = gSaveContext.linkAge;
     }
-    if (play->pauseCtx.state != 0 || play->pauseCtx.debugState != 0 ||
-        sFire.lastFrame == play->gameplayFrames) {
+    if (play->pauseCtx.state != 0 || play->pauseCtx.debugState != 0 || sFire.lastFrame == play->gameplayFrames) {
         return;
     }
     sFire.lastFrame = play->gameplayFrames;
     sFire.phase = (sFire.phase + 1) & 1023;
-    const s32 guarding = (player->stateFlags1 & PLAYER_STATE1_SHIELDING) &&
-                        player->rightHandType == PLAYER_MODELTYPE_RH_SHIELD;
+    const s32 guarding =
+        (player->stateFlags1 & PLAYER_STATE1_SHIELDING) && player->rightHandType == PLAYER_MODELTYPE_RH_SHIELD;
     sFire.opacity = CLAMP(sFire.opacity + (guarding ? 0.25f : -0.18f), 0.0f, 1.0f);
     if (guarding && CVarGetInteger(CVAR_ENHANCEMENT("DinFireShieldSfx"), 0)) {
         FireResources resources;
@@ -151,10 +151,10 @@ static void DinFireShield_DrawFlames(PlayState* play, const FireResources* resou
     const u8 alpha = (u8)(opacity * pulse * 255.0f);
     const s32 surfaceScroll = (phase * 3) & 127;
     const s32 rimScroll = (phase * 7) & 127;
-    const Color_RGB8 core = CVarGetColor24(CVAR_COSMETIC("Custom.DinFireShieldCore.Value"),
-                                          (Color_RGB8){ 255, 225, 122 });
-    const Color_RGB8 outer = CVarGetColor24(CVAR_COSMETIC("Custom.DinFireShieldOuter.Value"),
-                                           (Color_RGB8){ 255, 43, 3 });
+    const Color_RGB8 core =
+        CVarGetColor24(CVAR_COSMETIC("Custom.DinFireShieldCore.Value"), (Color_RGB8){ 255, 225, 122 });
+    const Color_RGB8 outer =
+        CVarGetColor24(CVAR_COSMETIC("Custom.DinFireShieldOuter.Value"), (Color_RGB8){ 255, 43, 3 });
 
     OPEN_DISPS(play->state.gfxCtx);
     Mtx* mtx = MATRIX_NEWMTX(play->state.gfxCtx);
@@ -167,18 +167,18 @@ static void DinFireShield_DrawFlames(PlayState* play, const FireResources* resou
     gDPSetTextureFilter(POLY_XLU_DISP++, G_TF_BILERP);
     gDPSetAlphaCompare(POLY_XLU_DISP++, G_AC_NONE);
     gSPTexture(POLY_XLU_DISP++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON);
-    gDPSetCombineLERP(POLY_XLU_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT,
-                     TEXEL0, 0, SHADE, 0, 0, 0, 0, COMBINED, COMBINED, 0, PRIMITIVE, 0);
-    gDPLoadTextureBlock(POLY_XLU_DISP++, sFlowTextureRef, G_IM_FMT_I, G_IM_SIZ_8b, 64, 32, 0,
-                       G_TX_WRAP, G_TX_WRAP, 6, 5, G_TX_NOLOD, G_TX_NOLOD);
+    gDPSetCombineLERP(POLY_XLU_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, SHADE, 0, 0, 0, 0,
+                      COMBINED, COMBINED, 0, PRIMITIVE, 0);
+    gDPLoadTextureBlock(POLY_XLU_DISP++, sFlowTextureRef, G_IM_FMT_I, G_IM_SIZ_8b, 64, 32, 0, G_TX_WRAP, G_TX_WRAP, 6,
+                        5, G_TX_NOLOD, G_TX_NOLOD);
     // Emit tile offsets inline, not through an eye/mouth/scene texture segment.
     gDPSetTileSize(POLY_XLU_DISP++, 0, 0, surfaceScroll, 63 << 2, surfaceScroll + (31 << 2));
     gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, core.r, core.g, core.b, alpha);
     gDPSetEnvColor(POLY_XLU_DISP++, outer.r, outer.g, outer.b, 255);
     gSPDisplayList(POLY_XLU_DISP++, resources->surface);
     gDPPipeSync(POLY_XLU_DISP++);
-    gDPLoadTextureBlock(POLY_XLU_DISP++, sFlameTextureRef, G_IM_FMT_I, G_IM_SIZ_8b, 64, 32, 0,
-                       G_TX_WRAP, G_TX_WRAP, 6, 5, G_TX_NOLOD, G_TX_NOLOD);
+    gDPLoadTextureBlock(POLY_XLU_DISP++, sFlameTextureRef, G_IM_FMT_I, G_IM_SIZ_8b, 64, 32, 0, G_TX_WRAP, G_TX_WRAP, 6,
+                        5, G_TX_NOLOD, G_TX_NOLOD);
     gDPSetTileSize(POLY_XLU_DISP++, 0, 0, rimScroll, 63 << 2, rimScroll + (31 << 2));
     gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, core.r, core.g, core.b, alpha);
     gDPSetEnvColor(POLY_XLU_DISP++, outer.r, outer.g, outer.b, 255);
@@ -189,15 +189,18 @@ static void DinFireShield_DrawFlames(PlayState* play, const FireResources* resou
 }
 
 void DinFireShield_Draw(PlayState* play, Player* player) {
-    if (play == NULL || player == NULL || player != GET_PLAYER(play)) return;
+    if (play == NULL || player == NULL || player != GET_PLAYER(play))
+        return;
     // Reflection runs first; skip it without erasing the real player's state.
-    if (player->actor.scale.y < 0.0f) return;
+    if (player->actor.scale.y < 0.0f)
+        return;
     // Recheck at draw time: toggles can change while paused.
     if (!DinFireShield_Eligible(play, player)) {
         DinFireShield_Reset();
         return;
     }
-    if (!DinFireShield_SameContext(play, player) || sFire.opacity <= 0.0f) return;
+    if (!DinFireShield_SameContext(play, player) || sFire.opacity <= 0.0f)
+        return;
     FireResources resources;
     if (!DinFireShield_Load(&resources)) {
         DinFireShield_Reset();
@@ -213,14 +216,18 @@ void DinFireShield_Draw(PlayState* play, Player* player) {
 }
 
 int DinFireShield_DrawItem(PlayState* play, s16 drawId) {
-    if (play == NULL || (drawId != GID_SHIELD_DEKU && drawId != GID_SHIELD_HYLIAN)) return false;
+    if (play == NULL || (drawId != GID_SHIELD_DEKU && drawId != GID_SHIELD_HYLIAN))
+        return false;
     const u16 itemId = drawId == GID_SHIELD_DEKU ? ITEM_SHIELD_DEKU : ITEM_SHIELD_HYLIAN;
     if (!DinFireShield_ItemEnabled(itemId) || !ResourceMgr_FileExists(sGIBracer) ||
-        !ResourceMgr_FileExists(sGIVertices)) return false;
+        !ResourceMgr_FileExists(sGIVertices))
+        return false;
     FireResources resources;
-    if (!DinFireShield_Load(&resources) || ResourceGetDataByName(sGIVertices) == NULL) return false;
+    if (!DinFireShield_Load(&resources) || ResourceGetDataByName(sGIVertices) == NULL)
+        return false;
     Gfx* bracer = ResourceMgr_LoadGfxByName(sGIBracer);
-    if (bracer == NULL) return false;
+    if (bracer == NULL)
+        return false;
 
     OPEN_DISPS(play->state.gfxCtx);
     Matrix_Push();

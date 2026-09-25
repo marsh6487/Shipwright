@@ -420,6 +420,7 @@ void BgTokiSwd_Init(Actor*, PlayState*);
 void BgTokiSwd_Update(Actor*, PlayState*);
 void BgTokiSwd_Destroy(Actor*, PlayState*);
 void BgTokiSwd_Draw(Actor*, PlayState*);
+void DinFireSword_DrawPedestal(PlayState*);
 void Inventory_SwapAgeEquipment(void);
 void Fixture_PlayDestroyAgeHandoff(PlayState*);
 void Fixture_HudRestore(PlayState*);

@@ -18,6 +18,8 @@ void DinFireSword_Update(struct PlayState* play, struct Player* player);
 // Gameplay left-hand matrix must be current. Ordinary sword hand only;
 // other weapon owners, PAK overrides and ceremonies keep their own draw path.
 void DinFireSword_Draw(struct PlayState* play, struct Player* player);
+// Call only alongside the custom pedestal sword, in its current model matrix.
+void DinFireSword_DrawPedestal(struct PlayState* play);
 
 #ifdef __cplusplus
 }

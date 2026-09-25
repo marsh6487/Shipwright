@@ -4,6 +4,7 @@
  * Description: Master Sword (Contains Cutscenes)
  */
 
+#include "din_fire_sword.h"
 #include "z_bg_toki_swd.h"
 #include "objects/object_toki_objects/object_toki_objects.h"
 #include "soh/OTRGlobals.h"
@@ -701,6 +702,9 @@ void BgTokiSwd_Draw(Actor* thisx, PlayState* play2) {
                Gfx_TexScrollEx(play->state.gfxCtx, 0, -(play->gameplayFrames % 0x80), 32, 32, 0, -1));
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPDisplayList(POLY_OPA_DISP++, selectedSword != NULL ? selectedSword : (Gfx*)object_toki_objects_DL_001BD0);
+    if (this->actor.params == BG_TOKI_SWD_TIME_PEDESTAL && selectedSword != NULL) {
+        DinFireSword_DrawPedestal(play);
+    }
     Matrix_Pop();
 
     CLOSE_DISPS(play->state.gfxCtx);

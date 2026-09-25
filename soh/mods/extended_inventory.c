@@ -474,7 +474,8 @@ uint8_t Nei_CaneActiveSkill(void);
 
 void* ExtInv_GetItemIcon(uint16_t itemId) {
     void* fireShieldIcon = DinFireShield_ItemIcon(itemId);
-    if (fireShieldIcon != NULL) return fireShieldIcon;
+    if (fireShieldIcon != NULL)
+        return fireShieldIcon;
 
     // Kafei lays SW97 landmines rather than throwing homing mice, so the slot has to read as one
     // while he is transformed and go back to the mouse the moment he is not. Skijer's NEI

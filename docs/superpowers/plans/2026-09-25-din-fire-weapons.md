@@ -60,3 +60,7 @@
 ## Pre-push evidence
 
 Cumulative regression suite passed with all26 required baselines retained and one pre-existing skipped test. Real player translation units compile. Independent archive validation passed for all18 sword resources, four profiles,1024px textures and byte-preserved HD256 shield resources. Offline geometry/pixel previews inspected. Fresh review found and resolved guarding visibility (`heldItemAction`) and crouch-stab fire toggle restoration. Ordinary and fidget idles share the hand attachment without an animation whitelist. Runtime appearance, sound and enemy reactions remain unverified.
+
+## Follow-up: visible custom pedestal and formatting gate
+
+User requested fire on the Room10 custom pedestal after db3f11fc, noting the absent adult sword must stay absent. The actor now calls the shared adult fire layers only when its custom selected sword is drawn, before its existing matrix pop. No standalone flame actor, actor-visibility changes, progression changes or native Temple of Time hook. Arbitrary replacement proportions remain approximate. Fresh reviewer found no blocker; actor and renderer fixtures pass. clang-format14 is applied with the repository's complete source selection, including inherited formatting violations.

@@ -153,15 +153,35 @@ int main(void) {
     REQUIRE(spawnCount == 1);
     REQUIRE(spawnParams == (0x4000 | 2));
     REQUIRE(memcmp(&adult, &gSaveContext.horseData, sizeof(adult)) == 0);
-    int scenes[] = { SCENE_HYRULE_FIELD, SCENE_LAKE_HYLIA, SCENE_GERUDO_VALLEY, SCENE_GERUDOS_FORTRESS,
-                     SCENE_LON_LON_RANCH, SCENE_KAKARIKO_VILLAGE, SCENE_GRAVEYARD, SCENE_ZORAS_RIVER,
-                     SCENE_KOKIRI_FOREST, SCENE_SACRED_FOREST_MEADOW, SCENE_ZORAS_FOUNTAIN, SCENE_LOST_WOODS,
-                     SCENE_DESERT_COLOSSUS, SCENE_HAUNTED_WASTELAND, SCENE_HYRULE_CASTLE,
-                     SCENE_DEATH_MOUNTAIN_TRAIL, SCENE_DEATH_MOUNTAIN_CRATER, SCENE_OUTSIDE_GANONS_CASTLE,
-                     SCENE_MARKET_ENTRANCE_DAY, SCENE_MARKET_ENTRANCE_NIGHT, SCENE_MARKET_ENTRANCE_RUINS,
-                     SCENE_MARKET_DAY, SCENE_MARKET_NIGHT, SCENE_MARKET_RUINS, SCENE_BACK_ALLEY_DAY,
-                     SCENE_BACK_ALLEY_NIGHT, SCENE_TEMPLE_OF_TIME_EXTERIOR_DAY,
-                     SCENE_TEMPLE_OF_TIME_EXTERIOR_NIGHT, SCENE_TEMPLE_OF_TIME_EXTERIOR_RUINS };
+    int scenes[] = { SCENE_HYRULE_FIELD,
+                     SCENE_LAKE_HYLIA,
+                     SCENE_GERUDO_VALLEY,
+                     SCENE_GERUDOS_FORTRESS,
+                     SCENE_LON_LON_RANCH,
+                     SCENE_KAKARIKO_VILLAGE,
+                     SCENE_GRAVEYARD,
+                     SCENE_ZORAS_RIVER,
+                     SCENE_KOKIRI_FOREST,
+                     SCENE_SACRED_FOREST_MEADOW,
+                     SCENE_ZORAS_FOUNTAIN,
+                     SCENE_LOST_WOODS,
+                     SCENE_DESERT_COLOSSUS,
+                     SCENE_HAUNTED_WASTELAND,
+                     SCENE_HYRULE_CASTLE,
+                     SCENE_DEATH_MOUNTAIN_TRAIL,
+                     SCENE_DEATH_MOUNTAIN_CRATER,
+                     SCENE_OUTSIDE_GANONS_CASTLE,
+                     SCENE_MARKET_ENTRANCE_DAY,
+                     SCENE_MARKET_ENTRANCE_NIGHT,
+                     SCENE_MARKET_ENTRANCE_RUINS,
+                     SCENE_MARKET_DAY,
+                     SCENE_MARKET_NIGHT,
+                     SCENE_MARKET_RUINS,
+                     SCENE_BACK_ALLEY_DAY,
+                     SCENE_BACK_ALLEY_NIGHT,
+                     SCENE_TEMPLE_OF_TIME_EXTERIOR_DAY,
+                     SCENE_TEMPLE_OF_TIME_EXTERIOR_NIGHT,
+                     SCENE_TEMPLE_OF_TIME_EXTERIOR_RUINS };
     for (int i = 0; i < ARRAY_COUNT(scenes); i++) {
         Reset();
         play.sceneNum = scenes[i];

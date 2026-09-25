@@ -790,10 +790,9 @@ void SohMenu::AddMenuEnhancements() {
     AddWidget(path, "Shield SFX", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("DinFireShieldSfx"))
         .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("DinFireShield"), 0) == 0;
-        })
-        .Options(CheckboxOptions().Tooltip("Plays a flame sound while guarding with Din's Fire Shield. Off by default."));
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("DinFireShield"), 0) == 0; })
+        .Options(
+            CheckboxOptions().Tooltip("Plays a flame sound while guarding with Din's Fire Shield. Off by default."));
     AddWidget(path, "Din Fire Sword (POC)", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("DinFireSword"))
         .RaceDisable(false)
@@ -803,12 +802,11 @@ void SohMenu::AddMenuEnhancements() {
             "Normal sword damage and reach are unchanged."));
     AddWidget(path, "Fire Damage", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("DinFireSwordDamage"))
-        .PreFunc([](WidgetInfo& info) {
-            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("DinFireSword"), 0) == 0;
-        })
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("DinFireSword"), 0) == 0; })
         .Options(CheckboxOptions().Tooltip(
             "Direct sword hits use the enemy's Fire Arrow damage and fire reaction. Off by default. "
-            "Changes damage and immunities; does not add a projectile or change reach. Charged spin waves stay unchanged."));
+            "Changes damage and immunities; does not add a projectile or change reach. Charged spin waves stay "
+            "unchanged."));
     AddWidget(path, "Hide Back Equipment and Scabbard", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("HideBackEquipment"))
         .RaceDisable(false)
