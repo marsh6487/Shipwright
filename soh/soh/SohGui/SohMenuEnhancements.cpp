@@ -804,9 +804,8 @@ void SohMenu::AddMenuEnhancements() {
         .CVar(CVAR_ENHANCEMENT("DinFireSwordDamage"))
         .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("DinFireSword"), 0) == 0; })
         .Options(CheckboxOptions().Tooltip(
-            "Direct sword hits use the enemy's Fire Arrow damage and fire reaction. Off by default. "
-            "Changes damage and immunities; does not add a projectile or change reach. Charged spin waves stay "
-            "unchanged."));
+            "Adds fire interactions to direct sword hits while preserving normal sword damage, cutting, and enemy "
+            "reactions. Off by default. Does not change reach. Charged spin waves stay unchanged."));
     AddWidget(path, "Hide Back Equipment and Scabbard", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("HideBackEquipment"))
         .RaceDisable(false)

@@ -84,6 +84,11 @@ static bool Dispatch(int id, ...);
 static bool NEI_PlayerDamageBoostActive() {
     return false;
 }
+// This stat-only fixture has no active fire sword; its collision integration is
+// exercised separately against real code by din_fire_sword_damage_test.c.
+static uint8_t DinFireSword_DamageEntry(PlayState*, Actor*, const ColliderInfo*, uint32_t, uint8_t vanillaEntry) {
+    return vanillaEntry;
+}
 #define GameInteractor_Should(id, initial, ...) Dispatch(id, __VA_ARGS__)
 #include "stat_upgrade_production.inc"
 

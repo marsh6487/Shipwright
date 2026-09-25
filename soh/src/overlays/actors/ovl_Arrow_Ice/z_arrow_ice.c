@@ -9,6 +9,7 @@
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/frame_interpolation.h"
 #include <libultraship/bridge/resourcebridge.h>
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_UPDATE_DURING_OCARINA)
@@ -47,6 +48,7 @@ static void ArrowIce_DrawSnowflake(ArrowIce* this, PlayState* play, Vec3f* pos, 
                                    Color_RGB8 secondary, s32 impact) {
     f32 halfSize;
     f32 opacity;
+    f32 rotation = 0.0f;
 
     if (impact) {
         f32 age = 32.0f - this->timer;
@@ -55,8 +57,12 @@ static void ArrowIce_DrawSnowflake(ArrowIce* this, PlayState* play, Vec3f* pos, 
         opacity = ArrowIce_SnowflakeFade(this) * MIN((age + 1.0f) / 3.0f, 1.0f);
     } else {
         f32 charge = CLAMP(this->radius * 0.1f, 0.0f, 1.0f);
-        halfSize = 5.0f + 7.0f * charge;
-        opacity = charge;
+        // Gameplay time freezes on pause and stays stable across redraws.
+        // At 20 Hz, turn once in twelve seconds with a gentle three-second pulse.
+        f32 pulse = sinf((play->gameplayFrames % 60) * (2.0f * M_PI / 60.0f));
+        rotation = (play->gameplayFrames % 240) * (2.0f * M_PI / 240.0f);
+        halfSize = (5.0f + 7.0f * charge) * (1.0f + 0.04f * pulse);
+        opacity = charge * (0.92f + 0.08f * pulse);
     }
     if (opacity <= 0.0f || this->alpha == 0) {
         return;
@@ -82,10 +88,15 @@ static void ArrowIce_DrawSnowflake(ArrowIce* this, PlayState* play, Vec3f* pos, 
     for (s32 layer = impact ? 0 : 1; layer < 2; ++layer) {
         f32 size = halfSize * (layer == 0 ? 0.32f : 1.0f);
         u8 alpha = (u8)(opacity * (layer == 0 ? 245.0f : (impact ? 210.0f : 96.0f)));
+        // Keep charge, impact flash and impact snowflake matrices independent.
+        FrameInterpolation_RecordOpenChild(this, impact ? layer + 1 : 0);
         Matrix_Translate(pos->x, pos->y, pos->z, MTXMODE_NEW);
         Matrix_ReplaceRotation(&play->billboardMtxF);
         // Lift the billboard slightly toward the camera at collision surfaces.
         Matrix_Translate(0.0f, 0.0f, 1.5f, MTXMODE_APPLY);
+        if (!impact) {
+            Matrix_RotateZ(rotation, MTXMODE_APPLY);
+        }
         Matrix_Scale(size / 32.0f, size / 32.0f, 1.0f, MTXMODE_APPLY);
         gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
         gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, primary.r, primary.g, primary.b, alpha);
@@ -94,6 +105,7 @@ static void ArrowIce_DrawSnowflake(ArrowIce* this, PlayState* play, Vec3f* pos, 
         gSPVertex(POLY_XLU_DISP++, (uintptr_t)sIceSnowflakeVertices, 4, 0);
         gSP2Triangles(POLY_XLU_DISP++, 0, 1, 2, 0, 0, 2, 3, 0);
         gDPPipeSync(POLY_XLU_DISP++);
+        FrameInterpolation_RecordCloseChild();
     }
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     Matrix_Pop();
@@ -311,8 +323,9 @@ void ArrowIce_Draw(Actor* thisx, PlayState* play) {
             gDPFillRectangle(POLY_XLU_DISP++, 0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
         }
 
-        // Draw native ice during charge/flight, or whenever the POC is absent.
-        if (!snowflakeImpact) {
+        // The custom snowflake replaces charge and impact geometry. Flight and
+        // missing/disabled/failed custom textures retain the native effect.
+        if (!snowflake) {
             Gfx_SetupDL_25Xlu(play->state.gfxCtx);
             gDPSetPrimColor(POLY_XLU_DISP++, 0x80, 0x80, primaryColor.r, primaryColor.g, primaryColor.b, this->alpha);
             gDPSetEnvColor(POLY_XLU_DISP++, secondaryColor.r, secondaryColor.g, secondaryColor.b, 128);

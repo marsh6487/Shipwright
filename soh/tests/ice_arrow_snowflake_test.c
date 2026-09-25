@@ -23,7 +23,10 @@ static Mtx matrix;
 static u8 pixels[64 * 64];
 static int alt, asset, badLoad, customColors, matrixCount, matrixDepth;
 static int audioCalls, magicCalls;
-static f32 lastX, lastY, lastZ, lastScale, scales[8], positions[8][3];
+static int interpolationDepth, interpolationIds[8], matrixIds[8];
+static const void* interpolationKeys[8];
+static const void* matrixKeys[8];
+static f32 lastX, lastY, lastZ, lastScale, lastRotation, scales[8], rotations[8], positions[8][3];
 static const char* texturePath = "__OTR__custom/henriko_effects/arrows/ice_snowflake_poc2";
 
 #define REQUIRE(c)                                               \
@@ -51,8 +54,13 @@ void* ResourceGetDataByName(const char* path) {
     return badLoad ? NULL : pixels;
 }
 void FrameInterpolation_RecordOpenChild(const void* key, int id) {
+    REQUIRE(interpolationDepth < ARRAY_COUNT(interpolationKeys));
+    interpolationKeys[interpolationDepth] = key;
+    interpolationIds[interpolationDepth++] = id;
 }
 void FrameInterpolation_RecordCloseChild(void) {
+    REQUIRE(interpolationDepth > 0);
+    --interpolationDepth;
 }
 void Gfx_SetupDL_25Xlu(GraphicsContext* context) {
     gDPPipeSync(context->polyXlu.p++);
@@ -82,6 +90,7 @@ void Matrix_Translate(f32 x, f32 y, f32 z, u8 mode) {
         lastX = x;
         lastY = y;
         lastZ = z;
+        lastRotation = 0.0f;
     }
 }
 void Matrix_Scale(f32 x, f32 y, f32 z, u8 mode) {
@@ -92,14 +101,19 @@ void Matrix_RotateX(f32 a, u8 mode) {
 void Matrix_RotateY(f32 a, u8 mode) {
 }
 void Matrix_RotateZ(f32 a, u8 mode) {
+    lastRotation = mode == MTXMODE_NEW ? a : lastRotation + a;
 }
 void Matrix_RotateZYX(s16 x, s16 y, s16 z, u8 mode) {
 }
 void Matrix_ReplaceRotation(MtxF* m) {
+    lastRotation = 0.0f;
 }
 Mtx* Matrix_NewMtx(GraphicsContext* context, char* file, s32 line) {
-    REQUIRE(matrixCount < 8);
+    REQUIRE(matrixCount < 8 && interpolationDepth > 0);
     scales[matrixCount] = lastScale;
+    rotations[matrixCount] = lastRotation;
+    matrixKeys[matrixCount] = interpolationKeys[interpolationDepth - 1];
+    matrixIds[matrixCount] = interpolationIds[interpolationDepth - 1];
     positions[matrixCount][0] = lastX;
     positions[matrixCount][1] = lastY;
     positions[matrixCount++][2] = lastZ;
@@ -152,9 +166,9 @@ static size_t draw(void) {
     EnArrow parentBefore = arrow;
     memset(commands, 0, sizeof(commands));
     gfx.polyXlu.p = commands;
-    matrixCount = matrixDepth = 0;
+    matrixCount = matrixDepth = interpolationDepth = 0;
     ArrowIce_Draw(&ice.actor, &play);
-    REQUIRE(matrixDepth == 0 && gfx.polyXlu.p < commands + ARRAY_COUNT(commands));
+    REQUIRE(matrixDepth == 0 && interpolationDepth == 0 && gfx.polyXlu.p < commands + ARRAY_COUNT(commands));
     REQUIRE(memcmp(&before, &ice, sizeof(ice)) == 0);
     REQUIRE(memcmp(&parentBefore, &arrow, sizeof(arrow)) == 0);
     REQUIRE(audioCalls == 0 && magicCalls == 0);
@@ -180,11 +194,94 @@ static int primAlpha(size_t count, unsigned rgb) {
     }
     return -1;
 }
+static int nativeGeometry(size_t count) {
+    int found = 0;
+    for (size_t i = 0; i < count; ++i) {
+        if ((commands[i].words.w0 >> 24) != G_DL || commands[i].words.w1 == (uintptr_t)scroll)
+            continue;
+        const char* path = (const char*)commands[i].words.w1;
+        REQUIRE(path != NULL);
+        if (!strcmp(path, "__OTR__overlays/ovl_Arrow_Ice/sMaterialDL") ||
+            !strcmp(path, "__OTR__overlays/ovl_Arrow_Ice/sModelDL"))
+            ++found;
+    }
+    return found;
+}
 static void hit(u16 timer) {
     ice.actionFunc = ArrowIce_Hit;
     ice.timer = timer;
     ice.alpha = 255;
     ice.unk_164 = 1.0f;
+}
+
+static void heldChargeMotion(void) {
+    setup();
+    play.gameplayFrames = 0;
+    size_t count = draw();
+    f32 previousRotation = rotations[0];
+    f32 previousScale = scales[0];
+    int previousAlpha = primAlpha(count, 0xAAFFFF);
+    f32 travel = 0.0f, minScale = previousScale, maxScale = previousScale;
+    int minAlpha = previousAlpha, maxAlpha = previousAlpha;
+
+    // Renderer inputs must move continuously over twelve seconds of held charge.
+    // A static quad, rapid spin, abrupt loop or flashing pulse must fail.
+    for (int frame = 1; frame <= 240; ++frame) {
+        play.gameplayFrames = frame;
+        count = draw();
+        REQUIRE(matrixCount == 1);
+        f32 rotation = rotations[0];
+        f32 scale = scales[0];
+        int alpha = primAlpha(count, 0xAAFFFF);
+        f32 step = remainderf(rotation - previousRotation, 2.0f * M_PI);
+        REQUIRE(step > 0.0f && step < 0.04f);
+        REQUIRE(scale > 0.355f && scale < 0.395f);
+        REQUIRE(alpha >= 80 && alpha <= 100);
+        REQUIRE(fabsf(scale - previousScale) < 0.003f && abs(alpha - previousAlpha) <= 2);
+        travel += step;
+        minScale = MIN(minScale, scale);
+        maxScale = MAX(maxScale, scale);
+        minAlpha = MIN(minAlpha, alpha);
+        maxAlpha = MAX(maxAlpha, alpha);
+        previousRotation = rotation;
+        previousScale = scale;
+        previousAlpha = alpha;
+    }
+    REQUIRE(travel > 6.27f && travel < 7.55f); // One turn every ten to twelve seconds.
+    REQUIRE(maxScale - minScale > 0.015f);
+    REQUIRE(maxAlpha - minAlpha >= 8 && maxAlpha - minAlpha <= 24);
+
+    play.gameplayFrames = 45;
+    count = draw();
+    memcpy(reference, commands, sizeof(commands));
+    f32 pausedRotation = rotations[0], pausedScale = scales[0];
+    // Render time continues while paused; only gameplay time may animate charge.
+    play.pauseCtx.state = 6;
+    play.state.frames += 123;
+    REQUIRE(draw() == count && !memcmp(reference, commands, sizeof(commands)));
+    REQUIRE(rotations[0] == pausedRotation && scales[0] == pausedScale);
+    REQUIRE(draw() == count && !memcmp(reference, commands, sizeof(commands)));
+    REQUIRE(rotations[0] == pausedRotation && scales[0] == pausedScale);
+}
+
+static void interpolationKeepsPhasesSeparate(void) {
+    setup();
+    draw();
+    const void* chargeKey = matrixKeys[0];
+    int chargeId = matrixIds[0];
+    hit(24);
+    draw();
+    REQUIRE(matrixCount == 2);
+    // The charge matrix must not interpolate into the impact flash, and the
+    // two impact layers must retain independent interpolation identities.
+    REQUIRE(matrixKeys[0] != chargeKey || matrixIds[0] != chargeId);
+    REQUIRE(matrixKeys[1] != chargeKey || matrixIds[1] != chargeId);
+    REQUIRE(matrixKeys[0] != matrixKeys[1] || matrixIds[0] != matrixIds[1]);
+    REQUIRE(rotations[0] == 0.0f && rotations[1] == 0.0f);
+    f32 impactScale = scales[1];
+    play.gameplayFrames += 45;
+    draw();
+    REQUIRE(rotations[0] == 0.0f && rotations[1] == 0.0f && scales[1] == impactScale);
 }
 
 int main(void) {
@@ -193,6 +290,9 @@ int main(void) {
     size_t count = draw();
     REQUIRE(textures(count, "ice_snowflake_poc2") == 1);
     REQUIRE(primAlpha(count, 0xAAFFFF) > 0 && primAlpha(count, 0xAAFFFF) < 128);
+    REQUIRE(nativeGeometry(count) == 0);
+    heldChargeMotion();
+    interpolationKeepsPhasesSeparate();
 
     // Fallback paths must produce identical native packets for every phase.
     for (int phase = 0; phase < 3; ++phase) {
@@ -203,6 +303,7 @@ int main(void) {
             hit(24);
         alt = 0;
         count = draw();
+        REQUIRE(nativeGeometry(count) == 2);
         memcpy(reference, commands, sizeof(commands));
         alt = 1;
         asset = 0;
@@ -210,6 +311,10 @@ int main(void) {
         asset = 1;
         badLoad = 1;
         REQUIRE(draw() == count && !memcmp(reference, commands, sizeof(commands)));
+        if (phase == 1) {
+            badLoad = 0;
+            REQUIRE(draw() == count && !memcmp(reference, commands, sizeof(commands)));
+        }
     }
     setup();
     ice.actionFunc = ArrowIce_Fly;
@@ -229,6 +334,7 @@ int main(void) {
     hit(32);
     count = draw();
     REQUIRE(textures(count, "ice_snowflake_poc2") == 1);
+    REQUIRE(nativeGeometry(count) == 0);
     REQUIRE(textures(count, "gFlashTex") == 1);
     f32 initialScale = scales[matrixCount - 1];
     hit(24);
@@ -262,7 +368,8 @@ int main(void) {
     REQUIRE(textures(draw(), "ice_snowflake_poc2") == 0);
     alt = 1;
     REQUIRE(textures(draw(), "ice_snowflake_poc2") == 1);
-    puts("PASS: charge/impact packets, native fallbacks, missing/failed assets, phase gates, captured position, "
-         "expansion/fade, cosmetics, pause, and draw-only state preservation");
+    puts("PASS: custom charge/impact replace native geometry, gentle held motion, phase/layer interpolation, "
+         "native flight/fallbacks, missing/failed assets, phase gates, captured position, expansion/fade, "
+         "cosmetics, pause, and draw-only state preservation");
     return 0;
 }

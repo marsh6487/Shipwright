@@ -12,6 +12,7 @@ static Player player;
 static Gfx opa[512], xlu[512], core[1], flame[1];
 static u8 pixels[4];
 static Mtx matrix;
+static MtxF currentMatrix, matrixStack[8], submittedMatrices[8];
 static int enabled, alt, assets, loadFailure, transformed, invisible, customColors;
 static int depth, matrices, fireDamage, otherOwner, pakActive, bossOwner;
 static const char* missing;
@@ -99,16 +100,21 @@ void gSPDisplayList(Gfx* packet, Gfx* list) {
     __gSPDisplayList(packet, list);
 }
 void Matrix_Push(void) {
+    REQUIRE(depth < ARRAY_COUNT(matrixStack));
+    matrixStack[depth] = currentMatrix;
     ++depth;
 }
 void Matrix_Pop(void) {
+    REQUIRE(depth > 0);
     --depth;
+    currentMatrix = matrixStack[depth];
 }
 Mtx* Matrix_NewMtx(GraphicsContext* context, char* file, s32 line) {
     (void)context;
     (void)file;
     (void)line;
-    ++matrices;
+    REQUIRE(matrices < ARRAY_COUNT(submittedMatrices));
+    submittedMatrices[matrices++] = currentMatrix;
     return &matrix;
 }
 
@@ -119,6 +125,7 @@ static void setup(void) {
     memset(&gSaveContext, 0, sizeof(gSaveContext));
     memset(opa, 0, sizeof(opa));
     memset(xlu, 0, sizeof(xlu));
+    memset(&currentMatrix, 0, sizeof(currentMatrix));
     play.state.gfxCtx = &gfx;
     play.actorCtx.actorLists[ACTORCAT_PLAYER].head = &player.actor;
     player.actor.scale.y = .01f;
@@ -138,8 +145,11 @@ static void tick(void) {
 static size_t draw(void) {
     gfx.polyOpa.p = opa;
     gfx.polyXlu.p = xlu;
+    matrices = 0;
     Player before = player;
+    DinFireSword_BeginPlayerDraw(&play, &player);
     DinFireSword_Draw(&play, &player);
+    DinFireSword_DrawAfterPlayer(&play, &player);
     REQUIRE(depth == 0 && gfx.polyOpa.p < opa + 512 && gfx.polyXlu.p < xlu + 512);
     REQUIRE(!memcmp(&before, &player, sizeof(player)));
     return (gfx.polyOpa.p - opa) + (gfx.polyXlu.p - xlu);
@@ -151,8 +161,8 @@ static void requireTexture(Gfx* start, Gfx* end, const char* name) {
             continue;
         uintptr_t address = p->words.w1;
         REQUIRE(address != 0 && !(address & 1));
-        REQUIRE(strcmp((char*)address, name) == 0);
-        ++found;
+        if (strcmp((char*)address, name) == 0)
+            ++found;
     }
     REQUIRE(found == 1);
 }
@@ -163,11 +173,116 @@ static int color(Gfx* start, Gfx* end, int opcode, unsigned rgb) {
     return 0;
 }
 
+static int containsLayer(Gfx* start, Gfx* end, Gfx* layer) {
+    for (Gfx* p = start; p < end; ++p)
+        if ((p->words.w0 >> 24) == G_DL && p->words.w1 == (uintptr_t)layer)
+            return 1;
+    return 0;
+}
+
+static void requireRecordedMatrix(Gfx* start, Gfx* end) {
+    int found = 0;
+    for (Gfx* p = start; p < end; ++p) {
+        if ((p->words.w0 >> 24) == G_MTX) {
+            REQUIRE(p->words.w1 == (uintptr_t)&matrix);
+            ++found;
+        }
+    }
+    REQUIRE(found == 1);
+}
+
+static u32 lastColor(Gfx* start, Gfx* end, int opcode) {
+    u32 result = 0;
+    for (Gfx* p = start; p < end; ++p)
+        if ((p->words.w0 >> 24) == opcode)
+            result = p->words.w1;
+    return result;
+}
+
+static void requireBodyColorsPreserved(void) {
+    // Custom meshes may inherit either color from the preceding limb. The fire
+    // must not paint subsequent torso/arm sections, regardless of sword profile.
+    for (int profile = 0; profile < 4; ++profile) {
+        setup();
+        customColors = 1;
+        if (profile == 1) {
+            gSaveContext.linkAge = LINK_AGE_CHILD;
+            player.itemAction = player.heldItemAction = PLAYER_IA_SWORD_KOKIRI;
+        } else if (profile >= 2) {
+            player.itemAction = player.heldItemAction = PLAYER_IA_SWORD_BIGGORON;
+            player.leftHandType = PLAYER_MODELTYPE_LH_BGS;
+            gSaveContext.swordHealth = profile == 2 ? 8 : 0;
+        }
+        tick();
+        gfx.polyOpa.p = opa;
+        gfx.polyXlu.p = xlu;
+        DinFireSword_BeginPlayerDraw(&play, &player);
+        gDPSetPrimColor(gfx.polyOpa.p++, 0, 0, 93, 47, 201, 173);
+        gDPSetEnvColor(gfx.polyOpa.p++, 17, 202, 64, 0);
+        currentMatrix.xx = currentMatrix.yy = currentMatrix.zz = currentMatrix.ww = 1.0f;
+        currentMatrix.xw = 91.0f;
+        currentMatrix.yw = -32.0f;
+        currentMatrix.zw = 67.0f;
+        MtxF hand = currentMatrix;
+        DinFireSword_Draw(&play, &player);
+        REQUIRE(gfx.polyOpa.p == opa + 2 && gfx.polyXlu.p == xlu);
+        REQUIRE(lastColor(opa, gfx.polyOpa.p, G_SETPRIMCOLOR) == 0x5D2FC9AD);
+        REQUIRE(lastColor(opa, gfx.polyOpa.p, G_SETENVCOLOR) == 0x11CA4000);
+        // Subsequent limbs change the current pose; the deferred fire must use
+        // the captured hand and restore the caller's matrix afterwards.
+        currentMatrix.xw = 999.0f;
+        DinFireSword_DrawAfterPlayer(&play, &player);
+        REQUIRE(containsLayer(opa, gfx.polyOpa.p, core));
+        REQUIRE(containsLayer(xlu, gfx.polyXlu.p, flame));
+        REQUIRE(matrices == 1 && depth == 0 && currentMatrix.xw == 999.0f);
+        REQUIRE(!memcmp(&submittedMatrices[0], &hand, sizeof(hand)));
+        requireRecordedMatrix(opa, gfx.polyOpa.p);
+        requireRecordedMatrix(xlu, gfx.polyXlu.p);
+    }
+    puts("PASS fire sword preserves inherited adult/child/Master/BGS/broken body colors");
+}
+
+static void requireDrawLifetime(void) {
+    setup();
+    tick();
+    gfx.polyOpa.p = opa;
+    gfx.polyXlu.p = xlu;
+    DinFireSword_BeginPlayerDraw(&play, &player);
+    DinFireSword_Draw(&play, &player);
+    // A new draw with no selected hand must not reuse a previous queued pose.
+    DinFireSword_BeginPlayerDraw(&play, &player);
+    DinFireSword_DrawAfterPlayer(&play, &player);
+    REQUIRE(gfx.polyOpa.p == opa && gfx.polyXlu.p == xlu);
+    DinFireSword_BeginPlayerDraw(&play, &player);
+    DinFireSword_Draw(&play, &player);
+    enabled = 0;
+    DinFireSword_DrawAfterPlayer(&play, &player);
+    enabled = 1;
+    DinFireSword_DrawAfterPlayer(&play, &player);
+    REQUIRE(gfx.polyOpa.p == opa && gfx.polyXlu.p == xlu);
+    // Reflections precede the actual player in the same frame. Suppression must
+    // not reset the animation context needed by the following normal pass.
+    player.actor.scale.y = -.01f;
+    REQUIRE(draw() == 0);
+    player.actor.scale.y = .01f;
+    REQUIRE(draw() > 0);
+    Gfx* opaqueEnd = gfx.polyOpa.p;
+    Gfx* effectsEnd = gfx.polyXlu.p;
+    DinFireSword_DrawAfterPlayer(&play, &player);
+    REQUIRE(gfx.polyOpa.p == opaqueEnd && gfx.polyXlu.p == effectsEnd);
+    puts("PASS deferred fire draw: no stale/duplicate pose, disable recovery and reflection-to-player rendering");
+}
+
 int main(void) {
+    requireBodyColorsPreserved();
+    requireDrawLifetime();
     setup();
     tick();
     REQUIRE(draw() > 0);
-    REQUIRE(matrices == 2 && gfx.polyOpa.p > opa && gfx.polyXlu.p > xlu);
+    // An opaque core must precede room transparency; drawing it in XLU can
+    // overwrite a foreground waterfall that has already blended over Link.
+    REQUIRE(containsLayer(opa, gfx.polyOpa.p, core));
+    REQUIRE(matrices == 1 && gfx.polyOpa.p > opa && gfx.polyXlu.p > xlu);
     REQUIRE(strstr(lastCorePath, "/adult/") != NULL);
     requireTexture(opa, gfx.polyOpa.p, "__OTR__objects/din_fire_sword/poc1/CoreTex");
     requireTexture(xlu, gfx.polyXlu.p, "__OTR__objects/din_fire_sword/poc1/FlameTex");
@@ -302,7 +417,7 @@ int main(void) {
     play.pauseCtx.state = 0;
     tick();
     draw();
-    REQUIRE(memcmp(a, opa, sizeof(a)) != 0);
+    REQUIRE(memcmp(b, xlu, sizeof(b)) != 0);
     ++play.sceneNum;
     REQUIRE(draw() == 0);
     tick();
@@ -312,8 +427,8 @@ int main(void) {
     setup();
     REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_MASTER) == DMG_SLASH_MASTER);
     fireDamage = 1;
-    REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_MASTER) == DMG_ARROW_FIRE);
-    REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_JUMP_MASTER) == DMG_ARROW_FIRE);
+    REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_MASTER) == (DMG_SLASH_MASTER | DMG_ARROW_FIRE));
+    REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_JUMP_MASTER) == (DMG_JUMP_MASTER | DMG_ARROW_FIRE));
     REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_HAMMER_SWING) == DMG_HAMMER_SWING);
     REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_MASTER | DMG_FIXED_DAMAGE) ==
             (DMG_SLASH_MASTER | DMG_FIXED_DAMAGE));
@@ -334,7 +449,7 @@ int main(void) {
     REQUIRE(strstr(lastCorePath, "/child/") != NULL);
     REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_KOKIRI) == DMG_SLASH_KOKIRI);
     fireDamage = 1;
-    REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_KOKIRI) == DMG_ARROW_FIRE);
+    REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_KOKIRI) == (DMG_SLASH_KOKIRI | DMG_ARROW_FIRE));
     for (bossOwner = 1; bossOwner <= 2; ++bossOwner) {
         // A PAK sword can leave the ordinary hand type intact for these owners.
         tick();
@@ -344,7 +459,7 @@ int main(void) {
     bossOwner = 0;
     tick();
     REQUIRE(draw() > 0);
-    REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_KOKIRI) == DMG_ARROW_FIRE);
+    REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_KOKIRI) == (DMG_SLASH_KOKIRI | DMG_ARROW_FIRE));
     otherOwner = 1;
     REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_KOKIRI) == DMG_SLASH_KOKIRI);
     puts("PASS child Din fire rendering and opt-in damage with PAK equipment slots");
@@ -354,7 +469,7 @@ int main(void) {
             DinFireSword_SetDamageFlags(&play, &player, q, DMG_JUMP_MASTER);
     fireDamage = 1;
     DinFireSword_RefreshDamage(&play, &player);
-    REQUIRE(player.meleeWeaponQuads[0].info.toucher.dmgFlags == DMG_ARROW_FIRE);
+    REQUIRE(player.meleeWeaponQuads[0].info.toucher.dmgFlags == (DMG_JUMP_MASTER | DMG_ARROW_FIRE));
     fireDamage = 0;
     DinFireSword_RefreshDamage(&play, &player);
     REQUIRE(player.meleeWeaponQuads[0].info.toucher.dmgFlags == DMG_JUMP_MASTER);
@@ -369,7 +484,7 @@ int main(void) {
     gfx.polyOpa.p = opa;
     gfx.polyXlu.p = xlu;
     DinFireSword_DrawPedestal(&play);
-    REQUIRE(gfx.polyOpa.p > opa && strstr(lastCorePath, "/adult/"));
+    REQUIRE(gfx.polyXlu.p > xlu && strstr(lastCorePath, "/adult/"));
     enabled = 0;
     gfx.polyOpa.p = opa;
     gfx.polyXlu.p = xlu;

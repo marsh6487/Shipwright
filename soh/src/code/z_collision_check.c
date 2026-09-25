@@ -1,4 +1,5 @@
 #include "global.h"
+#include "din_fire_sword.h"
 #include "vt.h"
 #include "overlays/effects/ovl_Effect_Ss_HitMark/z_eff_ss_hitmark.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
@@ -3047,8 +3048,10 @@ void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCt
             }
         }
 
-        damage = tbl->table[i] & 0xF;
-        collider->actor->colChkInfo.damageEffect = tbl->table[i] >> 4 & 0xF;
+        u8 entry =
+            DinFireSword_DamageEntry(play, collider->actor, info->acHitInfo, info->bumper.dmgFlags, tbl->table[i]);
+        damage = entry & 0xF;
+        collider->actor->colChkInfo.damageEffect = entry >> 4 & 0xF;
     }
     // DMG_UNBLOCKABLE (Gigantamax Pikachu): bypass damage table, force minimum damage
     if (info->acHitInfo->toucher.dmgFlags & DMG_UNBLOCKABLE) {

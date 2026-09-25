@@ -14408,6 +14408,8 @@ void Player_DrawGameplay(PlayState* play, Player* this, s32 lod, Gfx* cullDList,
 
     OPEN_DISPS(play->state.gfxCtx);
 
+    DinFireSword_BeginPlayerDraw(play, this);
+
     gSPSegment(POLY_OPA_DISP++, 0x0C, cullDList);
     gSPSegment(POLY_XLU_DISP++, 0x0C, cullDList);
 
@@ -14511,6 +14513,10 @@ void Player_DrawGameplay(PlayState* play, Player* this, s32 lod, Gfx* cullDList,
         if (CVarGetInteger(CVAR_GENERAL("FixIceTrapWithBunnyHood"), 1))
             Matrix_Pop();
     }
+
+    // Body, equipment and masks have consumed their inherited material colors.
+    // Draw the saved sword pose now, before effects change the actor matrix.
+    DinFireSword_DrawAfterPlayer(play, this);
 
     if (Player_IsHovering(this) && !(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
         !(this->stateFlags1 & PLAYER_STATE1_ON_HORSE) && (this->hoverBootsTimer != 0)) {

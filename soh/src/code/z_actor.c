@@ -1,4 +1,5 @@
 #include "global.h"
+#include "din_fire_sword.h"
 #include "vt.h"
 
 #include "overlays/actors/ovl_Arms_Hook/z_arms_hook.h"
@@ -4984,24 +4985,27 @@ u8 Actor_ApplyDamage(Actor* actor) {
 }
 
 void Actor_SetDropFlag(Actor* actor, ColliderInfo* colInfo, s32 freezeFlag) {
+    // A flaming sword still awards the sword's native drops. Do not classify
+    // this feature's added fire bit as an actual Fire Arrow killing blow.
+    u32 damageFlags = DinFireSword_OriginalDamageFlags(gPlayState, colInfo->acHitInfo);
     if (colInfo->acHitInfo == NULL) {
         actor->dropFlag = 0x00;
-    } else if (freezeFlag && (colInfo->acHitInfo->toucher.dmgFlags & 0x10060000)) {
+    } else if (freezeFlag && (damageFlags & 0x10060000)) {
         actor->freezeTimer = colInfo->acHitInfo->toucher.damage;
         actor->dropFlag = 0x00;
-    } else if (colInfo->acHitInfo->toucher.dmgFlags & 0x0800) {
+    } else if (damageFlags & 0x0800) {
         actor->dropFlag = 0x01;
-    } else if (colInfo->acHitInfo->toucher.dmgFlags & 0x1000) {
+    } else if (damageFlags & 0x1000) {
         actor->dropFlag = 0x02;
-    } else if (colInfo->acHitInfo->toucher.dmgFlags & 0x4000) {
+    } else if (damageFlags & 0x4000) {
         actor->dropFlag = 0x04;
-    } else if (colInfo->acHitInfo->toucher.dmgFlags & 0x8000) {
+    } else if (damageFlags & 0x8000) {
         actor->dropFlag = 0x08;
-    } else if (colInfo->acHitInfo->toucher.dmgFlags & 0x10000) {
+    } else if (damageFlags & 0x10000) {
         actor->dropFlag = 0x10;
-    } else if (colInfo->acHitInfo->toucher.dmgFlags & 0x2000) {
+    } else if (damageFlags & 0x2000) {
         actor->dropFlag = 0x20;
-    } else if (colInfo->acHitInfo->toucher.dmgFlags & 0x80000) {
+    } else if (damageFlags & 0x80000) {
         if (freezeFlag) {
             actor->freezeTimer = colInfo->acHitInfo->toucher.damage;
         }
@@ -5020,24 +5024,25 @@ void Actor_SetDropFlagJntSph(Actor* actor, ColliderJntSph* jntSph, s32 freezeFla
 
     for (i = jntSph->count - 1; i >= 0; i--) {
         curColInfo = &jntSph->elements[i].info;
+        u32 damageFlags = DinFireSword_OriginalDamageFlags(gPlayState, curColInfo->acHitInfo);
         if (curColInfo->acHitInfo == NULL) {
             flag = 0x00;
-        } else if (freezeFlag && (curColInfo->acHitInfo->toucher.dmgFlags & 0x10060000)) {
+        } else if (freezeFlag && (damageFlags & 0x10060000)) {
             actor->freezeTimer = curColInfo->acHitInfo->toucher.damage;
             flag = 0x00;
-        } else if (curColInfo->acHitInfo->toucher.dmgFlags & 0x0800) {
+        } else if (damageFlags & 0x0800) {
             flag = 0x01;
-        } else if (curColInfo->acHitInfo->toucher.dmgFlags & 0x1000) {
+        } else if (damageFlags & 0x1000) {
             flag = 0x02;
-        } else if (curColInfo->acHitInfo->toucher.dmgFlags & 0x4000) {
+        } else if (damageFlags & 0x4000) {
             flag = 0x04;
-        } else if (curColInfo->acHitInfo->toucher.dmgFlags & 0x8000) {
+        } else if (damageFlags & 0x8000) {
             flag = 0x08;
-        } else if (curColInfo->acHitInfo->toucher.dmgFlags & 0x10000) {
+        } else if (damageFlags & 0x10000) {
             flag = 0x10;
-        } else if (curColInfo->acHitInfo->toucher.dmgFlags & 0x2000) {
+        } else if (damageFlags & 0x2000) {
             flag = 0x20;
-        } else if (curColInfo->acHitInfo->toucher.dmgFlags & 0x80000) {
+        } else if (damageFlags & 0x80000) {
             if (freezeFlag) {
                 actor->freezeTimer = curColInfo->acHitInfo->toucher.damage;
             }
