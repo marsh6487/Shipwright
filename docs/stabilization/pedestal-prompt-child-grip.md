@@ -97,3 +97,80 @@ prompt remains available on top and absent on the ground. Test child withdrawal
 with the selected sword and Alt Assets, inspecting the wrist and blade through
 the handoff and hold. Repeat the adult insertion and both independently skipped
 phases. These are candidate runtime checks, not claimed acceptance.
+
+## September 24 on-stump investigation
+
+The user reaffirmed that interaction must require standing on the stump. No
+ground-level offer, larger radius, new NPC movement, or new permissive player
+state is introduced by this investigation.
+
+The supplied `Lost_Woods_Tunnel_Energy_POC4.prelude.o2r` has SHA-256
+`88087fa2887948d8b6febf493659ca0f77383ed8057c156e2d624932f26d99f8`.
+Its collision is byte-identical to the collision recorded above. The eleven
+cap polygons (3171–3181) all have normal `(0,32767,0)` and plane distance 56.
+The anchor and sampled cap approaches intersect Y=-56; the next overhead
+surfaces are above Y=150, outside both the pedestal and player floor probes.
+The existing 60-unit offer covers the approximately 35-unit cap.
+
+The player consumes the previous frame's interaction before clearing it; the
+PROP pedestal then evaluates the updated player floor and position, and static
+Saria's later ITEMACTION update suppresses her talk offer. The custom item offer
+already bypasses facing and reserves priority over carry actors. The native
+grab handler does not impose another facing or proximity test. These source
+and archive checks did not identify the live rejected gate. The previous
+fixture's floor query returns a literal -56, so its passing result does not
+prove the user's live collision state.
+
+The candidate therefore adds observation only. With the existing
+`gDeveloperTools.PreludeLoadProbe` enabled (default 1), a fresh A press within
+100 horizontal units of the waiting custom pedestal writes one INFO-level
+`[TimePedestalProbe]` line to the Ship log. Holding A does not repeat it. Stock
+Temple parameters and active ceremonies do not generate these interaction
+probes. Set the existing variable to 0 to disable the probe.
+
+Each line reports the post-evaluation status (`offered`, `not-offered`, or
+`ceremony`), player and pedestal positions, distances, both floor heights,
+collision owners and polygon addresses, player ground/state flags, current
+item offer, interaction and talk actor IDs/parameters, held actor, explosive
+state and transition state. `offered` describes the next frame's offer, since
+the player has already updated. A `ceremony` status can legitimately show
+cutscene guards because that press already started the ceremony.
+
+The hexadecimal `gates` mask records raw guard conditions:
+
+| Bit | Condition |
+| --- | --- |
+| 0 | Transition active |
+| 1 | Cutscene mode |
+| 2 | Talking |
+| 3 | Pedestal supporting polygon missing |
+| 4 | Player not grounded |
+| 5 | Different collision owner |
+| 6 | Player floor differs from cap by at least 2 units |
+| 7 | Player feet differ from cap by at least 4 units |
+| 8 | Another nonempty item offer |
+| 9 | Horizontal distance at least 60 |
+| 10 | Anchor height difference at least 40 |
+| 11 | Native blocked movement/action flags |
+| 12 | Explosive held |
+| 13 | Carrying actor or in cutscene |
+| 14 | Play state stopped |
+
+This is diagnostic state, not a replacement eligibility decision; native form
+exceptions and player action dispatch remain authoritative. If the actor is
+not updated at all, no line is emitted. Capture a short clip of an unsuccessful
+on-top A press and a successful one, with the matching Ship log. Those two
+samples distinguish floor/state rejection from an offered interaction that
+the player's current action did not consume.
+
+The probe regression first failed because no line was emitted, then passed
+with coverage for fresh versus held A, off-stump rejection, opt-out, distance,
+and exact custom-parameter scope. The full existing time-pedestal runner and
+real-header syntax check pass. Prompt reliability remains unresolved pending
+that runtime evidence; this candidate does not claim an interaction fix.
+
+Separately, POC4 still places Saria at `(-710,-68,-2373)`. The previously
+authorized two-unit clearance move is world Z +2 to `(-710,-68,-2371)`, with
+actor ID 42, params `0x7F23`, yaw 16575 and performance unchanged. The retained
+placement and both normal/Alt `custom/prelude/spot10_scene/added/room0` compiled
+records must agree if that archive correction is restored.

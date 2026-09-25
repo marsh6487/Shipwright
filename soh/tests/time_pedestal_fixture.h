@@ -237,6 +237,8 @@ struct PlayState {
 #define IS_RANDO fixtureRando
 #define CVAR_ENHANCEMENT(name) "gEnhancements." name
 #define CVAR_SETTING(name) "gSettings." name
+#define CVAR_DEVELOPER_TOOLS(name) "gDeveloperTools." name
+#define LUSLOG_INFO(...) lusprintf(__FILE__, __LINE__, 2, __VA_ARGS__)
 #define OWNED_EQUIP_FLAG(type, value) (1U << ((type)*4 + (value)))
 #define CHECK_OWNED_EQUIP(type, value) (gSaveContext.inventory.equipment & OWNED_EQUIP_FLAG(type, value))
 #define CHECK_OWNED_EQUIP_ALT CHECK_OWNED_EQUIP
@@ -412,6 +414,7 @@ void ExtEquip_ReloadBIcon(void);
 void ExtEquip_RefreshPlayer(void);
 void ExtEquip_ValidateForAgeWithoutProgression(u8);
 s32 CVarGetInteger(const char*, s32);
+void lusprintf(const char*, int32_t, int32_t, const char*, ...);
 extern u16 gEquipMasks[4], gEquipNegMasks[4];
 extern u8 gEquipShifts[4];
 extern CutsceneData D_808BB2F0[], D_808BB7A0[], D_808BBD90[];

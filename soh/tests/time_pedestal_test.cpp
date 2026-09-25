@@ -8,6 +8,8 @@
 
 std::map<u32, Gfx*> fixturePakEquipment;
 static int skipStorySetting;
+static bool pedestalProbeEnabled = true;
+static std::vector<std::string> pedestalProbeLines;
 static bool pakActive, altActive, replaceHandHook, invisibleLink;
 static Gfx nativeSword, altSword, pakSword, pakHandSword, emptyHand, wrongSword;
 static const void* drawnSword;
@@ -43,11 +45,21 @@ void ExtEquip_ReloadBIcon(void) {
 void ExtEquip_RefreshPlayer(void) {
 }
 s32 CVarGetInteger(const char* name, s32 fallback) {
+    if (strcmp(name, CVAR_DEVELOPER_TOOLS("PreludeLoadProbe")) == 0)
+        return pedestalProbeEnabled;
     if (strcmp(name, CVAR_ENHANCEMENT("TimeSavers.SkipCutscene.Story")) == 0 && skipStorySetting >= 0)
         return skipStorySetting;
     if (strcmp(name, CVAR_SETTING("AltAssets")) == 0)
         return altAssetsSetting;
     return fallback;
+}
+void lusprintf(const char*, int32_t, int32_t, const char* format, ...) {
+    char line[2048];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(line, sizeof(line), format, args);
+    va_end(args);
+    pedestalProbeLines.emplace_back(line);
 }
 const char gLinkChildLeftHandHoldingMasterSwordDL[] =
     "__OTR__objects/object_link_child/gLinkChildLeftHandHoldingMasterSwordDL";
@@ -422,6 +434,8 @@ static void Reset(PlayState& play, BgTokiSwd& sword, bool adult = false, bool ra
     metadataStore.data.clear();
     shuffleMasterSword = true;
     skipStorySetting = 0;
+    pedestalProbeEnabled = true;
+    pedestalProbeLines.clear();
     pakActive = altActive = replaceHandHook = invisibleLink = false;
     customMasterAsset = false;
     altAssetsSetting = true;
@@ -1584,6 +1598,41 @@ static void CheckPedestalCollisionClearance() {
     puts("PASS custom stump center/approaches stay clear, both ages, stock pedestal retains native OC shove");
 }
 
+static void CheckPedestalInteractionProbe() {
+    PlayState play;
+    BgTokiSwd sword;
+    Reset(play, sword);
+    BgTokiSwd_Init(&sword.actor, &play);
+    BgTokiSwd_Update(&sword.actor, &play);
+    REQUIRE(pedestalProbeLines.empty());
+    play.state.input[0].cur.button = BTN_A;
+    BgTokiSwd_Update(&sword.actor, &play);
+    REQUIRE(pedestalProbeLines.empty()); // Holding A does not produce per-frame logs.
+    play.state.input[0].press.button = BTN_A;
+    BgTokiSwd_Update(&sword.actor, &play);
+    REQUIRE(pedestalProbeLines.size() == 1);
+    REQUIRE(pedestalProbeLines.back().find("status=offered") != std::string::npos);
+    REQUIRE(pedestalProbeLines.back().find("gates=00000000") != std::string::npos);
+    play.player.interactRangeActor = nullptr;
+    play.player.actor.world.pos.y = play.player.actor.floorHeight = -96.0f;
+    sword.actor.yDistToPlayer = -33.0f;
+    BgTokiSwd_Update(&sword.actor, &play);
+    REQUIRE(pedestalProbeLines.size() == 2);
+    REQUIRE(pedestalProbeLines.back().find("status=not-offered") != std::string::npos);
+    REQUIRE(pedestalProbeLines.back().find("gates=000000c0") != std::string::npos);
+    pedestalProbeEnabled = false;
+    BgTokiSwd_Update(&sword.actor, &play);
+    pedestalProbeEnabled = true;
+    sword.actor.xzDistToPlayer = 101.0f;
+    BgTokiSwd_Update(&sword.actor, &play);
+    sword.actor.xzDistToPlayer = 31.0f;
+    sword.actor.params = 0;
+    BgTokiSwd_Update(&sword.actor, &play);
+    REQUIRE(pedestalProbeLines.size() == 2);
+    BgTokiSwd_Destroy(&sword.actor, &play);
+    puts("PASS pedestal probe captures fresh nearby A only, reports surface rejection, honors opt-out and stock scope");
+}
+
 static void CheckPedestalSwordSource() {
     PlayState play;
     BgTokiSwd sword;
@@ -1636,6 +1685,7 @@ int main(int argc, char** argv) {
     if (argc > 1 && strcmp(argv[1], "proximity") == 0) {
         CheckPedestalProximity();
         CheckPedestalCollisionClearance();
+        CheckPedestalInteractionProbe();
         return 0;
     }
     if (argc > 1 && strcmp(argv[1], "arrival") == 0) {
@@ -1660,6 +1710,7 @@ int main(int argc, char** argv) {
     puts("PASS both ages honor story skip and B, preserving room, position, equipment and progression");
     CheckPedestalProximity();
     CheckPedestalCollisionClearance();
+    CheckPedestalInteractionProbe();
     CheckPedestalSwordSource();
     CheckFireSwordPostHand();
     CheckChildSwordRendering();
