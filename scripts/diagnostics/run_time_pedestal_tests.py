@@ -155,13 +155,15 @@ def main():
         # and the resource manager supplied at the graphics boundary.
         tail = render["Player_OverrideLimbDrawGameplayDefault"]
         tail = tail[tail.index("    GameInteractor_Should(VB_PLAYER_OVERRIDE_LIMB_DRAW"):]
-        helpers = "static s32 sLeftHandType;\nstatic void DinFireSword_Draw(PlayState* p, Player* v) { (void)p; (void)v; }\nstatic s32 sDListsLodOffset;\n" + render["Player_ApplyBackEquipmentVisibility"] + "\n"
+        helpers = "static s32 sLeftHandType;\nstatic s32 sDListsLodOffset;\n" + render["Player_ApplyBackEquipmentVisibility"] + "\n"
         if "Player_ReverseTimePedestalEquipmentSword" in render:
             helpers += render["Player_ReverseTimePedestalEquipmentSword"] + "\n"
         if "Player_ApplyTimePedestalSword" in render:
             helpers += render["Player_ApplyTimePedestalSword"] + "\n"
         post_hand = render["Player_PostLimbDrawGameplay"]
         post_sword = block_from(post_hand, post_hand.index("        if ((*dList != NULL)"))
+        # Supply the final hand type at this boundary, initialized by the root
+        # limb and potentially changed by a different weapon owner in gameplay.
         (build / "render.c").write_text('#include "time_pedestal_fixture.h"\n' + helpers +
             "static s32 Fixture_RenderTail(PlayState* play, Player* this, s32 limbIndex, Gfx** dList, Vec3s* rot) {\n"
             "void* thisx = this;\n" + tail + "\n"
@@ -169,7 +171,8 @@ def main():
             "Vec3s rot = { 0 }; Fixture_RenderTail(p, player, limb, dl, &rot);\n}\n"
             "void Fixture_ApplyLateHandOverridesWithRot(PlayState* p, Player* player, s32 limb, Gfx** dl, Vec3s* rot) {\n"
             "Fixture_RenderTail(p, player, limb, dl, rot);\n}\n"
-            "void Fixture_DrawPostHand(PlayState* play, Player* this, Gfx** dList) {\n" + post_sword + "\n}\n")
+            "void Fixture_DrawPostHand(PlayState* play, Player* this, Gfx** dList) {\n"
+            "sLeftHandType = this->leftHandType;\n" + post_sword + "\n}\n")
         pak_source = (ROOT / "soh/mods/pak_loader/pak_loader.cpp").read_text().replace('extern "C" ', '')
         pak = functions(pak_source, {"FindEquip", "PakLoader_GetEquipDL", "PakLoader_UsedCombinedDL"})
         (build / "pak.cpp").write_text('#include "time_pedestal_fixture.h"\n' +

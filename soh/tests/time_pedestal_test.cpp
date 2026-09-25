@@ -16,7 +16,7 @@ static Gfx customMasterSword, customHandSword;
 static bool animationComplete;
 static int normalSwordEquipCalls, startModeHookCalls;
 static int cutsceneAudioFlag;
-static int postSwordDrawCalls;
+static int postSwordDrawCalls, fireSwordDrawCalls;
 static int cameraCreates, cameraCopies, cameraClears, letterboxSize;
 static bool failSubCamera;
 static float restingSwordRotation;
@@ -58,6 +58,10 @@ void Fixture_RecordDraw(const void* dl) {
 static int firePedestalDraws;
 void DinFireSword_DrawPedestal(PlayState*) {
     ++firePedestalDraws;
+}
+
+void DinFireSword_Draw(PlayState*, Player*) {
+    ++fireSwordDrawCalls;
 }
 
 void BossRemains_DrawOdolwaSword(PlayState*, Player*) {
@@ -424,7 +428,7 @@ static void Reset(PlayState& play, BgTokiSwd& sword, bool adult = false, bool ra
     animationComplete = false;
     normalSwordEquipCalls = startModeHookCalls = 0;
     cutsceneAudioFlag = 0;
-    postSwordDrawCalls = 0;
+    postSwordDrawCalls = fireSwordDrawCalls = 0;
     cameraCreates = cameraCopies = cameraClears = letterboxSize = 0;
     failSubCamera = false;
     fixturePakEquipment.clear();
@@ -1084,6 +1088,38 @@ static void CheckChildSwordRendering() {
     BgTokiSwd_Destroy(&sword.actor, &play);
 }
 
+static void CheckFireSwordPostHand() {
+    for (bool adult : { false, true }) {
+        for (bool usePak : { false, true }) {
+            PlayState play;
+            BgTokiSwd sword;
+            Reset(play, sword, adult);
+            pakActive = usePak;
+            play.player.actor.scale.y = 0.01f;
+            play.player.leftHandType = PLAYER_MODELTYPE_LH_SWORD;
+            Gfx* dl = &nativeSword;
+            Fixture_DrawPostHand(&play, &play.player, &dl);
+            REQUIRE(fireSwordDrawCalls == 1 && dl == &nativeSword);
+            play.player.leftHandType = PLAYER_MODELTYPE_LH_BGS;
+            Fixture_DrawPostHand(&play, &play.player, &dl);
+            REQUIRE(fireSwordDrawCalls == 2 && dl == &nativeSword);
+            // A different weapon owner, hidden hand or reflected pass still skips fire.
+            play.player.leftHandType = PLAYER_MODELTYPE_LH_OPEN;
+            Fixture_DrawPostHand(&play, &play.player, &dl);
+            REQUIRE(fireSwordDrawCalls == 2);
+            play.player.leftHandType = PLAYER_MODELTYPE_LH_SWORD;
+            dl = nullptr;
+            Fixture_DrawPostHand(&play, &play.player, &dl);
+            REQUIRE(fireSwordDrawCalls == 2);
+            dl = &nativeSword;
+            play.player.actor.scale.y = -0.01f;
+            Fixture_DrawPostHand(&play, &play.player, &dl);
+            REQUIRE(fireSwordDrawCalls == 2);
+        }
+    }
+    puts("PASS child/adult fire-sword hand hook with PAK slots, hidden hands and reflection guards");
+}
+
 static void CheckAdultSwordRendering() {
     PlayState play;
     BgTokiSwd sword;
@@ -1125,6 +1161,7 @@ static void CheckAdultSwordRendering() {
     // The post-limb renderer must not layer Odolwa's sword over this weapon.
     Fixture_DrawPostHand(&play, &play.player, &dl);
     REQUIRE(postSwordDrawCalls == 0);
+    REQUIRE(fireSwordDrawCalls == 0);
     func_80851A50(&play, &play.player, nullptr);
     BgTokiSwd_Update(&sword.actor, &play);
     REQUIRE(sword.actor.draw != nullptr);
@@ -1134,6 +1171,7 @@ static void CheckAdultSwordRendering() {
     REQUIRE(dl == &emptyHand && !PakLoader_UsedCombinedDL(true));
     Fixture_DrawPostHand(&play, &play.player, &dl);
     REQUIRE(postSwordDrawCalls == 0); // Nor redraw a sword after the insertion.
+    REQUIRE(fireSwordDrawCalls == 0);
     fixturePakEquipment.erase(0x50A0);
     Fixture_ApplyLateHandOverrides(&play, &play.player, PLAYER_LIMB_L_HAND, &dl);
     REQUIRE(dl == &emptyHand);
@@ -1605,6 +1643,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (argc > 1 && strcmp(argv[1], "render") == 0) {
+        CheckFireSwordPostHand();
         CheckChildSwordRendering();
         CheckAdultSwordRendering();
         puts("PASS child/adult handoffs, late overrides, alternate assets and Pak Master Sword selection");
@@ -1622,6 +1661,7 @@ int main(int argc, char** argv) {
     CheckPedestalProximity();
     CheckPedestalCollisionClearance();
     CheckPedestalSwordSource();
+    CheckFireSwordPostHand();
     CheckChildSwordRendering();
     CheckChildRootMovement();
     CheckAdultSwordRendering();

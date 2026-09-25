@@ -8,7 +8,6 @@
 #include <math.h>
 #include "mods/extended_equipment.h"
 #include "mods/items/logic/weapon_upgrades.h"
-#include "mods/pak_loader/pak_loader.h"
 extern s32 BossRemains_IsOdolwaWorn(void);
 extern s32 BossRemains_IsGohtWorn(void);
 
@@ -49,8 +48,9 @@ static s32 DinFireSword_Profile(Player* player) {
 static s32 DinFireSword_Eligible(PlayState* play, Player* player) {
     if (play == NULL || player == NULL || player != GET_PLAYER(play) ||
         !CVarGetInteger(CVAR_ENHANCEMENT("DinFireSword"), 0) || !CVarGetInteger(CVAR_SETTING("AltAssets"), 1) ||
-        TransformMasks_IsTransformedAny() || GameInteractor_InvisibleLinkActive() || player->actor.scale.y <= 0.0f ||
-        player->csAction != 0 || (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_WATER)) ||
+        TransformMasks_IsTransformedAny() || BossRemains_IsOdolwaWorn() || BossRemains_IsGohtWorn() ||
+        GameInteractor_InvisibleLinkActive() || player->actor.scale.y <= 0.0f || player->csAction != 0 ||
+        (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_WATER)) ||
         (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW) || play->transitionTrigger != TRANS_TRIGGER_OFF ||
         DinFireSword_Profile(player) < 0) {
         return false;
@@ -107,8 +107,7 @@ static s32 DinFireSword_Load(s32 age, Gfx** core, Gfx** flame) {
 
 uint32_t DinFireSword_DamageFlags(PlayState* play, Player* player, uint32_t original) {
     if (!CVarGetInteger(CVAR_ENHANCEMENT("DinFireSwordDamage"), 0) || !(original & DMG_SWORD) ||
-        (original & ~((u32)DMG_SWORD)) || !DinFireSword_Eligible(play, player) || PakLoader_HasActiveModel() ||
-        ExtEquip_ShouldHideSwordDL() || BossRemains_IsOdolwaWorn() || BossRemains_IsGohtWorn() ||
+        (original & ~((u32)DMG_SWORD)) || !DinFireSword_Eligible(play, player) || ExtEquip_ShouldHideSwordDL() ||
         (player->heldItemAction == PLAYER_IA_SWORD_KOKIRI && WeaponUpgrade_KokiriLevel()) ||
         (player->heldItemAction == PLAYER_IA_SWORD_BIGGORON && WeaponUpgrade_HasGreatFairy()))
         return original;

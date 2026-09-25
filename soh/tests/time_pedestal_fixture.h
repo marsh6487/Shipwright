@@ -455,6 +455,7 @@ extern const char gLinkAdultLeftHandHoldingMasterSwordNearDL[], gLinkAdultLeftHa
 void Fixture_ApplyLateHandOverrides(PlayState*, Player*, s32, Gfx**);
 void Fixture_ApplyLateHandOverridesWithRot(PlayState*, Player*, s32, Gfx**, Vec3s*);
 void Fixture_DrawPostHand(PlayState*, Player*, Gfx**);
+void DinFireSword_Draw(PlayState*, Player*);
 void BossRemains_DrawOdolwaSword(PlayState*, Player*);
 Gfx* Player_ResolveLimbDLForDummyOrLocal(void*);
 Gfx* PakLoader_GetEquipDL(Player*, s32);

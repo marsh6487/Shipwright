@@ -2521,10 +2521,10 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
         if ((*dList != NULL) && (this->actor.scale.y >= 0.0f) &&
             BgTokiSwd_GetTimePedestalHandState(play, this) == BG_TOKI_SWD_HAND_UNCHANGED) {
             BossRemains_DrawOdolwaSword(play, this);
-            // Only the ordinary sword hand receives Din's fire coating. Other
-            // weapon owners change sLeftHandType; PAK selections stay primary.
-            if ((sLeftHandType == PLAYER_MODELTYPE_LH_SWORD || sLeftHandType == PLAYER_MODELTYPE_LH_BGS) &&
-                !PakLoader_HasActiveModel()) {
+            // Coat the selected ordinary sword without replacing its model.
+            // Other weapon owners change sLeftHandType; unrelated PAK slots
+            // must not suppress this overlay.
+            if (sLeftHandType == PLAYER_MODELTYPE_LH_SWORD || sLeftHandType == PLAYER_MODELTYPE_LH_BGS) {
                 DinFireSword_Draw(play, this);
             }
         }

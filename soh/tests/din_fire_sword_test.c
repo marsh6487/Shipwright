@@ -13,7 +13,7 @@ static Gfx opa[512], xlu[512], core[1], flame[1];
 static u8 pixels[4];
 static Mtx matrix;
 static int enabled, alt, assets, loadFailure, transformed, invisible, customColors;
-static int depth, matrices, fireDamage, otherOwner;
+static int depth, matrices, fireDamage, otherOwner, pakActive, bossOwner;
 static const char* missing;
 static const char* lastCorePath;
 SaveContext gSaveContext;
@@ -60,16 +60,16 @@ void* ResourceGetDataByName(const char* path) {
     return loadFailure || (missing && strstr(path, missing)) ? NULL : pixels;
 }
 u8 PakLoader_HasActiveModel(void) {
-    return otherOwner;
+    return pakActive;
 }
 u8 ExtEquip_ShouldHideSwordDL(void) {
     return otherOwner;
 }
 s32 BossRemains_IsOdolwaWorn(void) {
-    return otherOwner;
+    return bossOwner == 1;
 }
 s32 BossRemains_IsGohtWorn(void) {
-    return otherOwner;
+    return bossOwner == 2;
 }
 u8 WeaponUpgrade_KokiriLevel(void) {
     return otherOwner;
@@ -128,7 +128,7 @@ static void setup(void) {
     enabled = alt = assets = 1;
     loadFailure = transformed = invisible = customColors = depth = matrices = 0;
     missing = lastCorePath = NULL;
-    fireDamage = otherOwner = 0;
+    fireDamage = otherOwner = pakActive = bossOwner = 0;
     DinFireSword_Reset();
 }
 static void tick(void) {
@@ -325,6 +325,29 @@ int main(void) {
     enabled = 1;
     assets = 0;
     REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_MASTER) == DMG_SLASH_MASTER);
+    setup();
+    gSaveContext.linkAge = LINK_AGE_CHILD;
+    player.itemAction = player.heldItemAction = PLAYER_IA_SWORD_KOKIRI;
+    pakActive = 1;
+    tick();
+    REQUIRE(draw() > 0);
+    REQUIRE(strstr(lastCorePath, "/child/") != NULL);
+    REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_KOKIRI) == DMG_SLASH_KOKIRI);
+    fireDamage = 1;
+    REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_KOKIRI) == DMG_ARROW_FIRE);
+    for (bossOwner = 1; bossOwner <= 2; ++bossOwner) {
+        // A PAK sword can leave the ordinary hand type intact for these owners.
+        tick();
+        REQUIRE(draw() == 0);
+        REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_KOKIRI) == DMG_SLASH_KOKIRI);
+    }
+    bossOwner = 0;
+    tick();
+    REQUIRE(draw() > 0);
+    REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_KOKIRI) == DMG_ARROW_FIRE);
+    otherOwner = 1;
+    REQUIRE(DinFireSword_DamageFlags(&play, &player, DMG_SLASH_KOKIRI) == DMG_SLASH_KOKIRI);
+    puts("PASS child Din fire rendering and opt-in damage with PAK equipment slots");
     setup();
     for (int q = 0; q < 2; ++q)
         player.meleeWeaponQuads[q].info.toucher.dmgFlags =
