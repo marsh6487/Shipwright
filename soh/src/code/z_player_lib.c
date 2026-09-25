@@ -1,5 +1,6 @@
 #include "global.h"
 #include "din_fire_shield.h"
+#include "din_fire_sword.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "objects/gameplay_field_keep/gameplay_field_keep.h"
 #include "objects/object_link_boy/object_link_boy.h"
@@ -2520,6 +2521,12 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
         if ((*dList != NULL) && (this->actor.scale.y >= 0.0f) &&
             BgTokiSwd_GetTimePedestalHandState(play, this) == BG_TOKI_SWD_HAND_UNCHANGED) {
             BossRemains_DrawOdolwaSword(play, this);
+            // Only the ordinary sword hand receives Din's fire coating. Other
+            // weapon owners change sLeftHandType; PAK selections stay primary.
+            if ((sLeftHandType == PLAYER_MODELTYPE_LH_SWORD || sLeftHandType == PLAYER_MODELTYPE_LH_BGS) &&
+                !PakLoader_HasActiveModel()) {
+                DinFireSword_Draw(play, this);
+            }
         }
 
         if (this->itemAction == PLAYER_IA_DEKU_STICK || this->itemAction == PLAYER_IA_ROD_FIRE ||

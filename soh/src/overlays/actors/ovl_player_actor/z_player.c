@@ -7,6 +7,7 @@
 #include <libultraship/libultra.h>
 #include "global.h"
 #include "din_fire_shield.h"
+#include "din_fire_sword.h"
 
 #include "overlays/actors/ovl_Bg_Heavy_Block/z_bg_heavy_block.h"
 #include "overlays/actors/ovl_Bg_Toki_Swd/z_bg_toki_swd.h"
@@ -5178,12 +5179,13 @@ s32 func_80837818(Player* this) {
     return sp18;
 }
 
-void func_80837918(Player* this, s32 quadIndex, u32 dmgFlags) {
+void func_80837918(PlayState* play, Player* this, s32 quadIndex, u32 dmgFlags) {
     // Giant's Mask: Link's strikes land as hammer blows (MM behavior). Skijer's NEI
     extern s32 MmMaskWear_IsGiantMaskActive(void);
     if (MmMaskWear_IsGiantMaskActive()) {
         dmgFlags = DMG_HAMMER_SWING;
     }
+    dmgFlags = DinFireSword_SetDamageFlags(play, this, quadIndex, dmgFlags);
     this->meleeWeaponQuads[quadIndex].info.toucher.dmgFlags = dmgFlags;
 
     if (dmgFlags == 2) {
@@ -5298,8 +5300,8 @@ void func_80837948(PlayState* play, Player* this, s32 arg2) {
                                                                                                    : D_80854488[0][0];
     }
 
-    func_80837918(this, 0, dmgFlags);
-    func_80837918(this, 1, dmgFlags);
+    func_80837918(play, this, 0, dmgFlags);
+    func_80837918(play, this, 1, dmgFlags);
 
     // Boss Remains (Odolwa): every melee swing with magic fires a moth projectile forward, like the
     // FD sword beam below. Self-guards on Odolwa-worn + magic. Mirrors the MM 2ship melee-setup hook.
@@ -10521,6 +10523,8 @@ s32 func_808428D8(Player* this, PlayState* play) {
     this->meleeWeaponAnimation = PLAYER_MWA_STAB_1H;
     this->yaw = this->actor.shape.rot.y + this->upperLimbRot.y;
 
+    DinFireSword_RefreshDamage(play, this);
+
     if (!CVarGetInteger(CVAR_ENHANCEMENT("CrouchStabHammerFix"), 0)) {
         return 1;
     }
@@ -10537,8 +10541,8 @@ s32 func_808428D8(Player* this, PlayState* play) {
     }
 
     u32 flags = D_80854488[swordId][0];
-    func_80837918(this, 0, flags);
-    func_80837918(this, 1, flags);
+    func_80837918(play, this, 0, flags);
+    func_80837918(play, this, 1, flags);
 
     return 1;
 }
@@ -12383,6 +12387,7 @@ void Player_Init(Actor* thisx, PlayState* play2) {
     s32 respawnMode;
 
     DinFireShield_Reset();
+    DinFireSword_Reset();
     play->shootingGalleryStatus = play->bombchuBowlingStatus = 0;
 
     play->playerInit = Player_InitCommon;
@@ -14328,6 +14333,7 @@ void Player_Update(Actor* thisx, PlayState* play) {
 
     GameInteractor_ExecuteOnPlayerUpdate();
     DinFireShield_Update(play, this);
+    DinFireSword_Update(play, this);
 
     // SW97 Shadow Medallion heart→magic exchange — must run before the spell
     // cast pipeline aborts on zero magic, so it lives outside that gate.

@@ -155,7 +155,7 @@ def main():
         # and the resource manager supplied at the graphics boundary.
         tail = render["Player_OverrideLimbDrawGameplayDefault"]
         tail = tail[tail.index("    GameInteractor_Should(VB_PLAYER_OVERRIDE_LIMB_DRAW"):]
-        helpers = "static s32 sDListsLodOffset;\n" + render["Player_ApplyBackEquipmentVisibility"] + "\n"
+        helpers = "static s32 sLeftHandType;\nstatic void DinFireSword_Draw(PlayState* p, Player* v) { (void)p; (void)v; }\nstatic s32 sDListsLodOffset;\n" + render["Player_ApplyBackEquipmentVisibility"] + "\n"
         if "Player_ReverseTimePedestalEquipmentSword" in render:
             helpers += render["Player_ReverseTimePedestalEquipmentSword"] + "\n"
         if "Player_ApplyTimePedestalSword" in render:

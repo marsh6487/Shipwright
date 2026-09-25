@@ -794,6 +794,21 @@ void SohMenu::AddMenuEnhancements() {
             info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("DinFireShield"), 0) == 0;
         })
         .Options(CheckboxOptions().Tooltip("Plays a flame sound while guarding with Din's Fire Shield. Off by default."));
+    AddWidget(path, "Din Fire Sword (POC)", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("DinFireSword"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Surrounds Din's drawn sword with animated fire, including while idle. Requires the fire-weapons add-on, "
+            "matching Din equipment, and Alternate Assets. Supports Kokiri, Master, and full/broken Biggoron swords. "
+            "Normal sword damage and reach are unchanged."));
+    AddWidget(path, "Fire Damage", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("DinFireSwordDamage"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("DinFireSword"), 0) == 0;
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Direct sword hits use the enemy's Fire Arrow damage and fire reaction. Off by default. "
+            "Changes damage and immunities; does not add a projectile or change reach. Charged spin waves stay unchanged."));
     AddWidget(path, "Hide Back Equipment and Scabbard", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("HideBackEquipment"))
         .RaceDisable(false)
