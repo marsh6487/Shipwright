@@ -3,7 +3,6 @@
 #ifdef __cplusplus
 
 #include <nlohmann/json.hpp>
-#include <libultraship/libultraship.h>
 #include "Anchor.h"
 
 extern "C" {
@@ -109,12 +108,29 @@ inline void to_json(json& j, const ShipRandomizerSaveContextData& shipRandomizer
     j = json{
         { "triforcePiecesCollected", shipRandomizerSaveContextData.triforcePiecesCollected },
         { "bombchuUpgradeLevel", shipRandomizerSaveContextData.bombchuUpgradeLevel },
+        { "quarterHearts", shipRandomizerSaveContextData.quarterHearts },
+        { "defenseUpgrades", shipRandomizerSaveContextData.defenseUpgrades },
+        { "speedUpgrades", shipRandomizerSaveContextData.speedUpgrades },
+        { "powerUpgrades", shipRandomizerSaveContextData.powerUpgrades },
+        { "magicStatUpgrades", shipRandomizerSaveContextData.magicStatUpgrades },
+        { "crawlSpeedUpgrades", shipRandomizerSaveContextData.crawlSpeedUpgrades },
+        { "climbSpeedUpgrades", shipRandomizerSaveContextData.climbSpeedUpgrades },
+        { "pushSpeedUpgrades", shipRandomizerSaveContextData.pushSpeedUpgrades },
     };
 }
 
 inline void from_json(const json& j, ShipRandomizerSaveContextData& shipRandomizerSaveContextData) {
     j.at("triforcePiecesCollected").get_to(shipRandomizerSaveContextData.triforcePiecesCollected);
     j.at("bombchuUpgradeLevel").get_to(shipRandomizerSaveContextData.bombchuUpgradeLevel);
+    // Older peers do not send stat counters. Treat absent counters like an older save.
+    shipRandomizerSaveContextData.quarterHearts = j.value("quarterHearts", (u8)0);
+    shipRandomizerSaveContextData.defenseUpgrades = j.value("defenseUpgrades", (u8)0);
+    shipRandomizerSaveContextData.speedUpgrades = j.value("speedUpgrades", (u8)0);
+    shipRandomizerSaveContextData.powerUpgrades = j.value("powerUpgrades", (u8)0);
+    shipRandomizerSaveContextData.magicStatUpgrades = j.value("magicStatUpgrades", (u8)0);
+    shipRandomizerSaveContextData.crawlSpeedUpgrades = j.value("crawlSpeedUpgrades", (u8)0);
+    shipRandomizerSaveContextData.climbSpeedUpgrades = j.value("climbSpeedUpgrades", (u8)0);
+    shipRandomizerSaveContextData.pushSpeedUpgrades = j.value("pushSpeedUpgrades", (u8)0);
 }
 
 inline void to_json(json& j, const ShipQuestSpecificSaveContextData& shipQuestSpecificSaveContextData) {
@@ -192,6 +208,9 @@ inline void from_json(const json& j, SaveContext& saveContext) {
     j.at("swordHealth").get_to(saveContext.swordHealth);
     std::vector<u32> sceneFlagsArray;
     j.at("sceneFlags").get_to(sceneFlagsArray);
+    if (sceneFlagsArray.size() < 124 * 4) {
+        sceneFlagsArray.resize(124 * 4, 0);
+    }
     for (int i = 0; i < 124; i++) {
         saveContext.sceneFlags[i].chest = sceneFlagsArray[i * 4];
         saveContext.sceneFlags[i].swch = sceneFlagsArray[i * 4 + 1];

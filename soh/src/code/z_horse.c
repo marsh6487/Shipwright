@@ -3,8 +3,12 @@
 #include <assert.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ResourceManagerHelpers.h"
+#include "young_epona.h"
+#include "overlays/actors/ovl_En_Horse/z_en_horse.h"
+#include "objects/object_horse_link_child/rideable_young_epona.h"
 
-s32 func_8006CFC0(s32 scene) {
+s32 Horse_CanSpawn(s32 scene) {
     s32 validScenes[] = { SCENE_HYRULE_FIELD, SCENE_LAKE_HYLIA, SCENE_GERUDO_VALLEY, SCENE_GERUDOS_FORTRESS,
                           SCENE_LON_LON_RANCH };
     s32 i;
@@ -18,7 +22,147 @@ s32 func_8006CFC0(s32 scene) {
     return 0;
 }
 
-void func_8006D074(PlayState* play) {
+s32 Horse_CanSpawnYoung(s32 scene) {
+    // Child riding has its own outdoor gate; adult Epona keeps the original scene list.
+    switch (scene) {
+        case SCENE_HYRULE_FIELD:
+        case SCENE_LAKE_HYLIA:
+        case SCENE_GERUDO_VALLEY:
+        case SCENE_GERUDOS_FORTRESS:
+        case SCENE_LON_LON_RANCH:
+        case SCENE_KAKARIKO_VILLAGE:
+        case SCENE_GRAVEYARD:
+        case SCENE_ZORAS_RIVER:
+        case SCENE_KOKIRI_FOREST:
+        case SCENE_SACRED_FOREST_MEADOW:
+        case SCENE_ZORAS_FOUNTAIN:
+        case SCENE_LOST_WOODS:
+        case SCENE_DESERT_COLOSSUS:
+        case SCENE_HAUNTED_WASTELAND:
+        case SCENE_HYRULE_CASTLE:
+        case SCENE_DEATH_MOUNTAIN_TRAIL:
+        case SCENE_DEATH_MOUNTAIN_CRATER:
+        case SCENE_OUTSIDE_GANONS_CASTLE:
+        case SCENE_MARKET_ENTRANCE_DAY:
+        case SCENE_MARKET_ENTRANCE_NIGHT:
+        case SCENE_MARKET_ENTRANCE_RUINS:
+        case SCENE_MARKET_DAY:
+        case SCENE_MARKET_NIGHT:
+        case SCENE_MARKET_RUINS:
+        case SCENE_BACK_ALLEY_DAY:
+        case SCENE_BACK_ALLEY_NIGHT:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_DAY:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_NIGHT:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_RUINS:
+            return true;
+        default:
+            return false;
+    }
+}
+
+s32 Horse_YoungEponaAssetsAvailable(void) {
+    const char* resources[] = { gYoungEponaStopAnim,          gYoungEponaRearAnim,          gYoungEponaLowJumpAnim,
+                                gYoungEponaHighJumpAnim,      gYoungEponaMountLeftAnim,     gYoungEponaMountRightAnim,
+                                gYoungEponaMountLeftAnimData, gYoungEponaMountRightAnimData };
+    for (s32 i = 0; i < ARRAY_COUNT(resources); i++) {
+        if (!ResourceMgr_FileExists(resources[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+s32 Horse_CanUseYoungEpona(void) {
+    return !LINK_IS_ADULT && CVarGetInteger(CVAR_ENHANCEMENT("RideYoungEpona"), 0) &&
+           CHECK_QUEST_ITEM(QUEST_SONG_EPONA) && INV_CONTENT(ITEM_OCARINA_FAIRY) != ITEM_NONE &&
+           (!IS_RANDO || (GameInteractor_Should(VB_HAVE_OCARINA_NOTE_D5, true) &&
+                          GameInteractor_Should(VB_HAVE_OCARINA_NOTE_B4, true) &&
+                          GameInteractor_Should(VB_HAVE_OCARINA_NOTE_A4, true))) &&
+           Horse_YoungEponaAssetsAvailable();
+}
+
+Actor* Horse_FindYoungEpona(PlayState* play) {
+    for (Actor* actor = play->actorCtx.actorLists[ACTORCAT_BG].head; actor != NULL; actor = actor->next) {
+        if (actor->id == ACTOR_EN_HORSE && actor->update != NULL && ((EnHorse*)actor)->type == HORSE_YOUNG_EPONA) {
+            return actor;
+        }
+    }
+    return NULL;
+}
+
+HorseData* Horse_GetActorSaveData(Actor* actor) {
+    if (actor != NULL && actor->id == ACTOR_EN_HORSE && ((EnHorse*)actor)->type == HORSE_YOUNG_EPONA) {
+        return &gSaveContext.ship.youngHorseData;
+    }
+    return &gSaveContext.horseData;
+}
+
+void Horse_SaveYoungEpona(PlayState* play, Actor* actor) {
+    if (LINK_IS_ADULT || actor == NULL || actor->id != ACTOR_EN_HORSE || ((EnHorse*)actor)->type != HORSE_YOUNG_EPONA ||
+        ((EnHorse*)actor)->action == ENHORSE_ACT_INACTIVE || !Horse_CanSpawnYoung(play->sceneNum)) {
+        return;
+    }
+    HorseData* data = &gSaveContext.ship.youngHorseData;
+    data->scene = play->sceneNum;
+    data->pos.x = actor->world.pos.x;
+    data->pos.y = actor->world.pos.y;
+    data->pos.z = actor->world.pos.z;
+    data->angle = actor->shape.rot.y;
+    gSaveContext.ship.youngHorseDataValid = true;
+}
+
+static Actor* Horse_SpawnYoungEpona(PlayState* play, Player* player, s32 mounted) {
+    if (!Horse_CanUseYoungEpona() || !Horse_CanSpawnYoung(play->sceneNum) || gSaveContext.sceneLayer > 3) {
+        return NULL;
+    }
+    Actor* actor = Horse_FindYoungEpona(play);
+    if (actor != NULL) {
+        return actor;
+    }
+    Vec3f pos = player->actor.world.pos;
+    s16 angle = player->actor.shape.rot.y;
+    s16 params = 2;
+    HorseData* saved = &gSaveContext.ship.youngHorseData;
+    if (mounted) {
+        params = 9;
+    } else if (gSaveContext.ship.youngHorseDataValid && saved->scene == play->sceneNum) {
+        pos.x = saved->pos.x;
+        pos.y = saved->pos.y;
+        pos.z = saved->pos.z;
+        angle = saved->angle;
+        params = 1;
+    }
+    actor = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_HORSE, pos.x, pos.y, pos.z, 0, angle, 0,
+                        params | ENHORSE_YOUNG_PARAM);
+    if (actor == NULL || actor->update == NULL) {
+        return NULL;
+    }
+    if (play->sceneNum == SCENE_GERUDOS_FORTRESS) {
+        actor->room = -1;
+    }
+    if (mounted) {
+        player->rideActor = actor;
+        Actor_MountHorse(play, player, actor);
+        Actor_RequestHorseCameraSetting(play, player);
+        Horse_SaveYoungEpona(play, actor);
+    }
+    return actor;
+}
+
+s32 Horse_TrySummonYoungEpona(PlayState* play) {
+    Player* player = GET_PLAYER(play);
+    if (player->stateFlags1 & (PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_DEAD)) {
+        return false;
+    }
+    if (Horse_SpawnYoungEpona(play, player, false) == NULL) {
+        return false;
+    }
+    // Horse initialization clears this register; signal only after spawning.
+    DREG(53) = 1;
+    return true;
+}
+
+void Horse_ResetHorseData(PlayState* play) {
     gSaveContext.horseData.scene = SCENE_HYRULE_FIELD;
     gSaveContext.horseData.pos.x = -1840;
     gSaveContext.horseData.pos.y = 72;
@@ -26,7 +170,7 @@ void func_8006D074(PlayState* play) {
     gSaveContext.horseData.angle = -27353;
 }
 
-void func_8006D0AC(PlayState* play) {
+void Horse_FixLakeHyliaPosition(PlayState* play) {
     if (gSaveContext.horseData.scene == SCENE_LAKE_HYLIA) {
         gSaveContext.horseData.scene = SCENE_LAKE_HYLIA;
         gSaveContext.horseData.pos.x = -2065;
@@ -43,7 +187,7 @@ typedef struct {
     /* 0x0A */ s16 type;
 } HorseSpawn;
 
-void func_8006D0EC(PlayState* play, Player* player) {
+void Horse_SetupInGameplay(PlayState* play, Player* player) {
     s32 i;
     HorseSpawn horseSpawns[] = {
         { SCENE_HYRULE_FIELD, -460, 100, 6640, 0, 2 },  { SCENE_LAKE_HYLIA, -1929, -1025, 768, 0, 2 },
@@ -59,7 +203,7 @@ void func_8006D0EC(PlayState* play, Player* player) {
         assert(player->rideActor != NULL);
 
         Actor_MountHorse(play, player, player->rideActor);
-        func_8002DE74(play, player);
+        Actor_RequestHorseCameraSetting(play, player);
         gSaveContext.horseData.scene = play->sceneNum;
 
         if (play->sceneNum == SCENE_GERUDOS_FORTRESS) {
@@ -87,7 +231,7 @@ void func_8006D0EC(PlayState* play, Player* player) {
         osSyncPrintf("馬存在によるセット %d %d %d\n", gSaveContext.horseData.scene,
                      Flags_GetEventChkInf(EVENTCHKINF_EPONA_OBTAINED), DREG(1));
 
-        if (func_8006CFC0(gSaveContext.horseData.scene)) {
+        if (Horse_CanSpawn(gSaveContext.horseData.scene)) {
             Actor* horseActor = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_HORSE, gSaveContext.horseData.pos.x,
                                             gSaveContext.horseData.pos.y, gSaveContext.horseData.pos.z, 0,
                                             gSaveContext.horseData.angle, 0, 1);
@@ -100,7 +244,7 @@ void func_8006D0EC(PlayState* play, Player* player) {
             // "Horse_SetNormal():%d set spot is no good."
             osSyncPrintf("Horse_SetNormal():%d セットスポットまずいです。\n", gSaveContext.horseData.scene);
             osSyncPrintf(VT_RST);
-            func_8006D074(play);
+            Horse_ResetHorseData(play);
         }
     } else if ((play->sceneNum == SCENE_LON_LON_RANCH) && !Flags_GetEventChkInf(EVENTCHKINF_EPONA_OBTAINED) &&
                (DREG(1) == 0)) {
@@ -136,7 +280,7 @@ typedef struct {
     /* 0x10 */ s16 type;
 } struct_8011F9B8;
 
-void func_8006D684(PlayState* play, Player* player) {
+void Horse_SetupInCutscene(PlayState* play, Player* player) {
     s32 pad;
     s32 i;
     Vec3s spawnPos;
@@ -166,7 +310,7 @@ void func_8006D684(PlayState* play, Player* player) {
         assert(player->rideActor != NULL);
 
         Actor_MountHorse(play, player, player->rideActor);
-        func_8002DE74(play, player);
+        Actor_RequestHorseCameraSetting(play, player);
         gSaveContext.horseData.scene = play->sceneNum;
     } else if ((play->sceneNum == SCENE_LON_LON_RANCH) && ((gSaveContext.eventInf[0] & 0xF) == 6) &&
                (Flags_GetEventChkInf(EVENTCHKINF_EPONA_OBTAINED) == 0) && (DREG(1) == 0)) {
@@ -175,7 +319,7 @@ void func_8006D684(PlayState* play, Player* player) {
         assert(player->rideActor != NULL);
 
         Actor_MountHorse(play, player, player->rideActor);
-        func_8002DE74(play, player);
+        Actor_RequestHorseCameraSetting(play, player);
         gSaveContext.horseData.scene = play->sceneNum;
 
         if (play->sceneNum == SCENE_GERUDOS_FORTRESS) {
@@ -209,7 +353,7 @@ void func_8006D684(PlayState* play, Player* player) {
                     assert(player->rideActor != NULL);
 
                     Actor_MountHorse(play, player, player->rideActor);
-                    func_8002DE74(play, player);
+                    Actor_RequestHorseCameraSetting(play, player);
                 } else if ((D_8011F9B8[i].type == 5) || (D_8011F9B8[i].type == 6) || (D_8011F9B8[i].type == 8)) {
                     Vec3f sp54;
                     s32 temp = 0;
@@ -230,7 +374,7 @@ void func_8006D684(PlayState* play, Player* player) {
                     player->actor.shape.rot.y = D_8011F9B8[i].angle;
 
                     Actor_MountHorse(play, player, player->rideActor);
-                    func_8002DE74(play, player);
+                    Actor_RequestHorseCameraSetting(play, player);
 
                     sp54.x = player->actor.world.pos.x - 200.0f;
                     sp54.y = player->actor.world.pos.y + 100.0f;
@@ -247,18 +391,27 @@ void func_8006D684(PlayState* play, Player* player) {
     }
 }
 
-void func_8006DC68(PlayState* play, Player* player) {
-    if (LINK_IS_ADULT) {
-        if (!func_8006CFC0(gSaveContext.horseData.scene)) {
+void Horse_InitPlayerHorse(PlayState* play, Player* player) {
+    if (!LINK_IS_ADULT) {
+        s32 mounted = AREG(6) != 0;
+        Actor* horse = Horse_SpawnYoungEpona(play, player, mounted);
+        AREG(6) = 0;
+        if (mounted && horse == NULL) {
+            player->stateFlags1 &= ~PLAYER_STATE1_ON_HORSE;
+            player->actor.parent = NULL;
+            player->rideActor = NULL;
+        }
+    } else {
+        if (!Horse_CanSpawn(gSaveContext.horseData.scene)) {
             osSyncPrintf(VT_COL(RED, WHITE));
             // "Horse_Set_Check():%d set spot is no good."
             osSyncPrintf("Horse_Set_Check():%d セットスポットまずいです。\n", gSaveContext.horseData.scene);
             osSyncPrintf(VT_RST);
-            func_8006D074(play);
+            Horse_ResetHorseData(play);
         }
 
-        if (func_8006CFC0(play->sceneNum)) {
-            if ((gSaveContext.sceneSetupIndex > 3) ||
+        if (Horse_CanSpawn(play->sceneNum)) {
+            if ((gSaveContext.sceneLayer > 3) ||
                 ((gSaveContext.entranceIndex == ENTR_HYRULE_FIELD_11 ||
                   gSaveContext.entranceIndex == ENTR_HYRULE_FIELD_12 ||
                   gSaveContext.entranceIndex == ENTR_HYRULE_FIELD_13 ||
@@ -266,15 +419,15 @@ void func_8006DC68(PlayState* play, Player* player) {
                  (gSaveContext.respawnFlag == 0)) ||
                 ((play->sceneNum == SCENE_LON_LON_RANCH) && ((gSaveContext.eventInf[0] & 0xF) == 6) &&
                  !Flags_GetEventChkInf(EVENTCHKINF_EPONA_OBTAINED) && (DREG(1) == 0))) {
-                func_8006D684(play, player);
+                Horse_SetupInCutscene(play, player);
             } else {
-                func_8006D0EC(play, player);
+                Horse_SetupInGameplay(play, player);
             }
         }
     }
 }
 
-void func_8006DD9C(Actor* actor, Vec3f* arg1, s16 arg2) {
+void Horse_RotateToPoint(Actor* actor, Vec3f* arg1, s16 arg2) {
     s16 x = Math_Vec3f_Yaw(&actor->world.pos, arg1) - actor->world.rot.y;
 
     if (x > arg2) {

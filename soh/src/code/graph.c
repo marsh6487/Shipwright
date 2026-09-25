@@ -6,9 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <libultraship/bridge/gfxdebuggerbridge.h>
+#include <libultraship/bridge/windowbridge.h>
 #include "soh/Enhancements/gameconsole.h"
 #include "soh/OTRGlobals.h"
-#include "libultraship/bridge.h"
 
 #define GFXPOOL_HEAD_MAGIC 0x1234
 #define GFXPOOL_TAIL_MAGIC 0x5678
@@ -389,7 +390,7 @@ void Graph_Update(GraphicsContext* gfxCtx, GameState* gameState) {
         gfxCtx->fbIdx++;
     }
 
-    func_800F3054();
+    Audio_Update();
 
     {
         OSTime time = osGetTime();
@@ -476,6 +477,10 @@ static void RunFrame() {
             hasSetupSkybox = true;
         }
 
+        // Finish after the replacement state is initialized and before its
+        // first Graph_StartFrame, including transitions to non-Play states.
+        PreludeLoadProbe_EndStateReload();
+
         uint64_t freq = GetFrequency();
 
         while (GameState_IsRunning(gGameState)) {
@@ -504,6 +509,8 @@ static void RunFrame() {
         }
 
         runFrameContext.nextOvl = Graph_GetNextGameState(gGameState);
+        // Capture source tags while the departing PlayState is still valid.
+        PreludeLoadProbe_BeginStateReload();
         GameState_Destroy(gGameState);
         SYSTEM_ARENA_FREE_DEBUG(gGameState);
         Overlay_FreeGameState(runFrameContext.ovl);

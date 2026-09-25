@@ -5,6 +5,7 @@
  */
 
 #include "z_en_dekunuts.h"
+#include "din_fire_sword.h"
 #include "overlays/effects/ovl_Effect_Ss_Hahen/z_eff_ss_hahen.h"
 #include "objects/object_dekunuts/object_dekunuts.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
@@ -209,7 +210,7 @@ void EnDekunuts_SetupGasp(EnDekunuts* this) {
 
 void EnDekunuts_SetupBeDamaged(EnDekunuts* this) {
     Animation_MorphToPlayOnce(&this->skelAnime, &gDekuNutsDamageAnim, -3.0f);
-    if ((this->collider.info.acHitInfo->toucher.dmgFlags & 0x1F824) != 0) {
+    if ((DinFireSword_OriginalDamageFlags(gPlayState, this->collider.info.acHitInfo) & 0x1F824) != 0) {
         this->actor.world.rot.y = this->collider.base.ac->world.rot.y;
     } else {
         this->actor.world.rot.y = Actor_WorldYawTowardActor(&this->actor, this->collider.base.ac) + 0x8000;
@@ -367,7 +368,7 @@ void EnDekunuts_Run(EnDekunuts* this, PlayState* play) {
     if (Math_SmoothStepToS(&this->actor.world.rot.y, this->runDirection, 1, 0xE38, 0xB6) == 0) {
         if (this->actor.bgCheckFlags & 0x20) {
             this->runDirection = Actor_WorldYawTowardPoint(&this->actor, &this->actor.home.pos);
-        } else if (this->actor.bgCheckFlags & 8) {
+        } else if (this->actor.bgCheckFlags & BGCHECKFLAG_WALL) {
             this->runDirection = this->actor.wallYaw;
         } else if (this->runAwayCount == 0) {
             diffRotInit = Actor_WorldYawTowardPoint(&this->actor, &this->actor.home.pos);

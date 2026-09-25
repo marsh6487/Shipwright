@@ -5,6 +5,7 @@
  */
 
 #include "z_en_bili.h"
+#include "din_fire_sword.h"
 #include "objects/object_bl/object_bl.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ResourceManagerHelpers.h"
@@ -323,7 +324,7 @@ void EnBili_UpdateFloating(EnBili* this) {
     this->actor.world.pos.y = this->actor.home.pos.y + (sinf(this->timer * (M_PI / 16)) * 3.0f);
 
     // Turn around if touching wall
-    if (this->actor.bgCheckFlags & 8) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_WALL) {
         this->actor.world.rot.y = this->actor.wallYaw;
     }
 }
@@ -381,7 +382,7 @@ void EnBili_DischargeLightning(EnBili* this, PlayState* play) {
     }
 
     SkelAnime_Update(&this->skelAnime);
-    func_8002F974(&this->actor, NA_SE_EN_BIRI_SPARK - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&this->actor, NA_SE_EN_BIRI_SPARK - SFX_FLAG);
 
     if (this->timer != 0) {
         this->timer--;
@@ -525,7 +526,7 @@ void EnBili_Stunned(EnBili* this, PlayState* play) {
         this->timer--;
     }
 
-    if (this->actor.bgCheckFlags & 2) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND_TOUCH) {
         Audio_PlayActorSound2(&this->actor, NA_SE_EN_DODO_M_GND);
     }
 
@@ -543,7 +544,7 @@ void EnBili_Frozen(EnBili* this, PlayState* play) {
         this->actor.gravity = -1.0f;
     }
 
-    if ((this->actor.bgCheckFlags & 1) || (this->actor.floorHeight == BGCHECK_Y_MIN)) {
+    if ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) || (this->actor.floorHeight == BGCHECK_Y_MIN)) {
         this->actor.colorFilterTimer = 0;
         EnBili_SetupDie(this);
     } else {
@@ -593,7 +594,7 @@ void EnBili_UpdateDamage(EnBili* this, PlayState* play) {
                 EnBili_SetupBurnt(this);
             }
 
-            if (this->collider.info.acHitInfo->toucher.dmgFlags & 0x1F820) { // DMG_ARROW
+            if (DinFireSword_OriginalDamageFlags(play, this->collider.info.acHitInfo) & 0x1F820) { // DMG_ARROW
                 this->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
             }
         }

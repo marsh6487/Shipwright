@@ -3,13 +3,11 @@
 #include <string>
 #include <vector>
 
-#include <libultraship/libultraship.h>
 #include <libultraship/controller/controldeck/ControlDeck.h>
 
+#include "randomizer_check_objects.h"
 #include "randomizer_check_tracker.h"
 #include "randomizer_item_tracker.h"
-#include "randomizerTypes.h"
-#include "soh/cvar_prefixes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
@@ -18,6 +16,11 @@
 #include "soh/SohGui/SohMenu.h"
 #include "soh/SohGui/UIWidgets.hpp"
 #include "soh/util.h"
+#include "soh/Enhancements/randomizer/randomizer.h"
+#include "soh/Enhancements/randomizer/dungeon.h"
+#include "soh/Enhancements/randomizer/randostatupgrade.h"
+
+#include <fast/Fast3dGui.h>
 
 extern "C" {
 #include <z64.h>
@@ -58,8 +61,11 @@ static WidgetInfo jabberNutsTracking;
 static WidgetInfo ocarinaButtonTracking;
 static WidgetInfo overworldKeysTracking;
 static WidgetInfo fishingPoleTracking;
+static WidgetInfo statUpgradeTracking;
+static WidgetInfo statUpgradeCount;
 static WidgetInfo personalNotesWiget;
 static WidgetInfo hookshotIdentWidget;
+static WidgetInfo openChestIdentWidget;
 
 namespace SohGui {
 extern std::shared_ptr<SohMenu> mSohMenu;
@@ -134,6 +140,8 @@ std::vector<ItemTrackerItem> gregItems = {
 std::vector<ItemTrackerItem> triforcePieces = {
     ITEM_TRACKER_ITEM(RG_TRIFORCE_PIECE, 0, DrawItem),
 };
+
+std::vector<ItemTrackerItem> statUpgradeItems = {};
 
 std::vector<ItemTrackerItem> rocsFeather = {
     ITEM_TRACKER_ITEM(RG_ROCS_FEATHER, 0, DrawItem),
@@ -431,6 +439,11 @@ typedef enum {
 } ItemTrackerTriforcePieceNumberOption;
 
 typedef enum {
+    STAT_COLLECTED_REQUIRED,
+    STAT_COLLECTED_REQUIRED_TOTAL,
+} ItemTrackerStatNumberOption;
+
+typedef enum {
     SECTION_DISPLAY_HIDDEN,
     SECTION_DISPLAY_MAIN_WINDOW,
     SECTION_DISPLAY_SEPARATE,
@@ -486,12 +499,13 @@ bool HasEquipment(ItemTrackerItem item) {
     return GameInteractor::IsSaveLoaded() ? (item.data & gSaveContext.inventory.equipment) : false;
 }
 
-void ItemTracker_LoadFromPreset(nlohmann::json trackerInfo) {
+void ItemTracker_LoadFromPreset(const nlohmann::json& trackerInfo) {
     presetLoaded = true;
     for (auto window : itemTrackerWindowIDs) {
         if (trackerInfo.contains(window)) {
-            presetPos[window] = { trackerInfo[window]["pos"]["x"], trackerInfo[window]["pos"]["y"] };
-            presetSize[window] = { trackerInfo[window]["size"]["width"], trackerInfo[window]["size"]["height"] };
+            const nlohmann::json& windowInfo = trackerInfo.at(window);
+            presetPos[window] = { windowInfo.at("pos").at("x"), windowInfo.at("pos").at("y") };
+            presetSize[window] = { windowInfo.at("size").at("width"), windowInfo.at("size").at("height") };
         }
     }
 }
@@ -576,56 +590,50 @@ ItemTrackerNumbers GetItemCurrentAndMax(ItemTrackerItem item) {
             // Though the ammo/capacity naming doesn't really make sense for keys, we are
             // hijacking the same system to display key counts as there are enough similarities
             result.currentAmmo = MAX(gSaveContext.inventory.dungeonKeys[item.data], 0);
-            result.currentCapacity = gSaveContext.ship.stats.dungeonKeys[item.data];
-            switch (item.data) {
-                case SCENE_FOREST_TEMPLE:
-                    result.maxCapacity = FOREST_TEMPLE_SMALL_KEY_MAX;
-                    break;
-                case SCENE_FIRE_TEMPLE:
-                    result.maxCapacity = FIRE_TEMPLE_SMALL_KEY_MAX;
-                    break;
-                case SCENE_WATER_TEMPLE:
-                    result.maxCapacity = WATER_TEMPLE_SMALL_KEY_MAX;
-                    break;
-                case SCENE_SPIRIT_TEMPLE:
-                    result.maxCapacity = SPIRIT_TEMPLE_SMALL_KEY_MAX;
-                    break;
-                case SCENE_SHADOW_TEMPLE:
-                    result.maxCapacity = SHADOW_TEMPLE_SMALL_KEY_MAX;
-                    break;
-                case SCENE_BOTTOM_OF_THE_WELL:
-                    result.maxCapacity = BOTTOM_OF_THE_WELL_SMALL_KEY_MAX;
-                    break;
-                case SCENE_GERUDO_TRAINING_GROUND:
-                    result.maxCapacity = GERUDO_TRAINING_GROUND_SMALL_KEY_MAX;
-                    break;
-                case SCENE_THIEVES_HIDEOUT:
-                    if (IS_RANDO) {
-                        switch (OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_GERUDO_FORTRESS)) {
-                            case RO_GF_CARPENTERS_NORMAL:
-                                result.maxCapacity = GERUDO_FORTRESS_SMALL_KEY_MAX;
-                                break;
-                            case RO_GF_CARPENTERS_FAST:
-                                result.maxCapacity = 1;
-                                break;
-                            case RO_GF_CARPENTERS_FREE:
-                                result.maxCapacity = 0;
-                                break;
-                            default:
-                                result.maxCapacity = 0;
-                                SPDLOG_ERROR(
-                                    "Invalid value for RSK_GERUDO_FORTRESS: {}",
-                                    OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_GERUDO_FORTRESS));
-                                assert(false);
-                                break;
+            if (item.data == SCENE_THIEVES_HIDEOUT) {
+                std::vector<uint8_t> DoorFlags = THIEVES_HIDEOUT_DOOR_FLAGS;
+                result.currentCapacity = Rando::FindTotalSmallKeys(&gSaveContext, SCENE_THIEVES_HIDEOUT, &DoorFlags);
+                result.maxCapacity = GERUDO_FORTRESS_SMALL_KEY_MAX;
+            } else {
+                result.currentCapacity = OTRGlobals::Instance->gRandoContext->GetDungeons()
+                                             ->GetDungeonFromScene(item.data)
+                                             ->GetTotalSmallKeys(&gSaveContext);
+                switch (item.data) {
+                    case SCENE_FOREST_TEMPLE:
+                        result.maxCapacity = FOREST_TEMPLE_SMALL_KEY_MAX;
+                        break;
+                    case SCENE_FIRE_TEMPLE:
+                        result.maxCapacity = FIRE_TEMPLE_SMALL_KEY_MAX;
+                        if (IS_RANDO &&
+                            !(OTRGlobals::Instance->gRandoContext->GetOption(RSK_KEYSANITY)
+                                  .Is(RO_DUNGEON_ITEM_LOC_ANYWHERE) ||
+                              OTRGlobals::Instance->gRandoContext->GetOption(RSK_KEYSANITY)
+                                  .Is(RO_DUNGEON_ITEM_LOC_OVERWORLD) ||
+                              OTRGlobals::Instance->gRandoContext->GetOption(RSK_KEYSANITY)
+                                  .Is(RO_DUNGEON_ITEM_LOC_ANY_DUNGEON)) &&
+                            OTRGlobals::Instance->gRandoContext->GetDungeon(Rando::FIRE_TEMPLE)->IsVanilla()) {
+                            result.currentCapacity = result.currentCapacity - 1;
                         }
-                    } else {
-                        result.maxCapacity = GERUDO_FORTRESS_SMALL_KEY_MAX;
-                    }
-                    break;
-                case SCENE_INSIDE_GANONS_CASTLE:
-                    result.maxCapacity = GANONS_CASTLE_SMALL_KEY_MAX;
-                    break;
+                        break;
+                    case SCENE_WATER_TEMPLE:
+                        result.maxCapacity = WATER_TEMPLE_SMALL_KEY_MAX;
+                        break;
+                    case SCENE_SPIRIT_TEMPLE:
+                        result.maxCapacity = SPIRIT_TEMPLE_SMALL_KEY_MAX;
+                        break;
+                    case SCENE_SHADOW_TEMPLE:
+                        result.maxCapacity = SHADOW_TEMPLE_SMALL_KEY_MAX;
+                        break;
+                    case SCENE_BOTTOM_OF_THE_WELL:
+                        result.maxCapacity = BOTTOM_OF_THE_WELL_SMALL_KEY_MAX;
+                        break;
+                    case SCENE_GERUDO_TRAINING_GROUND:
+                        result.maxCapacity = GERUDO_TRAINING_GROUND_SMALL_KEY_MAX;
+                        break;
+                    case SCENE_INSIDE_GANONS_CASTLE:
+                        result.maxCapacity = GANONS_CASTLE_SMALL_KEY_MAX;
+                        break;
+                }
             }
             break;
     }
@@ -652,7 +660,8 @@ void DrawItemCount(ItemTrackerItem item, bool hideMax) {
         CVarGetInteger(CVAR_TRACKER_ITEM("ItemCountType"), ITEM_TRACKER_NUMBER_CURRENT_CAPACITY_ONLY);
     int32_t trackerKeyNumberDisplayMode = CVarGetInteger(CVAR_TRACKER_ITEM("KeyCounts"), KEYS_COLLECTED_MAX);
     float textScalingFactor = static_cast<float>(iconSize) / 36.0f;
-    uint32_t actualItemId = INV_CONTENT(item.id);
+    uint32_t actualItemId =
+        (item.id >= RG_QUARTER_HEART && item.id <= RG_PUSH_SPEED_UPGRADE) ? ITEM_NONE : INV_CONTENT(item.id);
     bool hasItem = actualItemId != ITEM_NONE;
 
     if (CVarGetInteger(CVAR_TRACKER_ITEM("HookshotIdentifier"), 0)) {
@@ -671,6 +680,23 @@ void DrawItemCount(ItemTrackerItem item, bool hideMax) {
             ImGui::Text(item.id == ITEM_HOOKSHOT ? "H" : "L");
             ImGui::SetWindowFontScale(1.0f); // Reset font scale to the original state
         }
+    }
+
+    // progressive open chest: 'S' for small chests only, 'B' once big chests can be opened too
+    if (item.id == RG_OPEN_CHEST && CVarGetInteger(CVAR_TRACKER_ITEM("OpenChestIdentifier"), 0) && IS_RANDO &&
+        RAND_GET_OPTION(RSK_SHUFFLE_OPEN_CHEST).Is(RO_OPEN_CHEST_PROGRESSIVE) &&
+        Flags_GetRandomizerInf(RAND_INF_CAN_OPEN_CHEST)) {
+        const char* ident = Flags_GetRandomizerInf(RAND_INF_CAN_OPEN_LARGE_CHEST) ? "B" : "S";
+
+        ImVec2 textPos = ImVec2(p.x + (iconSize / 2) - (ImGui::CalcTextSize(ident).x * textScalingFactor / 2) +
+                                    8 * textScalingFactor,
+                                p.y - 22 * textScalingFactor);
+
+        ImGui::SetCursorScreenPos(textPos);
+        ImGui::SetWindowFontScale(textScalingFactor);
+
+        ImGui::Text("%s", ident);
+        ImGui::SetWindowFontScale(1.0f);
     }
 
     ImGui::SetWindowFontScale(textSize / 13.0f);
@@ -760,15 +786,17 @@ void DrawItemCount(ItemTrackerItem item, bool hideMax) {
         ImGui::Text("%s", maxString.c_str());
         ImGui::PopStyleColor();
     } else if (item.id == RG_TRIFORCE_PIECE && IS_RANDO &&
-               (OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_TRIFORCE_HUNT) != RO_TRIFORCE_HUNT_OFF) &&
+               (OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_TRIFORCE_HUNT_PIECES_TOTAL) > 0) &&
                IsValidSaveFile()) {
         std::string currentString = "";
         std::string requiredString = "";
         std::string maxString = "";
-        uint8_t piecesRequired =
-            (OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_TRIFORCE_HUNT_PIECES_REQUIRED) + 1);
-        uint8_t piecesTotal =
-            (OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_TRIFORCE_HUNT_PIECES_TOTAL) + 1);
+        uint8_t piecesTotal = OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_TRIFORCE_HUNT_PIECES_TOTAL);
+        uint8_t piecesRequired = OTRGlobals::Instance->gRandomizer->GetTriforcePiecesRequired();
+        // If no trigger uses Triforce Pieces they're just filler; gauge progress against the whole pool.
+        if (piecesRequired == 0) {
+            piecesRequired = piecesTotal;
+        }
         ImU32 currentColor = gSaveContext.ship.quest.data.randomizer.triforcePiecesCollected >= piecesRequired
                                  ? IM_COL_GREEN
                                  : IM_COL_WHITE;
@@ -796,6 +824,116 @@ void DrawItemCount(ItemTrackerItem item, bool hideMax) {
         ImGui::PushStyleColor(ImGuiCol_Text, maxColor);
         ImGui::Text("%s", maxString.c_str());
         ImGui::PopStyleColor();
+    } else if ((item.id == RG_QUARTER_HEART || item.id == RG_DEFENSE_UPGRADE || item.id == RG_SPEED_UPGRADE ||
+                item.id == RG_POWER_UPGRADE || item.id == RG_MAGIC_STAT_UPGRADE || item.id == RG_CRAWL_SPEED_UPGRADE ||
+                item.id == RG_CLIMB_SPEED_UPGRADE || item.id == RG_PUSH_SPEED_UPGRADE) &&
+               IS_RANDO && IsValidSaveFile()) {
+        uint8_t collected = 0;
+        uint8_t required = 0;
+        bool statEnabled = false;
+        if (item.id == RG_QUARTER_HEART && RAND_GET_OPTION(RSK_QUARTER_HEART)) {
+            uint8_t qh = gSaveContext.ship.quest.data.randomizer.quarterHearts;
+            if (qh > 0) {
+                std::string countStr = std::to_string(qh);
+                ImGui::SetCursorScreenPos(
+                    ImVec2(p.x + (iconSize / 2) - (ImGui::CalcTextSize(countStr.c_str()).x / 2), p.y - 14));
+                ImGui::PushStyleColor(ImGuiCol_Text, IM_COL_WHITE);
+                ImGui::Text("%s", countStr.c_str());
+                ImGui::PopStyleColor();
+            }
+        } else if (item.id == RG_DEFENSE_UPGRADE && RAND_GET_OPTION(RSK_DEFENSE_UPGRADE)) {
+            collected = gSaveContext.ship.quest.data.randomizer.defenseUpgrades;
+            required = StatUpgradeRequired(5, RSK_DEFENSE_UPGRADE_ADJUSTABLE, RSK_DEFENSE_UPGRADE_TOTAL,
+                                           RSK_DEFENSE_UPGRADE_REQUIRED);
+            statEnabled = true;
+        } else if (item.id == RG_SPEED_UPGRADE && RAND_GET_OPTION(RSK_SPEED_UPGRADE)) {
+            collected = gSaveContext.ship.quest.data.randomizer.speedUpgrades;
+            required = StatUpgradeRequired(5, RSK_SPEED_UPGRADE_ADJUSTABLE, RSK_SPEED_UPGRADE_TOTAL,
+                                           RSK_SPEED_UPGRADE_REQUIRED);
+            statEnabled = true;
+        } else if (item.id == RG_POWER_UPGRADE && RAND_GET_OPTION(RSK_POWER_UPGRADE)) {
+            collected = gSaveContext.ship.quest.data.randomizer.powerUpgrades;
+            required = StatUpgradeRequired(5, RSK_POWER_UPGRADE_ADJUSTABLE, RSK_POWER_UPGRADE_TOTAL,
+                                           RSK_POWER_UPGRADE_REQUIRED);
+            statEnabled = true;
+        } else if (item.id == RG_MAGIC_STAT_UPGRADE && RAND_GET_OPTION(RSK_MAGIC_STAT_UPGRADE)) {
+            collected = gSaveContext.ship.quest.data.randomizer.magicStatUpgrades;
+            required = StatUpgradeRequired(8, RSK_MAGIC_STAT_UPGRADE_ADJUSTABLE, RSK_MAGIC_STAT_UPGRADE_TOTAL,
+                                           RSK_MAGIC_STAT_UPGRADE_REQUIRED);
+            statEnabled = true;
+        } else if (item.id == RG_CRAWL_SPEED_UPGRADE && RAND_GET_OPTION(RSK_CRAWL_SPEED_UPGRADE)) {
+            collected = gSaveContext.ship.quest.data.randomizer.crawlSpeedUpgrades;
+            required = StatUpgradeRequired(5, RSK_CRAWL_SPEED_UPGRADE_ADJUSTABLE, RSK_CRAWL_SPEED_UPGRADE_TOTAL,
+                                           RSK_CRAWL_SPEED_UPGRADE_REQUIRED);
+            statEnabled = true;
+        } else if (item.id == RG_CLIMB_SPEED_UPGRADE && RAND_GET_OPTION(RSK_CLIMB_SPEED_UPGRADE)) {
+            collected = gSaveContext.ship.quest.data.randomizer.climbSpeedUpgrades;
+            required = StatUpgradeRequired(5, RSK_CLIMB_SPEED_UPGRADE_ADJUSTABLE, RSK_CLIMB_SPEED_UPGRADE_TOTAL,
+                                           RSK_CLIMB_SPEED_UPGRADE_REQUIRED);
+            statEnabled = true;
+        } else if (item.id == RG_PUSH_SPEED_UPGRADE && RAND_GET_OPTION(RSK_PUSH_SPEED_UPGRADE)) {
+            collected = gSaveContext.ship.quest.data.randomizer.pushSpeedUpgrades;
+            required = StatUpgradeRequired(5, RSK_PUSH_SPEED_UPGRADE_ADJUSTABLE, RSK_PUSH_SPEED_UPGRADE_TOTAL,
+                                           RSK_PUSH_SPEED_UPGRADE_REQUIRED);
+            statEnabled = true;
+        }
+        if (statEnabled) {
+            int32_t displayMode = CVarGetInteger(CVAR_TRACKER_ITEM("StatUpgradeCounts"), STAT_COLLECTED_REQUIRED);
+            uint8_t total;
+            if (item.id == RG_DEFENSE_UPGRADE)
+                total = RAND_GET_OPTION(RSK_DEFENSE_UPGRADE_ADJUSTABLE)
+                            ? (uint8_t)(RAND_GET_OPTION(RSK_DEFENSE_UPGRADE_TOTAL).Get() + 1)
+                            : 5;
+            else if (item.id == RG_SPEED_UPGRADE)
+                total = RAND_GET_OPTION(RSK_SPEED_UPGRADE_ADJUSTABLE)
+                            ? (uint8_t)(RAND_GET_OPTION(RSK_SPEED_UPGRADE_TOTAL).Get() + 1)
+                            : 5;
+            else if (item.id == RG_POWER_UPGRADE)
+                total = RAND_GET_OPTION(RSK_POWER_UPGRADE_ADJUSTABLE)
+                            ? (uint8_t)(RAND_GET_OPTION(RSK_POWER_UPGRADE_TOTAL).Get() + 1)
+                            : 5;
+            else if (item.id == RG_MAGIC_STAT_UPGRADE)
+                total = RAND_GET_OPTION(RSK_MAGIC_STAT_UPGRADE_ADJUSTABLE)
+                            ? (uint8_t)(RAND_GET_OPTION(RSK_MAGIC_STAT_UPGRADE_TOTAL).Get() + 1)
+                            : 8;
+            else if (item.id == RG_CRAWL_SPEED_UPGRADE)
+                total = RAND_GET_OPTION(RSK_CRAWL_SPEED_UPGRADE_ADJUSTABLE)
+                            ? (uint8_t)(RAND_GET_OPTION(RSK_CRAWL_SPEED_UPGRADE_TOTAL).Get() + 1)
+                            : 5;
+            else if (item.id == RG_CLIMB_SPEED_UPGRADE)
+                total = RAND_GET_OPTION(RSK_CLIMB_SPEED_UPGRADE_ADJUSTABLE)
+                            ? (uint8_t)(RAND_GET_OPTION(RSK_CLIMB_SPEED_UPGRADE_TOTAL).Get() + 1)
+                            : 5;
+            else
+                total = RAND_GET_OPTION(RSK_PUSH_SPEED_UPGRADE_ADJUSTABLE)
+                            ? (uint8_t)(RAND_GET_OPTION(RSK_PUSH_SPEED_UPGRADE_TOTAL).Get() + 1)
+                            : 5;
+            ImU32 currentColor = collected >= required ? IM_COL_GREEN : IM_COL_WHITE;
+            std::string currentString = std::to_string(collected) + "/";
+            std::string secondString = std::to_string(required);
+            std::string totalString = "";
+            if (displayMode == STAT_COLLECTED_REQUIRED_TOTAL) {
+                secondString += "/";
+                totalString = std::to_string(total);
+            }
+            ImGui::SetCursorScreenPos(
+                ImVec2(p.x + (iconSize / 2) -
+                           (ImGui::CalcTextSize((currentString + secondString + totalString).c_str()).x / 2),
+                       p.y - 14));
+            ImGui::PushStyleColor(ImGuiCol_Text, currentColor);
+            ImGui::Text("%s", currentString.c_str());
+            ImGui::PopStyleColor();
+            ImGui::SameLine(0, 0.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL_GREEN);
+            ImGui::Text("%s", secondString.c_str());
+            ImGui::PopStyleColor();
+            if (!totalString.empty()) {
+                ImGui::SameLine(0, 0.0f);
+                ImGui::PushStyleColor(ImGuiCol_Text, IM_COL_GRAY);
+                ImGui::Text("%s", totalString.c_str());
+                ImGui::PopStyleColor();
+            }
+        }
     } else {
         ImGui::SetCursorScreenPos(ImVec2(p.x, p.y - 14));
         ImGui::Text("");
@@ -805,8 +943,8 @@ void DrawItemCount(ItemTrackerItem item, bool hideMax) {
 void DrawEquip(ItemTrackerItem item) {
     bool hasEquip = HasEquipment(item);
     float iconSize = static_cast<float>(CVarGetInteger(CVAR_TRACKER_ITEM("IconSize"), 36));
-    ImGui::Image(Ship::Context::GetInstance()->GetWindow()->GetGui()->GetTextureByName(
-                     hasEquip && IsValidSaveFile() ? item.name : item.nameFaded),
+    ImGui::Image(std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                     ->GetTextureByName(hasEquip && IsValidSaveFile() ? item.name : item.nameFaded),
                  ImVec2(iconSize, iconSize), ImVec2(0.0f, 0.0f), ImVec2(1, 1));
 
     Tooltip(SohUtils::GetItemName(item.id).c_str());
@@ -816,9 +954,10 @@ void DrawQuest(ItemTrackerItem item) {
     bool hasQuestItem = HasQuestItem(item);
     float iconSize = static_cast<float>(CVarGetInteger(CVAR_TRACKER_ITEM("IconSize"), 36));
     ImGui::BeginGroup();
-    ImGui::ImageWithBg(Ship::Context::GetInstance()->GetWindow()->GetGui()->GetTextureByName(
-                           hasQuestItem && IsValidSaveFile() ? item.name : item.nameFaded),
-                       ImVec2(iconSize, iconSize), ImVec2(0, 0), ImVec2(1, 1));
+    ImGui::ImageWithBg(
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->GetTextureByName(hasQuestItem && IsValidSaveFile() ? item.name : item.nameFaded),
+        ImVec2(iconSize, iconSize), ImVec2(0, 0), ImVec2(1, 1));
 
     if (item.id == QUEST_SKULL_TOKEN) {
         DrawItemCount(item, false);
@@ -830,16 +969,23 @@ void DrawQuest(ItemTrackerItem item) {
 };
 
 bool HasBossSoul(RandomizerInf bossSoul) {
-    uint8_t soulSetting = OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_SHUFFLE_BOSS_SOULS);
-    bool isSoulRandomized = IS_RANDO && (soulSetting == RO_BOSS_SOULS_ON_PLUS_GANON ||
-                                         (soulSetting == RO_BOSS_SOULS_ON && bossSoul != RAND_INF_GANON_SOUL));
-
-    return isSoulRandomized ? Flags_GetRandomizerInf(bossSoul) : true;
+    if (!IS_RANDO) {
+        return false;
+    } else if (bossSoul == RAND_INF_GANON_SOUL) {
+        return OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_GANONS_SOUL) == RO_GANONS_SOUL_STARTWITH ||
+               Flags_GetRandomizerInf(RAND_INF_GANON_SOUL);
+    } else {
+        return OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_SHUFFLE_BOSS_SOULS) &&
+               Flags_GetRandomizerInf(bossSoul);
+    }
 }
 
 void DrawItem(ItemTrackerItem item) {
 
-    uint32_t actualItemId = GameInteractor::IsSaveLoaded() ? INV_CONTENT(item.id) : ITEM_NONE;
+    uint32_t actualItemId =
+        GameInteractor::IsSaveLoaded() && !(item.id >= RG_QUARTER_HEART && item.id <= RG_PUSH_SPEED_UPGRADE)
+            ? INV_CONTENT(item.id)
+            : ITEM_NONE;
     float iconSize = static_cast<float>(CVarGetInteger(CVAR_TRACKER_ITEM("IconSize"), 36));
     bool hasItem = actualItemId != ITEM_NONE;
     std::string itemName = "";
@@ -888,8 +1034,8 @@ void DrawItem(ItemTrackerItem item) {
             break;
         case RG_TRIFORCE_PIECE:
             actualItemId = item.id;
-            hasItem = IS_RANDO && (OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_TRIFORCE_HUNT) !=
-                                   RO_TRIFORCE_HUNT_OFF);
+            hasItem = IS_RANDO &&
+                      (OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_TRIFORCE_HUNT_PIECES_TOTAL) > 0);
             itemName = "Triforce Piece";
             break;
         case ITEM_NAYRUS_LOVE:
@@ -1200,6 +1346,54 @@ void DrawItem(ItemTrackerItem item) {
             hasItem = Flags_GetRandomizerInf(RAND_INF_CAN_GRAB);
             itemName = "Grab";
             break;
+        case RG_QUARTER_HEART:
+            actualItemId = item.id;
+            hasItem = IS_RANDO && RAND_GET_OPTION(RSK_QUARTER_HEART) &&
+                      gSaveContext.ship.quest.data.randomizer.quarterHearts > 0;
+            itemName = "Quarter Heart";
+            break;
+        case RG_DEFENSE_UPGRADE:
+            actualItemId = item.id;
+            hasItem = IS_RANDO && RAND_GET_OPTION(RSK_DEFENSE_UPGRADE) &&
+                      gSaveContext.ship.quest.data.randomizer.defenseUpgrades > 0;
+            itemName = "Defense Upgrade";
+            break;
+        case RG_SPEED_UPGRADE:
+            actualItemId = item.id;
+            hasItem = IS_RANDO && RAND_GET_OPTION(RSK_SPEED_UPGRADE) &&
+                      gSaveContext.ship.quest.data.randomizer.speedUpgrades > 0;
+            itemName = "Speed Upgrade";
+            break;
+        case RG_POWER_UPGRADE:
+            actualItemId = item.id;
+            hasItem = IS_RANDO && RAND_GET_OPTION(RSK_POWER_UPGRADE) &&
+                      gSaveContext.ship.quest.data.randomizer.powerUpgrades > 0;
+            itemName = "Power Upgrade";
+            break;
+        case RG_MAGIC_STAT_UPGRADE:
+            actualItemId = item.id;
+            hasItem = IS_RANDO && RAND_GET_OPTION(RSK_MAGIC_STAT_UPGRADE) &&
+                      gSaveContext.ship.quest.data.randomizer.magicStatUpgrades > 0;
+            itemName = "Magic Upgrade";
+            break;
+        case RG_CRAWL_SPEED_UPGRADE:
+            actualItemId = item.id;
+            hasItem = IS_RANDO && RAND_GET_OPTION(RSK_CRAWL_SPEED_UPGRADE) &&
+                      gSaveContext.ship.quest.data.randomizer.crawlSpeedUpgrades > 0;
+            itemName = "Crawl Speed Upgrade";
+            break;
+        case RG_CLIMB_SPEED_UPGRADE:
+            actualItemId = item.id;
+            hasItem = IS_RANDO && RAND_GET_OPTION(RSK_CLIMB_SPEED_UPGRADE) &&
+                      gSaveContext.ship.quest.data.randomizer.climbSpeedUpgrades > 0;
+            itemName = "Climb Speed Upgrade";
+            break;
+        case RG_PUSH_SPEED_UPGRADE:
+            actualItemId = item.id;
+            hasItem = IS_RANDO && RAND_GET_OPTION(RSK_PUSH_SPEED_UPGRADE) &&
+                      gSaveContext.ship.quest.data.randomizer.pushSpeedUpgrades > 0;
+            itemName = "Push Speed Upgrade";
+            break;
         case RG_OPEN_CHEST:
             actualItemId = item.id;
             hasItem = Flags_GetRandomizerInf(RAND_INF_CAN_OPEN_CHEST);
@@ -1215,8 +1409,8 @@ void DrawItem(ItemTrackerItem item) {
 
     ImGui::BeginGroup();
 
-    ImGui::Image(Ship::Context::GetInstance()->GetWindow()->GetGui()->GetTextureByName(
-                     hasItem && IsValidSaveFile() ? item.name : item.nameFaded),
+    ImGui::Image(std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                     ->GetTextureByName(hasItem && IsValidSaveFile() ? item.name : item.nameFaded),
                  ImVec2(iconSize, iconSize), ImVec2(0, 0), ImVec2(1, 1));
 
     DrawItemCount(item, false);
@@ -1271,7 +1465,7 @@ void DrawItem(ItemTrackerItem item) {
         ImGui::PopStyleColor();
     }
 
-    if (item.id >= RG_BRONZE_SCALE && item.id <= RG_OPEN_CHEST) {
+    if (item.id == RG_BRONZE_SCALE) {
         ImVec2 p = ImGui::GetCursorScreenPos();
         ImGui::SetCursorScreenPos(
             ImVec2(p.x + (iconSize / 2) - (ImGui::CalcTextSize(itemName.c_str()).x / 2), p.y - (iconSize + 2)));
@@ -1301,8 +1495,8 @@ void DrawBottle(ItemTrackerItem item) {
     }
 
     float iconSize = static_cast<float>(CVarGetInteger(CVAR_TRACKER_ITEM("IconSize"), 36));
-    ImGui::Image(Ship::Context::GetInstance()->GetWindow()->GetGui()->GetTextureByName(
-                     hasItem && IsValidSaveFile() ? item.name : item.nameFaded),
+    ImGui::Image(std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                     ->GetTextureByName(hasItem && IsValidSaveFile() ? item.name : item.nameFaded),
                  ImVec2(iconSize, iconSize), ImVec2(0, 0), ImVec2(1, 1));
 
     Tooltip(SohUtils::GetItemName(item.id).c_str());
@@ -1317,12 +1511,12 @@ void DrawDungeonItem(ItemTrackerItem item) {
     bool hasSmallKey = GameInteractor::IsSaveLoaded() ? ((gSaveContext.inventory.dungeonKeys[item.data]) >= 0) : false;
     ImGui::BeginGroup();
     if (itemId == ITEM_KEY_SMALL) {
-        ImGui::Image(Ship::Context::GetInstance()->GetWindow()->GetGui()->GetTextureByName(
-                         hasSmallKey && IsValidSaveFile() ? item.name : item.nameFaded),
+        ImGui::Image(std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                         ->GetTextureByName(hasSmallKey && IsValidSaveFile() ? item.name : item.nameFaded),
                      ImVec2(iconSize, iconSize), ImVec2(0, 0), ImVec2(1, 1));
     } else {
-        ImGui::Image(Ship::Context::GetInstance()->GetWindow()->GetGui()->GetTextureByName(
-                         hasItem && IsValidSaveFile() ? item.name : item.nameFaded),
+        ImGui::Image(std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                         ->GetTextureByName(hasItem && IsValidSaveFile() ? item.name : item.nameFaded),
                      ImVec2(iconSize, iconSize), ImVec2(0, 0), ImVec2(1, 1));
     }
 
@@ -1367,8 +1561,8 @@ void DrawSong(ItemTrackerItem item) {
     ImVec2 p = ImGui::GetCursorScreenPos();
     bool hasSong = HasSong(item);
     ImGui::SetCursorScreenPos(ImVec2(p.x + 6, p.y));
-    ImGui::Image(Ship::Context::GetInstance()->GetWindow()->GetGui()->GetTextureByName(
-                     hasSong && IsValidSaveFile() ? item.name : item.nameFaded),
+    ImGui::Image(std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                     ->GetTextureByName(hasSong && IsValidSaveFile() ? item.name : item.nameFaded),
                  ImVec2(iconSize / 1.5f, iconSize), ImVec2(0, 0), ImVec2(1, 1));
     Tooltip(SohUtils::GetQuestItemName(item.id).c_str());
 }
@@ -1721,6 +1915,36 @@ void UpdateVectors() {
         mainWindowItems.insert(mainWindowItems.end(), fishingPoleItems.begin(), fishingPoleItems.end());
     }
 
+    // Rebuild stat upgrade items based on which settings are enabled in this seed
+    statUpgradeItems.clear();
+    if (IS_RANDO) {
+        if (RAND_GET_OPTION(RSK_QUARTER_HEART))
+            statUpgradeItems.push_back(ITEM_TRACKER_ITEM(RG_QUARTER_HEART, 0, DrawItem));
+        if (RAND_GET_OPTION(RSK_DEFENSE_UPGRADE))
+            statUpgradeItems.push_back(ITEM_TRACKER_ITEM(RG_DEFENSE_UPGRADE, 0, DrawItem));
+        if (RAND_GET_OPTION(RSK_SPEED_UPGRADE))
+            statUpgradeItems.push_back(ITEM_TRACKER_ITEM(RG_SPEED_UPGRADE, 0, DrawItem));
+        if (RAND_GET_OPTION(RSK_POWER_UPGRADE))
+            statUpgradeItems.push_back(ITEM_TRACKER_ITEM(RG_POWER_UPGRADE, 0, DrawItem));
+        if (RAND_GET_OPTION(RSK_MAGIC_STAT_UPGRADE))
+            statUpgradeItems.push_back(ITEM_TRACKER_ITEM(RG_MAGIC_STAT_UPGRADE, 0, DrawItem));
+        if (RAND_GET_OPTION(RSK_CRAWL_SPEED_UPGRADE))
+            statUpgradeItems.push_back(ITEM_TRACKER_ITEM(RG_CRAWL_SPEED_UPGRADE, 0, DrawItem));
+        if (RAND_GET_OPTION(RSK_CLIMB_SPEED_UPGRADE))
+            statUpgradeItems.push_back(ITEM_TRACKER_ITEM(RG_CLIMB_SPEED_UPGRADE, 0, DrawItem));
+        if (RAND_GET_OPTION(RSK_PUSH_SPEED_UPGRADE))
+            statUpgradeItems.push_back(ITEM_TRACKER_ITEM(RG_PUSH_SPEED_UPGRADE, 0, DrawItem));
+    }
+
+    // If we're adding stat upgrades to the main window...
+    if (!statUpgradeItems.empty() && CVarGetInteger(CVAR_TRACKER_ITEM("DisplayType.StatUpgrades"),
+                                                    SECTION_DISPLAY_HIDDEN) == SECTION_DISPLAY_MAIN_WINDOW) {
+        while (mainWindowItems.size() % 6) {
+            mainWindowItems.push_back(ITEM_TRACKER_ITEM(ITEM_NONE, 0, DrawItem));
+        }
+        mainWindowItems.insert(mainWindowItems.end(), statUpgradeItems.begin(), statUpgradeItems.end());
+    }
+
     // If we're adding bean souls to the main window...
     if (CVarGetInteger(CVAR_TRACKER_ITEM("DisplayType.BeanSouls"), SECTION_DISPLAY_HIDDEN) ==
         SECTION_DISPLAY_MAIN_WINDOW) {
@@ -1828,7 +2052,7 @@ void ItemTrackerWindow::DrawElement() {
     int comboButton1Mask = buttonMap[CVarGetInteger(CVAR_TRACKER_ITEM("ComboButton1"), TRACKER_COMBO_BUTTON_L)];
     int comboButton2Mask = buttonMap[CVarGetInteger(CVAR_TRACKER_ITEM("ComboButton2"), TRACKER_COMBO_BUTTON_R)];
     OSContPad* buttonsPressed =
-        std::dynamic_pointer_cast<LUS::ControlDeck>(Ship::Context::GetInstance()->GetControlDeck())->GetPads();
+        std::dynamic_pointer_cast<LUS::ControlDeck>(Ship::Context::GetRawInstance()->GetControlDeck())->GetPads();
     bool comboButtonsHeld = buttonsPressed != nullptr && buttonsPressed[0].button & comboButton1Mask &&
                             buttonsPressed[0].button & comboButton2Mask;
     bool isPaused = CVarGetInteger(CVAR_TRACKER_ITEM("ShowOnlyPaused"), 0) == 0 ||
@@ -1857,6 +2081,8 @@ void ItemTrackerWindow::DrawElement() {
              SECTION_DISPLAY_MAIN_WINDOW) ||
             (CVarGetInteger(CVAR_TRACKER_ITEM("DisplayType.FishingPole"), SECTION_DISPLAY_EXTENDED_HIDDEN) ==
              SECTION_DISPLAY_EXTENDED_MAIN_WINDOW) ||
+            (!statUpgradeItems.empty() && CVarGetInteger(CVAR_TRACKER_ITEM("DisplayType.StatUpgrades"),
+                                                         SECTION_DISPLAY_HIDDEN) == SECTION_DISPLAY_MAIN_WINDOW) ||
             (CVarGetInteger(CVAR_TRACKER_ITEM("DisplayType.Notes"), SECTION_DISPLAY_HIDDEN) ==
              SECTION_DISPLAY_MAIN_WINDOW)) {
             BeginFloatingWindows("Item Tracker");
@@ -1984,6 +2210,13 @@ void ItemTrackerWindow::DrawElement() {
             EndFloatingWindows();
         }
 
+        if (!statUpgradeItems.empty() && CVarGetInteger(CVAR_TRACKER_ITEM("DisplayType.StatUpgrades"),
+                                                        SECTION_DISPLAY_HIDDEN) == SECTION_DISPLAY_SEPARATE) {
+            BeginFloatingWindows("Stat Upgrade Tracker");
+            DrawItemsInRows(statUpgradeItems);
+            EndFloatingWindows();
+        }
+
         if (CVarGetInteger(CVAR_TRACKER_ITEM("DisplayType.Notes"), SECTION_DISPLAY_HIDDEN) ==
                 SECTION_DISPLAY_SEPARATE &&
             (CVarGetInteger(CVAR_TRACKER_ITEM("WindowType"), TRACKER_WINDOW_FLOATING) == TRACKER_WINDOW_WINDOW ||
@@ -2025,6 +2258,10 @@ static std::map<int32_t, const char*> itemTrackerKeyTrackOptions = {
 static std::map<int32_t, const char*> itemTrackerTriforcePieceTrackOptions = {
     { TRIFORCE_PIECE_COLLECTED_REQUIRED, "Collected / Required" },
     { TRIFORCE_PIECE_COLLECTED_REQUIRED_MAX, "Collected / Required / Max" },
+};
+static std::map<int32_t, const char*> itemTrackerStatUpgradeCountOptions = {
+    { STAT_COLLECTED_REQUIRED, "Collected / Required" },
+    { STAT_COLLECTED_REQUIRED_TOTAL, "Collected / Required / Total" },
 };
 static std::map<int32_t, const char*> displayTypes = {
     { SECTION_DISPLAY_HIDDEN, "Hidden" },
@@ -2111,6 +2348,7 @@ void ItemTrackerSettingsWindow::DrawElement() {
 
         SohGui::mSohMenu->MenuDrawItem(keyTracking, 250, THEME_COLOR);
         SohGui::mSohMenu->MenuDrawItem(triforcePieceCount, 250, THEME_COLOR);
+        SohGui::mSohMenu->MenuDrawItem(statUpgradeCount, 250, THEME_COLOR);
 
         ImGui::TableNextColumn();
 
@@ -2184,6 +2422,7 @@ void ItemTrackerSettingsWindow::DrawElement() {
         SohGui::mSohMenu->MenuDrawItem(ocarinaButtonTracking, 250, THEME_COLOR);
         SohGui::mSohMenu->MenuDrawItem(overworldKeysTracking, 250, THEME_COLOR);
         SohGui::mSohMenu->MenuDrawItem(fishingPoleTracking, 250, THEME_COLOR);
+        SohGui::mSohMenu->MenuDrawItem(statUpgradeTracking, 250, THEME_COLOR);
 
         if (CVarCombobox("Total Checks", CVAR_TRACKER_ITEM("TotalChecks.DisplayType"), minimalDisplayTypes,
                          ComboboxOptions()
@@ -2196,6 +2435,7 @@ void ItemTrackerSettingsWindow::DrawElement() {
 
         SohGui::mSohMenu->MenuDrawItem(personalNotesWiget, 250, THEME_COLOR);
         SohGui::mSohMenu->MenuDrawItem(hookshotIdentWidget, 250, THEME_COLOR);
+        SohGui::mSohMenu->MenuDrawItem(openChestIdentWidget, 250, THEME_COLOR);
 
         ImGui::PopStyleVar(1);
         ImGui::EndTable();
@@ -2380,6 +2620,28 @@ void RegisterItemTrackerWidgets() {
     SohGui::mSohMenu->AddSearchWidget(
         { fishingPoleTracking, "Randomizer", "Item Tracker", "General Settings", "icon" });
 
+    statUpgradeTracking = { .name = "Stat Upgrades", .type = WidgetType::WIDGET_CVAR_COMBOBOX };
+    statUpgradeTracking.CVar(CVAR_TRACKER_ITEM("DisplayType.StatUpgrades"))
+        .Options(ComboboxOptions()
+                     .DefaultIndex(SECTION_DISPLAY_HIDDEN)
+                     .ComponentAlignment(ComponentAlignments::Right)
+                     .LabelPosition(LabelPositions::Far)
+                     .Color(THEME_COLOR)
+                     .ComboMap(displayTypes))
+        .Callback([](WidgetInfo& info) { shouldUpdateVectors = true; });
+    SohGui::mSohMenu->AddSearchWidget(
+        { statUpgradeTracking, "Randomizer", "Item Tracker", "General Settings", "icon" });
+
+    statUpgradeCount = { .name = "Stat Upgrade Count Tracking", .type = WidgetType::WIDGET_CVAR_COMBOBOX };
+    statUpgradeCount.CVar(CVAR_TRACKER_ITEM("StatUpgradeCounts"))
+        .Options(ComboboxOptions()
+                     .DefaultIndex(STAT_COLLECTED_REQUIRED)
+                     .ComponentAlignment(ComponentAlignments::Right)
+                     .LabelPosition(LabelPositions::Far)
+                     .Color(THEME_COLOR)
+                     .ComboMap(itemTrackerStatUpgradeCountOptions));
+    SohGui::mSohMenu->AddSearchWidget({ statUpgradeCount, "Randomizer", "Item Tracker", "General Settings" });
+
     personalNotesWiget = { .name = "Personal notes", .type = WidgetType::WIDGET_CVAR_COMBOBOX };
     static const char* notesDisabledTooltip =
         "Disabled because tracker is set to floating and display combo is enabled.";
@@ -2400,6 +2662,14 @@ void RegisterItemTrackerWidgets() {
                      .Color(THEME_COLOR)
                      .Tooltip("Shows an 'H' or an 'L' to more easily distinguish between Hookshot and Longshot."));
     SohGui::mSohMenu->AddSearchWidget({ hookshotIdentWidget, "Randomizer", "Item Tracker", "General Settings" });
+
+    openChestIdentWidget = { .name = "Show Open Chest Identifiers", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    openChestIdentWidget.CVar(CVAR_TRACKER_ITEM("OpenChestIdentifier"))
+        .Options(CheckboxOptions()
+                     .Color(THEME_COLOR)
+                     .Tooltip("With progressive Shuffle Open Chest, shows an 'S' when only small chests can be "
+                              "opened and a 'B' once big chests can be opened too."));
+    SohGui::mSohMenu->AddSearchWidget({ openChestIdentWidget, "Randomizer", "Item Tracker", "General Settings" });
 }
 
 void RegisterItemTracker() {

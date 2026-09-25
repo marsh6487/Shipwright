@@ -5,7 +5,10 @@
  */
 
 #include "z_en_horse_link_child.h"
+#include "young_epona.h"
+#include "overlays/actors/ovl_En_Horse/z_en_horse.h"
 #include "objects/object_horse_link_child/object_horse_link_child.h"
+#include "soh/Enhancements/cosmetics/EponaCosmetics.h"
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_UPDATE_DURING_OCARINA)
 
@@ -163,7 +166,7 @@ void EnHorseLinkChild_Init(Actor* thisx, PlayState* play) {
     this->unk_1F0 = 0;
     this->eyeTexIndex = 0;
 
-    if (gSaveContext.sceneSetupIndex > 3) {
+    if (gSaveContext.sceneLayer > 3) {
         func_80A69EC0(this);
     } else if (play->sceneNum == SCENE_LON_LON_RANCH) {
         if (!Flags_GetEventChkInf(EVENTCHKINF_TALON_RETURNED_FROM_CASTLE)) {
@@ -453,7 +456,7 @@ void func_80A6A5A4(EnHorseLinkChild* this, PlayState* play) {
         yawDiff = Actor_WorldYawTowardActor(&this->actor, &GET_PLAYER(play)->actor) - this->actor.world.rot.y;
         // 0.7071 = cos(pi/4)
         if ((Math_CosS(yawDiff) < 0.7071f) && (this->animationIdx == 2)) {
-            func_8006DD9C(&this->actor, &GET_PLAYER(play)->actor.world.pos, 300);
+            Horse_RotateToPoint(&this->actor, &GET_PLAYER(play)->actor.world.pos, 300);
         }
 
         if (SkelAnime_Update(&this->skin.skelAnime)) {
@@ -490,9 +493,9 @@ void func_80A6A7D0(EnHorseLinkChild* this, PlayState* play) {
 
     if ((this->animationIdx == 4) || (this->animationIdx == 3) || (this->animationIdx == 2)) {
         if (!this->unk_1E8) {
-            func_8006DD9C(&this->actor, &player->actor.world.pos, 300);
+            Horse_RotateToPoint(&this->actor, &player->actor.world.pos, 300);
         } else {
-            func_8006DD9C(&this->actor, &this->actor.home.pos, 300);
+            Horse_RotateToPoint(&this->actor, &this->actor.home.pos, 300);
         }
     }
 
@@ -553,6 +556,21 @@ static u8 sEyeIndexOrder[] = { 0, 1, 2, 1 };
 void EnHorseLinkChild_Update(Actor* thisx, PlayState* play) {
     EnHorseLinkChild* this = (EnHorseLinkChild*)thisx;
     s32 pad;
+
+    if (play->sceneNum == SCENE_LON_LON_RANCH && gSaveContext.sceneLayer < 4) {
+        Actor* rideable = Horse_FindYoungEpona(play);
+        if (rideable != NULL) {
+            if (((EnHorse*)rideable)->action != ENHORSE_ACT_INACTIVE) {
+                Actor_Kill(thisx);
+                return;
+            }
+            // Let the riding actor consume the song first. Keep the native NPC
+            // if no valid horse spawn point is available in this scene setup.
+            if (DREG(53) != 0) {
+                return;
+            }
+        }
+    }
 
     sActionFuncs[this->action](this, play);
     Actor_MoveXZGravity(&this->actor);
@@ -621,5 +639,7 @@ void EnHorseLinkChild_Draw(Actor* thisx, PlayState* play) {
     EnHorseLinkChild* this = (EnHorseLinkChild*)thisx;
 
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    EponaCosmetics_BeginDraw(play, &this->skin, true);
     func_800A6360(&this->actor, play, &this->skin, EnHorseLinkChild_PostDraw, EnHorseLinkChild_OverrideLimbDraw, true);
+    EponaCosmetics_EndDraw(play);
 }

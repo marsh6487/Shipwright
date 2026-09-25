@@ -5,6 +5,7 @@
  */
 
 #include "z_arrow_light.h"
+#include "soh/Enhancements/cosmetics/ElementalArrowSfx.h"
 
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
 
@@ -75,7 +76,7 @@ void ArrowLight_Charge(ArrowLight* this, PlayState* play) {
     this->actor.world.pos = arrow->actor.world.pos;
     this->actor.shape.rot = arrow->actor.shape.rot;
 
-    func_8002F974(&this->actor, NA_SE_PL_ARROW_CHARGE_LIGHT - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&this->actor, NA_SE_PL_ARROW_CHARGE_LIGHT - SFX_FLAG);
 
     // if arrow has no parent, player has fired the arrow
     if (arrow->actor.parent == NULL) {
@@ -163,7 +164,7 @@ void ArrowLight_Fly(ArrowLight* this, PlayState* play) {
     func_80869E6C(&this->unkPos, &this->actor.world.pos, 0.05f);
 
     if (arrow->hitFlags & 1) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_IT_EXPLOSION_LIGHT);
+        Audio_PlayActorSound2(&this->actor, ElementalArrow_GetImpactSfx(NA_SE_IT_EXPLOSION_LIGHT));
         ArrowLight_SetupAction(this, ArrowLight_Hit);
         this->timer = 32;
         this->alpha = 255;

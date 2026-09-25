@@ -1,6 +1,5 @@
 #include "global.h"
 #include "soh/ResourceManagerHelpers.h"
-#include <libultraship/bridge.h>
 
 extern bool gUseLegacySD;
 
@@ -122,7 +121,11 @@ void Audio_NoteSetResamplingRate(NoteSubEu* noteSubEu, f32 resamplingRateInput) 
         noteSubEu->bitField1.hasTwoParts = true;
         if (3.99996f < resamplingRateInput) {
             if (CVarGetInteger(CVAR_AUDIO("ExperimentalOctaveDrop"), 0) || noteSubEu->bitField1.isSyntheticWave) {
-                resamplingRate = resamplingRateInput * 0.25;
+                resamplingRate = resamplingRateInput * 0.5f;
+
+                while (resamplingRate > 1.99998f) {
+                    resamplingRate *= 0.5f;
+                }
             } else {
                 resamplingRate = 1.99998f;
             }
@@ -323,7 +326,7 @@ SoundFontSound* Audio_InstrumentGetSound(Instrument* instrument, s32 semitone) {
 Instrument* Audio_GetInstrumentInner(s32 fontId, s32 instId) {
     Instrument* inst;
 
-    if (fontId == 0xFF) {
+    if (fontId < 0 || (size_t)fontId >= fontMapSize) {
         return NULL;
     }
 
@@ -351,7 +354,7 @@ Instrument* Audio_GetInstrumentInner(s32 fontId, s32 instId) {
 Drum* Audio_GetDrum(s32 fontId, s32 drumId) {
     Drum* drum = NULL;
 
-    if (fontId == 0xFF) {
+    if (fontId < 0 || (size_t)fontId >= fontMapSize) {
         return NULL;
     }
 
@@ -375,7 +378,7 @@ Drum* Audio_GetDrum(s32 fontId, s32 drumId) {
 SoundFontSound* Audio_GetSfx(s32 fontId, s32 sfxId) {
     SoundFontSound* sfx = NULL;
 
-    if (fontId == 0xFF) {
+    if (fontId < 0 || (size_t)fontId >= fontMapSize) {
         return NULL;
     }
 
@@ -401,7 +404,7 @@ SoundFontSound* Audio_GetSfx(s32 fontId, s32 sfxId) {
 }
 
 s32 Audio_SetFontInstrument(s32 instrumentType, s32 fontId, s32 index, void* value) {
-    if (fontId == 0xFF) {
+    if (fontId < 0 || (size_t)fontId >= fontMapSize) {
         return -1;
     }
 

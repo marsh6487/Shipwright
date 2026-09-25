@@ -5,6 +5,7 @@
  */
 
 #include "z_en_wallmas.h"
+#include "din_fire_sword.h"
 #include "objects/object_wallmaster/object_wallmaster.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
@@ -230,7 +231,7 @@ void EnWallmas_SetupReturnToCeiling(EnWallmas* this) {
 
 void EnWallmas_SetupTakeDamage(EnWallmas* this) {
     Animation_MorphToPlayOnce(&this->skelAnime, &gWallmasterDamageAnim, -3.0f);
-    if (this->collider.info.acHitInfo->toucher.dmgFlags & 0x0001F824) {
+    if (DinFireSword_OriginalDamageFlags(gPlayState, this->collider.info.acHitInfo) & 0x0001F824) {
         this->actor.world.rot.y = this->collider.base.ac->world.rot.y;
     } else {
         this->actor.world.rot.y = Actor_WorldYawTowardActor(&this->actor, this->collider.base.ac) + 0x8000;
@@ -271,8 +272,8 @@ void EnWallmas_SetupTakePlayer(EnWallmas* this, PlayState* play) {
     this->actor.velocity.y = 0.0f;
 
     this->yTarget = this->actor.yDistToPlayer;
-    func_8002DF38(play, &this->actor, 0x25);
-    OnePointCutscene_Init(play, 9500, 9999, &this->actor, MAIN_CAM);
+    Player_SetCsAction(play, &this->actor, 0x25);
+    OnePointCutscene_Init(play, 9500, 9999, &this->actor, CAM_ID_MAIN);
 }
 
 void EnWallmas_ProximityOrSwitchInit(EnWallmas* this) {
@@ -342,9 +343,10 @@ void EnWallmas_WaitToDrop(EnWallmas* this, PlayState* play) {
 void EnWallmas_Drop(EnWallmas* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
 
-    if (!Player_InCsMode(play) && !(player->stateFlags2 & PLAYER_STATE2_MOVING_DYNAPOLY) &&
-        (player->invincibilityTimer >= 0) && (this->actor.xzDistToPlayer < 30.0f) &&
-        (this->actor.yDistToPlayer < -5.0f) && (-(f32)(player->cylinder.dim.height + 10) < this->actor.yDistToPlayer)) {
+    if (GameInteractor_Should(VB_ENEMY_GRAB_PLAYER, true, this) && !Player_InCsMode(play) &&
+        !(player->stateFlags2 & PLAYER_STATE2_MOVING_DYNAPOLY) && (player->invincibilityTimer >= 0) &&
+        (this->actor.xzDistToPlayer < 30.0f) && (this->actor.yDistToPlayer < -5.0f) &&
+        (-(f32)(player->cylinder.dim.height + 10) < this->actor.yDistToPlayer)) {
         EnWallmas_SetupTakePlayer(this, play);
     }
 }
@@ -594,7 +596,7 @@ void EnWallmas_Update(Actor* thisx, PlayState* play) {
         Collider_UpdateCylinder(&this->actor, &this->collider);
         CollisionCheck_SetOC(play, &play->colChkCtx, &this->collider.base);
 
-        if ((this->actionFunc != EnWallmas_TakeDamage) && (this->actor.bgCheckFlags & 1) != 0 &&
+        if ((this->actionFunc != EnWallmas_TakeDamage) && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) != 0 &&
             (this->actor.freezeTimer == 0)) {
             CollisionCheck_SetAC(play, &play->colChkCtx, &this->collider.base);
         }

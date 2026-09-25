@@ -5,6 +5,7 @@
  */
 
 #include "z_en_st.h"
+#include "din_fire_sword.h"
 #include "objects/object_st/object_st.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ResourceManagerHelpers.h"
@@ -403,7 +404,7 @@ s32 EnSt_CheckHitLink(EnSt* this, PlayState* play) {
     this->gaveDamageSpinTimer = 30;
     play->damagePlayer(play, -8);
     Audio_PlayActorSound2(&player->actor, NA_SE_PL_BODY_HIT);
-    func_8002F71C(play, &this->actor, 4.0f, this->actor.yawTowardsPlayer, 6.0f);
+    Actor_SetPlayerKnockbackLargeNoDamage(play, &this->actor, 4.0f, this->actor.yawTowardsPlayer, 6.0f);
     return true;
 }
 
@@ -430,14 +431,14 @@ s32 EnSt_CheckHitBackside(EnSt* this, PlayState* play) {
     if (cyl->base.acFlags & AC_HIT) {
         cyl->base.acFlags &= ~AC_HIT;
         hit = true;
-        flags |= cyl->info.acHitInfo->toucher.dmgFlags;
+        flags |= DinFireSword_OriginalDamageFlags(play, cyl->info.acHitInfo);
     }
 
     cyl = &this->colCylinder[1];
     if (cyl->base.acFlags & AC_HIT) {
         cyl->base.acFlags &= ~AC_HIT;
         hit = true;
-        flags |= cyl->info.acHitInfo->toucher.dmgFlags;
+        flags |= DinFireSword_OriginalDamageFlags(play, cyl->info.acHitInfo);
     }
 
     if (!hit) {
@@ -660,7 +661,7 @@ s32 EnSt_IsDoneBouncing(EnSt* this, PlayState* play) {
         return false;
     }
 
-    if (!(this->actor.bgCheckFlags & 1)) {
+    if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
         // the Skulltula is not on the ground.
         return false;
     }
