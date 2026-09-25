@@ -11,6 +11,9 @@ python3 -B scripts/diagnostics/run_young_epona_player_tests.py
 python3 -B scripts/diagnostics/run_young_epona_save_tests.py
 python3 -B scripts/diagnostics/run_midna_navi_draw_test.py
 python3 -B scripts/diagnostics/run_midna_audio_test.py
+python3 -B scripts/diagnostics/run_epona_cosmetics_tests.py
+python3 -B scripts/diagnostics/run_alt_segment_binding_tests.py
+python3 -B scripts/diagnostics/run_house_rocs_feather_tests.py
 python3 -B scripts/diagnostics/run_zora_barrier_cosmetics_tests.py
 python3 -B scripts/diagnostics/run_oot_custom_cosmetics_tests.py
 python3 -B scripts/diagnostics/run_stat_upgrade_tests.py

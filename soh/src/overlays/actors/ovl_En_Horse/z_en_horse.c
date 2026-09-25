@@ -12,6 +12,7 @@
 #include "objects/object_horse_link_child/rideable_young_epona.h"
 #include "scenes/overworld/spot09/spot09_scene.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/cosmetics/EponaCosmetics.h"
 #include "young_epona.h"
 #include <assert.h>
 
@@ -3946,10 +3947,16 @@ void EnHorse_Draw(Actor* thisx, PlayState* play) {
     if (!(this->stateFlags & ENHORSE_INACTIVE)) {
         Gfx_SetupDL_25Opa(play->state.gfxCtx);
         this->stateFlags |= ENHORSE_DRAW;
+        if (this->type != HORSE_HNI) {
+            EponaCosmetics_BeginDraw(play, &this->skin, this->type == HORSE_YOUNG_EPONA);
+        }
         if (this->stateFlags & ENHORSE_JUMPING) {
             func_800A6360(thisx, play, &this->skin, EnHorse_PostDraw, EnHorse_OverrideLimbDraw, false);
         } else {
             func_800A6360(thisx, play, &this->skin, EnHorse_PostDraw, EnHorse_OverrideLimbDraw, true);
+        }
+        if (this->type != HORSE_HNI) {
+            EponaCosmetics_EndDraw(play);
         }
         if (this->postDrawFunc != NULL) {
             this->postDrawFunc(this, play);

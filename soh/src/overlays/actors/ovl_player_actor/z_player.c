@@ -13499,6 +13499,7 @@ static f32 sFloorConveyorSpeeds[] = { 0.5f, 1.0f, 3.0f };
 void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
     s32 pad;
 
+    BgTokiSwd_UpdateTimePedestalFill(play, this);
     sControlInput = input;
 
     if (this->unk_A86 < 0) {
@@ -13858,8 +13859,18 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
         Player_UpdateCamAndSeqModes(play, this);
 
         if (this->skelAnime.movementFlags & 8) {
-            AnimationContext_SetMoveActor(play, &this->actor, &this->skelAnime,
-                                          (this->skelAnime.movementFlags & 4) ? 1.0f : this->ageProperties->unk_08);
+            f32 movementYScale = (this->skelAnime.movementFlags & 4) ? 1.0f : this->ageProperties->unk_08;
+            f32 swordPullFloor;
+            if (BgTokiSwd_GetChildSwordPullFloor(play, this, &swordPullFloor)) {
+                // Keep the original reach and frame-87 sword transfer. The
+                // child's later animation root lift is ceremonial. With that
+                // lift disabled, the native and Young Din foot soles sit about
+                // 2-4 world units above the actor origin during the hold.
+                // Anchor close to the stump cap; the planted sword is unaffected.
+                Math_ApproachF(&this->actor.world.pos.y, swordPullFloor - 3.0f, 1.0f, 4.0f);
+                movementYScale = 0.0f;
+            }
+            AnimationContext_SetMoveActor(play, &this->actor, &this->skelAnime, movementYScale);
         }
 
         Player_UpdateShapeYaw(this, play);
@@ -16616,11 +16627,15 @@ static void Player_FinishTimePedestalArrival(PlayState* play, Player* this) {
 }
 
 void Player_Action_8084E9AC(Player* this, PlayState* play) {
-    if (BgTokiSwd_SkipTimePedestalArrival(play, this)) {
+    BgTokiSwd_UpdateTimePedestalArrivalCamera(play, this);
+    s32 skipArrival = BgTokiSwd_SkipTimePedestalArrival(play, this);
+    if (skipArrival > 0) {
         Player_FinishTimePedestalArrival(play, this);
         return;
     }
-    BgTokiSwd_UpdateTimePedestalArrivalCamera(play, this);
+    if (skipArrival < 0) {
+        return;
+    }
     if (LinkAnimation_Update(play, &this->skelAnime)) {
         if (this->av1.actionVar1 == 0) {
             if (DECR(this->av2.actionVar2) == 0) {

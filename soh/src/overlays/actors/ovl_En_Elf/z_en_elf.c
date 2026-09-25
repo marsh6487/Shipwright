@@ -323,8 +323,9 @@ static void EnElf_UpdateMidnaIdleAudio(EnElf* this, PlayState* play) {
     if (this->actor.params != FAIRY_NAVI) {
         return;
     }
-    MidnaAudio_UpdateIdle(this->unk_2A8 == 0 && !(this->fairyFlags & 8) && this->actor.scale.x >= 0.0078f &&
-                          this->innerColor.a > 0.0f && this->unk_2C7 == 0 && fabsf(player->actor.speedXZ) < 0.1f &&
+    MidnaAudio_UpdateIdle(CVarGetInteger(CVAR_ENHANCEMENT("MidnaCompanion"), 0) && this->unk_2A8 == 0 &&
+                          !(this->fairyFlags & 8) && this->actor.scale.x >= 0.0078f && this->innerColor.a > 0.0f &&
+                          this->unk_2C7 == 0 && fabsf(player->actor.speedXZ) < 0.1f &&
                           fabsf(player->linearVelocity) < 0.1f && (player->actor.bgCheckFlags & 1) &&
                           !(player->stateFlags1 & (PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_GETTING_ITEM |
                                                    PLAYER_STATE1_PARALLEL | PLAYER_STATE1_FIRST_PERSON)) &&
@@ -337,8 +338,8 @@ static void EnElf_UpdateMidnaIdleAudio(EnElf* this, PlayState* play) {
 static void EnElf_UpdateMidnaBlink(EnElf* this) {
     /* Do not spend the blink interval inside Link or during the tiny part of
      * emergence/recall. Update time also naturally stops while paused. */
-    if (this->actor.params == FAIRY_NAVI && this->unk_2A8 != 8 && !(this->fairyFlags & 8) &&
-        this->actor.scale.x >= 0.004f && this->innerColor.a > 0.0f) {
+    if (this->actor.params == FAIRY_NAVI && CVarGetInteger(CVAR_ENHANCEMENT("MidnaCompanion"), 0) &&
+        this->unk_2A8 != 8 && !(this->fairyFlags & 8) && this->actor.scale.x >= 0.004f && this->innerColor.a > 0.0f) {
         this->midnaBlinkTimer = (this->midnaBlinkTimer + 1) % 200;
     }
 }
@@ -875,7 +876,8 @@ void EnElf_UpdateLights(EnElf* this, PlayState* play) {
     /* The light context draws its spherical halo separately from EnElf_Draw.
      * Keep local illumination, but remove that halo only for a usable Midna
      * model. Native Navi and all other fairy types retain their usual light. */
-    if (this->actor.params == FAIRY_NAVI && ResourceMgr_FileExists("objects/midna_navi/poc1/MidnaFloatDL") &&
+    if (this->actor.params == FAIRY_NAVI && CVarGetInteger(CVAR_ENHANCEMENT("MidnaCompanion"), 0) &&
+        ResourceMgr_FileExists("objects/midna_navi/poc1/MidnaFloatDL") &&
         ResourceMgr_LoadGfxByName("objects/midna_navi/poc1/MidnaFloatDL") != NULL) {
         Lights_PointNoGlowSetInfo(&this->lightInfoGlow, this->actor.world.pos.x, this->actor.world.pos.y,
                                   this->actor.world.pos.z, 255, 255, 255, glowLightRadius);
@@ -1654,7 +1656,8 @@ static s32 EnElf_TryDrawMidna(EnElf* this, PlayState* play) {
     u8 alpha;
     s32 blinkState = 0;
 
-    if (this->actor.params != FAIRY_NAVI || !ResourceMgr_FileExists(path)) {
+    if (this->actor.params != FAIRY_NAVI || !CVarGetInteger(CVAR_ENHANCEMENT("MidnaCompanion"), 0) ||
+        !ResourceMgr_FileExists(path)) {
         return false;
     }
     /* Resolve through the resource manager each draw; retaining a raw pointer

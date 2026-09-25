@@ -58,12 +58,15 @@ with tempfile.TemporaryDirectory(prefix='midna-audio-test-') as folder:
         result.check_returncode()
     print(result.stdout.strip())
     resources = (ROOT / 'soh/soh/Enhancements/audio/MidnaAudioResources.cpp').read_text()
-    adapter = ''.join(function(resources, name) for name in ('HasModel', 'ReadClip', 'Gain'))
+    adapter = ''.join(function(resources, name) for name in
+                      ('GetOwnResourceManager', 'ListClips', 'ReadAssignment', 'WriteAssignment',
+                       'Enabled', 'HasModel', 'ReadClip', 'Gain'))
     source = folder/'resources.cpp'
     source.write_text((ROOT / 'soh/tests/midna_audio_resources_test.cpp').read_text().replace(
         '/* PRODUCTION_MIDNA_AUDIO_RESOURCES */', adapter))
     binary = folder/'resources'
-    subprocess.run([os.environ.get('CXX', 'c++'), '-std=c++17', '-Isoh', '-Isoh/tests',
-                    str(source), '-o', str(binary)], cwd=ROOT, check=True)
-    subprocess.run([str(binary)], cwd=ROOT, check=True)
+    for mode in ([], ['-DCOMBO_BUILD']):
+        subprocess.run([os.environ.get('CXX', 'c++'), '-std=c++17', '-Isoh', '-Isoh/tests', *mode,
+                        str(source), '-o', str(binary)], cwd=ROOT, check=True)
+        subprocess.run([str(binary)], cwd=ROOT, check=True)
     print('PASS: complete modified actor and HUD translation units compile')

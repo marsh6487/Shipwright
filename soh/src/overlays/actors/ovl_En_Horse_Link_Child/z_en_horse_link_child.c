@@ -8,6 +8,7 @@
 #include "young_epona.h"
 #include "overlays/actors/ovl_En_Horse/z_en_horse.h"
 #include "objects/object_horse_link_child/object_horse_link_child.h"
+#include "soh/Enhancements/cosmetics/EponaCosmetics.h"
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_UPDATE_DURING_OCARINA)
 
@@ -638,5 +639,7 @@ void EnHorseLinkChild_Draw(Actor* thisx, PlayState* play) {
     EnHorseLinkChild* this = (EnHorseLinkChild*)thisx;
 
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    EponaCosmetics_BeginDraw(play, &this->skin, true);
     func_800A6360(&this->actor, play, &this->skin, EnHorseLinkChild_PostDraw, EnHorseLinkChild_OverrideLimbDraw, true);
+    EponaCosmetics_EndDraw(play);
 }

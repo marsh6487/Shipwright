@@ -20,10 +20,14 @@ static int postSwordDrawCalls;
 static int cameraCreates, cameraCopies, cameraClears, letterboxSize;
 static bool failSubCamera;
 static float restingSwordRotation;
+static float rootMovementYScale;
 static LinkAnimationHeader idleAnimation, childArrivalAnimation, adultArrivalAnimation;
 static std::vector<Collider*> registeredColliders;
 
 extern "C" {
+void AnimationContext_SetMoveActor(PlayState*, Actor*, SkelAnime*, f32 yScale) {
+    rootMovementYScale = yScale;
+}
 SaveContext gSaveContext;
 PlayState* gPlayState;
 bool fixtureRando;
@@ -551,9 +555,19 @@ static void RunInteraction(bool adult, bool rando, bool skip = false, s16 entran
     }
     play.csCtx.state = CS_STATE_SKIPPABLE_EXEC;
     play.csCtx.frames = 100;
+    f32 childSwordFloor = 999.0f;
+    REQUIRE(!BgTokiSwd_GetChildSwordPullFloor(&play, &play.player, &childSwordFloor));
     sword.actor.parent = &play.player.actor; // Native frame70/87 sword handoff.
     BgTokiSwd_Update(&sword.actor, &play);
     REQUIRE((sword.actor.draw != nullptr) == adult);
+    if (!adult) {
+        REQUIRE(!BgTokiSwd_GetChildSwordPullFloor(&play, &play.player, &childSwordFloor));
+        play.player.leftHandDLists = &gPlayerLeftHandBgsDLs[LINK_AGE_CHILD];
+        REQUIRE(BgTokiSwd_GetChildSwordPullFloor(&play, &play.player, &childSwordFloor));
+        REQUIRE(childSwordFloor == sword.actor.floorHeight);
+    } else {
+        REQUIRE(!BgTokiSwd_GetChildSwordPullFloor(&play, &play.player, &childSwordFloor));
+    }
     play.csCtx.frames = adult ? 209 : 229;
     BgTokiSwd_Update(&sword.actor, &play);
     REQUIRE(play.transitionTrigger == TRANS_TRIGGER_OFF);
@@ -563,6 +577,7 @@ static void RunInteraction(bool adult, bool rando, bool skip = false, s16 entran
         play.csCtx.frames++;
     BgTokiSwd_Update(&sword.actor, &play);
     REQUIRE(play.transitionTrigger == TRANS_TRIGGER_START);
+    REQUIRE(!BgTokiSwd_GetChildSwordPullFloor(&play, &play.player, &childSwordFloor));
     REQUIRE(play.linkAgeOnLoad == (adult ? LINK_AGE_CHILD : LINK_AGE_ADULT));
     REQUIRE(play.nextEntranceIndex == entrance && play.sceneNum == SCENE_LOST_WOODS);
     REQUIRE(gSaveContext.respawnFlag == 1 && gSaveContext.respawn[0].roomIndex == 10);
@@ -620,6 +635,81 @@ static void CheckResetDuringCutscene() {
     REQUIRE(gSaveContext.cutsceneTrigger == 0 && gSaveContext.cutsceneIndex == 0);
     REQUIRE(interactor.hooks.empty());
     CheckProgressionUnchanged(before);
+}
+
+static void CheckInterruptedSkip() {
+    for (int interrupted = 0; interrupted < 4; ++interrupted) {
+        PlayState play;
+        BgTokiSwd sword;
+        Reset(play, sword);
+        BgTokiSwd_Init(&sword.actor, &play);
+        sword.actor.parent = &play.player.actor;
+        BgTokiSwd_Update(&sword.actor, &play);
+        play.csCtx.state = CS_STATE_SKIPPABLE_EXEC;
+        play.csCtx.frames = 21;
+        play.state.input[0].press.button = BTN_B;
+        BgTokiSwd_Update(&sword.actor, &play);
+        REQUIRE(play.envCtx.fillScreen && play.envCtx.screenFillColor[3] > 0);
+        play.state.running = interrupted != 1;
+        if (interrupted >= 2) {
+            play.csCtx.segment = D_808BB2F0; // A different cutscene replaces this one.
+        }
+        if (interrupted == 3) {
+            play.envCtx.screenFillColor[0] = 12; // Another effect now owns the fill.
+        }
+        BgTokiSwd_Update(&sword.actor, &play);
+        BgTokiSwd_Destroy(&sword.actor, &play);
+        REQUIRE(!!play.envCtx.fillScreen == (interrupted == 3));
+        if (interrupted == 3) {
+            REQUIRE(play.envCtx.screenFillColor[0] == 12);
+        }
+        REQUIRE(play.transitionTrigger == TRANS_TRIGGER_OFF && play.linkAgeOnLoad == LINK_AGE_CHILD);
+    }
+    puts("PASS interrupted skip releases its screen fill without changing age");
+}
+
+static void CheckChildRootMovement() {
+    PlayState play;
+    BgTokiSwd sword;
+    Reset(play, sword);
+    sword.actor.world.pos.y = -65.0f; // Current authored sword anchor must stay untouched.
+    PlayerAgeProperties age{ nullptr, nullptr, 0.64f };
+    play.player.ageProperties = &age;
+    BgTokiSwd_Init(&sword.actor, &play);
+    sword.actor.parent = &play.player.actor;
+    BgTokiSwd_Update(&sword.actor, &play);
+    play.csCtx.state = CS_STATE_SKIPPABLE_EXEC;
+    play.player.skelAnime.movementFlags = 12;
+    play.player.skelAnime.curFrame = 86;
+    func_80851A50(&play, &play.player, nullptr);
+    Fixture_PlayerAnimationMove(&play, &play.player);
+    REQUIRE(rootMovementYScale == 1.0f); // The original reach still moves vertically.
+    play.player.skelAnime.curFrame = 87;
+    func_80851A50(&play, &play.player, nullptr);
+    BgTokiSwd_Update(&sword.actor, &play);
+    REQUIRE(sword.actor.draw == nullptr);
+    play.player.actor.world.pos.y = -43.0f;
+    const auto before = play.player.actor.world.pos;
+    for (float expected : { -47.0f, -51.0f, -55.0f, -59.0f, -59.0f }) {
+        Fixture_PlayerAnimationMove(&play, &play.player);
+        REQUIRE(rootMovementYScale == 0.0f && play.player.actor.world.pos.y == expected);
+        REQUIRE(play.player.actor.world.pos.x == before.x && play.player.actor.world.pos.z == before.z);
+        REQUIRE(sword.actor.world.pos.y == -65.0f);
+    }
+    // Stock actors, remote players and adult movement retain their native scale.
+    Player remote = play.player;
+    Fixture_PlayerAnimationMove(&play, &remote);
+    REQUIRE(rootMovementYScale == 1.0f);
+    sword.actor.params = 0;
+    play.player.skelAnime.movementFlags = 8;
+    Fixture_PlayerAnimationMove(&play, &play.player);
+    REQUIRE(rootMovementYScale == 0.64f);
+    sword.actor.params = BG_TOKI_SWD_TIME_PEDESTAL;
+    gSaveContext.linkAge = LINK_AGE_ADULT;
+    Fixture_PlayerAnimationMove(&play, &play.player);
+    REQUIRE(rootMovementYScale == 0.64f);
+    BgTokiSwd_Destroy(&sword.actor, &play);
+    puts("PASS post-handoff child feet ease to the stump without moving the sword anchor or other players");
 }
 
 static void CheckExtendedHandoff() {
@@ -854,6 +944,15 @@ static void CheckRequestedSkip(bool adult, bool rando, int setting, bool pressB)
     play.player.actor.world.pos = ceremonyPos;
     BgTokiSwd_Update(&sword.actor, &play);
     const bool shouldSkip = pressB || (setting < 0 ? rando : setting != 0);
+    if (shouldSkip) {
+        for (int frame = 1; frame <= 8; ++frame) {
+            REQUIRE(play.transitionTrigger == TRANS_TRIGGER_OFF);
+            REQUIRE(play.envCtx.fillScreen && play.envCtx.screenFillColor[3] == 255 * frame / 8);
+            REQUIRE(memcmp(&play.player.actor.world.pos, &ceremonyPos, sizeof(Vec3f)) == 0);
+            play.state.input[0].press.button = 0; // The fade stays armed after the B edge.
+            BgTokiSwd_Update(&sword.actor, &play);
+        }
+    }
     REQUIRE((play.transitionTrigger == TRANS_TRIGGER_START) == shouldSkip);
     if (shouldSkip) {
         REQUIRE(play.transitionType == TRANS_TYPE_FADE_WHITE_FAST);
@@ -1057,7 +1156,16 @@ static void CheckNativeTimeTravelHold() {
     REQUIRE(play.player.skelAnime.endFrame == 0.0f);
 }
 
-enum class ArrivalCameraCase { Normal, NoSlot, OtherCamera, ReusedSlot, SceneTeardown, ImmediateSkip };
+enum class ArrivalCameraCase {
+    Normal,
+    NoSlot,
+    OtherCamera,
+    ReusedSlot,
+    SceneTeardown,
+    SkipTeardown,
+    FadeTeardown,
+    ImmediateSkip
+};
 
 static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipExit, bool storySkipEnabled = false,
                          bool mismatchedScene = false, ArrivalCameraCase cameraCase = ArrivalCameraCase::Normal) {
@@ -1078,6 +1186,13 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
     play.state.input[0].press.button = skipMain ? BTN_B : 0;
     play.state.input[0].cur.button = skipMain ? BTN_B : 0;
     BgTokiSwd_Update(&sword.actor, &play);
+    if (skipMain) {
+        for (int frame = 0; frame < 8; ++frame) {
+            REQUIRE(play.transitionTrigger == TRANS_TRIGGER_OFF);
+            play.state.input[0].press.button = 0;
+            BgTokiSwd_Update(&sword.actor, &play);
+        }
+    }
     REQUIRE(play.transitionTrigger == TRANS_TRIGGER_START);
     // The departure image must fade out before the synchronous age reload.
     REQUIRE(play.csCtx.state == CS_STATE_UNSKIPPABLE_EXEC && play.transitionType == TRANS_TYPE_FADE_WHITE_FAST);
@@ -1149,8 +1264,14 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
     // state nor the persistent story-skip setting may cancel the exit action.
     if (cameraCase == ArrivalCameraCase::ImmediateSkip) {
         arrival.state.input[0].press.button = BTN_B;
+        for (int frame = 1; frame <= 8; ++frame) {
+            Player_Action_8084E9AC(&arrival.player, &arrival);
+            REQUIRE(arrival.player.actionFunc == Player_Action_8084E9AC);
+            REQUIRE(arrival.envCtx.screenFillColor[3] == 255 * frame / 8);
+            arrival.state.input[0].press.button = 0;
+        }
         Player_Action_8084E9AC(&arrival.player, &arrival);
-        REQUIRE(arrival.player.actionFunc == Player_Action_Idle && cameraCreates == 0);
+        REQUIRE(arrival.player.actionFunc == Player_Action_Idle && cameraCreates == 1);
         REQUIRE(!BgTokiSwd_IsTimePedestalArrival(&arrival, &arrival.player));
         REQUIRE(memcmp(&arrival.player.actor.world.pos, &returnPos, sizeof(returnPos)) == 0);
         CheckProgressionUnchanged(before);
@@ -1166,7 +1287,10 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
         REQUIRE(cameraCreates == (failSubCamera ? 1 : 0)); // No repeated allocation or camera takeover.
         REQUIRE(!arrival.subCameraAllocated && cameraCopies == 0 && cameraClears == 0);
         arrival.state.input[0].press.button = BTN_B;
-        Player_Action_8084E9AC(&arrival.player, &arrival);
+        for (int frame = 0; frame < 9; ++frame) {
+            Player_Action_8084E9AC(&arrival.player, &arrival);
+            arrival.state.input[0].press.button = 0;
+        }
         REQUIRE(arrival.player.actionFunc == Player_Action_Idle);
         REQUIRE(arrival.activeCamera == (failSubCamera ? CAM_ID_MAIN : 2));
         REQUIRE(memcmp(&arrival.player.actor.world.pos, &returnPos, sizeof(returnPos)) == 0);
@@ -1180,12 +1304,19 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
     // Both points must live near this transformed pedestal, not Temple of Time's origin.
     REQUIRE(fabsf(exitCamera.at.x + 736) < 250 && fabsf(exitCamera.at.z + 2395) < 250);
     REQUIRE(fabsf(exitCamera.eye.x + 736) < 250 && fabsf(exitCamera.eye.z + 2395) < 250);
+    REQUIRE(exitCamera.eye.x > -736 && exitCamera.eye.z > -2395); // Sheik and Saria's side of the stump.
     arrival.player.actor.world.pos.x += 12.0f;
     arrival.state.input[0] = {};
     Player_Action_8084E9AC(&arrival.player, &arrival);
     REQUIRE(arrival.player.actionFunc == Player_Action_8084E9AC);
     REQUIRE(cameraCreates == 1 && memcmp(&arrival.subCamera, &exitCamera, sizeof(Camera)) == 0);
-    if (cameraCase == ArrivalCameraCase::ReusedSlot || cameraCase == ArrivalCameraCase::SceneTeardown) {
+    if (cameraCase == ArrivalCameraCase::ReusedSlot || cameraCase == ArrivalCameraCase::SceneTeardown ||
+        cameraCase == ArrivalCameraCase::SkipTeardown) {
+        if (cameraCase == ArrivalCameraCase::SkipTeardown) {
+            arrival.state.input[0].press.button = BTN_B;
+            Player_Action_8084E9AC(&arrival.player, &arrival);
+            REQUIRE(arrival.envCtx.fillScreen);
+        }
         if (cameraCase == ArrivalCameraCase::ReusedSlot) {
             arrival.subCamera.uid++; // Another camera has reused this slot.
         } else {
@@ -1194,8 +1325,9 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
         REQUIRE(BgTokiSwd_EndTimePedestalArrival(&arrival, &arrival.player));
         REQUIRE(!BgTokiSwd_IsTimePedestalArrival(&arrival, &arrival.player));
         REQUIRE(cameraCopies == 0);
-        REQUIRE(cameraClears == (cameraCase == ArrivalCameraCase::SceneTeardown ? 1 : 0));
-        REQUIRE(arrival.activeCamera == (cameraCase == ArrivalCameraCase::SceneTeardown ? CAM_ID_MAIN : 1));
+        REQUIRE(cameraClears == (cameraCase == ArrivalCameraCase::ReusedSlot ? 0 : 1));
+        REQUIRE(arrival.activeCamera == (cameraCase == ArrivalCameraCase::ReusedSlot ? 1 : CAM_ID_MAIN));
+        REQUIRE(!arrival.envCtx.fillScreen);
         REQUIRE(!BgTokiSwd_EndTimePedestalArrival(&arrival, &arrival.player)); // Cleanup is one-use.
         CheckProgressionUnchanged(before);
         return;
@@ -1204,7 +1336,10 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
         // Release/repress produces the fresh edge that skips this phase, even
         // while Skip Story Cutscenes remains enabled.
         arrival.state.input[0].press.button = arrival.state.input[0].cur.button = BTN_B;
-        Player_Action_8084E9AC(&arrival.player, &arrival);
+        for (int frame = 0; frame < 9; ++frame) {
+            Player_Action_8084E9AC(&arrival.player, &arrival);
+            arrival.state.input[0].press.button = 0;
+        }
     } else {
         animationComplete = true;
         Player_Action_8084E9AC(&arrival.player, &arrival);
@@ -1223,6 +1358,33 @@ static void CheckArrival(bool sourceAdult, bool rando, bool skipMain, bool skipE
     // completion must not twist the whole character back to the pre-swap yaw.
     REQUIRE(returnYaw != -0x4000);
     REQUIRE(arrival.player.actor.shape.rot.y == -0x4000 && arrival.player.yaw == -0x4000);
+    if (skipExit) {
+        if (cameraCase == ArrivalCameraCase::FadeTeardown) {
+            arrival.state.running = false;
+            REQUIRE(!BgTokiSwd_EndTimePedestalArrival(&arrival, &arrival.player));
+            Fixture_UpdatePedestalFill(&arrival, &arrival.player);
+            REQUIRE(!arrival.envCtx.fillScreen);
+            CheckProgressionUnchanged(before);
+            return;
+        }
+        Player remote = arrival.player;
+        PlayState otherPlay = arrival;
+        Fixture_UpdatePedestalFill(&arrival, &remote);
+        Fixture_UpdatePedestalFill(&otherPlay, &otherPlay.player);
+        REQUIRE(arrival.envCtx.screenFillColor[3] == 255 && otherPlay.envCtx.screenFillColor[3] == 255);
+        for (int frame = 7; frame >= 0; --frame) {
+            ++arrival.gameplayFrames;
+            Fixture_UpdatePedestalFill(&arrival, &arrival.player);
+            REQUIRE(arrival.envCtx.screenFillColor[3] == 255 * frame / 8);
+            BgTokiSwd_Update(&sword.actor, &arrival);
+            REQUIRE(arrival.envCtx.screenFillColor[3] == 255 * frame / 8);
+            // A second pedestal updates in the same gameplay frame.
+            BgTokiSwd secondSword = sword;
+            BgTokiSwd_Update(&secondSword.actor, &arrival);
+            REQUIRE(arrival.envCtx.screenFillColor[3] == 255 * frame / 8);
+        }
+        REQUIRE(!arrival.envCtx.fillScreen);
+    }
     CheckProgressionUnchanged(before);
     REQUIRE(memcmp(&before.equips, &gSaveContext.equips, sizeof(ItemEquips)) == 0);
     skipStorySetting = 0;
@@ -1412,6 +1574,14 @@ static void CheckPedestalSwordSource() {
 }
 
 int main(int argc, char** argv) {
+    if (argc > 1 && strcmp(argv[1], "fade_multiple_actors") == 0) {
+        CheckArrival(false, true, true, true);
+        return 0;
+    }
+    if (argc > 1 && strcmp(argv[1], "skip_interruption") == 0) {
+        CheckInterruptedSkip();
+        return 0;
+    }
     if (argc > 1 && strcmp(argv[1], "pedestal_model") == 0) {
         CheckPedestalSwordSource();
         return 0;
@@ -1444,6 +1614,7 @@ int main(int argc, char** argv) {
     CheckPedestalCollisionClearance();
     CheckPedestalSwordSource();
     CheckChildSwordRendering();
+    CheckChildRootMovement();
     CheckAdultSwordRendering();
     puts("PASS child/adult handoffs, late overrides, alternate assets and Pak Master Sword selection");
     CheckNativeTimeTravelHold();
@@ -1462,7 +1633,8 @@ int main(int argc, char** argv) {
     for (bool sourceAdult : { false, true }) {
         for (ArrivalCameraCase cameraCase :
              { ArrivalCameraCase::NoSlot, ArrivalCameraCase::OtherCamera, ArrivalCameraCase::ReusedSlot,
-               ArrivalCameraCase::SceneTeardown, ArrivalCameraCase::ImmediateSkip }) {
+               ArrivalCameraCase::SceneTeardown, ArrivalCameraCase::SkipTeardown, ArrivalCameraCase::FadeTeardown,
+               ArrivalCameraCase::ImmediateSkip }) {
             CheckArrival(sourceAdult, false, true, true, false, false, cameraCase);
         }
     }
@@ -1480,6 +1652,7 @@ int main(int argc, char** argv) {
     CheckPostRespawnEmptyB();
     CheckSavedAdultWithoutSword();
     CheckResetDuringCutscene();
+    CheckInterruptedSkip();
     CheckExtendedHandoff();
     for (bool adult : { false, true }) {
         for (bool rando : { false, true }) {

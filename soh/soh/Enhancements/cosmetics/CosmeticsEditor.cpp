@@ -435,6 +435,12 @@ std::map<std::string, CosmeticOption> cosmeticOptions = {
     COSMETIC_OPTION("NPC.Gerudo",                   "Gerudo",                   COSMETICS_GROUP_NPC,          ColorRGBA8( 90,   0, 140, 255), false, true, false),
     COSMETIC_OPTION("NPC.MetalTrap",                "Metal Trap",               COSMETICS_GROUP_NPC,          ColorRGBA8(255, 255, 255, 255), false, true, true),
     COSMETIC_OPTION("NPC.IronKnuckles",             "Iron Knuckles",            COSMETICS_GROUP_NPC,          ColorRGBA8(245, 255, 205, 255), false, true, false),
+    COSMETIC_OPTION("NPC.Epona.Coat",               "Adult Epona Coat",         COSMETICS_GROUP_NPC,          ColorRGBA8(170,  58,   2, 255), false, true, false),
+    COSMETIC_OPTION("NPC.Epona.WhiteHair",          "Adult Epona White Hair",   COSMETICS_GROUP_NPC,          ColorRGBA8(255, 255, 255, 255), false, true, false),
+    COSMETIC_OPTION("NPC.Epona.Eyes",               "Adult Epona Eyes",         COSMETICS_GROUP_NPC,          ColorRGBA8( 40,  24,  16, 255), false, true, false),
+    COSMETIC_OPTION("NPC.YoungEpona.Coat",          "Young Epona Coat",         COSMETICS_GROUP_NPC,          ColorRGBA8(170,  58,   2, 255), false, true, false),
+    COSMETIC_OPTION("NPC.YoungEpona.WhiteHair",     "Young Epona White Hair",   COSMETICS_GROUP_NPC,          ColorRGBA8(255, 255, 255, 255), false, true, false),
+    COSMETIC_OPTION("NPC.YoungEpona.Eyes",          "Young Epona Eyes",         COSMETICS_GROUP_NPC,          ColorRGBA8( 40,  24,  16, 255), false, true, false),
 };
 // clang-format on
 

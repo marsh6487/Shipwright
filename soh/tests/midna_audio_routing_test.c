@@ -8,6 +8,7 @@ f32 gSfxDefaultFreqAndVolScale = 1;
 s8 gSfxDefaultReverb;
 static u16 sCUpInvisible, sCUpTimer;
 static int nativeCalls, customCalls, clipPresent, disableCalls;
+static int midnaEnabled = 1;
 static u16 nativeId;
 static MidnaAudioEvent customEvent;
 static int idleUpdates, idleEligible, playerCutscene;
@@ -24,6 +25,11 @@ u8 Message_GetState(MessageContext* ctx) {
 }
 
 int32_t CVarGetInteger(const char* name, int32_t fallback) {
+    if (strcmp(name, CVAR_ENHANCEMENT("MidnaCompanion")) == 0) {
+        REQUIRE(fallback == 0);
+        return midnaEnabled;
+    }
+    REQUIRE(strcmp(name, CVAR_AUDIO("DisableNaviCallAudio")) == 0);
     return disableCalls;
 }
 bool MidnaAudio_TryPlay(MidnaAudioEvent event) {
@@ -81,6 +87,7 @@ static void idleGates(void) {
         EnElf_UpdateMidnaIdleAudio(&fairy, &play); \
         REQUIRE(idleEligible);                     \
     } while (0)
+    BLOCKED(midnaEnabled, 0);
     BLOCKED(player.actor.speedXZ, 2.0f);
     BLOCKED(player.actor.speedXZ, -2.0f);
     BLOCKED(player.linearVelocity, 2.0f);

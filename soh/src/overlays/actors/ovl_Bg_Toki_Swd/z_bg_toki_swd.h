@@ -28,6 +28,7 @@ typedef struct BgTokiSwd {
     s16 ageSwapFrame;
     u8 localCutsceneStarted;
     u8 localCutsceneFinished;
+    u8 skipFadeFrame;
 } BgTokiSwd;
 
 #ifdef __cplusplus
@@ -39,9 +40,11 @@ size_t TimePedestalCutscene_Build(CutsceneData* output, size_t capacity, const C
                                 size_t wordCount, const Vec3f* origin, s16 yaw, s16* ageSwapFrame);
 s32 BgTokiSwd_RelocateTimePedestalPlayer(PlayState* play, Player* player);
 s32 BgTokiSwd_GetTimePedestalHandState(PlayState* play, Player* player);
+s32 BgTokiSwd_GetChildSwordPullFloor(PlayState* play, Player* player, f32* floorY);
 s32 BgTokiSwd_BeginTimePedestalArrival(PlayState* play, Player* player);
 s32 BgTokiSwd_IsTimePedestalArrival(PlayState* play, Player* player);
 void BgTokiSwd_UpdateTimePedestalArrivalCamera(PlayState* play, Player* player);
+void BgTokiSwd_UpdateTimePedestalFill(PlayState* play, Player* player);
 s32 BgTokiSwd_SkipTimePedestalArrival(PlayState* play, Player* player);
 s32 BgTokiSwd_EndTimePedestalArrival(PlayState* play, Player* player);
 

@@ -445,11 +445,11 @@ void BuildPushSpeedUpgradeMessage(CustomMessage& msg) {
 
 void BuildItemMessage(u16* textId, bool* loadFromMessageTable) {
     Player* player = GET_PLAYER(gPlayState);
-    // Fixed Time Gate rewards use the existing custom-item text in normal saves.
+    // Fixed Time Gate and house feather rewards use custom-item text in normal saves.
     // Other vanilla uses of 0xF8 must continue loading their ordinary message.
     if (*textId == TEXT_RANDOMIZER_CUSTOM_ITEM && !IS_RANDO &&
         (player->getItemEntry.objectId == OBJECT_INVALID || player->getItemEntry.modIndex != MOD_RANDOMIZER ||
-         player->getItemEntry.getItemId != RG_TIME_GATE)) {
+         (player->getItemEntry.getItemId != RG_TIME_GATE && player->getItemEntry.getItemId != RG_PROGRESSIVE_ROCS))) {
         return;
     }
     CustomMessage msg;

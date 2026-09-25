@@ -7,6 +7,10 @@
 #include <soh/Enhancements/TimeDisplay/TimeDisplay.h>
 #include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/Restorations/GetItemManipulation.h"
+#include "soh/Enhancements/audio/MidnaAudio.h"
+#include <algorithm>
+#include <cfloat>
+#include <cstring>
 #include <ship/Context.h>
 
 extern "C" {
@@ -95,6 +99,72 @@ static const std::map<int32_t, const char*> allPowers = {
     { DAMAGE_OHKO, "OHKO (256x)" },
 };
 
+static std::string MidnaClipLabel(const std::string& path) {
+    constexpr const char* prefix = "objects/midna_navi/audio/";
+    std::string label = path.rfind(prefix, 0) == 0 ? path.substr(std::strlen(prefix)) : path;
+    if (label.size() >= 4) {
+        label.resize(label.size() - 4);
+    }
+    std::replace(label.begin(), label.end(), '_', ' ');
+    return label;
+}
+
+static void DrawMidnaSoundAssignments(WidgetInfo& info) {
+    if (!ImGui::CollapsingHeader("Midna Sound Effects")) {
+        return;
+    }
+    const auto clips = MidnaAudio_GetAvailableClips();
+    if (clips.empty()) {
+        ImGui::TextWrapped("No playable Midna sounds found. Install the Midna companion archive and restart the game.");
+        return;
+    }
+    bool changed = false;
+    if (ImGui::BeginTable("MidnaSoundAssignments", 2, ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Event", ImGuiTableColumnFlags_WidthStretch, 0.45f);
+        ImGui::TableSetupColumn("Sound", ImGuiTableColumnFlags_WidthStretch, 0.55f);
+        for (int i = 0; i < MIDNA_AUDIO_EVENT_COUNT; ++i) {
+            const auto event = static_cast<MidnaAudioEvent>(i);
+            const auto selected = MidnaAudio_GetAssignment(event);
+            const char* native = event == MIDNA_AUDIO_YAWN ? "Silent" : "Original game sound";
+            std::string preview = selected.empty() ? native : MidnaClipLabel(selected);
+            if (!selected.empty() && std::find(clips.begin(), clips.end(), selected) == clips.end()) {
+                preview += " (unavailable)";
+            }
+            ImGui::PushID(i);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", MidnaAudio_GetEventLabel(event));
+            ImGui::TableNextColumn();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::BeginCombo("##Sound", preview.c_str())) {
+                if (ImGui::Selectable(native, selected.empty())) {
+                    changed |= MidnaAudio_Assign(event, "");
+                }
+                for (const auto& clip : clips) {
+                    ImGui::PushID(clip.c_str());
+                    if (ImGui::Selectable(MidnaClipLabel(clip).c_str(), selected == clip)) {
+                        changed |= MidnaAudio_Assign(event, clip);
+                    }
+                    if (selected == clip) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    if (ImGui::Button("Reset Midna Sounds")) {
+        MidnaAudio_ResetAssignments();
+        changed = true;
+    }
+    if (changed) {
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    }
+}
+
 static const std::map<int32_t, const char*> subPowers = {
     { DAMAGE_VANILLA, "Vanilla (1x)" },      { DAMAGE_DOUBLE, "Double (2x)" },
     { DAMAGE_QUADRUPLE, "Quadruple (4x)" },  { DAMAGE_OCTUPLE, "Octuple (8x)" },
@@ -173,6 +243,20 @@ void SohMenu::AddMenuEnhancements() {
             "with native horse fences and area restrictions.\n"
             "Requires Young_Epona_SoH_POC1_Assets.o2r. Reload the area after changing this option.\n"
             "Young Epona's saved location is separate from adult Epona."));
+
+    AddWidget(path, "Midna Companion (Navi)", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("MidnaCompanion"))
+        .RaceDisable(false)
+        .Callback([](WidgetInfo&) { MidnaAudio_Reset(); })
+        .Options(CheckboxOptions().DefaultValue(false).Tooltip(
+            "Replace Navi with Midna's model, animation and companion sounds. Requires the Midna companion pack in "
+            "mods. "
+            "Missing assets use Navi's normal appearance or sounds. Turn off to restore Navi. "
+            "Enable to choose a sound for each event below."));
+    AddWidget(path, "Midna Sound Effects", WIDGET_CUSTOM)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("MidnaCompanion"), 0); })
+        .CustomFunction(DrawMidnaSoundAssignments);
 
     AddWidget(path, "Saving", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Autosave", WIDGET_CVAR_CHECKBOX)

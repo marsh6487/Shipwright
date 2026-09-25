@@ -105,6 +105,7 @@ typedef struct {
 typedef struct {
     f32 curFrame, endFrame, animLength;
     LinkAnimationHeader* animation;
+    u8 movementFlags;
 } SkelAnime;
 typedef struct {
     u16 unk_00, unk_02;
@@ -116,6 +117,7 @@ typedef struct {
 typedef struct {
     LinkAnimationHeader* unk_9C;
     LinkAnimationHeader* unk_A0;
+    f32 unk_08;
 } PlayerAgeProperties;
 struct Player;
 typedef void (*PlayerActionFunc)(struct Player*, PlayState*);
@@ -190,6 +192,8 @@ struct PlayState {
     } sequenceCtx;
     struct {
         u8 unk_E0;
+        u8 fillScreen;
+        u8 screenFillColor[4];
     } envCtx;
     struct {
         int state, cursorSpecialPos;
@@ -383,6 +387,10 @@ extern bool fixtureRando;
 void func_80068DC0(PlayState*, CutsceneContext*);
 void Environment_PlaySceneSequence(PlayState*);
 void Fixture_AdultLoadRepair(void);
+void Fixture_UpdatePedestalFill(PlayState*, Player*);
+void Fixture_PlayerAnimationMove(PlayState*, Player*);
+void Math_ApproachF(f32*, f32, f32, f32);
+void AnimationContext_SetMoveActor(PlayState*, Actor*, SkelAnime*, f32);
 u8 Fixture_GiveSword(PlayState*, u8);
 u8 Return_Item(u8, int, u8);
 u8 Inventory_DeleteEquipment(PlayState*, s16);

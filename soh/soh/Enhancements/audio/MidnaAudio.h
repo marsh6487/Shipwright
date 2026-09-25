@@ -22,7 +22,8 @@ typedef enum MidnaAudioEvent {
     MIDNA_AUDIO_EVENT_COUNT
 } MidnaAudioEvent;
 
-// Load optional private clips on startup. No original sound-bank entries change.
+// Load optional private clips on startup, including while the option is off so
+// enabling needs no archive access from the mixer. Native banks never change.
 void MidnaAudio_Init(void);
 // False means the caller must play its original sound, with its original arguments.
 // True includes an available movement cue intentionally suppressed by its cooldown.
@@ -32,9 +33,21 @@ bool MidnaAudio_TryPlay(MidnaAudioEvent event);
 void MidnaAudio_UpdateIdle(bool eligible);
 // Adds dry, centered mono clips to the engine's 32 kHz stereo output.
 void MidnaAudio_Mix(int16_t* interleavedStereo, size_t frameCount);
-// Stop Midna's voices at scene teardown; keep clips and remaining cue intervals.
+// Stop voices at scene/game teardown and whenever the checkbox changes. The
+// latter also handles off/on while paused. Keep clips and remaining intervals.
 void MidnaAudio_Reset(void);
 
 #ifdef __cplusplus
 }
+
+#include <string>
+#include <vector>
+
+// Menu operations use the decoded archive bank; no I/O is performed during playback.
+std::vector<std::string> MidnaAudio_GetAvailableClips();
+const char* MidnaAudio_GetEventLabel(MidnaAudioEvent event);
+std::string MidnaAudio_GetAssignment(MidnaAudioEvent event);
+// An empty path restores the native cue (silence for the optional idle yawn).
+bool MidnaAudio_Assign(MidnaAudioEvent event, const std::string& path);
+void MidnaAudio_ResetAssignments();
 #endif

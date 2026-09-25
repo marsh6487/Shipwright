@@ -12,11 +12,30 @@
 #include <vector>
 
 static bool model = true;
+static bool enabled = true;
 static float gain = 1.0f;
 static std::map<std::string, std::vector<uint8_t>> files;
 static int reads;
+static std::map<std::string, std::string> assignments;
 
 namespace MidnaAudioResources {
+std::vector<std::string> ListClips() {
+    std::vector<std::string> result;
+    for (const auto& [path, bytes] : files) {
+        result.push_back(path);
+    }
+    return result;
+}
+std::string ReadAssignment(const char* event, const char* fallback) {
+    const auto it = assignments.find(event);
+    return it == assignments.end() ? fallback : it->second;
+}
+void WriteAssignment(const char* event, const std::string& path) {
+    assignments[event] = path;
+}
+bool Enabled() {
+    return enabled;
+}
 bool HasModel() {
     return model;
 }
@@ -154,10 +173,108 @@ static void idleYawn() {
         REQUIRE(tick(true) == 0); // older packs remain silent, with no native substitute
 }
 
+// Disabling must restore native cues and discard private voices even if the
+// setting changes during a pause, when no game update or PCM mix runs.
+static void optInAndDisable() {
+    enabled = false;
+    MidnaAudio_Init();
+    REQUIRE(!MidnaAudio_TryPlay(MIDNA_AUDIO_DASH));
+    std::array<int16_t, 4> output = { 10, 20, 30, 40 };
+    MidnaAudio_Mix(output.data(), 2);
+    REQUIRE((output == std::array<int16_t, 4>{ 10, 20, 30, 40 }));
+    enabled = true;
+    REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_CALL));
+    MidnaAudio_Mix(output.data(), 1);
+    REQUIRE(output[0] == 210); // enabling uses clips loaded while disabled
+
+    // The mixer independently handles external config changes before an actor ticks.
+    enabled = false;
+    output = {};
+    MidnaAudio_Mix(output.data(), 1);
+    REQUIRE(output[0] == 0);
+    enabled = true;
+    MidnaAudio_Mix(output.data(), 1);
+    REQUIRE(output[0] == 0); // the old CALL tail cannot resume
+
+    REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_CALL));
+    enabled = false;
+    REQUIRE(!MidnaAudio_TryPlay(MIDNA_AUDIO_VANISH));
+    enabled = true;
+    MidnaAudio_Mix(output.data(), 1);
+    REQUIRE(output[0] == 0); // a native fallback also clears pending voices
+
+    REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_CALL));
+    enabled = false;
+    MidnaAudio_UpdateIdle(true);
+    enabled = true;
+    MidnaAudio_Mix(output.data(), 1);
+    REQUIRE(output[0] == 0);
+
+    REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_CALL));
+    enabled = false;
+    MidnaAudio_Reset(); // checkbox callback: immediate off/on while paused
+    enabled = true;
+    MidnaAudio_Mix(output.data(), 1);
+    REQUIRE(output[0] == 0);
+}
+
+static void reassignArchiveClips() {
+    const std::string extra = "objects/midna_navi/audio/extra_laugh.wav";
+    files[extra] = wav({ 1234, -2345, 3456 });
+    files["objects/midna_navi/audio/broken.wav"] = { 0, 1, 2 };
+    MidnaAudio_Init();
+    const auto choices = MidnaAudio_GetAvailableClips();
+    REQUIRE(std::find(choices.begin(), choices.end(), extra) != choices.end());
+    REQUIRE(std::find(choices.begin(), choices.end(), "objects/midna_navi/audio/broken.wav") == choices.end());
+    REQUIRE(std::strcmp(MidnaAudio_GetEventLabel(MIDNA_AUDIO_APPEAR), "Midna Emerge") == 0);
+    const int archiveReads = reads;
+    REQUIRE(MidnaAudio_Assign(MIDNA_AUDIO_APPEAR, extra));
+    REQUIRE(MidnaAudio_GetAssignment(MIDNA_AUDIO_APPEAR) == extra);
+    REQUIRE(assignments.at("Emerge") == extra);
+    REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_APPEAR));
+    std::array<int16_t, 2> out{};
+    MidnaAudio_Mix(out.data(), 1);
+    REQUIRE(out[0] == 1234 && out[1] == 1234);
+    REQUIRE(reads == archiveReads); // choosing/playing never opens the archive
+
+    // A remap stops the previous event's tail immediately and updates idle routing too.
+    REQUIRE(MidnaAudio_Assign(MIDNA_AUDIO_APPEAR, ""));
+    out = {};
+    MidnaAudio_Mix(out.data(), 1);
+    REQUIRE(out[0] == 0);
+    REQUIRE(!MidnaAudio_TryPlay(MIDNA_AUDIO_APPEAR));
+    REQUIRE(MidnaAudio_Assign(MIDNA_AUDIO_YAWN, extra));
+    REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_YAWN));
+    out = {};
+    MidnaAudio_Mix(out.data(), 1);
+    REQUIRE(out[0] == 1234);
+    REQUIRE(!MidnaAudio_Assign(MIDNA_AUDIO_EVENT_COUNT, extra));
+    REQUIRE(!MidnaAudio_Assign(MIDNA_AUDIO_CALL, "absent.wav"));
+
+    MidnaAudio_Init(); // restart uses saved assignments, including explicit native fallback
+    REQUIRE(!MidnaAudio_TryPlay(MIDNA_AUDIO_APPEAR));
+    REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_YAWN));
+    out = {};
+    MidnaAudio_Mix(out.data(), 1);
+    REQUIRE(out[0] == 1234);
+    files.erase(extra);
+    MidnaAudio_Init();
+    REQUIRE(MidnaAudio_GetAssignment(MIDNA_AUDIO_YAWN) == extra);
+    REQUIRE(!MidnaAudio_TryPlay(MIDNA_AUDIO_YAWN)); // removed pack keeps selection, falls back safely
+    MidnaAudio_ResetAssignments();
+    REQUIRE(MidnaAudio_GetAssignment(MIDNA_AUDIO_CALL) == "objects/midna_navi/audio/call.wav");
+    REQUIRE(MidnaAudio_TryPlay(MIDNA_AUDIO_CALL));
+    files.erase("objects/midna_navi/audio/broken.wav");
+    assignments.clear();
+}
+
 int main() {
     files["objects/midna_navi/audio/dash.wav"] = wav({ 1000, -2000, 3000, 4000 });
     files["objects/midna_navi/audio/vanish.wav"] = wav({ 500, 600 });
     files["objects/midna_navi/audio/call.wav"] = wav({ 200, 300 });
+    reassignArchiveClips();
+    optInAndDisable();
+    reads = 0;
     model = false;
     MidnaAudio_Init();
     REQUIRE(!MidnaAudio_TryPlay(MIDNA_AUDIO_DASH));
@@ -246,12 +363,16 @@ int main() {
         }
     });
     for (int i = 0; i < 1000; ++i) {
+        REQUIRE(MidnaAudio_Assign(MIDNA_AUDIO_CALL,
+                                  i % 2 ? "objects/midna_navi/audio/vanish.wav" : "objects/midna_navi/audio/call.wav"));
+        MidnaAudio_TryPlay(MIDNA_AUDIO_CALL);
         MidnaAudio_TryPlay(MIDNA_AUDIO_DASH);
         MidnaAudio_Reset();
     }
     mixer.join();
+    MidnaAudio_ResetAssignments();
     MidnaAudio_Reset();
     movementSpacing();
     idleYawn();
-    puts("PASS: Midna private clips, native fallback, PCM validation, mixing, volume and teardown");
+    puts("PASS: Midna archive choices, saved/live assignments, native fallback, PCM validation, mixing and teardown");
 }

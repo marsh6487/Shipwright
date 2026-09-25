@@ -75,7 +75,8 @@ def main():
         if arrival_state:
             actor_body += arrival_state[0] + "\n"
         actor_body += "\n".join(source.values())
-        (build / "actor.c").write_text('#include "time_pedestal_fixture.h"\n' + actor_body)
+        (build / "actor.c").write_text('#include "time_pedestal_fixture.h"\n' +
+            re.search(r"#define TIME_PEDESTAL_SKIP_FADE_FRAMES \d+", actor_source)[0] + "\n" + actor_body)
         collision_source = (ROOT / "soh/src/code/z_collision_check.c").read_text()
         collision = functions(collision_source)
         collision_names = ["Collider_InitBase", "Collider_DestroyBase", "Collider_SetBase",
@@ -114,6 +115,7 @@ def main():
             "void Fixture_HudRestore(PlayState* play) { InterfaceContext* interfaceCtx = &play->interfaceCtx; s16 sp28 = 0;\n" +
             hud_zero + " else " + hud_one + "\n}\n" + parameter["func_80084BF4"])
         player = functions(player_source)
+        fill_update = re.search(r"    BgTokiSwd_UpdateTimePedestalFill\(play, this\);", player["Player_UpdateCommon"])[0]
         turn_list = re.search(r"static s8 sActionHandlerListTurnInPlace\[\] = \{.*?^};", player_source, re.M | re.S)[0]
         (build / "interaction.c").write_text('#include "time_pedestal_fixture.h"\n' + turn_list + '\n' +
             'static s32 sUpperBodyIsBusy;\n' +
@@ -128,6 +130,11 @@ def main():
             re.search(r"static AnimSfxEntry D_808551AC\[\] = \{.*?^};", player_source, re.M | re.S)[0] + "\n" +
             player["func_80851A50"])
         player_body += "\nstatic Vec3f D_808546F4 = { -1.0f, 69.0f, 20.0f };\n"
+        player_body += "\nvoid Fixture_UpdatePedestalFill(PlayState* play, Player* this) {\n" + fill_update + "\n}\n"
+        move = player["Player_UpdateCommon"]
+        move = block_from(move, move.index("        if (this->skelAnime.movementFlags & 8)"))
+        player_body += "\n" + functions((ROOT / "soh/src/code/z_lib.c").read_text())["Math_ApproachF"]
+        player_body += "\nvoid Fixture_PlayerAnimationMove(PlayState* play, Player* this) {\n" + move + "\n}\n"
         for name in ("D_808549F0", "D_808549F4"):
             player_body += re.search(r"static AnimSfxEntry " + name + r"\[\] = \{.*?^};", player_source, re.M | re.S)[0] + "\n"
         for name in ("Player_StartMode_TimeTravel", "func_8083C0E8", "func_8084E988",

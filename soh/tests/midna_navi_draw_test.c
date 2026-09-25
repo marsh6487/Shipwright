@@ -11,6 +11,7 @@ static Gfx blinkHalf[1], blinkClosed[1];
 static Vtx pose[1];
 static unsigned nativeDraws, midnaSetups, resourceChecks, resourceLoads, pushes, pops;
 static int packPresent, loadSucceeds;
+static int midnaEnabled;
 static int poc2Present, poseMissing, markingsMissing, lastPoseFrame, inputTimer = 17;
 static int shimmerVerticesMissing, shimmerVerticesFailed, textureFailed;
 static int blinkPresent, blinkMissing, blinkFailed, expectedBlink;
@@ -135,6 +136,11 @@ Mtx* Matrix_NewMtx(GraphicsContext* gfx, char* file, s32 line) {
 f32 Math_SinS(s16 angle) {
     return sinf(angle * (3.14159265358979323846f / 32768.0f));
 }
+int32_t CVarGetInteger(const char* name, int32_t defaultValue) {
+    REQUIRE(strcmp(name, CVAR_ENHANCEMENT("MidnaCompanion")) == 0);
+    REQUIRE(defaultValue == 0);
+    return midnaEnabled;
+}
 float CVarGetFloat(const char* name, float defaultValue) {
     return fairySize;
 }
@@ -191,7 +197,7 @@ static void checkCase(int fairyType, int present, int loaded, int hiddenState, i
     REQUIRE(pushes == pops && pushes == expectMidna + (enhanced ? 6 : 0));
     REQUIRE(memcmp(&before, &fairy, sizeof(fairy)) == 0);
     REQUIRE(memcmp(&playerBefore, &player, sizeof(player)) == 0);
-    if (fairyType != FAIRY_NAVI || hiddenState || hiddenFlag || (firstPerson && !inFront)) {
+    if (!midnaEnabled || fairyType != FAIRY_NAVI || hiddenState || hiddenFlag || (firstPerson && !inFront)) {
         REQUIRE(resourceChecks == 0 && resourceLoads == 0);
     }
     if (expectMidna) {
@@ -275,6 +281,10 @@ static void checkVisibleClock(void) {
     }
 #ifdef MIDNA_VISIBLE_CLOCK
     u16 held = fairy.midnaBlinkTimer;
+    midnaEnabled = 0;
+    EnElf_Update(&fairy.actor, &play);
+    REQUIRE(fairy.midnaBlinkTimer == held);
+    midnaEnabled = 1;
     fairy.fairyFlags = 8;
     EnElf_Update(&fairy.actor, &play);
     REQUIRE(fairy.midnaBlinkTimer == held);
@@ -295,6 +305,16 @@ static void checkVisibleClock(void) {
 }
 
 int main(void) {
+    /* An installed pack is inactive until explicitly enabled; disabling also
+     * restores the native halo without touching actor or player state. */
+    checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 0, 1);
+    checkLights(FAIRY_NAVI, 1, 1, 0, LIGHT_POINT_GLOW);
+    midnaEnabled = 1;
+    checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
+    midnaEnabled = 0;
+    checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 0, 1);
+    checkLights(FAIRY_NAVI, 1, 1, 0, LIGHT_POINT_GLOW);
+    midnaEnabled = 1;
     /* Installed pack selects Midna only for the companion fairy. */
     checkCase(FAIRY_NAVI, 1, 1, 0, 0, 0, 1, 1, 0);
     fairySize = 1.5f;

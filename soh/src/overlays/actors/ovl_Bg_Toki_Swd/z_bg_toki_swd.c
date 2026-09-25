@@ -79,6 +79,7 @@ static InitChainEntry sInitChain[] = {
 // on a mismatched spawn, so reset/load/another entrance cannot replay it later.
 static struct {
     PlayState* play;
+    PlayState* fillPlay;
     Player* player;
     Vec3f startPos, returnPos;
     Vec3f cameraAt, cameraEye;
@@ -86,8 +87,49 @@ static struct {
     s16 subCamId, subCamUid;
     u16 fileNum;
     s8 room, age;
-    u8 pending, cameraAttempted;
+    u8 pending, cameraAttempted, skipFadeFrame, fadeOutFrame, fillAlpha;
 } sTimePedestalArrival;
+
+#define TIME_PEDESTAL_SKIP_FADE_FRAMES 8
+
+static void BgTokiSwd_SetSkipFill(PlayState* play, u8 alpha) {
+    sTimePedestalArrival.fillPlay = alpha != 0 ? play : NULL;
+    sTimePedestalArrival.fillAlpha = alpha;
+    play->envCtx.fillScreen = alpha != 0;
+    play->envCtx.screenFillColor[0] = 255;
+    play->envCtx.screenFillColor[1] = 255;
+    play->envCtx.screenFillColor[2] = 255;
+    play->envCtx.screenFillColor[3] = alpha;
+}
+
+static void BgTokiSwd_ClearSkipFill(PlayState* play) {
+    if (sTimePedestalArrival.fillPlay != play) {
+        return;
+    }
+    // Another transition or effect may have replaced the shared fill already.
+    if (play->envCtx.screenFillColor[0] == 255 && play->envCtx.screenFillColor[1] == 255 &&
+        play->envCtx.screenFillColor[2] == 255 && play->envCtx.screenFillColor[3] == sTimePedestalArrival.fillAlpha) {
+        play->envCtx.fillScreen = false;
+        play->envCtx.screenFillColor[3] = 0;
+    }
+    sTimePedestalArrival.fillPlay = NULL;
+    sTimePedestalArrival.fadeOutFrame = 0;
+}
+
+void BgTokiSwd_UpdateTimePedestalFill(PlayState* play, Player* player) {
+    if (play == NULL || player == NULL || player != GET_PLAYER(play) || sTimePedestalArrival.fillPlay != play ||
+        sTimePedestalArrival.fadeOutFrame == 0) {
+        return;
+    }
+    if (!play->state.running || play->transitionTrigger != TRANS_TRIGGER_OFF) {
+        BgTokiSwd_ClearSkipFill(play);
+        return;
+    }
+    // The primary player updates this once, even if the room contains several
+    // pedestals or the pedestal has been removed during the exit animation.
+    sTimePedestalArrival.fadeOutFrame--;
+    BgTokiSwd_SetSkipFill(play, 255 * sTimePedestalArrival.fadeOutFrame / TIME_PEDESTAL_SKIP_FADE_FRAMES);
+}
 
 void BgTokiSwd_SetupAction(BgTokiSwd* this, BgTokiSwdActionFunc actionFunc) {
     this->actionFunc = actionFunc;
@@ -103,6 +145,7 @@ void BgTokiSwd_Init(Actor* thisx, PlayState* play) {
     this->localCutscene = NULL;
     this->localCutsceneStarted = false;
     this->localCutsceneFinished = false;
+    this->skipFadeFrame = 0;
 
     if (this->actor.params == BG_TOKI_SWD_TIME_PEDESTAL) {
         // The authored grip anchor can sit inside the stump. Resolve the
@@ -153,6 +196,9 @@ void BgTokiSwd_Init(Actor* thisx, PlayState* play) {
 void BgTokiSwd_Destroy(Actor* thisx, PlayState* play) {
     BgTokiSwd* this = (BgTokiSwd*)thisx;
 
+    if (this->skipFadeFrame != 0) {
+        BgTokiSwd_ClearSkipFill(play);
+    }
     if (this->localCutscene != NULL) {
         // Actor teardown happens after the age-equipment handoff and after the
         // player is deleted. It must never request another age transition.
@@ -257,10 +303,14 @@ s32 BgTokiSwd_BeginTimePedestalArrival(PlayState* play, Player* player) {
     if (play == NULL || player == NULL || player != GET_PLAYER(play)) {
         return false;
     }
+    BgTokiSwd_ClearSkipFill(play);
+    sTimePedestalArrival.fillPlay = NULL;
     sTimePedestalArrival.play = NULL;
     sTimePedestalArrival.player = NULL;
     sTimePedestalArrival.subCamId = SUBCAM_NONE;
     sTimePedestalArrival.cameraAttempted = false;
+    sTimePedestalArrival.skipFadeFrame = 0;
+    sTimePedestalArrival.fadeOutFrame = 0;
     if (!sTimePedestalArrival.pending) {
         return false;
     }
@@ -321,10 +371,23 @@ s32 BgTokiSwd_SkipTimePedestalArrival(PlayState* play, Player* player) {
     // The arrival is the player's local exit movement, not a story cutscene.
     // Keep the global story skip scoped to the departure ceremony above; only
     // a fresh B edge skips this independent phase.
-    return CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B);
+    if (sTimePedestalArrival.skipFadeFrame == 0 && !CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B)) {
+        return false;
+    }
+    if (sTimePedestalArrival.skipFadeFrame < TIME_PEDESTAL_SKIP_FADE_FRAMES) {
+        sTimePedestalArrival.skipFadeFrame++;
+        BgTokiSwd_SetSkipFill(play, 255 * sTimePedestalArrival.skipFadeFrame / TIME_PEDESTAL_SKIP_FADE_FRAMES);
+        return -1; // Hold the current animation pose until the handoff is covered.
+    }
+    BgTokiSwd_SetSkipFill(play, 255);
+    return true;
 }
 
 s32 BgTokiSwd_EndTimePedestalArrival(PlayState* play, Player* player) {
+    if (play != NULL && player != NULL && player == GET_PLAYER(play) &&
+        (!play->state.running || play->transitionTrigger != TRANS_TRIGGER_OFF)) {
+        BgTokiSwd_ClearSkipFill(play);
+    }
     if (!BgTokiSwd_IsTimePedestalArrival(play, player)) {
         return false;
     }
@@ -347,6 +410,10 @@ s32 BgTokiSwd_EndTimePedestalArrival(PlayState* play, Player* player) {
         }
     }
     sTimePedestalArrival.subCamId = SUBCAM_NONE;
+    if (sTimePedestalArrival.skipFadeFrame != 0 && sTimePedestalArrival.fillPlay == play) {
+        sTimePedestalArrival.fadeOutFrame = TIME_PEDESTAL_SKIP_FADE_FRAMES;
+    }
+    sTimePedestalArrival.skipFadeFrame = 0;
     sTimePedestalArrival.play = NULL;
     sTimePedestalArrival.player = NULL;
     return true;
@@ -384,6 +451,27 @@ s32 BgTokiSwd_GetTimePedestalHandState(PlayState* play, Player* player) {
     // Never infer a ceremonial weapon from inventory or another player's pose.
     return player->leftHandDLists == &gPlayerLeftHandBgsDLs[LINK_AGE_CHILD] ? BG_TOKI_SWD_HAND_MASTER_SWORD
                                                                             : BG_TOKI_SWD_HAND_UNCHANGED;
+}
+
+s32 BgTokiSwd_GetChildSwordPullFloor(PlayState* play, Player* player, f32* floorY) {
+    if (play == NULL || player == NULL || floorY == NULL || player != GET_PLAYER(play) || LINK_IS_ADULT ||
+        play->csCtx.state == CS_STATE_IDLE) {
+        return false;
+    }
+    Actor* actor = player->interactRangeActor;
+    if (actor == NULL || actor->id != ACTOR_BG_TOKI_SWD || actor->params != BG_TOKI_SWD_TIME_PEDESTAL) {
+        return false;
+    }
+    BgTokiSwd* pedestal = (BgTokiSwd*)actor;
+    // The planted sword must remain aligned with the reaching hand. Once the
+    // frame-87 handoff hides that sword, the held blade follows Link's limb.
+    if (pedestal->localCutscene == NULL || play->csCtx.segment != pedestal->localCutscene ||
+        pedestal->localCutsceneFinished || actor->draw != NULL || actor->floorPoly == NULL ||
+        player->leftHandDLists != &gPlayerLeftHandBgsDLs[LINK_AGE_CHILD]) {
+        return false;
+    }
+    *floorY = actor->floorHeight;
+    return true;
 }
 
 void BgTokiSwd_FinishTimePedestal(BgTokiSwd* this, PlayState* play) {
@@ -430,12 +518,11 @@ void BgTokiSwd_FinishTimePedestal(BgTokiSwd* this, PlayState* play) {
     TimePedestalCutscene_TransformPoint(&sTimePedestalArrival.startPos, &this->actor.world.pos,
                                         this->actor.shape.rot.y);
     sTimePedestalArrival.startYaw = this->actor.shape.rot.y + 0x8000;
-    // A fixed front-side composition for the local hop/flourish. Author in
-    // the same Temple-of-Time coordinates as the animation, then relocate
-    // both points with the pedestal. Do not follow the animation's root motion.
-    sTimePedestalArrival.cameraAt = (Vec3f){ -1.0f, play->linkAgeOnLoad == LINK_AGE_CHILD ? 103.0f : 118.0f, -10.0f };
-    sTimePedestalArrival.cameraEye =
-        (Vec3f){ 120.0f, play->linkAgeOnLoad == LINK_AGE_CHILD ? 132.0f : 150.0f, -190.0f };
+    // Frame the far side of the stump toward Sheik and Saria in room 10.
+    // These points use the same pedestal-relative coordinates as the native
+    // cutscene, so moving the authored sword moves both ages' shots together.
+    sTimePedestalArrival.cameraAt = (Vec3f){ -59.0f, play->linkAgeOnLoad == LINK_AGE_CHILD ? 103.0f : 118.0f, 56.0f };
+    sTimePedestalArrival.cameraEye = (Vec3f){ -80.0f, play->linkAgeOnLoad == LINK_AGE_CHILD ? 132.0f : 150.0f, 165.0f };
     TimePedestalCutscene_TransformPoint(&sTimePedestalArrival.cameraAt, &this->actor.world.pos,
                                         this->actor.shape.rot.y);
     TimePedestalCutscene_TransformPoint(&sTimePedestalArrival.cameraEye, &this->actor.world.pos,
@@ -452,6 +539,10 @@ void BgTokiSwd_FinishTimePedestal(BgTokiSwd* this, PlayState* play) {
 void BgTokiSwd_TimePedestalCutscene(BgTokiSwd* this, PlayState* play) {
     if (!play->state.running || GET_PLAYER(play) == NULL || this->localCutsceneFinished ||
         play->transitionTrigger == TRANS_TRIGGER_START || play->csCtx.segment != this->localCutscene) {
+        if (this->skipFadeFrame != 0 && (!play->state.running || !this->localCutsceneFinished)) {
+            BgTokiSwd_ClearSkipFill(play);
+            this->skipFadeFrame = 0;
+        }
         return;
     }
     if (play->csCtx.state != CS_STATE_IDLE) {
@@ -471,9 +562,14 @@ void BgTokiSwd_TimePedestalCutscene(BgTokiSwd* this, PlayState* play) {
     // its automatic story-skip hook never runs. Read the same setting directly:
     // that hook would also award story flags/items inappropriate for this actor.
     // B can skip either local ceremony after the native camera has started.
-    if (this->localCutsceneStarted && play->csCtx.frames > 20 &&
-        (CVarGetInteger(CVAR_ENHANCEMENT("TimeSavers.SkipCutscene.Story"), IS_RANDO) ||
+    if (this->localCutsceneStarted && play->csCtx.frames > 20 && play->csCtx.frames < this->ageSwapFrame &&
+        (this->skipFadeFrame != 0 || CVarGetInteger(CVAR_ENHANCEMENT("TimeSavers.SkipCutscene.Story"), IS_RANDO) ||
          CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B))) {
+        if (this->skipFadeFrame < TIME_PEDESTAL_SKIP_FADE_FRAMES) {
+            this->skipFadeFrame++;
+            BgTokiSwd_SetSkipFill(play, 255 * this->skipFadeFrame / TIME_PEDESTAL_SKIP_FADE_FRAMES);
+            return;
+        }
         BgTokiSwd_FinishTimePedestal(this, play);
         return;
     }
