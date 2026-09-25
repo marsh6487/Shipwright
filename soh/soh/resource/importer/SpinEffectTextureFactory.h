@@ -4,7 +4,8 @@
 
 namespace SOH {
 
-// Keep oversized I8 spin-effect replacements in the native UV domain.
+// Keep exact allowlisted I4/I8 effect replacements in their native UV domain.
+// Historical factory names remain stable for existing resource registration.
 // Geometry and display-list selection remain entirely asset controlled.
 class SpinEffectTextureFactoryV0 final : public Ship::ResourceFactoryBinary {
   public:

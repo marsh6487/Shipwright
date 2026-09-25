@@ -1,7 +1,9 @@
 // Real actor code, game headers, and GBI. Engine allocation/resource services
 // are fixtures; these checks cannot prove visual appearance in a running game.
 #include "global.h"
+#include "overlays/actors/ovl_Arrow_Fire/z_arrow_fire.h"
 #include "overlays/actors/ovl_Arrow_Ice/z_arrow_ice.h"
+#include "overlays/actors/ovl_Arrow_Light/z_arrow_light.h"
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
 #include "soh/ResourceManagerHelpers.h"
 #include <math.h>
@@ -13,6 +15,12 @@ void ArrowIce_Draw(Actor*, PlayState*);
 void ArrowIce_Charge(ArrowIce*, PlayState*);
 void ArrowIce_Fly(ArrowIce*, PlayState*);
 void ArrowIce_Hit(ArrowIce*, PlayState*);
+void ArrowFire_Charge(ArrowFire*, PlayState*);
+void ArrowFire_Fly(ArrowFire*, PlayState*);
+void ArrowFire_Hit(ArrowFire*, PlayState*);
+void ArrowLight_Charge(ArrowLight*, PlayState*);
+void ArrowLight_Fly(ArrowLight*, PlayState*);
+void ArrowLight_Hit(ArrowLight*, PlayState*);
 
 static GraphicsContext gfx;
 static PlayState play;
@@ -23,6 +31,9 @@ static Mtx matrix;
 static u8 pixels[64 * 64];
 static int alt, asset, badLoad, customColors, matrixCount, matrixDepth;
 static int audioCalls, magicCalls;
+static int elementalImpactSounds, lastAudioFlagged;
+static u16 lastAudioId;
+static Actor* lastAudioActor;
 static int interpolationDepth, interpolationIds[8], matrixIds[8];
 static const void* interpolationKeys[8];
 static const void* matrixKeys[8];
@@ -38,6 +49,9 @@ static const char* texturePath = "__OTR__custom/henriko_effects/arrows/ice_snowf
     } while (0)
 
 int32_t CVarGetInteger(const char* name, int32_t fallback) {
+    if (!strcmp(name, CVAR_COSMETIC("Arrows.ElementalImpactSounds"))) {
+        return elementalImpactSounds < 0 ? fallback : elementalImpactSounds;
+    }
     return strstr(name, "Changed") ? customColors : fallback;
 }
 Color_RGB8 CVarGetColor24(const char* name, Color_RGB8 fallback) {
@@ -129,9 +143,15 @@ void Actor_ProcessInitChain(Actor* actor, InitChainEntry* chain) {
 }
 void Actor_PlaySfx_Flagged(Actor* actor, u16 id) {
     ++audioCalls;
+    lastAudioActor = actor;
+    lastAudioId = id;
+    lastAudioFlagged = 1;
 }
 void Audio_PlayActorSound2(Actor* actor, u16 id) {
     ++audioCalls;
+    lastAudioActor = actor;
+    lastAudioId = id;
+    lastAudioFlagged = 0;
 }
 void Magic_Reset(PlayState* context) {
     ++magicCalls;
@@ -160,10 +180,12 @@ static void setup(void) {
     ice.actionFunc = ArrowIce_Charge;
     alt = asset = 1;
     badLoad = customColors = audioCalls = magicCalls = 0;
+    elementalImpactSounds = -1; // Unset CVar must retain the native impact sound.
 }
 static size_t draw(void) {
     ArrowIce before = ice;
     EnArrow parentBefore = arrow;
+    int audioBefore = audioCalls, magicBefore = magicCalls;
     memset(commands, 0, sizeof(commands));
     gfx.polyXlu.p = commands;
     matrixCount = matrixDepth = interpolationDepth = 0;
@@ -171,7 +193,7 @@ static size_t draw(void) {
     REQUIRE(matrixDepth == 0 && interpolationDepth == 0 && gfx.polyXlu.p < commands + ARRAY_COUNT(commands));
     REQUIRE(memcmp(&before, &ice, sizeof(ice)) == 0);
     REQUIRE(memcmp(&parentBefore, &arrow, sizeof(arrow)) == 0);
-    REQUIRE(audioCalls == 0 && magicCalls == 0);
+    REQUIRE(audioCalls == audioBefore && magicCalls == magicBefore);
     return (size_t)(gfx.polyXlu.p - commands);
 }
 static int textures(size_t count, const char* suffix) {
@@ -284,7 +306,119 @@ static void interpolationKeepsPhasesSeparate(void) {
     REQUIRE(rotations[0] == 0.0f && rotations[1] == 0.0f && scales[1] == impactScale);
 }
 
+static void releaseKeepsSnowflake(void) {
+    Actor holder = { 0 };
+    setup();
+    arrow.actor.parent = &holder;
+    arrow.timer = 50;
+    ArrowIce_Charge(&ice, &play);
+    size_t count = draw();
+    f32 chargeScale = scales[0], chargeRotation = rotations[0];
+    int chargeAlpha = primAlpha(count, 0xAAFFFF), chargeId = matrixIds[0];
+    const void* chargeKey = matrixKeys[0];
+
+    // Exercise the real release transition. Its native alpha jumps to 255;
+    // the visible sprite must retain its size, opacity and interpolation key.
+    arrow.actor.parent = NULL;
+    ArrowIce_Charge(&ice, &play);
+    REQUIRE(ice.actionFunc == ArrowIce_Fly && ice.alpha == 255 && ice.radius == 10);
+    count = draw();
+    REQUIRE(textures(count, "ice_snowflake_poc2") == 1 && nativeGeometry(count) == 0);
+    REQUIRE(matrixCount == 1 && scales[0] == chargeScale && rotations[0] == chargeRotation);
+    REQUIRE(primAlpha(count, 0xAAFFFF) == chargeAlpha);
+    REQUIRE(matrixKeys[0] == chargeKey && matrixIds[0] == chargeId);
+
+    for (int frame = 0; frame < 8; ++frame) {
+        ++play.gameplayFrames;
+        arrow.actor.world.pos.x += 25;
+        ArrowIce_Fly(&ice, &play);
+        count = draw();
+        REQUIRE(textures(count, "ice_snowflake_poc2") == 1 && nativeGeometry(count) == 0);
+        REQUIRE(matrixCount == 1 && positions[0][0] == arrow.actor.world.pos.x);
+        REQUIRE(scales[0] > 0.355f && scales[0] < 0.395f);
+        REQUIRE(matrixKeys[0] == chargeKey && matrixIds[0] == chargeId);
+    }
+    memcpy(reference, commands, sizeof(commands));
+    play.pauseCtx.state = 6;
+    play.state.frames += 123;
+    REQUIRE(draw() == count && !memcmp(reference, commands, sizeof(commands)));
+    play.pauseCtx.state = 0;
+
+    // The pre-existing lifetime alpha must also fade the flight sprite, without
+    // letting the native cone return during the tail of flight.
+    arrow.timer = 33;
+    int previousAlpha = primAlpha(count, 0xAAFFFF);
+    for (int frame = 0; frame < 5; ++frame) {
+        ArrowIce_Fly(&ice, &play);
+        count = draw();
+        REQUIRE(textures(count, "ice_snowflake_poc2") == 1 && nativeGeometry(count) == 0);
+        int alpha = primAlpha(count, 0xAAFFFF);
+        REQUIRE(alpha > 0 && alpha < previousAlpha);
+        previousAlpha = alpha;
+    }
+
+    arrow.hitFlags = 1;
+    ArrowIce_Fly(&ice, &play);
+    REQUIRE(ice.actionFunc == ArrowIce_Hit && ice.timer == 32);
+    count = draw();
+    REQUIRE(textures(count, "ice_snowflake_poc2") == 1 && textures(count, "gFlashTex") == 1);
+    REQUIRE(nativeGeometry(count) == 0 && matrixCount == 2);
+    REQUIRE(matrixKeys[0] != chargeKey || matrixIds[0] != chargeId);
+    REQUIRE(matrixKeys[1] != chargeKey || matrixIds[1] != chargeId);
+}
+
+static void nativeImpactSounds(void) {
+    static const int options[] = { -1, 1, 0 };
+    Actor holder = { 0 };
+    for (size_t step = 0; step < ARRAY_COUNT(options); ++step) {
+        setup();
+        elementalImpactSounds = options[step];
+        ArrowFire fire = { 0 };
+        ArrowLight light = { 0 };
+        fire.actor.parent = light.actor.parent = &arrow.actor;
+        arrow.actor.parent = &holder;
+        arrow.timer = 50;
+        ArrowFire_Charge(&fire, &play);
+        REQUIRE(lastAudioId == NA_SE_PL_ARROW_CHARGE_FIRE - SFX_FLAG && lastAudioFlagged);
+        ArrowIce_Charge(&ice, &play);
+        REQUIRE(lastAudioId == NA_SE_PL_ARROW_CHARGE_ICE - SFX_FLAG && lastAudioFlagged);
+        ArrowLight_Charge(&light, &play);
+        REQUIRE(lastAudioId == NA_SE_PL_ARROW_CHARGE_LIGHT - SFX_FLAG && lastAudioFlagged);
+        REQUIRE(audioCalls == 3);
+
+        arrow.actor.parent = NULL;
+        audioCalls = 0;
+        ArrowFire_Fly(&fire, &play);
+        ArrowIce_Fly(&ice, &play);
+        ArrowLight_Fly(&light, &play);
+        REQUIRE(audioCalls == 0);
+        arrow.hitFlags = 1;
+
+        ArrowFire_Fly(&fire, &play);
+        REQUIRE(audioCalls == 1 && lastAudioActor == &fire.actor && !lastAudioFlagged);
+        REQUIRE(lastAudioId == (options[step] > 0 ? NA_SE_EV_FLAME_IGNITION : NA_SE_IT_EXPLOSION_FRAME));
+        REQUIRE(fire.actionFunc == ArrowFire_Hit && fire.timer == 32 && fire.alpha == 255);
+        ArrowFire_Hit(&fire, &play);
+        REQUIRE(audioCalls == 1);
+
+        ArrowIce_Fly(&ice, &play);
+        REQUIRE(audioCalls == 2 && lastAudioActor == &ice.actor && !lastAudioFlagged);
+        REQUIRE(lastAudioId == (options[step] > 0 ? NA_SE_EV_ICE_BROKEN : NA_SE_IT_EXPLOSION_ICE));
+        REQUIRE(ice.actionFunc == ArrowIce_Hit && ice.timer == 32 && ice.alpha == 255);
+        ArrowIce_Hit(&ice, &play);
+        REQUIRE(audioCalls == 2);
+
+        ArrowLight_Fly(&light, &play);
+        REQUIRE(audioCalls == 3 && lastAudioActor == &light.actor && !lastAudioFlagged);
+        REQUIRE(lastAudioId == (options[step] > 0 ? NA_SE_EN_LIGHT_ARROW_HIT : NA_SE_IT_EXPLOSION_LIGHT));
+        REQUIRE(light.actionFunc == ArrowLight_Hit && light.timer == 32 && light.alpha == 255);
+        ArrowLight_Hit(&light, &play);
+        REQUIRE(audioCalls == 3);
+    }
+}
+
 int main(void) {
+    nativeImpactSounds();
     // Missing addition: charging must submit one named high-resolution sprite.
     setup();
     size_t count = draw();
@@ -293,6 +427,7 @@ int main(void) {
     REQUIRE(nativeGeometry(count) == 0);
     heldChargeMotion();
     interpolationKeepsPhasesSeparate();
+    releaseKeepsSnowflake();
 
     // Fallback paths must produce identical native packets for every phase.
     for (int phase = 0; phase < 3; ++phase) {
@@ -311,14 +446,10 @@ int main(void) {
         asset = 1;
         badLoad = 1;
         REQUIRE(draw() == count && !memcmp(reference, commands, sizeof(commands)));
-        if (phase == 1) {
-            badLoad = 0;
-            REQUIRE(draw() == count && !memcmp(reference, commands, sizeof(commands)));
-        }
     }
     setup();
     ice.actionFunc = ArrowIce_Fly;
-    REQUIRE(textures(draw(), "ice_snowflake_poc2") == 0);
+    REQUIRE(textures(draw(), "ice_snowflake_poc2") == 1);
     setup();
     ice.radius = 0;
     REQUIRE(textures(draw(), "ice_snowflake_poc2") == 0);
@@ -368,8 +499,8 @@ int main(void) {
     REQUIRE(textures(draw(), "ice_snowflake_poc2") == 0);
     alt = 1;
     REQUIRE(textures(draw(), "ice_snowflake_poc2") == 1);
-    puts("PASS: custom charge/impact replace native geometry, gentle held motion, phase/layer interpolation, "
-         "native flight/fallbacks, missing/failed assets, phase gates, captured position, expansion/fade, "
-         "cosmetics, pause, and draw-only state preservation");
+    puts("PASS: continuous custom charge/release/flight/impact, gentle held motion, phase/layer interpolation, "
+         "native fallbacks, missing/failed assets, phase gates, flight fade, captured position, expansion/fade, "
+         "cosmetics, pause, draw-only state preservation, native Fire/Ice/Light opt-in impact sounds");
     return 0;
 }

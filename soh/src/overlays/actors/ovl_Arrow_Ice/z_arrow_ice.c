@@ -5,6 +5,7 @@
  */
 
 #include "z_arrow_ice.h"
+#include "soh/Enhancements/cosmetics/ElementalArrowSfx.h"
 
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
@@ -63,6 +64,9 @@ static void ArrowIce_DrawSnowflake(ArrowIce* this, PlayState* play, Vec3f* pos, 
         rotation = (play->gameplayFrames % 240) * (2.0f * M_PI / 240.0f);
         halfSize = (5.0f + 7.0f * charge) * (1.0f + 0.04f * pulse);
         opacity = charge * (0.92f + 0.08f * pulse);
+        if (this->actionFunc == ArrowIce_Fly) {
+            opacity *= this->alpha / 255.0f;
+        }
     }
     if (opacity <= 0.0f || this->alpha == 0) {
         return;
@@ -88,7 +92,7 @@ static void ArrowIce_DrawSnowflake(ArrowIce* this, PlayState* play, Vec3f* pos, 
     for (s32 layer = impact ? 0 : 1; layer < 2; ++layer) {
         f32 size = halfSize * (layer == 0 ? 0.32f : 1.0f);
         u8 alpha = (u8)(opacity * (layer == 0 ? 245.0f : (impact ? 210.0f : 96.0f)));
-        // Keep charge, impact flash and impact snowflake matrices independent.
+        // Charge and flight share a continuous billboard; impact layers stay separate.
         FrameInterpolation_RecordOpenChild(this, impact ? layer + 1 : 0);
         Matrix_Translate(pos->x, pos->y, pos->z, MTXMODE_NEW);
         Matrix_ReplaceRotation(&play->billboardMtxF);
@@ -256,7 +260,7 @@ void ArrowIce_Fly(ArrowIce* this, PlayState* play) {
     func_80867E8C(&this->unkPos, &this->actor.world.pos, 0.05f);
 
     if (arrow->hitFlags & 1) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_IT_EXPLOSION_ICE);
+        Audio_PlayActorSound2(&this->actor, ElementalArrow_GetImpactSfx(NA_SE_IT_EXPLOSION_ICE));
         ArrowIce_SetupAction(this, ArrowIce_Hit);
         this->timer = 32;
         this->alpha = 255;
@@ -296,7 +300,8 @@ void ArrowIce_Draw(Actor* thisx, PlayState* play) {
     }
 
     if ((arrow != NULL) && (arrow->actor.update != NULL) && (this->timer < 255)) {
-        s32 snowflake = (this->actionFunc == ArrowIce_Charge || this->actionFunc == ArrowIce_Hit) &&
+        s32 snowflake = (this->actionFunc == ArrowIce_Charge || this->actionFunc == ArrowIce_Fly ||
+                         this->actionFunc == ArrowIce_Hit) &&
                         ResourceMgr_IsAltAssetsEnabled() && ResourceMgr_FileAltExists(sIceSnowflakeTex) &&
                         ResourceGetDataByName(sIceSnowflakeTex) != NULL;
         s32 snowflakeImpact = snowflake && this->actionFunc == ArrowIce_Hit;
@@ -323,8 +328,8 @@ void ArrowIce_Draw(Actor* thisx, PlayState* play) {
             gDPFillRectangle(POLY_XLU_DISP++, 0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
         }
 
-        // The custom snowflake replaces charge and impact geometry. Flight and
-        // missing/disabled/failed custom textures retain the native effect.
+        // Keep the custom effect through flight so release cannot reintroduce
+        // the native cone. Missing/disabled/failed textures retain native geometry.
         if (!snowflake) {
             Gfx_SetupDL_25Xlu(play->state.gfxCtx);
             gDPSetPrimColor(POLY_XLU_DISP++, 0x80, 0x80, primaryColor.r, primaryColor.g, primaryColor.b, this->alpha);

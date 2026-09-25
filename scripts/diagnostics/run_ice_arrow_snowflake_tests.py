@@ -1,4 +1,4 @@
-"""Exercise the real ice-arrow actor and GBI commands without starting SoH."""
+"""Exercise real Ice Arrow GBI/lifecycle and native elemental impact sound paths."""
 from pathlib import Path
 import os
 import re
@@ -21,6 +21,8 @@ def main():
         subprocess.run([os.environ.get("CC", "cc"), *flags,
                         "soh/tests/ice_arrow_snowflake_test.c",
                         "soh/src/overlays/actors/ovl_Arrow_Ice/z_arrow_ice.c",
+                        "soh/src/overlays/actors/ovl_Arrow_Fire/z_arrow_fire.c",
+                        "soh/src/overlays/actors/ovl_Arrow_Light/z_arrow_light.c",
                         "-lm", "-o", str(binary)], cwd=ROOT, check=True)
         subprocess.run([str(binary)], check=True)
 
