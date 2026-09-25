@@ -6,6 +6,7 @@
 
 #include <libultraship/libultra.h>
 #include "global.h"
+#include "din_fire_shield.h"
 
 #include "overlays/actors/ovl_Bg_Heavy_Block/z_bg_heavy_block.h"
 #include "overlays/actors/ovl_Bg_Toki_Swd/z_bg_toki_swd.h"
@@ -12381,6 +12382,7 @@ void Player_Init(Actor* thisx, PlayState* play2) {
     s32 respawnFlag;
     s32 respawnMode;
 
+    DinFireShield_Reset();
     play->shootingGalleryStatus = play->bombchuBowlingStatus = 0;
 
     play->playerInit = Player_InitCommon;
@@ -14325,6 +14327,7 @@ void Player_Update(Actor* thisx, PlayState* play) {
     }
 
     GameInteractor_ExecuteOnPlayerUpdate();
+    DinFireShield_Update(play, this);
 
     // SW97 Shadow Medallion heart→magic exchange — must run before the spell
     // cast pipeline aborts on zero magic, so it lives outside that gate.

@@ -15,6 +15,7 @@ python3 -B scripts/diagnostics/run_epona_cosmetics_tests.py
 python3 -B scripts/diagnostics/run_alt_segment_binding_tests.py
 python3 -B scripts/diagnostics/run_house_rocs_feather_tests.py
 python3 -B scripts/diagnostics/run_zora_barrier_cosmetics_tests.py
+python3 -B scripts/diagnostics/run_din_fire_shield_tests.py
 python3 -B scripts/diagnostics/run_oot_custom_cosmetics_tests.py
 python3 -B scripts/diagnostics/run_stat_upgrade_tests.py
 python3 -B scripts/diagnostics/run_chest_size_tests.py

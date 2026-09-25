@@ -1,4 +1,5 @@
 #include "global.h"
+#include "din_fire_shield.h"
 #include <libultraship/bridge/resourcebridge.h>
 #include "objects/object_gi_key/object_gi_key.h"
 #include "objects/object_gi_jewel/object_gi_jewel.h"
@@ -400,6 +401,7 @@ DrawItemTableEntry sDrawItemTable[] = {
  * Calls the corresponding draw function for the given draw ID
  */
 void GetItem_Draw(PlayState* play, s16 drawId) {
+    if (DinFireShield_DrawItem(play, drawId)) return;
     sDrawItemTable[drawId].drawFunc(play, drawId);
 }
 

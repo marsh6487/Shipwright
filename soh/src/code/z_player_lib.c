@@ -1,4 +1,5 @@
 #include "global.h"
+#include "din_fire_shield.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "objects/gameplay_field_keep/gameplay_field_keep.h"
 #include "objects/object_link_boy/object_link_boy.h"
@@ -2694,6 +2695,7 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
     } else if (limbIndex == PLAYER_LIMB_R_HAND) {
         Actor* heldActor = this->heldActor;
 
+        DinFireShield_Draw(play, this);
         ItemEquip_CaptureHandMatrix();
 
         if (this->rightHandType == PLAYER_MODELTYPE_RH_FF) {

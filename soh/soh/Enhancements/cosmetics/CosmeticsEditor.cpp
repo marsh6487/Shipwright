@@ -190,6 +190,8 @@ std::map<std::string, CosmeticOption> cosmeticOptions = {
     COSMETIC_OPTION("Custom.ZoraMagicShield",          "Zora Magic Shield",        COSMETICS_GROUP_MAGIC,        ColorRGBA8(  0, 150, 255, 255), false, true, false),
     COSMETIC_OPTION("Custom.ZoraMagicShieldGlow",             "Zora Shield Glow",         COSMETICS_GROUP_MAGIC,        ColorRGBA8(  0,   0, 100, 255), false, true, false),
     COSMETIC_OPTION("Custom.ZoraMagicShieldHighlights",       "Zora Shield Highlights",   COSMETICS_GROUP_MAGIC,        ColorRGBA8(170, 255, 255, 255), false, true, false),
+    COSMETIC_OPTION("Custom.DinFireShieldCore",        "Din Fire Shield Core",     COSMETICS_GROUP_MAGIC,        ColorRGBA8(255, 225, 122, 255), false, true, false),
+    COSMETIC_OPTION("Custom.DinFireShieldOuter",       "Din Fire Shield Outer",    COSMETICS_GROUP_MAGIC,        ColorRGBA8(255,  43,   3, 255), false, true, false),
     COSMETIC_OPTION("Link.KokiriTunic",             "Kokiri Tunic",             COSMETICS_GROUP_LINK,         ColorRGBA8( 30, 105,  27, 255), false, true, false),
     COSMETIC_OPTION("Link.GoronTunic",              "Goron Tunic",              COSMETICS_GROUP_LINK,         ColorRGBA8(100,  20,   0, 255), false, true, false),
     COSMETIC_OPTION("Link.ZoraTunic",               "Zora Tunic",               COSMETICS_GROUP_LINK,         ColorRGBA8(  0,  60, 100, 255), false, true, false),

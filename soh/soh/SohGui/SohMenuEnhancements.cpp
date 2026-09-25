@@ -780,6 +780,13 @@ void SohMenu::AddMenuEnhancements() {
         .CVar(CVAR_ENHANCEMENT("EquipmentAlwaysVisible"))
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip("Makes all equipment visible, regardless of age."));
+    AddWidget(path, "Din Fire Shield (POC)", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("DinFireShield"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Forms an animated flame shield while guarding with Din's bracer. Requires the fire-shield add-on, "
+            "the matching Din bracer pack, and Alternate Assets. POC supports child Deku and adult Hylian shields. "
+            "Blocking follows the equipped shield's normal rules."));
     AddWidget(path, "Hide Back Equipment and Scabbard", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("HideBackEquipment"))
         .RaceDisable(false)
