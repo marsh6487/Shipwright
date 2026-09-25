@@ -1,4 +1,5 @@
 #include "global.h"
+#include "align_asset_macro.h"
 #include "din_fire_shield.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
@@ -16,6 +17,11 @@ static const char sRimVertices[] = FIRE_ROOT "RimVertices";
 static const char sGIBracer[] = FIRE_ROOT "GIBracerDL";
 static const char sGIVertices[] = FIRE_ROOT "GIBracerVertices";
 static const char sIcon[] = FIRE_ROOT "IconTex";
+// Give the interpreter named resources so it retains HD dimensions/flags.
+// Its OTR signature check requires even-aligned addresses.
+static const ALIGN_ASSET(2) char sFlameTextureRef[] = "__OTR__" FIRE_ROOT "FlameTex";
+static const ALIGN_ASSET(2) char sFlowTextureRef[] = "__OTR__" FIRE_ROOT "FlowTex";
+static const ALIGN_ASSET(2) char sIconTextureRef[] = "__OTR__" FIRE_ROOT "IconTex";
 static const char sChildBracer[] = "objects/object_link_child/DinSleekEquipmentPOC1_OOT_Child/BracerDL";
 static const char sAdultBracer[] = "objects/object_link_boy/DinSleekEquipmentPOC1_OOT_Adult/BracerDL";
 
@@ -66,7 +72,7 @@ static s32 DinFireShield_ItemEnabled(u16 itemId) {
 
 void* DinFireShield_ItemIcon(u16 itemId) {
     if (!DinFireShield_ItemEnabled(itemId) || !ResourceMgr_FileExists(sIcon)) return NULL;
-    return ResourceGetDataByName(sIcon);
+    return ResourceGetDataByName(sIcon) != NULL ? (void*)sIconTextureRef : NULL;
 }
 
 // The option and the matching bracer pack are both required. This effect owns
@@ -127,6 +133,15 @@ void DinFireShield_Update(PlayState* play, Player* player) {
     const s32 guarding = (player->stateFlags1 & PLAYER_STATE1_SHIELDING) &&
                         player->rightHandType == PLAYER_MODELTYPE_RH_SHIELD;
     sFire.opacity = CLAMP(sFire.opacity + (guarding ? 0.25f : -0.18f), 0.0f, 1.0f);
+    if (guarding && CVarGetInteger(CVAR_ENHANCEMENT("DinFireShieldSfx"), 0)) {
+        FireResources resources;
+        if (DinFireShield_Load(&resources)) {
+            // Fire Arrow's sustained flame sound. Direct positional playback
+            // leaves the player's own actor.sfx slot and audio flags intact.
+            // Without SFX_FLAG it expires when guarding stops refreshing it.
+            Audio_PlayActorSound2(&player->actor, NA_SE_PL_ARROW_CHARGE_FIRE - SFX_FLAG);
+        }
+    }
 }
 
 // Both the held shield and get-item model use this material/animation path.
@@ -154,7 +169,7 @@ static void DinFireShield_DrawFlames(PlayState* play, const FireResources* resou
     gSPTexture(POLY_XLU_DISP++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON);
     gDPSetCombineLERP(POLY_XLU_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT,
                      TEXEL0, 0, SHADE, 0, 0, 0, 0, COMBINED, COMBINED, 0, PRIMITIVE, 0);
-    gDPLoadTextureBlock(POLY_XLU_DISP++, resources->flow, G_IM_FMT_I, G_IM_SIZ_8b, 64, 32, 0,
+    gDPLoadTextureBlock(POLY_XLU_DISP++, sFlowTextureRef, G_IM_FMT_I, G_IM_SIZ_8b, 64, 32, 0,
                        G_TX_WRAP, G_TX_WRAP, 6, 5, G_TX_NOLOD, G_TX_NOLOD);
     // Emit tile offsets inline, not through an eye/mouth/scene texture segment.
     gDPSetTileSize(POLY_XLU_DISP++, 0, 0, surfaceScroll, 63 << 2, surfaceScroll + (31 << 2));
@@ -162,7 +177,7 @@ static void DinFireShield_DrawFlames(PlayState* play, const FireResources* resou
     gDPSetEnvColor(POLY_XLU_DISP++, outer.r, outer.g, outer.b, 255);
     gSPDisplayList(POLY_XLU_DISP++, resources->surface);
     gDPPipeSync(POLY_XLU_DISP++);
-    gDPLoadTextureBlock(POLY_XLU_DISP++, resources->flame, G_IM_FMT_I, G_IM_SIZ_8b, 64, 32, 0,
+    gDPLoadTextureBlock(POLY_XLU_DISP++, sFlameTextureRef, G_IM_FMT_I, G_IM_SIZ_8b, 64, 32, 0,
                        G_TX_WRAP, G_TX_WRAP, 6, 5, G_TX_NOLOD, G_TX_NOLOD);
     gDPSetTileSize(POLY_XLU_DISP++, 0, 0, rimScroll, 63 << 2, rimScroll + (31 << 2));
     gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, core.r, core.g, core.b, alpha);

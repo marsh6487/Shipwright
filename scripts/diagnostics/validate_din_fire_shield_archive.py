@@ -19,6 +19,26 @@ def hash_path(path):
     return value
 
 
+def texture_pixels(tex, kind, native_size):
+    resource, version = struct.unpack_from("<II", tex, 4)
+    assert resource == 0x4F544558
+    if version == 0:
+        width, height = native_size
+        size = width * height * (4 if kind == 1 else 1)
+        assert struct.unpack_from("<IIII", tex, 64) == (kind, width, height, size)
+        assert len(tex) == 80 + size
+        return tex[80:], 4 if kind == 1 else 1, (width, height)
+    assert version == 1
+    fmt, width, height, flags, hscale, vscale, size = struct.unpack_from("<IIIIffI", tex, 64)
+    assert fmt == kind and flags == 3 and hscale == vscale == 1
+    assert width > 0 and height > 0 and size == width * height * 4
+    assert len(tex) == 92 + size
+    pixels = tex[92:]
+    if kind == 6:
+        assert pixels[0::4] == pixels[1::4] == pixels[2::4] == pixels[3::4]
+    return pixels, 4, (width, height)
+
+
 def validate(path):
     with zipfile.ZipFile(path) as archive:
         assert archive.testzip() is None
@@ -32,16 +52,16 @@ def validate(path):
     assert not manifest["overrides"]
     for name in wanted:
         assert manifest["resources"][name] == hashlib.sha256(files[name]).hexdigest()
+    dimensions = {}
     for name in ("FlameTex", "FlowTex"):
-        tex = files[root + name]
-        assert struct.unpack_from("<II", tex, 4) == (0x4F544558, 0)
-        assert struct.unpack_from("<IIII", tex, 64) == (6, 64, 32, 2048)
-        assert len(tex) == 2128 and max(tex[80:]) > 180
-    assert min(files[root + "FlameTex"][80:]) == 0
-    icon = files[root + "IconTex"]
-    assert struct.unpack_from("<II", icon, 4) == (0x4F544558, 0)
-    assert struct.unpack_from("<IIII", icon, 64) == (1, 32, 32, 4096)
-    assert len(icon) == 4176 and min(icon[83::4]) == 0 and max(icon[83::4]) == 255
+        pixels, channels, dimensions[name] = texture_pixels(files[root + name], 6, (64, 32))
+        assert max(pixels[::channels]) > 180
+        if name == "FlameTex":
+            assert min(pixels[::channels]) == 0
+        assert dimensions[name] == (manifest["texture_contract"]["width"], manifest["texture_contract"]["height"])
+    pixels, channels, dimensions["IconTex"] = texture_pixels(files[root + "IconTex"], 1, (32, 32))
+    assert min(pixels[3::4]) == 0 and max(pixels[3::4]) == 255
+    assert dimensions["IconTex"] == (manifest["icon_contract"]["width"], manifest["icon_contract"]["height"])
     hashes = {hash_path(name): name for name in files}
     total = 0
     for layer in ("Surface", "Rim", "GIBracer"):
@@ -84,7 +104,8 @@ def validate(path):
         assert triangles == manifest["geometry"][layer.lower() + "_triangles"]
         total += triangles
     result = {"archive": str(path), "sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(),
-              "private_resources": len(wanted), "triangles": total, "runtime_tested": False}
+              "private_resources": len(wanted), "triangles": total, "texture_dimensions": dimensions,
+              "runtime_tested": False}
     print(json.dumps(result, indent=2))
     return result
 

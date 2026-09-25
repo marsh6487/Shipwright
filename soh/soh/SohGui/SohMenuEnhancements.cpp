@@ -787,6 +787,13 @@ void SohMenu::AddMenuEnhancements() {
             "Forms an animated flame shield while guarding with Din's bracer. Requires the fire-shield add-on, "
             "the matching Din bracer pack, and Alternate Assets. POC supports child Deku and adult Hylian shields. "
             "Blocking follows the equipped shield's normal rules."));
+    AddWidget(path, "Shield SFX", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("DinFireShieldSfx"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("DinFireShield"), 0) == 0;
+        })
+        .Options(CheckboxOptions().Tooltip("Plays a flame sound while guarding with Din's Fire Shield. Off by default."));
     AddWidget(path, "Hide Back Equipment and Scabbard", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("HideBackEquipment"))
         .RaceDisable(false)
