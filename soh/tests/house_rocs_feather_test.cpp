@@ -84,6 +84,11 @@ void func_8002ED80(Actor*, PlayState*, s32) {
 void GetItem_Draw(PlayState*, s16) {
     REQUIRE(false);
 }
+// This fixture supplies its own unrelated FeatherDraw callback. The real NEI
+// renderer's bindings/fallback are exercised by tests/nei_gi/presentation_test.cpp.
+bool NeiGi_Draw(PlayState*, GetItemEntry*) {
+    return false;
+}
 Actor* Actor_Spawn(ActorContext* context, PlayState* state, s16 id, f32 x, f32 y, f32 z, s16 rotX, s16 rotY, s16 rotZ,
                    s16 params) {
     spawnCalls++;

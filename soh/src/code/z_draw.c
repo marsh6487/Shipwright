@@ -1,6 +1,7 @@
 #include "global.h"
 #include "din_fire_shield.h"
 #include <libultraship/bridge/resourcebridge.h>
+#include "soh/Enhancements/randomizer/NeiGiPresentation.h"
 #include "objects/object_gi_key/object_gi_key.h"
 #include "objects/object_gi_jewel/object_gi_jewel.h"
 #include "objects/object_gi_melody/object_gi_melody.h"
@@ -411,6 +412,9 @@ void GetItem_Draw(PlayState* play, s16 drawId) {
  * Uses the Custom Draw Function if it exists, or just calls `GetItem_Draw`
  */
 void GetItemEntry_Draw(PlayState* play, GetItemEntry getItemEntry) {
+    if (NeiGi_Draw(play, &getItemEntry)) {
+        return;
+    }
     if (getItemEntry.drawFunc != NULL) {
         getItemEntry.drawFunc(play, &getItemEntry);
     } else {
