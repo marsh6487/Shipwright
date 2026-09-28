@@ -26,23 +26,31 @@ class RecordingBackend : public BackendDefaults {
     std::map<std::pair<uint64_t, uint64_t>, ShaderProgram> programs;
     std::vector<uint32_t> output;
     std::vector<uint64_t> events;
-    GfxClipParameters clip{true, false};
+    GfxClipParameters clip{ true, false };
     size_t queries = 0, triangles = 0;
     bool recording = true;
-    GfxClipParameters GetClipParameters() override { return clip; }
+    GfxClipParameters GetClipParameters() override {
+        return clip;
+    }
     ShaderProgram* LookupShader(uint64_t a, uint64_t b) override {
-        auto i = programs.find({a, b});
+        auto i = programs.find({ a, b });
         return i == programs.end() ? nullptr : &i->second;
     }
     ShaderProgram* CreateAndLoadNewShader(uint64_t a, uint64_t b) override {
-        auto& p = programs[{a, b}];
-        p.id0 = a; p.id1 = b;
+        auto& p = programs[{ a, b }];
+        p.id0 = a;
+        p.id1 = b;
         gfx_cc_get_features(a, b, &p.features);
         LoadShader(&p);
         return &p;
     }
-    void LoadShader(ShaderProgram* p) override { event(1, p->id0); event(2, p->id1); }
-    void UnloadShader(ShaderProgram*) override { event(3, 0); }
+    void LoadShader(ShaderProgram* p) override {
+        event(1, p->id0);
+        event(2, p->id1);
+    }
+    void UnloadShader(ShaderProgram*) override {
+        event(3, 0);
+    }
     void ShaderGetInfo(ShaderProgram* p, uint8_t* count, bool textures[2]) override {
         ++queries;
         *count = p->features.numInputs;
@@ -52,22 +60,48 @@ class RecordingBackend : public BackendDefaults {
     void SetSamplerParameters(int s, bool linear, uint32_t cms, uint32_t cmt) override {
         event(4, s | (linear << 8) | (cms << 16) | (cmt << 24));
     }
-    void SetDepthTestAndMask(bool a, bool b) override { event(5, a | (b << 1)); }
-    void SetZmodeDecal(bool a) override { event(6, a); }
-    void SetViewport(int x, int y, int w, int h) override { event(7, x); event(7, y); event(7, w); event(7, h); }
-    void SetScissor(int x, int y, int w, int h) override { event(8, x); event(8, y); event(8, w); event(8, h); }
-    void SetUseAlpha(bool a) override { event(9, a); }
-    void SetCurrentPrimDepth(float z) override { uint32_t bits; memcpy(&bits, &z, 4); event(10, bits); }
+    void SetDepthTestAndMask(bool a, bool b) override {
+        event(5, a | (b << 1));
+    }
+    void SetZmodeDecal(bool a) override {
+        event(6, a);
+    }
+    void SetViewport(int x, int y, int w, int h) override {
+        event(7, x);
+        event(7, y);
+        event(7, w);
+        event(7, h);
+    }
+    void SetScissor(int x, int y, int w, int h) override {
+        event(8, x);
+        event(8, y);
+        event(8, w);
+        event(8, h);
+    }
+    void SetUseAlpha(bool a) override {
+        event(9, a);
+    }
+    void SetCurrentPrimDepth(float z) override {
+        uint32_t bits;
+        memcpy(&bits, &z, 4);
+        event(10, bits);
+    }
     void DrawTriangles(float* data, size_t length, size_t count) override {
         triangles += count;
-        event(11, count); event(12, length);
+        event(11, count);
+        event(12, length);
         if (recording) {
             size_t at = output.size();
             output.resize(at + length);
             memcpy(output.data() + at, data, length * sizeof(float));
         }
     }
-    void event(uint64_t kind, uint64_t value) { if (recording) { events.push_back(kind); events.push_back(value); } }
+    void event(uint64_t kind, uint64_t value) {
+        if (recording) {
+            events.push_back(kind);
+            events.push_back(value);
+        }
+    }
 };
 
 // Texture pixels/archives are outside this fixture; preserve observable imports
@@ -85,8 +119,11 @@ void Interpreter::ImportTextureMask(int i, int tile) {
 using namespace Fast;
 
 // Compile unchanged against the parent commit to demonstrate the missing reuse.
-template<class T> void beginRun(T& gfx, bool enabled) {
-    if constexpr (requires { gfx.mTriangleState; gfx.mTriangleStateReuseAllowed; }) {
+template <class T> void beginRun(T& gfx, bool enabled) {
+    if constexpr (requires {
+                      gfx.mTriangleState;
+                      gfx.mTriangleStateReuseAllowed;
+                  }) {
         gfx.mTriangleState.valid = false;
         gfx.mTriangleStateReuseAllowed = enabled;
     }
@@ -103,15 +140,21 @@ struct Fixture {
         gfx.mRdp->other_mode_l = Z_CMP | Z_UPD;
         gfx.mRsp->geometry_mode = G_ZBUFFER;
         gfx.mRdp->combine_mode = uint64_t(G_CCMUX_SHADE) << 13;
-        gfx.mRdp->prim_color = {51, 102, 153, 204};
-        gfx.mRdp->env_color = {200, 150, 100, 50};
-        gfx.mRdp->fog_color = {10, 20, 30, 40};
-        gfx.mRdp->blend_color = {40, 30, 20, 10};
-        gfx.mRdp->grayscale_color = {100, 120, 130, 140};
+        gfx.mRdp->prim_color = { 51, 102, 153, 204 };
+        gfx.mRdp->env_color = { 200, 150, 100, 50 };
+        gfx.mRdp->fog_color = { 10, 20, 30, 40 };
+        gfx.mRdp->blend_color = { 40, 30, 20, 10 };
+        gfx.mRdp->grayscale_color = { 100, 120, 130, 140 };
         for (unsigned i = 0; i < MAX_VERTICES; ++i) {
             auto& v = gfx.mRsp->loaded_vertices[i];
-            v = {float(i % 8) * .125f, float(i / 8) * .125f, .25f, 1.f + float(i % 3),
-                 float(i * 17), float(i * 31), {uint8_t(i * 3), uint8_t(i * 5), uint8_t(i * 7), 255}, 0};
+            v = { float(i % 8) * .125f,
+                  float(i / 8) * .125f,
+                  .25f,
+                  1.f + float(i % 3),
+                  float(i * 17),
+                  float(i * 31),
+                  { uint8_t(i * 3), uint8_t(i * 5), uint8_t(i * 7), 255 },
+                  0 };
         }
         for (int i = 0; i < 2; ++i) {
             gfx.mRenderingState.mTextures[i] = &textures[i];
@@ -133,7 +176,10 @@ struct Fixture {
 };
 
 static void require(bool value, const char* message) {
-    if (!value) { std::cerr << "FAIL: " << message << '\n'; std::exit(1); }
+    if (!value) {
+        std::cerr << "FAIL: " << message << '\n';
+        std::exit(1);
+    }
 }
 
 static void reuseTest() {
@@ -148,8 +194,9 @@ static void reuseTest() {
 
 static void configure(Fixture& f, unsigned variant);
 
-template<class T> uint64_t packedMask(const T& gfx) {
-    if constexpr (requires { gfx.mTriangleState.packedVertexMask; }) return gfx.mTriangleState.packedVertexMask;
+template <class T> uint64_t packedMask(const T& gfx) {
+    if constexpr (requires { gfx.mTriangleState.packedVertexMask; })
+        return gfx.mTriangleState.packedVertexMask;
     return 0;
 }
 
@@ -186,12 +233,13 @@ static void packedVertexReuseTest() {
 
 static void packedFlushAndBoundaryTest() {
     Fixture baseline, optimized;
-    for (auto* f : {&baseline, &optimized}) {
+    for (auto* f : { &baseline, &optimized }) {
         configure(*f, 3);
         beginRun(f->gfx, f == &optimized);
         f->gfx.GfxSpTri1(63, 0, 63, false);
-        if (f == &optimized) require(packedMask(f->gfx) == ((uint64_t{1} << 63) | 1),
-                                     "index 63 and repeated indices must fit the validity mask");
+        if (f == &optimized)
+            require(packedMask(f->gfx) == ((uint64_t{ 1 } << 63) | 1),
+                    "index 63 and repeated indices must fit the validity mask");
         f->gfx.Flush();
         require(packedMask(f->gfx) == 0, "explicit flush must invalidate submission-buffer offsets");
         // Preserve prepared material state across this flush, then overwrite the
@@ -199,7 +247,8 @@ static void packedFlushAndBoundaryTest() {
         f->gfx.GfxSpTri1(0, 1, 63, false);
         f->gfx.GfxSpTri1(1, 63, 0, false);
         f->gfx.Flush();
-        for (unsigned i = 64; i < 68; ++i) f->gfx.mRsp->loaded_vertices[i] = f->gfx.mRsp->loaded_vertices[i-64];
+        for (unsigned i = 64; i < 68; ++i)
+            f->gfx.mRsp->loaded_vertices[i] = f->gfx.mRsp->loaded_vertices[i - 64];
         f->gfx.GfxSpTri1(64, 65, 67, true);
         f->gfx.GfxSpTri1(65, 66, 67, true);
         require(packedMask(f->gfx) == 0, "temporary rectangle vertices must bypass packed reuse");
@@ -210,8 +259,8 @@ static void packedFlushAndBoundaryTest() {
     std::cout << "PASS packed offsets reset on flush and preserve index/rectangle boundaries\n";
 }
 
-
-static uint64_t combine(unsigned a, unsigned b, unsigned c, unsigned d, unsigned aa, unsigned ab, unsigned ac, unsigned ad) {
+static uint64_t combine(unsigned a, unsigned b, unsigned c, unsigned d, unsigned aa, unsigned ab, unsigned ac,
+                        unsigned ad) {
     return (a & 15) | ((b & 15) << 4) | ((c & 31) << 8) | ((d & 7) << 13) |
            (uint64_t((aa & 7) | ((ab & 7) << 3) | ((ac & 7) << 6) | ((ad & 7) << 9)) << 16);
 }
@@ -221,8 +270,8 @@ static void configure(Fixture& f, unsigned variant) {
     const unsigned material = variant % 5;
     uint64_t shade = combine(15, 15, 31, G_CCMUX_SHADE, 7, 7, 7, G_ACMUX_SHADE);
     uint64_t texture = combine(G_CCMUX_TEXEL0, 15, G_CCMUX_SHADE, 7, G_ACMUX_TEXEL0, 7, G_ACMUX_SHADE, 7);
-    uint64_t dual = combine(G_CCMUX_TEXEL0, G_CCMUX_TEXEL1, G_CCMUX_ENVIRONMENT, G_CCMUX_PRIMITIVE,
-                            G_ACMUX_TEXEL0, G_ACMUX_TEXEL1, G_ACMUX_PRIMITIVE, G_ACMUX_ENVIRONMENT);
+    uint64_t dual = combine(G_CCMUX_TEXEL0, G_CCMUX_TEXEL1, G_CCMUX_ENVIRONMENT, G_CCMUX_PRIMITIVE, G_ACMUX_TEXEL0,
+                            G_ACMUX_TEXEL1, G_ACMUX_PRIMITIVE, G_ACMUX_ENVIRONMENT);
     r.combine_mode = material == 0 ? shade : (material == 1 ? texture : dual);
     r.other_mode_h = (variant & 1 ? G_TF_BILERP : G_TF_POINT);
     if (material >= 3) {
@@ -230,25 +279,36 @@ static void configure(Fixture& f, unsigned variant) {
         r.combine_mode |= combine(G_CCMUX_COMBINED, 15, G_CCMUX_SHADE, 7, G_ACMUX_COMBINED, 7, G_ACMUX_SHADE, 7) << 28;
     }
     r.other_mode_l = Z_CMP | Z_UPD;
-    if (variant & 2) r.other_mode_l |= (G_BL_CLR_MEM << 20) | (G_BL_1MA << 16);
-    if (variant & 4) r.other_mode_l |= uint32_t(G_BL_CLR_FOG) << 30;
-    if (variant & 8) r.other_mode_l = (r.other_mode_l & ~(3u << 30)) | (uint32_t(G_BL_CLR_BL) << 30);
-    if (variant & 16) r.other_mode_l |= G_ZS_PRIM | ZMODE_DEC;
-    if (variant & 32) r.other_mode_l |= CVG_X_ALPHA;
+    if (variant & 2)
+        r.other_mode_l |= (G_BL_CLR_MEM << 20) | (G_BL_1MA << 16);
+    if (variant & 4)
+        r.other_mode_l |= uint32_t(G_BL_CLR_FOG) << 30;
+    if (variant & 8)
+        r.other_mode_l = (r.other_mode_l & ~(3u << 30)) | (uint32_t(G_BL_CLR_BL) << 30);
+    if (variant & 16)
+        r.other_mode_l |= G_ZS_PRIM | ZMODE_DEC;
+    if (variant & 32)
+        r.other_mode_l |= CVG_X_ALPHA;
     r.grayscale = variant & 64;
     r.prim_depth = (variant * 71) % 32768;
     r.prim_lod_fraction = variant % 256;
-    r.viewport = {int16_t(variant % 7), int16_t(variant % 11), 640, 480};
-    r.scissor = {0, 0, 640, 480};
+    r.viewport = { int16_t(variant % 7), int16_t(variant % 11), 640, 480 };
+    r.scissor = { 0, 0, 640, 480 };
     r.viewport_or_scissor_changed = true;
     f.gfx.mRsp->geometry_mode = G_ZBUFFER;
     switch ((variant / 128) % 4) {
-        case 1: f.gfx.mRsp->geometry_mode |= F3DEX2_G_CULL_FRONT; break;
-        case 2: f.gfx.mRsp->geometry_mode |= F3DEX2_G_CULL_BACK; break;
-        case 3: f.gfx.mRsp->geometry_mode |= F3DEX2_G_CULL_BOTH; break;
+        case 1:
+            f.gfx.mRsp->geometry_mode |= F3DEX2_G_CULL_FRONT;
+            break;
+        case 2:
+            f.gfx.mRsp->geometry_mode |= F3DEX2_G_CULL_BACK;
+            break;
+        case 3:
+            f.gfx.mRsp->geometry_mode |= F3DEX2_G_CULL_BOTH;
+            break;
     }
     f.gfx.mRsp->extra_geometry_mode = variant & 512 ? G_EX_INVERT_CULLING : 0;
-    f.backend.clip = {bool(variant & 1024), bool(variant & 2048)};
+    f.backend.clip = { bool(variant & 1024), bool(variant & 2048) };
     for (unsigned i = 0; i < MAX_VERTICES; ++i) {
         auto& v = f.gfx.mRsp->loaded_vertices[i];
         v.w = (variant & 4096) && i % 3 == 0 ? -1.f : 1.f + float(i % 3);
@@ -281,7 +341,10 @@ static void equalOutput(const Fixture& a, const Fixture& b) {
 
 static uint64_t digest(const std::vector<uint32_t>& data) {
     uint64_t result = 1469598103934665603ull;
-    for (auto bits : data) { result ^= bits; result *= 1099511628211ull; }
+    for (auto bits : data) {
+        result ^= bits;
+        result *= 1099511628211ull;
+    }
     return result;
 }
 
@@ -295,27 +358,34 @@ static void equivalenceTest() {
         unsigned count = variant % 127 == 0 ? 600 : 17;
         baseline.triangles(count);
         optimized.triangles(count);
-        baseline.gfx.Flush(); optimized.gfx.Flush();
+        baseline.gfx.Flush();
+        optimized.gfx.Flush();
         equalOutput(baseline, optimized);
         // Comparison above is exact; retain a compact reproducible parent-build digest below.
         if (variant % 1024 == 1023) {
-            std::cout << "output " << variant << " " << std::hex << digest(optimized.backend.output) << std::dec << '\n';
-            baseline.backend.output.clear(); optimized.backend.output.clear();
-            baseline.backend.events.clear(); optimized.backend.events.clear();
+            std::cout << "output " << variant << " " << std::hex << digest(optimized.backend.output) << std::dec
+                      << '\n';
+            baseline.backend.output.clear();
+            optimized.backend.output.clear();
+            baseline.backend.events.clear();
+            optimized.backend.events.clear();
         }
     }
     std::cout << "PASS 16384 state/clip/cull/texture variants; bitwise vertices and backend events identical\n";
 }
 
-template<class Table> bool dispatch(const Table& table, int8_t opcode, F3DGfx** cmd, Interpreter* gfx) {
-    if constexpr (requires { table.invoke(opcode, cmd, gfx); }) return table.invoke(opcode, cmd, gfx);
-    else return table.at(opcode).second(cmd);
+template <class Table> bool dispatch(const Table& table, int8_t opcode, F3DGfx** cmd, Interpreter* gfx) {
+    if constexpr (requires { table.invoke(opcode, cmd, gfx); })
+        return table.invoke(opcode, cmd, gfx);
+    else
+        return table.at(opcode).second(cmd);
 }
-template<class T> void enable(T& gfx, bool enabled) {
-    if constexpr (requires { gfx.mTriangleStateReuseEnabled; }) gfx.mTriangleStateReuseEnabled = enabled;
+template <class T> void enable(T& gfx, bool enabled) {
+    if constexpr (requires { gfx.mTriangleStateReuseEnabled; })
+        gfx.mTriangleStateReuseEnabled = enabled;
 }
 #ifdef GFX_EXPLICIT_DISPATCH
-#define HANDLER_CONTEXT Interpreter* gfx,
+#define HANDLER_CONTEXT Interpreter *gfx,
 #define HANDLER_INSTANCE
 #else
 #define HANDLER_CONTEXT
@@ -339,8 +409,8 @@ static bool temporaryDraw(HANDLER_CONTEXT F3DGfx**) {
 // externally selected interpreter changes. Reacquiring the global weak pointer
 // both violates that contract and adds atomic ownership work to every command.
 static void dispatchContextTest() {
-    constexpr UcodeHandler table = {{1, {"tri", gfx_tri2_handler_f3dex}},
-                                   {2, {"depth", gfx_set_prim_depth_handler_rdp}}};
+    constexpr UcodeHandler table = { { 1, { "tri", gfx_tri2_handler_f3dex } },
+                                     { 2, { "depth", gfx_set_prim_depth_handler_rdp } } };
     Fixture selected, executing;
     auto selectedOwner = std::shared_ptr<Interpreter>(&selected.gfx, [](Interpreter*) {});
     mInstance = selectedOwner;
@@ -360,10 +430,11 @@ static void dispatchContextTest() {
     std::cout << "PASS command dispatch stays with its executing interpreter\n";
 }
 static void dispatchTest() {
-    const UcodeHandler table = {{1, {"tri", gfx_tri2_handler_f3dex}},
-                               {2, {"change", changeColor}}, {3, {"temporary", temporaryDraw}}};
+    const UcodeHandler table = { { 1, { "tri", gfx_tri2_handler_f3dex } },
+                                 { 2, { "change", changeColor } },
+                                 { 3, { "temporary", temporaryDraw } } };
     Fixture baseline, optimized;
-    for (auto* f : {&baseline, &optimized}) {
+    for (auto* f : { &baseline, &optimized }) {
         auto owner = std::shared_ptr<Interpreter>(&f->gfx, [](Interpreter*) {});
         mInstance = owner;
         configure(*f, 2);
@@ -372,17 +443,19 @@ static void dispatchTest() {
         cmd.words.w0 = (0 << 17) | (1 << 9) | (2 << 1);
         cmd.words.w1 = (1 << 17) | (3 << 9) | (2 << 1);
         auto ptr = &cmd;
-        for (int i : {1, 1, 2, 1, 1, 3, 1, 1}) dispatch(table, i, &ptr, &f->gfx);
+        for (int i : { 1, 1, 2, 1, 1, 3, 1, 1 })
+            dispatch(table, i, &ptr, &f->gfx);
         f->gfx.Flush();
     }
     equalOutput(baseline, optimized);
-    require(optimized.backend.queries == 4, "two state barriers must split triangle preparation into three runs plus temporary draw");
+    require(optimized.backend.queries == 4,
+            "two state barriers must split triangle preparation into three runs plus temporary draw");
     std::cout << "PASS production dispatcher invalidates before/after state and temporary rectangle draws\n";
 }
 
 static void sharedSamplerTest() {
     Fixture baseline, optimized;
-    for (auto* f : {&baseline, &optimized}) {
+    for (auto* f : { &baseline, &optimized }) {
         configure(*f, 3);
         f->gfx.mRenderingState.mTextures[1] = f->gfx.mRenderingState.mTextures[0];
         f->gfx.mRdp->texture_tile[0].cms = G_TX_WRAP;
@@ -396,9 +469,9 @@ static void sharedSamplerTest() {
 }
 
 static void frameResetTest() {
-    constexpr UcodeHandler table = {{1, {"tri", gfx_tri2_handler_f3dex}}};
+    constexpr UcodeHandler table = { { 1, { "tri", gfx_tri2_handler_f3dex } } };
     Fixture baseline, optimized;
-    for (auto* f : {&baseline, &optimized}) {
+    for (auto* f : { &baseline, &optimized }) {
         auto owner = std::shared_ptr<Interpreter>(&f->gfx, [](Interpreter*) {});
         mInstance = owner;
         enable(f->gfx, f == &optimized);
@@ -427,9 +500,8 @@ static void literalVertexTest() {
     beginRun(f.gfx, true);
     f.gfx.GfxSpTri1(0, 1, 2, false);
     f.gfx.Flush();
-    const float expected[] = {0, 0, .625f, 1, 0, 0, 0,
-                              .125f, 0, 1.125f, 2, 3/255.f, 5/255.f, 7/255.f,
-                              .25f, 0, 1.625f, 3, 6/255.f, 10/255.f, 14/255.f};
+    const float expected[] = { 0,         0,         .625f,     1,    0, 0,      0, .125f,     0,          1.125f,    2,
+                               3 / 255.f, 5 / 255.f, 7 / 255.f, .25f, 0, 1.625f, 3, 6 / 255.f, 10 / 255.f, 14 / 255.f };
     require(f.backend.output.size() == std::size(expected), "shade-only triangle must have seven floats per vertex");
     require(memcmp(f.backend.output.data(), expected, sizeof(expected)) == 0,
             "triangle must match hand-derived position/depth/color fixture");
@@ -438,12 +510,12 @@ static void literalVertexTest() {
 
 static void lodInputTest() {
     Fixture baseline, optimized;
-    for (auto* f : {&baseline, &optimized}) {
+    for (auto* f : { &baseline, &optimized }) {
         auto& r = *f->gfx.mRdp;
-        r.combine_mode = combine(G_CCMUX_PRIMITIVE, 15, G_CCMUX_LOD_FRACTION, 7,
-                                  G_ACMUX_PRIMITIVE, 7, G_ACMUX_LOD_FRACTION, 7);
+        r.combine_mode =
+            combine(G_CCMUX_PRIMITIVE, 15, G_CCMUX_LOD_FRACTION, 7, G_ACMUX_PRIMITIVE, 7, G_ACMUX_LOD_FRACTION, 7);
         r.other_mode_l = G_TL_LOD | (G_BL_CLR_MEM << 20) | (G_BL_1MA << 16);
-        r.prim_color = {255, 255, 255, 255};
+        r.prim_color = { 255, 255, 255, 255 };
         r.prim_lod_fraction = 91;
         f->gfx.mRsp->loaded_vertices[0].w = 1500;
         f->gfx.mRsp->loaded_vertices[1].w = 4500;
@@ -459,7 +531,7 @@ static void lodInputTest() {
     const size_t stride = data.size() / 9;
     // LOD is the second shader input: the first vertex's W determines it
     // for all three vertices of that triangle, even when indices are shared.
-    const float want[] = {0.f, 127.f / 255.f, 1.f};
+    const float want[] = { 0.f, 127.f / 255.f, 1.f };
     for (size_t tri = 0; tri < 3; ++tri) {
         for (size_t v = 0; v < 3; ++v) {
             float got;
@@ -473,7 +545,7 @@ static void lodInputTest() {
 
 static void benchmark() {
     constexpr unsigned batches = 7680, perBatch = 16;
-    for (unsigned material : {0u, 1u, 3u, 15u, 127u}) {
+    for (unsigned material : { 0u, 1u, 3u, 15u, 127u }) {
         std::vector<double> times[2];
         for (int repeat = 0; repeat < 11; ++repeat) {
             for (int pass = 0; pass < 2; ++pass) {
@@ -489,61 +561,65 @@ static void benchmark() {
                 f.gfx.Flush();
                 auto end = std::chrono::steady_clock::now();
                 require(f.backend.triangles == batches * perBatch, "benchmark must submit every triangle");
-                if (repeat) times[mode].push_back(std::chrono::duration<double, std::milli>(end-start).count());
+                if (repeat)
+                    times[mode].push_back(std::chrono::duration<double, std::milli>(end - start).count());
             }
         }
-        std::sort(times[0].begin(), times[0].end()); std::sort(times[1].begin(), times[1].end());
-        auto off = times[0][times[0].size()/2], on = times[1][times[1].size()/2];
-        std::cout << "BENCH " << material << " triangles=" << batches * perBatch << " off_ms=" << off
-                  << " on_ms=" << on << " saved_pct=" << 100*(off-on)/off << '\n';
+        std::sort(times[0].begin(), times[0].end());
+        std::sort(times[1].begin(), times[1].end());
+        auto off = times[0][times[0].size() / 2], on = times[1][times[1].size() / 2];
+        std::cout << "BENCH " << material << " triangles=" << batches * perBatch << " off_ms=" << off << " on_ms=" << on
+                  << " saved_pct=" << 100 * (off - on) / off << '\n';
     }
 }
 
 static void commandBenchmark() {
-    const UcodeHandler table = {{1, {"tri", gfx_tri2_handler_f3dex}},
-                               {2, {"depth", gfx_set_prim_depth_handler_rdp}},
-                               {3, {"key-r", gfx_set_key_r_handler_rdp}},
-                               {4, {"key-gb", gfx_set_key_gb_handler_rdp}}};
+    const UcodeHandler table = { { 1, { "tri", gfx_tri2_handler_f3dex } },
+                                 { 2, { "depth", gfx_set_prim_depth_handler_rdp } },
+                                 { 3, { "key-r", gfx_set_key_r_handler_rdp } },
+                                 { 4, { "key-gb", gfx_set_key_gb_handler_rdp } } };
     // Synthetic mixes approximate command/triangle counts, not scene replays.
-    for (auto shape : {std::array<unsigned, 3>{7680, 8, 10}, {6250, 6, 25}}) {
-      for (bool shared : {false, true}) {
-        std::vector<double> times;
-        for (unsigned repeat = 0; repeat < 16; ++repeat) {
-            Fixture f;
-            configure(f, 3);
-            enable(f.gfx, true);
-            f.backend.recording = false;
-            auto owner = std::shared_ptr<Interpreter>(&f.gfx, [](Interpreter*) {});
-            mInstance = owner;
-            F3DGfx triangle{}, state{};
-            triangle.words.w0 = (1 << 9) | (2 << 1);
-            triangle.words.w1 = (1 << 17) | (3 << 9) | (2 << 1);
-            state.words.w1 = 0x12345678;
-            auto start = std::chrono::steady_clock::now();
-            for (unsigned batch = 0; batch < shape[0]; ++batch) {
-                for (unsigned s = 0; s < shape[2]; ++s) {
-                    auto ptr = &state;
-                    dispatch(table, 2 + s % 3, &ptr, &f.gfx);
+    for (auto shape : { std::array<unsigned, 3>{ 7680, 8, 10 }, { 6250, 6, 25 } }) {
+        for (bool shared : { false, true }) {
+            std::vector<double> times;
+            for (unsigned repeat = 0; repeat < 16; ++repeat) {
+                Fixture f;
+                configure(f, 3);
+                enable(f.gfx, true);
+                f.backend.recording = false;
+                auto owner = std::shared_ptr<Interpreter>(&f.gfx, [](Interpreter*) {});
+                mInstance = owner;
+                F3DGfx triangle{}, state{};
+                triangle.words.w0 = (1 << 9) | (2 << 1);
+                triangle.words.w1 = (1 << 17) | (3 << 9) | (2 << 1);
+                state.words.w1 = 0x12345678;
+                auto start = std::chrono::steady_clock::now();
+                for (unsigned batch = 0; batch < shape[0]; ++batch) {
+                    for (unsigned s = 0; s < shape[2]; ++s) {
+                        auto ptr = &state;
+                        dispatch(table, 2 + s % 3, &ptr, &f.gfx);
+                    }
+                    for (unsigned t = 0; t < shape[1]; ++t) {
+                        const unsigned first = shared ? 0 : t * 6;
+                        triangle.words.w0 = (first << 17) | ((first + 1) << 9) | ((first + 2) << 1);
+                        triangle.words.w1 = ((first + 1) << 17) | ((first + 3) << 9) | ((first + 2) << 1);
+                        if (!shared)
+                            triangle.words.w1 = ((first + 3) << 17) | ((first + 4) << 9) | ((first + 5) << 1);
+                        auto ptr = &triangle;
+                        dispatch(table, 1, &ptr, &f.gfx);
+                    }
                 }
-                for (unsigned t = 0; t < shape[1]; ++t) {
-                    const unsigned first = shared ? 0 : t * 6;
-                    triangle.words.w0 = (first << 17) | ((first + 1) << 9) | ((first + 2) << 1);
-                    triangle.words.w1 = ((first + 1) << 17) | ((first + 3) << 9) | ((first + 2) << 1);
-                    if (!shared) triangle.words.w1 = ((first + 3) << 17) | ((first + 4) << 9) | ((first + 5) << 1);
-                    auto ptr = &triangle;
-                    dispatch(table, 1, &ptr, &f.gfx);
-                }
+                f.gfx.Flush();
+                auto end = std::chrono::steady_clock::now();
+                require(f.backend.triangles == shape[0] * shape[1] * 2, "command workload must draw every triangle");
+                if (repeat)
+                    times.push_back(std::chrono::duration<double, std::milli>(end - start).count());
             }
-            f.gfx.Flush();
-            auto end = std::chrono::steady_clock::now();
-            require(f.backend.triangles == shape[0] * shape[1] * 2, "command workload must draw every triangle");
-            if (repeat) times.push_back(std::chrono::duration<double, std::milli>(end - start).count());
+            std::sort(times.begin(), times.end());
+            std::cout << "COMMAND_BENCH commands=" << shape[0] * (shape[1] + shape[2])
+                      << " triangles=" << shape[0] * shape[1] * 2 << " shared=" << shared
+                      << " median_ms=" << times[times.size() / 2] << '\n';
         }
-        std::sort(times.begin(), times.end());
-        std::cout << "COMMAND_BENCH commands=" << shape[0] * (shape[1] + shape[2])
-                  << " triangles=" << shape[0] * shape[1] * 2 << " shared=" << shared
-                  << " median_ms=" << times[times.size()/2] << '\n';
-      }
     }
 }
 
@@ -553,10 +629,24 @@ int main(int argc, char** argv) {
         reference |= std::string(argv[i]) == "--reference";
         bench |= std::string(argv[i]) == "--benchmark";
     }
-    if (bench) { benchmark(); commandBenchmark(); return 0; }
-    if (!reference) { dispatchContextTest(); packedVertexReuseTest(); packedFlushAndBoundaryTest(); }
-    if (!reference) reuseTest();
+    if (bench) {
+        benchmark();
+        commandBenchmark();
+        return 0;
+    }
+    if (!reference) {
+        dispatchContextTest();
+        packedVertexReuseTest();
+        packedFlushAndBoundaryTest();
+    }
+    if (!reference)
+        reuseTest();
     equivalenceTest();
     literalVertexTest();
-    if (!reference) { dispatchTest(); sharedSamplerTest(); frameResetTest(); lodInputTest(); }
+    if (!reference) {
+        dispatchTest();
+        sharedSamplerTest();
+        frameResetTest();
+        lodInputTest();
+    }
 }

@@ -279,8 +279,8 @@ int main(int argc, char** argv) {
     REQUIRE(scoped->LoadResource(name) == native);
     if (failures)
         return 1;
-    std::printf(
-        "PASS %s Alt segment binding: cold direct DL and metadata-only fallback over warm texture, on/off, retained caches, HD texture, "
-        "missing/empty/wrong type; render lookup shortcut, dirty reload, manager and owner switching\n",
-        argc > 1 ? argv[1] : "game");
+    std::printf("PASS %s Alt segment binding: cold direct DL and metadata-only fallback over warm texture, on/off, "
+                "retained caches, HD texture, "
+                "missing/empty/wrong type; render lookup shortcut, dirty reload, manager and owner switching\n",
+                argc > 1 ? argv[1] : "game");
 }
