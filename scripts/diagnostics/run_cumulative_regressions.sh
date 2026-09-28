@@ -4,6 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 python3 -B scripts/diagnostics/test_soh_performance_patch.py
 python3 -B scripts/apply_soh_performance_patch.py
+python3 -B scripts/diagnostics/run_gfx_dispatch_table_tests.py
 python3 -B scripts/diagnostics/run_gfx_triangle_run_tests.py
 python3 -B scripts/diagnostics/run_gfx_vertex_batch_tests.py
 python3 -B scripts/diagnostics/run_pak_menu_tests.py --selection-only

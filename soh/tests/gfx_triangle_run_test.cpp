@@ -409,7 +409,7 @@ static bool temporaryDraw(HANDLER_CONTEXT F3DGfx**) {
 // externally selected interpreter changes. Reacquiring the global weak pointer
 // both violates that contract and adds atomic ownership work to every command.
 static void dispatchContextTest() {
-    constexpr UcodeHandler table = { { 1, { "tri", gfx_tri2_handler_f3dex } },
+    const UcodeHandler table = { { 1, { "tri", gfx_tri2_handler_f3dex } },
                                      { 2, { "depth", gfx_set_prim_depth_handler_rdp } } };
     Fixture selected, executing;
     auto selectedOwner = std::shared_ptr<Interpreter>(&selected.gfx, [](Interpreter*) {});
@@ -469,7 +469,7 @@ static void sharedSamplerTest() {
 }
 
 static void frameResetTest() {
-    constexpr UcodeHandler table = { { 1, { "tri", gfx_tri2_handler_f3dex } } };
+    const UcodeHandler table = { { 1, { "tri", gfx_tri2_handler_f3dex } } };
     Fixture baseline, optimized;
     for (auto* f : { &baseline, &optimized }) {
         auto owner = std::shared_ptr<Interpreter>(&f->gfx, [](Interpreter*) {});

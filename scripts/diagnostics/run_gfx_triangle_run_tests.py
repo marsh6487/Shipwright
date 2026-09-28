@@ -87,7 +87,7 @@ def main():
             generated += "#define GFX_EXPLICIT_DISPATCH 1\n"
         generated += "\n".join(re.findall(r"^#define C[01].*$", source, re.M)) + "\n"
         generated += "\n".join(function(source, name) for name in names)
-        generated += source[source.index("class UcodeHandler {"):source.index("static constexpr UcodeHandler rdpHandlers")]
+        generated += source[source.index("class UcodeHandler {"):re.search(r"static (?:constexpr|const) UcodeHandler rdpHandlers", source).start()]
         generated += "\n}\n"
         generated += function(source, "gfx_cc_get_features")
         (build / "triangle_production.inc").write_text(generated)

@@ -92,7 +92,7 @@ index 5d87f4e..1d432f3 100644
      GfxTextureCache mTextureCache{};
      std::map<ColorCombinerKey, ColorCombiner> mColorCombinerPool; // color_combiner_pool;
 diff --git a/src/fast/interpreter.cpp b/src/fast/interpreter.cpp
-index e12e6b0..142164a 100644
+index e12e6b0..54a5c5d 100644
 --- a/src/fast/interpreter.cpp
 +++ b/src/fast/interpreter.cpp
 @@ -25,6 +25,7 @@
@@ -1936,7 +1936,7 @@ index e12e6b0..142164a 100644
          }
      }
  
-@@ -4613,7 +4614,24 @@ class UcodeHandler {
+@@ -4613,11 +4614,30 @@ class UcodeHandler {
          return mHandlers[static_cast<uint8_t>(opcode)];
      }
  
@@ -1961,7 +1961,59 @@ index e12e6b0..142164a 100644
      std::pair<const char*, GfxOpcodeHandlerFunc> mHandlers[std::numeric_limits<uint8_t>::max() + 1];
  };
  
-@@ -4805,10 +4823,9 @@ const char* GfxGetOpcodeName(int8_t opcode) {
+-static constexpr UcodeHandler rdpHandlers = {
++// GCC 11 cannot constant-evaluate these handler-pointer comparisons. Build the
++// immutable tables once at startup; dispatch still reads precomputed flags.
++static const UcodeHandler rdpHandlers = {
+     { RDP_G_SETTARGETINTERPINDEX,
+       { "G_SETTARGETINTERPINDEX", gfx_set_interpolation_index_target } }, // G_SETTARGETINTERPINDEX
+     { RDP_G_SETTILESIZE_INTERP,
+@@ -4652,7 +4672,7 @@ static constexpr UcodeHandler rdpHandlers = {
+     { RDP_G_SETCIMG, { "G_SETCIMG", gfx_set_c_img_handler_rdp } },                            // G_SETCIMG (-1)
+ };
+ 
+-static constexpr UcodeHandler otrHandlers = {
++static const UcodeHandler otrHandlers = {
+     { OTR_G_SETTIMG_OTR_HASH,
+       { "G_SETTIMG_OTR_HASH", gfx_set_timg_otr_hash_handler_custom } },       // G_SETTIMG_OTR_HASH (0x20)
+     { OTR_G_SETFB, { "G_SETFB", gfx_set_fb_handler_custom } },                // G_SETFB (0x21)
+@@ -4693,7 +4713,7 @@ static constexpr UcodeHandler otrHandlers = {
+     { RDP_G_TRI1_WIDE, { "G_TRI1_WIDE", gfx_tri1_handler_f3dex2 } },                   // RDP_G_TRI1_WIDE (-17)
+ };
+ 
+-static constexpr UcodeHandler f3dex2Handlers = {
++static const UcodeHandler f3dex2Handlers = {
+     { F3DEX2_G_NOOP, { "G_NOOP", gfx_noop_handler_f3dex2 } },
+     { F3DEX2_G_SPNOOP, { "G_SPNOOP", gfx_noop_handler_f3dex2 } },
+     { F3DEX2_G_CULLDL, { "G_CULLDL", gfx_cull_dl_handler_f3dex2 } },
+@@ -4714,7 +4734,7 @@ static constexpr UcodeHandler f3dex2Handlers = {
+     { F3DEX2_G_SETOTHERMODE_H, { "G_SETOTHERMODE_H", gfx_othermode_h_handler_f3dex2 } },
+ };
+ 
+-static constexpr UcodeHandler f3dexHandlers = {
++static const UcodeHandler f3dexHandlers = {
+     { F3DEX_G_NOOP, { "G_NOOP", gfx_noop_handler_f3dex2 } },
+     { F3DEX_G_CULLDL, { "G_CULLDL", gfx_cull_dl_handler_f3dex2 } },
+     { F3DEX_G_MTX, { "G_MTX", gfx_mtx_handler_f3d } },
+@@ -4737,7 +4757,7 @@ static constexpr UcodeHandler f3dexHandlers = {
+     { F3DEX_G_QUAD, { "G_QUAD", gfx_quad_handler_f3dex } },
+ };
+ 
+-static constexpr UcodeHandler f3dHandlers = {
++static const UcodeHandler f3dHandlers = {
+     { F3DEX_G_NOOP, { "G_NOOP", gfx_noop_handler_f3dex2 } },
+     { F3DEX_G_CULLDL, { "G_CULLDL", gfx_cull_dl_handler_f3dex2 } },
+     { F3DEX_G_MTX, { "G_MTX", gfx_mtx_handler_f3d } },
+@@ -4761,7 +4781,7 @@ static constexpr UcodeHandler f3dHandlers = {
+ 
+ // LUSTODO: These S2DEX commands have different opcode numbers on F3DEX2 vs other ucodes. More research needs to be done
+ // to see if the implementations are different.
+-static constexpr UcodeHandler s2dexHandlers = {
++static const UcodeHandler s2dexHandlers = {
+     { F3DEX2_G_BG_COPY, { "G_BG_COPY", gfx_bg_copy_handler_s2dex } },
+     { F3DEX2_G_BG_1CYC, { "G_BG_1CYC", gfx_bg_1cyc_handler_s2dex } },
+     { F3DEX2_G_OBJ_RENDERMODE, { "G_OBJ_RENDERMODE", gfx_stubbed_command_handler } },
+@@ -4805,10 +4825,9 @@ const char* GfxGetOpcodeName(int8_t opcode) {
  
  // TODO, implement a system where we can get the current opcode handler by writing to the GWords. If the powers that be
  // are OK with that...
@@ -1973,7 +2025,7 @@ index e12e6b0..142164a 100644
      ucode_handler_index = ucode;
  
      // Reset some RSP state values upon ucode load to deal with hardware quirks discovered by emulators
-@@ -4826,7 +4843,7 @@ static void gfx_set_ucode_handler(UcodeHandlers ucode) {
+@@ -4826,7 +4845,7 @@ static void gfx_set_ucode_handler(UcodeHandlers ucode) {
      }
  }
  
@@ -1982,7 +2034,7 @@ index e12e6b0..142164a 100644
      auto& cmd = g_exec_stack.currCmd();
      auto cmd0 = cmd;
      int8_t opcode = (int8_t)(cmd->words.w0 >> 24);
-@@ -4846,7 +4863,8 @@ static void gfx_step() {
+@@ -4846,7 +4865,8 @@ static void gfx_step() {
  #endif
  
      if (opcode == F3DEX2_G_LOAD_UCODE) {
@@ -1992,7 +2044,7 @@ index e12e6b0..142164a 100644
          ++cmd;
          return;
          // Instead of having a handler for each ucode for switching ucode, just check for it early and return.
-@@ -4864,27 +4882,30 @@ static void gfx_step() {
+@@ -4864,27 +4884,30 @@ static void gfx_step() {
                  || w1 > 0x0000FFFFFFFFFFFFull
  #endif
              ) {
@@ -2026,7 +2078,7 @@ index e12e6b0..142164a 100644
          SPDLOG_CRITICAL("Unhandled OP code: 0x{:X}, invalid ucode: {}", (uint8_t)opcode, (uint32_t)ucode_handler_index);
      }
  
-@@ -4892,6 +4913,8 @@ static void gfx_step() {
+@@ -4892,6 +4915,8 @@ static void gfx_step() {
  }
  
  void Interpreter::SpReset() {
@@ -2035,7 +2087,7 @@ index e12e6b0..142164a 100644
      while (!mShaderStack.empty()) {
          mShaderStack.pop();
      }
-@@ -5130,7 +5153,7 @@ void Interpreter::Run(Gfx* commands, const std::unordered_map<Mtx*, MtxF>& mtx_r
+@@ -5130,7 +5155,7 @@ void Interpreter::Run(Gfx* commands, const std::unordered_map<Mtx*, MtxF>& mtx_r
              }
              g_exec_stack.gfx_path.pop_back();
          }

@@ -87,7 +87,7 @@ def main():
         generated += "\n".join(function(source, name) for name in names)
         if os.environ.get("VERTEX_TEST_MUTATE"):
             generated = generated.replace("d->x = x;", "d->x = x + 1.0f;")
-        generated += source[source.index("class UcodeHandler {"):source.index("static constexpr UcodeHandler rdpHandlers")]
+        generated += source[source.index("class UcodeHandler {"):re.search(r"static (?:constexpr|const) UcodeHandler rdpHandlers", source).start()]
         baseline = subprocess.check_output(["git", "show", "c57da1b4afa775b24b58b2adf93d63d3b561bb65:src/fast/interpreter.cpp"], cwd=ROOT / "libultraship", text=True)
         generated += function(baseline, "Interpreter::GfxSpVertex").replace("Interpreter::GfxSpVertex(", "Interpreter::GfxSpVertexBaseline(")
         generated += "\n}\n"
