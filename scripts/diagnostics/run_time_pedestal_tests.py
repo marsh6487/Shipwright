@@ -155,7 +155,7 @@ def main():
         # and the resource manager supplied at the graphics boundary.
         tail = render["Player_OverrideLimbDrawGameplayDefault"]
         tail = tail[tail.index("    GameInteractor_Should(VB_PLAYER_OVERRIDE_LIMB_DRAW"):]
-        helpers = "static s32 sLeftHandType;\nstatic s32 sDListsLodOffset;\n" + render["Player_ApplyBackEquipmentVisibility"] + "\n"
+        helpers = "static s32 sLeftHandType, sRightHandType;\nstatic s32 sDListsLodOffset;\n" + render["Player_ApplyBackEquipmentVisibility"] + "\n"
         if "Player_ReverseTimePedestalEquipmentSword" in render:
             helpers += render["Player_ReverseTimePedestalEquipmentSword"] + "\n"
         if "Player_ApplyTimePedestalSword" in render:
@@ -166,7 +166,7 @@ def main():
         # limb and potentially changed by a different weapon owner in gameplay.
         (build / "render.c").write_text('#include "time_pedestal_fixture.h"\n' + helpers +
             "static s32 Fixture_RenderTail(PlayState* play, Player* this, s32 limbIndex, Gfx** dList, Vec3s* rot) {\n"
-            "void* thisx = this;\n" + tail + "\n"
+            "void* thisx = this; sRightHandType = this->rightHandType;\n" + tail + "\n"
             "void Fixture_ApplyLateHandOverrides(PlayState* p, Player* player, s32 limb, Gfx** dl) {\n"
             "Vec3s rot = { 0 }; Fixture_RenderTail(p, player, limb, dl, &rot);\n}\n"
             "void Fixture_ApplyLateHandOverridesWithRot(PlayState* p, Player* player, s32 limb, Gfx** dl, Vec3s* rot) {\n"
