@@ -549,8 +549,8 @@ const HintText Hint::GetItemHintText(uint8_t slot, bool mysterious) const {
         // NEI items can have a display name without a dedicated hint entry. Keep their
         // localized name instead of inserting RHT_NONE's literal "No Hint" into a clue.
         // Non-item sentinels retain their existing behavior; never rewrite the shared table.
-        if (item.GetHintKey() == RHT_NONE && item.GetRandomizerGet() != RG_NONE &&
-            item.GetRandomizerGet() != RG_HINT && item.GetRandomizerGet() != RG_SOLD_OUT) {
+        if (item.GetHintKey() == RHT_NONE && item.GetRandomizerGet() != RG_NONE && item.GetRandomizerGet() != RG_HINT &&
+            item.GetRandomizerGet() != RG_SOLD_OUT) {
             return HintText(CustomMessage(item.GetArticle() + item.GetName()));
         }
         return item.GetHint();
