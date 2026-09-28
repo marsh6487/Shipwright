@@ -1,0 +1,18 @@
+{
+  "include/fast/RenderResourceLookup.h": {
+    "before": null,
+    "after": "46d4565f0a476720ac09009fda372bf671ee8a12ecf59288e524f23f58b29ed2"
+  },
+  "include/fast/interpreter.h": {
+    "before": "cbb6a41877c828eda56aaed653a7da1a77cbdac31fb0a61c21c17650ac7ead30",
+    "after": "811d6bd46372bbdbf9a0d9db9901a2eba55851c8eb79b3c42e6433921d69ca1d"
+  },
+  "src/fast/interpreter.cpp": {
+    "before": "15c38b5250290448e84daf3821835345c53525108294785a0d377087741aec6c",
+    "after": "9aad4991149a56cc2526de3d92fb09c2eba3ffd512b74a43a3f470717818e085"
+  },
+  "src/ship/resource/ResourceManager.cpp": {
+    "before": "e5567eb8d3e32749eecd748cd4e2169079196ac0e5860eeecf16829e72c04630",
+    "after": "4a7646d77e9de975d57c9bea35ad605a60987271356df6c597f074a711e596be"
+  }
+}

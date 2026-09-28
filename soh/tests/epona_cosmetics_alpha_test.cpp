@@ -110,9 +110,9 @@ int main() {
             auto* command = &packet;
             const auto opcode = command->words.w0 >> 24;
             if (opcode == G_SETCOMBINE)
-                Fast::gfx_set_combine_handler_rdp(&command);
+                Fast::gfx_set_combine_handler_rdp(Fast::sInterpreter.get(), &command);
             if (opcode == G_SETPRIMCOLOR)
-                Fast::gfx_set_prim_color_handler_rdp(&command);
+                Fast::gfx_set_prim_color_handler_rdp(Fast::sInterpreter.get(), &command);
             if (opcode == G_DL) {
                 part = (command->words.w1 >> 24) - 9;
                 overlay = part < 3;

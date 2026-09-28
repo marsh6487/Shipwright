@@ -693,15 +693,31 @@ extern "C" void VoicePack_Init(void) {
     }
 
     s32 candidates = 0;
-    for (auto& entry : std::filesystem::directory_iterator(modsPath)) {
-        if (entry.is_directory())
+    std::error_code scanError;
+    std::filesystem::recursive_directory_iterator it(
+        modsPath, std::filesystem::directory_options::skip_permission_denied, scanError);
+    const std::filesystem::recursive_directory_iterator end;
+    for (; it != end; it.increment(scanError)) {
+        if (scanError)
+            break;
+        if (it->is_directory(scanError)) {
+            const auto name = it->path().filename().string();
+            // Match the model loader's game boundary in shared installations.
+            if ((name == "soh" || name == "2ship") && name != appShortName)
+                it.disable_recursion_pending();
             continue;
-        if (entry.path().extension() != ".pak")
+        }
+        if (!it->is_regular_file(scanError))
+            continue;
+        std::string extension = it->path().extension().string();
+        for (char& c : extension)
+            c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+        if (extension != ".pak")
             continue;
 
         candidates++;
         VoicePack pack{};
-        if (ScanOnePak(entry.path().string(), pack)) {
+        if (ScanOnePak(it->path().string(), pack)) {
             sClaimedPaths.insert(pack.path);
             VP_LOG("Found voice pack: '%s' (%d sfxIds, %s)", pack.displayName.c_str(), (int)pack.oggEntryByHex.size(),
                    pack.path.c_str());

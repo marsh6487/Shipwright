@@ -30,6 +30,11 @@ jobs:
       uses: actions/checkout@v7
       with:
         submodules: true
+    - name: Verify dispatch tables with the artifact compiler
+      run: |
+        python3 scripts/apply_soh_performance_patch.py
+        CXX=g++ python3 scripts/diagnostics/run_gfx_dispatch_table_tests.py
+        CXX=g++ python3 scripts/diagnostics/run_gfx_triangle_run_tests.py
     - name: Configure ccache
       uses: hendrikmuhs/ccache-action@v1.2.23
       with:
