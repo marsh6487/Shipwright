@@ -850,7 +850,9 @@ void Handle_BallAndChain(Player* p, PlayState* play) {
         return;
     }
     if (in.otherButtonPressed) {
-        BallChain_Stop(p, play);
+        // A slot assignment alone does not own the pose, shared timers, or unequip sound.
+        if (bcActive)
+            BallChain_Stop(p, play);
         return;
     }
 
