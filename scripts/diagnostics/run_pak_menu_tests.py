@@ -15,6 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 def main(imgui):
+    selection_only = imgui == "--selection-only"
     imgui = pathlib.Path(imgui).resolve()
     compiler = shlex.split(os.environ.get("CXX", "c++"))
     with tempfile.TemporaryDirectory(prefix="soh-pak-tests-") as temporary:
@@ -49,6 +50,8 @@ def main(imgui):
             "-I" + str(ROOT / "soh"), "-I" + str(build),
             str(ROOT / "soh/tests/pak_selection_runtime_test.cpp"), "-o", str(runtime_test)], check=True)
         subprocess.run([str(runtime_test)], check=True)
+        if selection_only:
+            return
         source = ROOT / "soh/soh/SohGui/UIWidgets.hpp"
         text = source.read_text()
         match = re.search(

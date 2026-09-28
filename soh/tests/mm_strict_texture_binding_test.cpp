@@ -13,7 +13,7 @@
 
 namespace Fast {
 extern void GfxSetInstance(std::shared_ptr<Interpreter>);
-extern bool gfx_set_timg_otr_filepath_handler_custom(F3DGfx**);
+extern bool gfx_set_timg_otr_filepath_handler_custom(Interpreter*, F3DGfx**);
 } // namespace Fast
 using namespace Fast;
 
@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
     for (bool useAlt : { false, true, false }) {
         manager->SetAltAssetsEnabled(useAlt);
         F3DGfx* cursor = &command;
-        REQUIRE(!gfx_set_timg_otr_filepath_handler_custom(&cursor));
+        REQUIRE(!gfx_set_timg_otr_filepath_handler_custom(interpreter.get(), &cursor));
         auto& loaded = interpreter->mRdp->texture_to_load;
         REQUIRE(loaded.addr[0] == (useAlt ? 33 : 22));
         REQUIRE(loaded.tex_flags == (useAlt ? TEX_FLAG_LOAD_AS_IMG : TEX_FLAG_LOAD_AS_RAW));

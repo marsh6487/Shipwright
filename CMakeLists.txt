@@ -193,6 +193,12 @@ add_compile_definitions(CONTROLLERBUTTONS_T=uint32_t)
 ################################################################################
 # Sub-projects
 ################################################################################
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+execute_process(COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/apply_soh_performance_patch.py
+    RESULT_VARIABLE SOH_PERFORMANCE_PATCH_RESULT)
+if(NOT SOH_PERFORMANCE_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR "Could not apply the reviewed SoH performance patch")
+endif()
 add_subdirectory(libultraship ${CMAKE_BINARY_DIR}/libultraship)
 target_compile_options(libultraship PRIVATE "${WARNING_OVERRIDE}")
 target_compile_definitions(libultraship PUBLIC INCLUDE_MPQ_SUPPORT)
