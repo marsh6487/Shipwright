@@ -18,13 +18,11 @@ static void NeiLantern_DrawPass(PlayState* play, bool glass) {
     Matrix_Scale(NeiLantern::ModelScale, NeiLantern::ModelScale, NeiLantern::ModelScale, MTXMODE_APPLY);
     if (glass) {
         Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-        gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx),
-                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
         gDma1p(POLY_XLU_DISP++, G_DL_OTR_FILEPATH, kLanternGlass, 0, G_DL_PUSH);
     } else {
         Gfx_SetupDL_25Opa(play->state.gfxCtx);
-        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx),
-                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
         gDma1p(POLY_OPA_DISP++, G_DL_OTR_FILEPATH, kLanternOpaque, 0, G_DL_PUSH);
     }
     Matrix_Pop();

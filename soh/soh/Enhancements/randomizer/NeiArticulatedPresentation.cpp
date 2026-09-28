@@ -19,8 +19,7 @@ extern "C" bool NeiArticulated_ApplySwitchHookHand(PlayState* play, Player* play
     Gfx* compound = static_cast<Gfx*>(Graph_Alloc(play->state.gfxCtx, 3 * sizeof(Gfx)));
     Gfx* command = compound;
     __gSPDisplayList(command++, resolvedHand);
-    const char* item = player->heldActor != nullptr ? NEI_HELD_PATH("switch_hook")
-                                                   : NEI_HELD_PATH("switch_hook_body");
+    const char* item = player->heldActor != nullptr ? NEI_HELD_PATH("switch_hook") : NEI_HELD_PATH("switch_hook_body");
     gDma1p(command++, G_DL_OTR_FILEPATH, item, 0, G_DL_PUSH);
     gSPEndDisplayList(command);
     *limb = compound;

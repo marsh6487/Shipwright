@@ -65,8 +65,7 @@ inline NeiGi::Mesh SampleAccents(uint8_t fire, uint32_t frame, const NeiGi::Basi
         }
         for (int i = 0; i < 4; ++i) {
             const float f = std::fmod(clock * 3 + i * .25f, 1.f);
-            const Point p{ std::sin(t * 2 + i * 2.3f) * 7.f, -4.f + f * 25.f,
-                           std::cos(t * 2 + i * 2.3f) * 7.f };
+            const Point p{ std::sin(t * 2 + i * 2.3f) * 7.f, -4.f + f * 25.f, std::cos(t * 2 + i * 2.3f) * 7.f };
             Glow(mesh, p, .65f + .9f * (1.f - f), 0xFFC46A, uint8_t(200 * (1 - f)), camera);
         }
     } else if (fire == 2) {
@@ -85,12 +84,10 @@ inline NeiGi::Mesh SampleAccents(uint8_t fire, uint32_t frame, const NeiGi::Basi
         for (int wisp = 0; wisp < 3; ++wisp) {
             auto p = [&](int j) {
                 const float a = t * (wisp == 1 ? -1 : 1) + wisp * Tau / 3 - (6 - j) * .14f;
-                return Point{ 10.f * std::cos(a), 12.f * std::sin(a + wisp * .65f),
-                              8.f * std::sin(a) };
+                return Point{ 10.f * std::cos(a), 12.f * std::sin(a + wisp * .65f), 8.f * std::sin(a) };
             };
             for (int j = 0; j < 6; ++j)
-                Band(mesh, p(j), p(j + 1), .45f + .18f * j, 0x9746EF, 0xEECFFF, camera,
-                     uint8_t(45 + j * 30));
+                Band(mesh, p(j), p(j + 1), .45f + .18f * j, 0x9746EF, 0xEECFFF, camera, uint8_t(45 + j * 30));
             Glow(mesh, p(6), 2.2f, 0xD4A3FF, 200, camera);
         }
     } else if (fire == 4) {
