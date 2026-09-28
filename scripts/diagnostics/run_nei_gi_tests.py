@@ -1,5 +1,8 @@
 """Compile the GI policy and production renderer against this checkout's real headers."""
 import os
+import json
+import math
+import hashlib
 from pathlib import Path
 import re
 import subprocess
@@ -21,17 +24,33 @@ with tempfile.TemporaryDirectory(prefix="nei-gi-tests-") as tmp:
     draw = functions((ROOT / "soh/src/code/z_draw.c").read_text())
     player = functions((ROOT / "soh/src/code/z_player_lib.c").read_text())
     shop = functions((ROOT / "soh/src/overlays/actors/ovl_En_GirlA/z_en_girla.c").read_text())
+    custom = functions((ROOT / "soh/soh/Enhancements/randomizer/draw.cpp").read_text())
     (Path(tmp) / "nei_gi_dispatch.inc").write_text(draw["GetItemEntry_Draw"] + "\n" +
         re.sub(r"\bthis\b", "player", player["Player_DrawGetItemImpl"]) + "\n" +
-        re.sub(r"\bthis\b", "shop", shop["EnGirlA_Draw"]))
+        re.sub(r"\bthis\b", "shop", shop["EnGirlA_Draw"]) + "\n" +
+        custom["Randomizer_DrawCaneSomariaUpgradeFlame"])
     fixtures = []
     for slug, callback in (("ball_and_chain", "BallAndChain"), ("shovel", "Shovel"),
-                           ("fire_rod", "FireRod"), ("ice_rod", "IceRod"), ("light_rod", "LightRod")):
+                           ("fire_rod", "FireRod"), ("ice_rod", "IceRod"), ("light_rod", "LightRod"),
+                           ("hylia_grace", "HyliaGrace"), ("zonai_permafrost", "ZonaiPermafrost"),
+                           ("demise_destruction", "DemiseDestruction"), ("time_gate", "TimeGate"),
+                           ("switch_hook", "SwitchHook"), ("rocs_feather", "RocsFeatherSkijer"),
+                           ("rocs_feather", "RocsFeather"), ("spinner", "Spinner"),
+                           ("cane_of_somaria", "CaneOfSomaria"), ("cane_of_somaria", "CaneSomariaUpgrade"),
+                           ("minish_cap", "MinishCap"), ("rocs_cape", "RocsCape")):
         root = ROOT / "soh/assets/custom/objects/nei_gi_redesign" / slug
-        ys = [int(v.get("Y")) for v in ET.parse(root / "mesh_opa_vtx").getroot()]
+        # Include the translucent shell: it is lower than the opaque spell core.
+        vertices = [tuple(int(v.get(axis)) for axis in ("X", "Y", "Z"))
+                    for path in root.glob("mesh_*_vtx") for v in ET.parse(path).getroot()]
         words = struct.unpack_from("<16I", (root / "scale_mtx").read_bytes(), 64)
         scale = ((words[0] >> 16) * 65536 + (words[8] >> 16)) / 65536
-        fixtures.append(f'{{Randomizer_Draw{callback}, "{slug}", {min(ys)*scale}f, {max(ys)*scale}f}},')
+        radius = max(math.hypot(p[0], p[2]) for p in vertices) * scale
+        meta = json.loads((ROOT / "tools/nei_gi/CHECKPOINTS" / slug / "checkpoint.json").read_text())
+        low = ", ".join(f"{min(p[axis] for p in vertices)*scale}f" for axis in range(3))
+        high = ", ".join(f"{max(p[axis] for p in vertices)*scale}f" for axis in range(3))
+        fixtures.append(f'{{Randomizer_Draw{callback}, "{slug}", {json.dumps(meta["name"])}, "{callback}", '
+                        f'{{{low}}}, {{{high}}}, {2*radius}f, {float(meta["draw_scale"])}f, '
+                        f'{str((root / "gi_xlu_dl").exists()).lower()}}},')
     (Path(tmp) / "nei_gi_bounds.inc").write_text("\n".join(fixtures))
     names = ["nei_gi/effect_policy", "nei_gi/presentation"]
     if "--held" in sys.argv:
@@ -58,3 +77,28 @@ for source in sources:
 print("PASS: real-header common, overhead and shop GI C translation units")
 if "--held" in sys.argv:
     print("PASS: held C++ renderers, custom-items unity and hook actor C translation units")
+
+if preview_path := os.environ.get("NEI_SHOP_PREVIEW_EXPORT"):
+    path = Path(preview_path)
+    preview = json.loads(path.read_text())
+    sources = ("soh/soh/Enhancements/randomizer/NeiGiPresentation.cpp",
+               "soh/soh/Enhancements/randomizer/NeiGiRender.h",
+               "soh/soh/Enhancements/randomizer/NeiGiShopFit.h",
+               "soh/soh/Enhancements/randomizer/draw.cpp",
+               "soh/src/overlays/actors/ovl_En_GirlA/z_en_girla.c",
+               "tests/nei_gi/presentation_test.cpp",
+               "scripts/diagnostics/run_nei_gi_tests.py")
+    preview["metadata"]["source_sha256"] = {
+        source: hashlib.sha256((ROOT / source).read_bytes()).hexdigest() for source in sources
+    }
+    for item in preview["items"]:
+        asset = ROOT / "soh/assets/custom/objects/nei_gi_redesign" / item["slug"]
+        item["asset_sha256"] = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                                for p in sorted(asset.iterdir()) if p.is_file()}
+        checkpoint = ROOT / "tools/nei_gi/CHECKPOINTS" / item["slug"]
+        item["checkpoint_sha256"] = {
+            name: hashlib.sha256((checkpoint / name).read_bytes()).hexdigest()
+            for name in ("checkpoint.json", item["slug"] + ".glb")
+        }
+    path.write_text(json.dumps(preview, indent=2) + "\n")
+    print(f"PASS: production shop poses exported to {path}")

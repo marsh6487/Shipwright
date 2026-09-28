@@ -30,7 +30,14 @@ def baseline_functions(path):
 def write_rod_functions(directory, negative=False):
     parts = []
     helper = functions((ROOT / "soh/mods/items/helpers/equip_helper.c").read_text())
-    parts.append(helper["ItemEquip_Update"])
+    raw_helper = (ROOT / "soh/mods/items/helpers/equip_helper.c").read_text()
+    end = raw_helper.index("} ItemUnequipSoundState;") + len("} ItemUnequipSoundState;")
+    start = raw_helper.rfind("typedef struct {", 0, end)
+    parts.append(raw_helper[start:end])
+    parts += [helper[name] for name in ("ItemEquip_UnequipSoundState", "ItemEquip_ResetUnequipSound", "ItemEquip_BeginItemChangeSound", "ItemEquip_ClaimUnequipSound", "ItemEquip_PlayEquipSFXForAction", "ItemEquip_PlayUnequipSFXForAction", "ItemEquip_Update")]
+    player = functions((ROOT / "soh/src/overlays/actors/ovl_player_actor/z_player.c").read_text())
+    parts.append(player["Player_FinishItemChange"])
+    parts.append(functions((ROOT / "soh/mods/items/logic/item_mitts.c").read_text())["Mitts_OnUnequip"])
     for element, prefix, spin in (("fire", "FireRod", "Fire"), ("ice", "IceRod", "Ice"),
                                   ("light", "LightRod", "Light")):
         source = (ROOT / f"soh/mods/items/logic/item_rod_{element}.c").read_text()

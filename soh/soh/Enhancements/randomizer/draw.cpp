@@ -1618,8 +1618,12 @@ void Randomizer_DrawCanePacci(PlayState* play, GetItemEntry* getItemEntry) {
     DrawCustomItemDiamondTint(play, (Gfx*)gSomariaCaneGiveDL, NULL, 0.25f, 255, 215, 70);
 }
 
-void Randomizer_DrawCaneSomariaUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
+void Randomizer_DrawCaneSomariaUpgradeFlame(PlayState* play) {
     DrawWeaponFlameOverlay(play, 255, 60, 60);
+}
+
+void Randomizer_DrawCaneSomariaUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
+    Randomizer_DrawCaneSomariaUpgradeFlame(play);
     DrawCustomItemDiamondTint(play, (Gfx*)gSomariaCaneGiveDL, NULL, 0.25f, 235, 55, 45);
 }
 

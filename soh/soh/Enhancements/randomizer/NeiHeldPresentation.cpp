@@ -1,5 +1,6 @@
 #include "NeiHeldPresentation.h"
 #include "NeiGiRender.h"
+#include "NeiUsedMagicPresentation.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/frame_interpolation.h"
 #include <algorithm>
@@ -43,10 +44,6 @@ extern "C" bool NeiHeld_DrawRod(PlayState* play, int element) {
     if (!play || element < 0 || element > 2 || !NeiHeld_HasResources(paths[element], nullptr))
         return false;
     Matrix_Push();
-    // The legacy light rod has a five-world-unit offset baked into its draw
-    // pose. Recenter the upgraded grip while retaining that fallback pose.
-    if (element == 2)
-        Matrix_Translate(0, -100, 0, MTXMODE_APPLY);
     NeiHeld_DrawModel(play, paths[element], nullptr);
     constexpr float angle = 32 * kPi / 180;
     const float tip = (element == 1 ? 68.f : 66.f) * 4.f;
@@ -59,6 +56,7 @@ extern "C" bool NeiHeld_DrawRod(PlayState* play, int element) {
     const auto camera = NeiGi_CameraBasis(play);
     NeiGi_DrawMesh(play, NeiGi::SampleOrb(kinds[element], camera), kinds[element]);
     NeiGi_DrawMesh(play, NeiGi::SampleEnergy(kinds[element], play->gameplayFrames, camera));
+    NeiUsedMagic_DrawChargeFocus(play, element);
     Matrix_Pop();
     return true;
 }

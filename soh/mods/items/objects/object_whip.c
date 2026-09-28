@@ -323,8 +323,10 @@ static void Whip_DrawApprovedBody(PlayState* play, Vec3f* start, Vec3f* end, f32
     s32 i;
     Vec3f a, b;
 
-    if (count < 1) count = 1;
-    if (count > WHIP_BODY_MAX_SEGS) count = WHIP_BODY_MAX_SEGS;
+    if (count < 1)
+        count = 1;
+    if (count > WHIP_BODY_MAX_SEGS)
+        count = WHIP_BODY_MAX_SEGS;
     Matrix_Push();
     Whip_ApprovedPathPoint(start, end, sag, 0.0f, &a);
     for (i = 0; i < count; ++i) {
@@ -340,8 +342,7 @@ static void Whip_DrawApprovedBody(PlayState* play, Vec3f* start, Vec3f* end, f32
             Matrix_Translate((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f, (a.z + b.z) * 0.5f, MTXMODE_NEW);
             Matrix_RotateY(Math_FAtan2F(dx, dz), MTXMODE_APPLY);
             Matrix_RotateX(Math_FAtan2F(-dy, sqrtf(dx * dx + dz * dz)), MTXMODE_APPLY);
-            Matrix_Scale(WHIP_BODY_SCALE, WHIP_BODY_SCALE,
-                         WHIP_BODY_SCALE * length / WHIP_BODY_SEGMENT, MTXMODE_APPLY);
+            Matrix_Scale(WHIP_BODY_SCALE, WHIP_BODY_SCALE, WHIP_BODY_SCALE * length / WHIP_BODY_SEGMENT, MTXMODE_APPLY);
             NeiHeld_DrawModel(play, NEI_HELD_PATH("whip_segment"), NULL);
         }
         a = b;
@@ -372,7 +373,11 @@ static u8 Whip_DrawApproved(Player* player, PlayState* play, u8 state) {
     }
     // Deferred asset paths use the same base/Alt selection as the whole bundle.
     // Only the visual rope start follows this socket; gameplay positions stay owned by the item logic.
-    drawn = NeiArticulated_DrawWhipGrip(player, play, state == WHIP_STATE_EQUIP, &start);
+    // The camera enters first person over several equip frames. Use the same
+    // grip as the lash immediately; the display coil would flash across that
+    // transition before Link's body is hidden.
+    drawn = NeiArticulated_DrawWhipGrip(player, play,
+                                        state == WHIP_STATE_EQUIP && !gCustomItemState.whipFirstPersonActive, &start);
     if (!drawn || state == WHIP_STATE_EQUIP) {
         return drawn;
     }
@@ -400,6 +405,11 @@ void CustomItems_DrawWhip(Player* player, PlayState* play) {
     state = gCustomItemState.whipState;
 
     if (Whip_DrawApproved(player, play, state)) {
+        return;
+    }
+    // A hidden first-person wrist or missing bundle must not resurrect the
+    // legacy equipped snake during the same camera transition.
+    if (state == WHIP_STATE_EQUIP && gCustomItemState.whipFirstPersonActive) {
         return;
     }
 

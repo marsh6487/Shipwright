@@ -2,6 +2,7 @@
 #include "NeiGiEffectPolicy.h"
 #include "NeiGiEnergyTexture.h"
 #include "NeiGiRender.h"
+#include "NeiGiShopFit.h"
 #include <algorithm>
 #include <cstring>
 #include "draw.h"
@@ -24,37 +25,90 @@ struct Presentation {
     float scale;
     Kind effect;
     Vec3f effectCenter;
+    NeiGi::ShopFit shop;
 };
 
 #define GI_PATH(slug) "__OTR__objects/nei_gi_redesign/" slug "/gi_dl"
 #define GI_XLU(slug) "__OTR__objects/nei_gi_redesign/" slug "/gi_xlu_dl"
 // These bindings are for presentation only. Actor and held-item resources retain their own paths.
 const Presentation kPresentations[] = {
-    { Randomizer_DrawRocsFeatherSkijer, GI_PATH("rocs_feather"), nullptr, .5f, Kind::Neutral, {} },
+    { Randomizer_DrawRocsFeatherSkijer,
+      GI_PATH("rocs_feather"),
+      nullptr,
+      .5f,
+      Kind::Neutral,
+      {},
+      NeiGi::kFeatherShopFit },
+    { Randomizer_DrawRocsFeather, GI_PATH("rocs_feather"), nullptr, .5f, Kind::Neutral, {}, NeiGi::kFeatherShopFit },
     { Randomizer_DrawWhip, GI_PATH("whip"), nullptr, .5f, Kind::Neutral, {} },
-    { Randomizer_DrawFireRod, GI_PATH("fire_rod"), nullptr, .2f, Kind::Fire, { 9.883f, 30.415f, 0 } },
-    { Randomizer_DrawIceRod, GI_PATH("ice_rod"), nullptr, .2f, Kind::Ice, { 10.365f, 31.899f, 0 } },
-    { Randomizer_DrawLightRod, GI_PATH("light_rod"), nullptr, .2f, Kind::Light, { 9.883f, 30.415f, 0 } },
+    { Randomizer_DrawFireRod,
+      GI_PATH("fire_rod"),
+      nullptr,
+      .2f,
+      Kind::Fire,
+      { 9.883f, 30.415f, 0 },
+      NeiGi::kRodShopFit },
+    { Randomizer_DrawIceRod, GI_PATH("ice_rod"), nullptr, .2f, Kind::Ice, { 10.365f, 31.899f, 0 }, NeiGi::kRodShopFit },
+    { Randomizer_DrawLightRod,
+      GI_PATH("light_rod"),
+      nullptr,
+      .2f,
+      Kind::Light,
+      { 9.883f, 30.415f, 0 },
+      NeiGi::kRodShopFit },
     { Randomizer_DrawDekuLeaf, GI_PATH("deku_leaf"), nullptr, .5f, Kind::Leaf, {} },
-    { Randomizer_DrawSwitchHook, GI_PATH("switch_hook"), nullptr, .01f, Kind::Neutral, {} },
+    { Randomizer_DrawSwitchHook, GI_PATH("switch_hook"), nullptr, .01f, Kind::Neutral, {}, NeiGi::kSwitchHookShopFit },
     { Randomizer_DrawMogmaMitts, GI_PATH("mogma_mitts"), nullptr, .5f, Kind::Neutral, {} },
     { Randomizer_DrawGustJar, GI_PATH("gust_jar"), nullptr, 5.f, Kind::Neutral, {} },
-    { Randomizer_DrawBallAndChain, GI_PATH("ball_and_chain"), nullptr, .25f, Kind::Neutral, {} },
-    { Randomizer_DrawTimeGate, GI_PATH("time_gate"), nullptr, .5f, Kind::Neutral, {} },
+    { Randomizer_DrawBallAndChain,
+      GI_PATH("ball_and_chain"),
+      nullptr,
+      .25f,
+      Kind::Neutral,
+      {},
+      NeiGi::kBallAndChainShopFit },
+    { Randomizer_DrawTimeGate, GI_PATH("time_gate"), nullptr, .5f, Kind::Neutral, {}, NeiGi::kTimeGateShopFit },
     { Randomizer_DrawBeetle, GI_PATH("beetle"), nullptr, .3f, Kind::Neutral, {} },
-    { Randomizer_DrawShovel, GI_PATH("shovel"), nullptr, .2f, Kind::Neutral, {} },
-    { Randomizer_DrawHyliaGrace, GI_PATH("hylia_grace"), GI_XLU("hylia_grace"), 1.f, Kind::Hylia, {} },
-    { Randomizer_DrawZonaiPermafrost, GI_PATH("zonai_permafrost"), GI_XLU("zonai_permafrost"), 1.f, Kind::Zonai, {} },
+    { Randomizer_DrawShovel, GI_PATH("shovel"), nullptr, .2f, Kind::Neutral, {}, NeiGi::kShovelShopFit },
+    { Randomizer_DrawHyliaGrace,
+      GI_PATH("hylia_grace"),
+      GI_XLU("hylia_grace"),
+      1.f,
+      Kind::Hylia,
+      {},
+      NeiGi::kSpellShopFit },
+    { Randomizer_DrawZonaiPermafrost,
+      GI_PATH("zonai_permafrost"),
+      GI_XLU("zonai_permafrost"),
+      1.f,
+      Kind::Zonai,
+      {},
+      NeiGi::kSpellShopFit },
     { Randomizer_DrawDemiseDestruction,
       GI_PATH("demise_destruction"),
       GI_XLU("demise_destruction"),
       1.f,
       Kind::Demise,
-      {} },
-    { Randomizer_DrawRocsCape, nullptr, nullptr, 1.f, Kind::Neutral, {} },
-    { Randomizer_DrawSpinner, nullptr, nullptr, 1.f, Kind::Neutral, {} },
+      {},
+      NeiGi::kSpellShopFit },
+    { Randomizer_DrawRocsCape, GI_PATH("rocs_cape"), nullptr, .6f, Kind::Neutral, {}, NeiGi::kRocsCapeShopFit },
+    { Randomizer_DrawSpinner, GI_PATH("spinner"), nullptr, .3f, Kind::Neutral, {} },
     { Randomizer_DrawBombArrows, nullptr, nullptr, 1.f, Kind::Neutral, {} },
-    { Randomizer_DrawCaneOfSomaria, nullptr, nullptr, 1.f, Kind::Neutral, {} },
+    { Randomizer_DrawCaneOfSomaria,
+      GI_PATH("cane_of_somaria"),
+      nullptr,
+      .25f,
+      Kind::Neutral,
+      {},
+      NeiGi::kSomariaShopFit },
+    { Randomizer_DrawCaneSomariaUpgrade,
+      GI_PATH("cane_of_somaria"),
+      nullptr,
+      .25f,
+      Kind::Neutral,
+      {},
+      NeiGi::kSomariaShopFit },
+    { Randomizer_DrawMinishCap, GI_PATH("minish_cap"), nullptr, .5f, Kind::Neutral, {} },
     { Randomizer_DrawDominionRod, nullptr, nullptr, 1.f, Kind::Neutral, {} },
     { Randomizer_DrawMagnesis, nullptr, nullptr, 1.f, Kind::Neutral, {} },
     { Randomizer_DrawStasis, nullptr, nullptr, 1.f, Kind::Neutral, {} },
@@ -92,7 +146,8 @@ NeiGi::Basis NeiGi_CameraBasis(PlayState* play) {
     return { right, up, NeiGi::Unit(NeiGi::Cross(right, up)) };
 }
 
-void NeiGi_DrawMesh(PlayState* play, const NeiGi::Mesh& mesh, Kind orb) {
+static void NeiGi_DrawMeshMaterial(PlayState* play, const NeiGi::Mesh& mesh, Kind orb,
+                                   const NeiGi::TextureMaterial* material) {
     if (mesh.count == 0)
         return;
     // Reuse shared vertices within each 32-entry RSP cache load. A full potion
@@ -122,8 +177,8 @@ void NeiGi_DrawMesh(PlayState* play, const NeiGi::Mesh& mesh, Kind orb) {
                                 static_cast<int16_t>(std::lround(v.p.y * 16)),
                                 static_cast<int16_t>(std::lround(v.p.z * 16)) },
                               0,
-                              { static_cast<int16_t>(std::lround(v.u * 63 * 32)),
-                                static_cast<int16_t>(std::lround(v.v * 63 * 32)) },
+                              { static_cast<int16_t>(std::lround(v.u * (material ? 32 : 63) * 32)),
+                                static_cast<int16_t>(std::lround(v.v * (material ? 32 : 63) * 32)) },
                               { static_cast<uint8_t>(v.rgb >> 16), static_cast<uint8_t>(v.rgb >> 8),
                                 static_cast<uint8_t>(v.rgb), v.alpha } } };
         }
@@ -157,7 +212,16 @@ void NeiGi_DrawMesh(PlayState* play, const NeiGi::Mesh& mesh, Kind orb) {
     gDPSetCycleType(POLY_XLU_DISP++, G_CYC_2CYCLE);
     gDPSetAlphaCompare(POLY_XLU_DISP++, G_AC_NONE);
     gDPSetRenderMode(POLY_XLU_DISP++, G_RM_PASS, G_RM_AA_ZB_XLU_SURF2);
-    if (orb != Kind::Neutral) {
+    if (material) {
+        gSPTexture(POLY_XLU_DISP++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON);
+        gDPSetTextureLUT(POLY_XLU_DISP++, G_TT_NONE);
+        gDPSetTextureFilter(POLY_XLU_DISP++, G_TF_BILERP);
+        gDPLoadTextureBlock(POLY_XLU_DISP++, material->path, G_IM_FMT_RGBA, G_IM_SIZ_32b, 32, 32, 0,
+                            material->repeatS ? G_TX_WRAP : G_TX_CLAMP, material->repeatT ? G_TX_WRAP : G_TX_CLAMP, 5,
+                            5, G_TX_NOLOD, G_TX_NOLOD);
+        // Resource RGBA multiplied by each sampled vertex's color AND alpha.
+        gDPSetCombineMode(POLY_XLU_DISP++, G_CC_MODULATEIA, G_CC_PASS2);
+    } else if (orb != Kind::Neutral) {
         const auto color = NeiGi::OrbPalette(orb);
         gSPTexture(POLY_XLU_DISP++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON);
         gDPSetTextureLUT(POLY_XLU_DISP++, G_TT_NONE);
@@ -192,6 +256,17 @@ void NeiGi_DrawMesh(PlayState* play, const NeiGi::Mesh& mesh, Kind orb) {
     Matrix_Pop();
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     CLOSE_DISPS(play->state.gfxCtx);
+}
+
+void NeiGi_DrawMesh(PlayState* play, const NeiGi::Mesh& mesh, Kind orb) {
+    NeiGi_DrawMeshMaterial(play, mesh, orb, nullptr);
+}
+
+bool NeiGi_DrawTexturedMesh(PlayState* play, const NeiGi::Mesh& mesh, const NeiGi::TextureMaterial& material) {
+    if (!play || !mesh.count || !HasResource(material.path))
+        return false;
+    NeiGi_DrawMeshMaterial(play, mesh, Kind::Neutral, &material);
+    return true;
 }
 
 static void NeiGi_DrawEffects(PlayState* play, const Presentation& item, bool upgraded) {
@@ -233,21 +308,14 @@ static bool NeiGi_DrawImpl(PlayState* play, GetItemEntry* entry, bool shop) {
     const bool upgraded = HasResource(item->opaque) && (!item->translucent || HasResource(item->translucent));
     Matrix_Push();
     if (shop && upgraded) {
-        // EnGirlA's origin is 24 local units above the shelf. Fit the lowest
-        // serialized vertex above -22; leave world and overhead sizes intact.
-        float scale = 1.f, lift = 0.f;
-        if (item->draw == Randomizer_DrawBallAndChain) {
-            scale = .62f;
-            lift = 9.f;
-        } else if (item->draw == Randomizer_DrawShovel) {
-            scale = .82f;
-            lift = 13.f;
-        } else if (item->effect == Kind::Fire || item->effect == Kind::Ice || item->effect == Kind::Light) {
-            scale = .85f;
-            lift = 14.f;
-        }
-        Matrix_Translate(0, lift, 0, MTXMODE_APPLY);
-        Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
+        // The same shelf pose encloses the mesh, energy and crystal skin.
+        // World/overhead sizes and incomplete-resource fallbacks stay intact.
+        Matrix_Translate(0, item->shop.lift, 0, MTXMODE_APPLY);
+        Matrix_Scale(item->shop.scale, item->shop.scale, item->shop.scale, MTXMODE_APPLY);
+    }
+    if (upgraded && item->draw == Randomizer_DrawCaneSomariaUpgrade) {
+        // Retain the original red skill-upgrade flame with the authored cane.
+        Randomizer_DrawCaneSomariaUpgradeFlame(play);
     }
     Matrix_Push();
     if (upgraded) {

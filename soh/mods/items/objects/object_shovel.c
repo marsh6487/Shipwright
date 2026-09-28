@@ -9,6 +9,7 @@
 #include "../custom_items.h"
 #include "macros.h"
 #include "functions.h"
+#include "variables.h"
 #include <math.h>
 
 // Shovel model from shovel_DL folder
@@ -59,7 +60,10 @@ void CustomItems_DrawShovel(Player* player, PlayState* play) {
     Matrix_RotateX(-shovelPitch, MTXMODE_APPLY);
     Matrix_RotateY(BINANG_TO_RAD(0x4000), MTXMODE_APPLY);
 
-    Matrix_Scale(0.06f, 0.06f, 0.06f, MTXMODE_APPLY);
+    // Keep the authored grip at the two-hand midpoint while reducing the
+    // approved shovel by 10% for adult Link and 20% for child Link.
+    f32 scale = NeiHeld_HasResources(NEI_HELD_PATH("shovel"), NULL) ? (LINK_IS_CHILD ? 0.048f : 0.054f) : 0.06f;
+    Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
 
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);

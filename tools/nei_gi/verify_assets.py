@@ -14,7 +14,8 @@ CHECKPOINTS = Path(__file__).resolve().parent / "CHECKPOINTS"
 PREFIX = "objects/nei_gi_redesign/"
 ITEMS = ("fire_rod", "ice_rod", "light_rod", "rocs_feather", "time_gate", "whip", "shovel",
          "gust_jar", "hylia_grace", "zonai_permafrost", "demise_destruction", "ball_and_chain",
-         "deku_leaf", "mogma_mitts", "switch_hook", "beetle", "lantern")
+         "deku_leaf", "mogma_mitts", "switch_hook", "beetle", "lantern",
+         "spinner", "cane_of_somaria", "minish_cap", "rocs_cape")
 
 
 def face_key(points):

@@ -382,7 +382,22 @@ static void TestInputSuppression(void) {
   }
 }
 
+static void TestNativeSoundLifetime(void) {
+  Reset();
+  ItemEquip_ResetUnequipSound(&play, &player, PLAYER_IA_ROD_FIRE);
+  ItemEquip_ResetUnequipSound(&play, &player, PLAYER_IA_ROD_ICE);
+  assert(ItemEquip_ClaimUnequipSound(&play, &player, PLAYER_IA_ROD_FIRE));
+  assert(!ItemEquip_ClaimUnequipSound(&play, &player, PLAYER_IA_ROD_FIRE));
+  Player_InitItemAction(&play, &player, PLAYER_IA_ROD_ICE);
+  // Initializing a new item must not reopen the outgoing item's sound.
+  assert(!ItemEquip_ClaimUnequipSound(&play, &player, PLAYER_IA_ROD_FIRE));
+  assert(ItemEquip_ClaimUnequipSound(&play, &player, PLAYER_IA_ROD_ICE));
+  Player_InitItemAction(&play, &player, PLAYER_IA_ROD_FIRE);
+  assert(ItemEquip_ClaimUnequipSound(&play, &player, PLAYER_IA_ROD_FIRE));
+}
+
 int main(void) {
+  TestNativeSoundLifetime();
   TestClassifierAndCleanup();
   TestPlayerEntries();
   TestHudCandidateAndCooldown();

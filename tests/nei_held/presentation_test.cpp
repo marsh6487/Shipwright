@@ -36,6 +36,9 @@ int main() {
     matrix = .05f;
     matrixY = 13;
     assert(NeiHeld_DrawRod(&play, i) && !arena.empty());
+    // All three grip origins use the caller's wrist pose. The legacy light
+    // rod's five-unit correction belongs only to its native fallback drawer.
+    assert(submitted.front().first == .05f && submitted.front().second == 13);
     assert(matrix == .05f && matrixY == 13 && stack.empty());
     assert(Drawn() == std::vector<std::string>({rods[i]}));
   }

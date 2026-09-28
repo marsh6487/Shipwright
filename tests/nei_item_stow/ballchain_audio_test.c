@@ -47,6 +47,7 @@ static void ResetFixture(int slot) {
   player.skelAnime.jointTable = joints;
   sBallChainColInitialized = 0;
   sBallChainPrevInvinc = 0;
+  ItemEquip_ResetUnequipSound(&play, &player, PLAYER_IA_BALL_AND_CHAIN);
   Player_InitBallAndChainIA(&play, &player);
   soundCount = stoppedCount = 0;
   cameraExits = deletedTrails = registeredColliders = 0;

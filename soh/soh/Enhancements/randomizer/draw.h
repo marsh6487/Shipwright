@@ -88,6 +88,8 @@ void Randomizer_DrawQuartzOfMotion(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawClawshot(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawBottomlessBottle(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawCanePacci(PlayState* play, GetItemEntry* getItemEntry);
+// Shared by the original Somaria upgrade and its optional GI replacement.
+void Randomizer_DrawCaneSomariaUpgradeFlame(PlayState* play);
 void Randomizer_DrawCaneSomariaUpgrade(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawCanePacciUpgrade(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawCanePacciUltrahand(PlayState* play, GetItemEntry* getItemEntry);

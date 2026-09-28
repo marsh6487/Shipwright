@@ -1,5 +1,12 @@
 # NEI GI upgrade candidate
 
+The final presentation candidate extends this original batch to **21 GI models**:
+the lantern, Spinner, Cane of Somaria, Minish Cap and Roc's Cape are included.
+Both native SoH and NEI feather callbacks use the approved feather. Current
+scope, references and evidence are recorded in
+[`../nei_final_preview/VERIFICATION.md`](../nei_final_preview/VERIFICATION.md).
+The original batch history below remains the record of its earlier review.
+
 This batch replaces the get-item presentation for 16 NEI items: Fire, Ice and Light Rods; Roc's Feather; Time Gate; Whip A; Shovel; Gust Jar; Hylia's Grace; Zonai Permafrost; Demise Destruction; Ball and Chain; Deku Leaf; Mogma Mitts; Switch Hook; and Beetle.
 
 The same bindings cover pickups, randomized shops and shuffled freestanding items that call `GetItemEntry_Draw`. Actor and held-item resource paths are unchanged. Source resources are bundled under `soh/assets/custom/objects/nei_gi_redesign/`. An older build without these bindings cannot use the standalone archive.

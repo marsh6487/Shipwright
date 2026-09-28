@@ -3,7 +3,10 @@
 #include "soh/Enhancements/randomizer/NeiGiPresentation.cpp"
 #include "variables.h"
 #include <cassert>
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <set>
@@ -17,6 +20,7 @@ float matrix = 1;
 float matrixY = 0;
 std::vector<std::pair<float, float>> stack;
 std::vector<std::pair<float, float>> submitted;
+std::vector<std::array<unsigned, 3>> flameColors;
 std::vector<std::vector<Vtx>> arena;
 std::map<Gfx *, std::vector<Vtx>> vertexLoads;
 std::set<std::string> files;
@@ -31,6 +35,7 @@ void Reset() {
   matrix = 1;
   matrixY = 0;
   submitted.clear();
+  flameColors.clear();
   arena.clear();
   vertexLoads.clear();
   std::memset(opa, 0, sizeof(opa));
@@ -62,6 +67,7 @@ std::vector<std::string> Drawn() {
 } // namespace Fixture
 
 extern "C" {
+void NeiUsedMagic_DrawChargeFocus(PlayState*, int) {}
 uintptr_t gSegments[NUM_SEGMENTS];
 GameInfo gameInfo{};
 GameInfo *gGameInfo = &gameInfo;
@@ -155,6 +161,7 @@ void gSPDisplayList(Gfx *, Gfx *) {
 #define ORIGINAL(name)                                                         \
   void name(PlayState *, GetItemEntry *) { Fixture::Original(); }
 ORIGINAL(Randomizer_DrawRocsFeatherSkijer)
+ORIGINAL(Randomizer_DrawRocsFeather)
 ORIGINAL(Randomizer_DrawWhip)
 ORIGINAL(Randomizer_DrawFireRod)
 ORIGINAL(Randomizer_DrawIceRod)
@@ -174,6 +181,12 @@ ORIGINAL(Randomizer_DrawRocsCape)
 ORIGINAL(Randomizer_DrawSpinner)
 ORIGINAL(Randomizer_DrawBombArrows)
 ORIGINAL(Randomizer_DrawCaneOfSomaria)
+ORIGINAL(Randomizer_DrawCaneSomariaUpgrade)
+ORIGINAL(Randomizer_DrawCanePacci)
+ORIGINAL(Randomizer_DrawCanePacciUpgrade)
+ORIGINAL(Randomizer_DrawCanePacciUltrahand)
+ORIGINAL(Randomizer_DrawExtCaneOfByrna)
+ORIGINAL(Randomizer_DrawMinishCap)
 ORIGINAL(Randomizer_DrawDominionRod)
 ORIGINAL(Randomizer_DrawMagnesis)
 ORIGINAL(Randomizer_DrawStasis)
@@ -181,6 +194,9 @@ ORIGINAL(Randomizer_DrawLantern)
 ORIGINAL(Randomizer_DrawCryonis)
 ORIGINAL(UnrelatedDraw)
 #undef ORIGINAL
+static void DrawWeaponFlameOverlay(PlayState *, u8 r, u8 g, u8 b) {
+  Fixture::flameColors.push_back({r, g, b});
+}
 #define gSPSegment(pkt, seg, target) ((void)(pkt))
 #include "nei_gi_dispatch.inc"
 #undef gSPSegment
@@ -229,6 +245,35 @@ int main() {
          arena.front().size() > 30); // Intrinsic energy, shimmer OFF.
   assert(Drawn()[1].ends_with("/gi_xlu_dl") && gfx.polyXlu.p > xlu);
   assert(matrix == 1 && stack.empty() && interpolation == 0);
+
+  // A missing spell pass must never expose half a replacement or apply its
+  // shelf lift to the legacy fallback, in either resource namespace.
+  for (const auto &[draw, slug] : std::vector<std::pair<CustomDrawFunc, const char *>>{
+           {Randomizer_DrawHyliaGrace, "hylia_grace"},
+           {Randomizer_DrawZonaiPermafrost, "zonai_permafrost"},
+           {Randomizer_DrawDemiseDestruction, "demise_destruction"}}) {
+    for (bool altOnly : {false, true}) {
+      for (int passes = 0; passes < 4; ++passes) {
+        Reset();
+        entry.drawFunc = draw;
+        alt = altOnly;
+        const auto prefix = std::string(altOnly ? "alt/" : "") +
+                            "__OTR__objects/nei_gi_redesign/" + slug;
+        if (passes & 1)
+          files.insert(prefix + "/gi_dl");
+        if (passes & 2)
+          files.insert(prefix + "/gi_xlu_dl");
+        matrix = .25f;
+        matrixY = 6;
+        assert(NeiGi_DrawShop(&play, &entry));
+        assert(fallback == (passes == 3 ? 0 : 1));
+        assert(Drawn().size() == (passes == 3 ? 2 : 0));
+        assert(matrix == .25f && matrixY == 6 && stack.empty() && loads == 0);
+        if (passes != 3)
+          assert(submitted.empty());
+      }
+    }
+  }
 
   Reset();
   entry.drawFunc = Randomizer_DrawFireRod;
@@ -280,29 +325,94 @@ int main() {
   Player_DrawGetItemImpl(&play, &player, &ref, 1);
   assert(triforce == 1 && vanilla == 1);
 
-  // The NEI feather must resolve to the exact same textured resource in shops,
-  // freestanding common draws (including the house), and Link's overhead draw.
-  std::vector<std::string> featherPaths;
-  for (int route = 0; route < 3; ++route) {
-    Reset();
-    entry = {};
-    entry.drawFunc = Randomizer_DrawRocsFeatherSkijer;
-    files.insert("__OTR__objects/nei_gi_redesign/rocs_feather/gi_dl");
-    if (route == 0) {
-      GetItemEntry_Draw(&play, entry);
-      featherPaths = Drawn();
-    } else if (route == 1) {
-      EnGirlA shop{};
-      shop.actor.params = SI_RANDOMIZED_ITEM;
-      shopEntry = entry;
-      EnGirlA_Draw(&shop.actor, &play);
-    } else {
-      player = {};
-      player.getItemEntry = entry;
-      Player_DrawGetItemImpl(&play, &player, &ref, 1);
+  // Both item-table identities use the approved feather in every real draw
+  // route. This must work for stock Roc's Feather, without plando substitutions.
+  const std::vector<std::string> featherPaths = {
+      "__OTR__objects/nei_gi_redesign/rocs_feather/gi_dl"};
+  for (const auto draw : {Randomizer_DrawRocsFeatherSkijer,
+                          Randomizer_DrawRocsFeather}) {
+    for (int route = 0; route < 3; ++route) {
+      for (bool altOnly : {false, true}) {
+        Reset();
+        entry = {};
+        entry.drawFunc = draw;
+        alt = altOnly;
+        files.insert((altOnly ? "alt/" : "") + featherPaths.front());
+        if (route == 0) {
+          GetItemEntry_Draw(&play, entry);
+        } else if (route == 1) {
+          EnGirlA shop{};
+          shop.actor.params = SI_RANDOMIZED_ITEM;
+          shopEntry = entry;
+          EnGirlA_Draw(&shop.actor, &play);
+        } else {
+          player = {};
+          player.getItemEntry = entry;
+          Player_DrawGetItemImpl(&play, &player, &ref, 1);
+        }
+        assert(Drawn() == featherPaths && fallback == 0);
+        assert(stack.empty() && interpolation == 0 && loads == 0);
+      }
     }
-    assert(Drawn() == featherPaths && Drawn().size() == 1 && fallback == 0);
-    assert(stack.empty() && interpolation == 0 && loads == 0);
+    Reset();
+    entry.drawFunc = draw;
+    assert(NeiGi_DrawShop(&play, &entry));
+    assert(fallback == 1 && Drawn().empty() && matrix == 1 && matrixY == 0);
+    std::cout << (draw == Randomizer_DrawRocsFeather ? "Stock Roc's Feather" : "NEI Progressive Roc")
+              << ": common/shop/overhead base+Alt use approved feather; missing resource falls back\n";
+  }
+
+  // Newly authored models reach every GI caller, with complete-resource base
+  // and Alt fallback. Per-skill Somaria shares red geometry; other cane modes
+  // retain their own original callbacks and presentation identities.
+  for (const auto &[draw, slug] : std::vector<std::pair<CustomDrawFunc, const char *>>{
+           {Randomizer_DrawSpinner, "spinner"},
+           {Randomizer_DrawCaneOfSomaria, "cane_of_somaria"},
+           {Randomizer_DrawCaneSomariaUpgrade, "cane_of_somaria"},
+           {Randomizer_DrawMinishCap, "minish_cap"},
+           {Randomizer_DrawRocsCape, "rocs_cape"}}) {
+    const auto path = std::string("__OTR__objects/nei_gi_redesign/") + slug + "/gi_dl";
+    for (int route = 0; route < 3; ++route) {
+      for (bool altOnly : {false, true}) {
+        Reset();
+        entry = {};
+        entry.drawFunc = draw;
+        alt = altOnly;
+        files.insert((altOnly ? "alt/" : "") + path);
+        if (route == 0) {
+          GetItemEntry_Draw(&play, entry);
+        } else if (route == 1) {
+          EnGirlA shop{};
+          shop.actor.params = SI_RANDOMIZED_ITEM;
+          shopEntry = entry;
+          EnGirlA_Draw(&shop.actor, &play);
+        } else {
+          player = {};
+          player.getItemEntry = entry;
+          Player_DrawGetItemImpl(&play, &player, &ref, 1);
+        }
+        assert(Drawn() == std::vector<std::string>{path} && fallback == 0);
+        assert(flameColors.size() == (draw == Randomizer_DrawCaneSomariaUpgrade ? 1 : 0));
+        if (!flameColors.empty())
+          assert((flameColors.front() == std::array<unsigned, 3>{255, 60, 60}));
+        assert(stack.empty() && interpolation == 0 && loads == 0);
+      }
+    }
+    Reset();
+    entry.drawFunc = draw;
+    files.insert("alt/" + path); // Disabled Alt cannot hide the legacy model.
+    assert(NeiGi_DrawShop(&play, &entry));
+    assert(fallback == 1 && Drawn().empty() && matrix == 1 && matrixY == 0);
+  }
+  for (auto draw : {Randomizer_DrawCanePacci, Randomizer_DrawCanePacciUpgrade,
+                   Randomizer_DrawCanePacciUltrahand, Randomizer_DrawExtCaneOfByrna}) {
+    Reset();
+    entry.drawFunc = draw;
+    files.insert("__OTR__objects/nei_gi_redesign/cane_of_somaria/gi_dl");
+    assert(!NeiGi_Draw(&play, &entry));
+    assert(!NeiGi_DrawShop(&play, &entry));
+    GetItemEntry_Draw(&play, entry);
+    assert(fallback == 1 && Drawn().empty());
   }
 
   // Serialized model vertices and resource matrices must clear the shelf by 0.5
@@ -310,16 +420,46 @@ int main() {
   struct Bounds {
     CustomDrawFunc draw;
     const char *slug;
-    float low, high;
+    const char *name;
+    const char *callback;
+    std::array<float, 3> minimum, maximum;
+    float spinningWidth, drawScale;
+    bool translucent;
   };
   const Bounds bounds[] = {
 #include "nei_gi_bounds.inc"
   };
+  std::ofstream preview;
+  if (const auto *path = std::getenv("NEI_SHOP_PREVIEW_EXPORT")) {
+    preview.open(path);
+    assert(preview.is_open());
+    preview << std::setprecision(9)
+            << "{\"metadata\":{\"runtime_tested\":false,"
+               "\"matrix_convention\":\"row-major, column vector\","
+               "\"rotation\":\"normalized to identity by fixture; preview may add GI spin\","
+               "\"shop_matrix_includes\":\"GI caller scale, .25 actor scale and +24 local origin (world +6)\","
+               "\"nonshop_matrix_includes\":\"GI caller scale\","
+               "\"matrix_input\":\"vertices after serialized resource scale_mtx\","
+               "\"checkpoint_renderer\":\"already applies resource and caller scales; divide exported matrix scale by draw_scale\","
+               "\"counter_world_y\":0,\"actor_scale\":0.25,\"actor_y_offset_local\":24},\"items\":[";
+  }
+  bool firstPreview = true;
+  const auto writeMatrix = [&](float s, float y) {
+    preview << "[[" << s << ",0,0,0],[0," << s << ",0," << y
+            << "],[0,0," << s << ",0],[0,0,0,1]]";
+  };
+  const auto writeBounds = [&](const Bounds &b, float s, float y) {
+    preview << "{\"min\":[" << s * b.minimum[0] << ',' << y + s * b.minimum[1]
+            << ',' << s * b.minimum[2] << "],\"max\":[" << s * b.maximum[0]
+            << ',' << y + s * b.maximum[1] << ',' << s * b.maximum[2] << "]}";
+  };
   for (const auto &b : bounds) {
     Reset();
     entry.drawFunc = b.draw;
-    files.insert(std::string("__OTR__objects/nei_gi_redesign/") + b.slug +
-                 "/gi_dl");
+    const auto path = std::string("__OTR__objects/nei_gi_redesign/") + b.slug;
+    files.insert(path + "/gi_dl");
+    if (b.translucent)
+      files.insert(path + "/gi_xlu_dl");
     matrix = .25f;
     matrixY = 6;
     EnGirlA shop{};
@@ -327,22 +467,67 @@ int main() {
     shopEntry = entry;
     EnGirlA_Draw(&shop.actor, &play);
     const auto [scale, y] = submitted.front();
-    assert(y + scale * b.low >= .5f);
-    assert(scale * (b.high - b.low) <= 19.f);
+    std::cout << b.slug << ": shelf bottom=" << y + scale * b.minimum[1]
+              << ", height=" << scale * (b.maximum[1] - b.minimum[1])
+              << ", spinning width=" << scale * b.spinningWidth << '\n'
+              << std::flush;
+    assert(y + scale * b.minimum[1] >= .5f);
+    // The approved feather retains its full size; only its shelf lift changes.
+    const bool feather = b.draw == Randomizer_DrawRocsFeather || b.draw == Randomizer_DrawRocsFeatherSkijer;
+    assert(scale * (b.maximum[1] - b.minimum[1]) <= (feather ? 21.f : 19.f));
+    assert(scale * b.spinningWidth <= 19.f);
+    if (b.translucent) // The shell uses the same lifted/scaled pose as its core.
+      assert(submitted.back() == submitted.front());
     assert(matrix == .25f && matrixY == 6 && stack.empty());
+    // The actual common draw keeps its original size outside shops.
+    submitted.clear();
+    matrix = 1;
+    matrixY = 0;
+    GetItemEntry_Draw(&play, entry);
+    assert(submitted.front().first == b.drawScale && submitted.front().second == 0);
+    if (preview.is_open()) {
+      if (!firstPreview)
+        preview << ',';
+      firstPreview = false;
+      preview << "{\"slug\":\"" << b.slug << "\",\"name\":\"" << b.name
+              << "\",\"callback\":\"Randomizer_Draw" << b.callback
+              << "\",\"draw_scale\":" << b.drawScale << ",\"shop_matrix\":";
+      writeMatrix(scale, y);
+      preview << ",\"nonshop_matrix\":";
+      writeMatrix(submitted.front().first, submitted.front().second);
+      preview << ",\"bounds\":{\"resource\":";
+      writeBounds(b, 1, 0);
+      preview << ",\"nonshop\":";
+      writeBounds(b, submitted.front().first, submitted.front().second);
+      preview << ",\"shop\":";
+      writeBounds(b, scale, y);
+      preview << "}}";
+    }
+    submitted.clear();
+    player = {};
+    player.getItemEntry = entry;
+    ref = {};
+    Player_DrawGetItemImpl(&play, &player, &ref, 1);
+    assert(std::abs(submitted.front().first - .2f * b.drawScale) < .000001f);
+    assert(submitted.front().second == 14.f);
     Reset();
     matrix = .25f;
     matrixY = 6;
     assert(NeiGi_DrawShop(&play, &entry));
     assert(fallback == 1 && matrix == .25f && matrixY == 6);
   }
+  if (preview.is_open())
+    preview << "]}\n";
   // Eight occupied potion-shop slots share one frame's XLU buffer. Keep at
   // least a third of its 4096 commands available to the room and other actors.
   Reset();
   enabled = 1;
-  for (size_t i : {size_t(2), size_t(3), size_t(4), size_t(13), size_t(14),
-                   size_t(15), size_t(8), size_t(10)}) {
-    const auto &item = kPresentations[i];
+  for (auto draw : {Randomizer_DrawFireRod, Randomizer_DrawIceRod,
+                   Randomizer_DrawLightRod, Randomizer_DrawHyliaGrace,
+                   Randomizer_DrawZonaiPermafrost, Randomizer_DrawDemiseDestruction,
+                   Randomizer_DrawGustJar, Randomizer_DrawTimeGate}) {
+    const auto &item = *std::find_if(std::begin(kPresentations), std::end(kPresentations),
+                                   [draw](const auto &candidate) { return candidate.draw == draw; });
     files.insert(item.opaque);
     if (item.translucent)
       files.insert(item.translucent);
@@ -413,6 +598,24 @@ int main() {
       triangle(cmd->words.w1);
   }
   assert(decoded == mesh.count && vertexLoads.size() > 1);
+  // Optional private USED surfaces must not load global textures or retain an
+  // Alt-owned resource pointer. Missing base/Alt materials queue nothing.
+  Reset();
+  const NeiGi::TextureMaterial material{"__OTR__objects/nei_used_magic/ice_fracture", true, true};
+  assert(!NeiGi_DrawTexturedMesh(&play, mesh, material));
+  assert(gfx.polyXlu.p == xlu && allocations == 0 && arena.empty());
+  files.insert(std::string("alt/") + material.path);
+  assert(!NeiGi_DrawTexturedMesh(&play, mesh, material));
+  alt = 1;
+  assert(NeiGi_DrawTexturedMesh(&play, mesh, material));
+  assert(loads == 0 && allocations > 0 && stack.empty() && interpolation == 0);
+  for (const auto& batch : arena) for (const auto& vertex : batch) {
+    // This fixture's UVs are normalized; private surfaces have a 32px logical tile.
+    assert(std::abs(vertex.v.tc[0]) <= 32 * 32 && std::abs(vertex.v.tc[1]) <= 32 * 32);
+  }
+  alt = 0;
+  const auto* after = gfx.polyXlu.p;
+  assert(!NeiGi_DrawTexturedMesh(&play, mesh, material) && gfx.polyXlu.p == after);
   std::cout << "NEI production renderer: fallback, OPA/XLU, disabled effects, "
                "Alt paths, and matrix balance passed\n";
   return 0;

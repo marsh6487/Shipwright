@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiUsedMagicPresentation.h"
 /**
  * item_rod_ice.c - Ice Rod from A Link Between Worlds
  *
@@ -15,6 +16,7 @@
  */
 
 #include "item_rod_ice.h"
+#include "item_rod_common.h"
 #include "../helpers/equip_helper.h"
 #include "../helpers/combat_helper.h"
 #include "../helpers/fx_helper.h"
@@ -458,6 +460,10 @@ static void IceRod_UpdateIceWave(Player* p, PlayState* play) {
                 iceRodWaveColliders[i].base.atFlags &= ~AT_HIT;
             }
         }
+        // Sample the existing wave/beam state; no additional effect lifetime.
+        for (s32 i = 0; i < ICE_ROD_WAVE_COUNT; ++i) {
+            NeiUsedMagic_DrawBurst(play, 1, &iceRodWavePos[i], .8f + .1f * i, iceRodWaveTimer / 30.0f);
+        }
     } else {
         iceRodWaveActive = 0;
         Audio_StopSfxById(ICE_ROD_SFX_ICE_LOOP);
@@ -623,7 +629,7 @@ static void IceRod_UpdateSpinIce(Player* p, PlayState* play) {
     }
 
     // Draw ice cylinder (blue to white based on progress)
-    FX_DrawSpinFireCylinder(play, p, iceRodSpinRadius, iceRodSpinIsBig, &sIceRodColor);
+    NeiUsedMagic_DrawSpin(play, p, 1, iceRodSpinRadius, iceRodSpinIsBig);
 
     if ((play->gameplayFrames % 6) == 0) {
         Audio_PlayActorSound2(&p->actor, ICE_ROD_SFX_ICE_IGNITE);
@@ -746,11 +752,11 @@ static void IceRod_UpdateCharge(Player* p, PlayState* play) {
         Audio_PlayActorSound2(&p->actor, ICE_ROD_SFX_CHARGE);
     }
 
-    FX_DrawChargeAura(play, p, iceRodChargeLevel, &sIceRodColor);
+    NeiUsedMagic_DrawCharge(play, p, 1, iceRodChargeLevel);
 
     if ((play->gameplayFrames % 3) == 0) {
         Vec3f* tipPos = &p->meleeWeaponInfo[0].tip;
-        FX_SpawnRodSwingParticles(play, tipPos, &sIceRodColor);
+        RodCommon_PreserveChargeSparkCadence(play, tipPos, &sIceRodColor);
     }
 
     if ((play->gameplayFrames % 12) == 0) {
@@ -876,7 +882,7 @@ static void IceRod_OnEquip(PlayState* play, Player* p) {
     sIceChargeHoldCounter = 0;
 
     iceRodBlureIdx = FX_InitSwordTrail(play, &sIceRodColor);
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_ROD_ICE);
 }
 
 static void IceRod_OnUnequip(PlayState* play, Player* p) {
@@ -909,7 +915,7 @@ static void IceRod_OnUnequip(PlayState* play, Player* p) {
 
     if (iceRodSpinActive)
         IceRod_StopSpinIce();
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_ROD_ICE);
 }
 
 void IceRod_PutAway(Player* p, PlayState* play) {

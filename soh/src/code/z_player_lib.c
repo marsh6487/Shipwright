@@ -44,6 +44,7 @@ extern void KiteSurf_AdjustLimb(s32 limbIndex, Vec3s* rot);
 // The Sheikah Slate is pinned to the right fist and used to rebuild its pose from two bodyPartsPos
 // points, which give a direction and so cannot express the wrist twisting around it. Skijer's NEI
 extern void ItemEquip_CaptureHandMatrix(void);
+extern void ItemEquip_CaptureLeftHandMatrix(void);
 extern u8 ItemEquip_HoldsClosedFist(void);
 extern u8 ItemEquip_HoldsEmptyHand(void);
 
@@ -1980,8 +1981,8 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
     if (limbIndex == PLAYER_LIMB_R_HAND && *dList != NULL && this->actor.scale.y >= 0.0f &&
         sRightHandType == PLAYER_MODELTYPE_RH_HOOKSHOT && !TransformMasks_IsTransformedAny() &&
         NeiArticulated_UsesSwitchHook(this)) {
-        Gfx* hand = Player_ResolveLimbDLForDummyOrLocal(
-            sPlayerRightHandClosedDLs[gSaveContext.linkAge + sDListsLodOffset]);
+        Gfx* hand =
+            Player_ResolveLimbDLForDummyOrLocal(sPlayerRightHandClosedDLs[gSaveContext.linkAge + sDListsLodOffset]);
         NeiArticulated_ApplySwitchHookHand(play, this, dList, hand);
     }
 
@@ -2076,9 +2077,9 @@ s32 Player_OverrideLimbDrawGameplayFirstPerson(PlayState* play, s32 limbIndex, G
 
     // First-person has a distinct FAR hand path. Do not expose a limb hidden
     // by its camera/transformation rules, and do not alter the aim transform.
-    if (limbIndex == PLAYER_LIMB_R_HAND && *dList != NULL && this->unk_6AD == 2 &&
-        this->actor.scale.y >= 0.0f && this->rightHandType == PLAYER_MODELTYPE_RH_HOOKSHOT &&
-        !TransformMasks_IsTransformedAny() && NeiArticulated_UsesSwitchHook(this)) {
+    if (limbIndex == PLAYER_LIMB_R_HAND && *dList != NULL && this->unk_6AD == 2 && this->actor.scale.y >= 0.0f &&
+        this->rightHandType == PLAYER_MODELTYPE_RH_HOOKSHOT && !TransformMasks_IsTransformedAny() &&
+        NeiArticulated_UsesSwitchHook(this)) {
         Gfx* hand = Player_ResolveLimbDLForDummyOrLocal(sPlayerRightHandClosedDLs[gSaveContext.linkAge + 2]);
         NeiArticulated_ApplySwitchHookHand(play, this, dList, hand);
     }
@@ -2533,6 +2534,9 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
         MtxF sp14C;
         Actor* hookedActor;
 
+        // Capture the actual wrist before a native stick/sword draw changes
+        // this matrix. PAK/custom hand display lists keep the same bone frame.
+        ItemEquip_CaptureLeftHandMatrix();
         Math_Vec3f_Copy(&this->leftHandPos, D_80160000);
 
         // Boss Remains: draw Odolwa's sword on the hand bone (the native sword was hidden to a

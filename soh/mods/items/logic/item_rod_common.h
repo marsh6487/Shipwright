@@ -130,4 +130,8 @@ typedef struct {
 // *Rod_CalcVelocity helpers, parameterized by speed.
 void RodCommon_CalcVelocity(const RodConfig* cfg, Vec3f* outVel, s16 yaw, s16 pitch);
 
+// Retain the original charge spark's pool/lifetime/RNG behavior while its
+// visible presentation is sampled by NeiUsedMagic_DrawCharge.
+void RodCommon_PreserveChargeSparkCadence(PlayState* play, Vec3f* tipPos, RodColor* color);
+
 #endif // ITEM_ROD_COMMON_H

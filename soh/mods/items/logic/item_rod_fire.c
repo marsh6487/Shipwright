@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiUsedMagicPresentation.h"
 /**
  * item_rod_fire.c - Fire Rod from A Link Between Worlds
  *
@@ -708,11 +709,11 @@ static void FireRod_UpdateCharge(Player* p, PlayState* play) {
         Audio_PlayActorSound2(&p->actor, FIRE_ROD_SFX_CHARGE);
     }
 
-    FX_DrawChargeAura(play, p, fireRodChargeLevel, &sFireRodColor);
+    NeiUsedMagic_DrawCharge(play, p, 0, fireRodChargeLevel);
 
     if ((play->gameplayFrames % 3) == 0) {
         Vec3f* tipPos = &p->meleeWeaponInfo[0].tip;
-        FX_SpawnRodSwingParticles(play, tipPos, &sFireRodColor);
+        RodCommon_PreserveChargeSparkCadence(play, tipPos, &sFireRodColor);
     }
 
     Audio_PlayActorSound2(&p->actor, FIRE_ROD_SFX_FIRE_IGNITE - SFX_FLAG);
@@ -840,7 +841,7 @@ static void FireRod_OnEquip(PlayState* play, Player* p) {
     sChargeHoldCounter = 0;
 
     fireRodBlureIdx = FX_InitSwordTrail(play, &sFireRodColor);
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_ROD_FIRE);
 }
 
 static void FireRod_OnUnequip(PlayState* play, Player* p) {
@@ -874,7 +875,7 @@ static void FireRod_OnUnequip(PlayState* play, Player* p) {
 
     if (fireRodSpinActive)
         FireRod_StopSpinFire();
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_ROD_FIRE);
 }
 
 void FireRod_PutAway(Player* p, PlayState* play) {

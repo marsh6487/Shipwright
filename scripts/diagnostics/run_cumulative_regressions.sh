@@ -5,10 +5,13 @@ cd "$(dirname "$0")/../.."
 python3 -B scripts/diagnostics/check_feature_baselines.py
 python3 -B -m unittest discover -s scripts/diagnostics -p test_feature_baselines.py
 python3 -B scripts/diagnostics/run_nei_gi_tests.py --held
+python3 -B tests/nei_held/run_hand_fit_tests.py
+python3 -B tests/nei_held/run_articulated_tests.py
+python3 -B tests/nei_used_fx/run_tests.py
 python3 -B tests/nei_item_stow/run_ballchain_tests.py
 python3 -B tests/nei_item_stow/run_lantern_rod_tests.py
 python3 -B tests/nei_item_stow/run_stow_tests.py
-python3 -B tools/nei_gi/verify_assets.py
+python3 -B tools/nei_held/verify_assets.py
 python3 -B scripts/diagnostics/test_young_epona_assets.py
 python3 -B scripts/diagnostics/run_young_epona_tests.py
 python3 -B scripts/diagnostics/run_young_epona_actor_tests.py

@@ -2620,6 +2620,7 @@ void Player_InitItemAction(PlayState* play, Player* this, s8 itemAction) {
     this->unk_860 = 0;
 
     this->heldItemAction = this->itemAction = itemAction;
+    ItemEquip_ResetUnequipSound(play, this, itemAction);
     this->modelGroup = this->nextModelGroup;
 
     this->stateFlags1 &= ~(PLAYER_STATE1_ITEM_IN_HAND | PLAYER_STATE1_USING_BOOMERANG);
@@ -3148,7 +3149,9 @@ s32 func_8083442C(Player* this, PlayState* play) {
 }
 
 void Player_FinishItemChange(PlayState* play, Player* this) {
-    if (this->heldItemAction != PLAYER_IA_NONE) {
+    // Cleanup may already have sounded, or may run during/after Player_UseItem.
+    // Claim only the outgoing sound; the incoming equipment sound stays separate.
+    if (this->heldItemAction != PLAYER_IA_NONE && ItemEquip_ClaimUnequipSound(play, this, this->heldItemAction)) {
         if (func_8008F2BC(this, this->heldItemAction) >= 0) {
             func_808328EC(this, NA_SE_IT_SWORD_PUTAWAY);
         } else {
@@ -4241,6 +4244,7 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
             } else if ((itemAction != this->heldItemAction) ||
                        ((this->heldActor == NULL) && (Player_ActionToExplosive(this, itemAction) >= 0))) {
                 // Handle using a new held item
+                ItemEquip_BeginItemChangeSound(play, this, this->heldItemAction);
                 this->nextModelGroup = Player_ActionToModelGroup(this, itemAction);
                 nextAnimType = gPlayerModelTypes[this->nextModelGroup][PLAYER_MODELGROUPENTRY_ANIM];
 

@@ -1,5 +1,17 @@
 # Held models POC1
 
+The current final-pass candidate has 22 held components and 21 GI models. The
+Spinner and Somaria additions use the separate completion builder:
+
+```
+python tools/nei_gi/SOURCE/build_completion.py --held --install
+```
+
+This rebuilds only the four final GI additions and their two used components.
+See `tools/nei_final_preview/VERIFICATION.md` for the current branch, fitting
+checks, source-animation previews and review boundary. The original pass below
+remains the preserved baseline.
+
 Baseline: `3ba8d915c` (GI Ice POC7). Work branch: `feat/nei-held-models-poc1-20260927`.
 
 This candidate carries the approved GI designs into actual equipped and active

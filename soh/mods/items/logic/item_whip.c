@@ -268,7 +268,7 @@ static void Whip_Stop(Player* p, PlayState* play) {
     p->actor.gravity = -1.0f;
     // Stop looping swing sound
     Audio_StopSfxById(WHIP_SFX_SWING);
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_WHIP);
 }
 
 static void Whip_Start(Player* p, PlayState* play) {
@@ -313,7 +313,7 @@ static void Whip_Start(Player* p, PlayState* play) {
         }
     }
 
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_WHIP);
 }
 
 // =============================================================================

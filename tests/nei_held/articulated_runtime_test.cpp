@@ -238,10 +238,44 @@ int main(int argc, char** argv) {
         } else assert(drawn.empty());
     }
     reset(); whipBundle();
+    // FirstPerson_Init marks aiming before its four camera transition frames.
+    // A full GI coil must never flash during that transition or settled aim;
+    // the same handle already used by the lash remains attached to the wrist.
+    for (int cameraTimer : {14, 13, 12, 11, 10, 1}) {
+      reset();
+      whipBundle();
+      gCustomItemState = {};
+      gCustomItemState.whipActive = 1;
+      gCustomItemState.whipState = 1;
+      gCustomItemState.whipFirstPersonActive = 1;
+      p.unk_834 = cameraTimer;
+      const CustomItemState saved = gCustomItemState;
+      CustomItems_DrawWhip(&p, &play);
+      assert(drawn == std::vector<std::string>{NEI_HELD_PATH("whip_handle")});
+      assert(nativeDraws == 0);
+      assert(std::memcmp(&saved, &gCustomItemState, sizeof(saved)) == 0);
+    }
+    gCustomItemState.whipFirstPersonActive = 0;
+    reset();
+    whipBundle();
     available.erase(NEI_HELD_PATH("whip_segment"));
     gCustomItemState.whipState=1;
     CustomItems_DrawWhip(&p,&play);
     assert(drawn.empty() && nativeDraws>0);
+    // If first person has hidden the wrist, or the bundle is incomplete,
+    // the old equipped snake must not replace the suppressed display coil.
+    for (bool wrist : {false, true}) {
+      reset();
+      if (!wrist) {
+        whipBundle();
+        ItemEquip_ReleaseHandMatrix();
+      } else {
+        ItemEquip_CaptureHandMatrix();
+      }
+      gCustomItemState.whipFirstPersonActive = 1;
+      CustomItems_DrawWhip(&p, &play);
+      assert(drawn.empty() && nativeDraws == 0);
+    }
 
     // Optional offline preview samples are emitted by the same production
     // object draw exercised above. They are render fixtures, not game captures.
@@ -276,4 +310,5 @@ int main(int argc, char** argv) {
     std::cout << "PASS: articulated bundle fallback, item isolation, native hands, docked/flying tip ownership\n";
     std::cout << "PASS: real captured wrist pose, release lifetime, equip/active socket continuity and deferred grip paths\n";
     std::cout << "PASS: real whip equip/lash/latch/swing/retract routing, contiguous rope intervals and unchanged gameplay state\n";
+    return 0;
 }
