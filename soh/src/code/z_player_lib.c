@@ -1738,6 +1738,38 @@ static void Player_ApplyBackEquipmentVisibility(s32 limbIndex, Gfx** dList) {
     }
 }
 
+// The lantern's accepted placement is at the left hand; only choose its
+// grasping mesh here, after ordinary model/equipment overrides. Keep the wrist
+// matrix, animation and lantern transform intact.
+static void Player_ApplyLanternGrip(Player* player, s32 limbIndex, Gfx** dList) {
+    if (limbIndex != PLAYER_LIMB_L_HAND || *dList == NULL ||
+        !(gCustomItemState.lanternEquipped || gCustomItemState.lanternSwinging) ||
+        (player->heldItemAction != PLAYER_IA_NONE && player->heldItemAction != PLAYER_IA_LANTERN)) {
+        return;
+    }
+    u8 equipped = 0;
+    for (u8 button = 1; button < ARRAY_COUNT(gSaveContext.equips.buttonItems); ++button) {
+        if (gSaveContext.equips.buttonItems[button] == ITEM_LANTERN) {
+            equipped = 1;
+            break;
+        }
+    }
+    if (!equipped) {
+        return;
+    }
+    // PAK uses the canonical adult resource name as its DL_LFIST (0x50A0)
+    // lookup key for either age. The selected model owns the returned fist.
+    const char* pakKey = sDListsLodOffset == 0 ? gLinkAdultLeftHandClosedNearDL : gLinkAdultLeftHandClosedFarDL;
+    Gfx* hand = PakLoader_GetDLOverride(pakKey);
+    if (hand == NULL || hand == PAK_DL_STUB) {
+        hand = Player_ResolveLimbDLForDummyOrLocal(gPlayerLeftHandClosedDLs[gSaveContext.linkAge + sDListsLodOffset]);
+    }
+    if (hand != NULL) {
+        *dList = hand;
+        sLeftHandType = PLAYER_MODELTYPE_LH_CLOSED;
+    }
+}
+
 static void Player_ApplyTimePedestalSword(PlayState* play, Player* player, s32 limbIndex, Gfx** dList, Vec3s* rot) {
     // Keep the animated wrist basis. CustomEquipment applies the native child
     // ceremonial placement to the selected sword alone, inside its display list.
@@ -1985,6 +2017,8 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
             Player_ResolveLimbDLForDummyOrLocal(sPlayerRightHandClosedDLs[gSaveContext.linkAge + sDListsLodOffset]);
         NeiArticulated_ApplySwitchHookHand(play, this, dList, hand);
     }
+
+    Player_ApplyLanternGrip(this, limbIndex, dList);
 
     // The sword cue changes leftHandDLists without changing the child's open
     // hand type. Preserve that handoff after ordinary hand/equipment overrides;

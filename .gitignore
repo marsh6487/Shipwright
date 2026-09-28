@@ -58,6 +58,7 @@ graphs/
 .extracted-assets.json
 
 !OTRExporter/assets/**/*.png
+!tools/nei_feedback_preview/art/*.png
 
 # Docs
 !docs/tutorial/

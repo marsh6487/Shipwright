@@ -3,8 +3,8 @@
 /**
  * object_timegate.c - Time Gate draw functions
  *
- * Draws the time gate item in Link's hand during casting
- * and the blue warp portal effect on the ground.
+ * Keeps the item model hidden during activation and draws the blue warp portal
+ * effect on the ground.
  */
 
 #include "z64.h"
@@ -31,10 +31,13 @@ static Gfx* TimeGate_GetDL(void) {
 }
 
 /**
- * Draw the time gate item in Link's hand during casting animation
+ * Draw the item only outside its activation sequence.
  */
 void CustomItems_DrawTimeGate(Player* player, PlayState* play) {
-    if (!tgItemVisible)
+    // Casting sets this visibility flag as the portal-start latch and retains
+    // it through the confirmation dialogue. Keep that timing intact, but hide
+    // the physical model for the whole activation, including cancel/exit.
+    if (tgActive || !tgItemVisible)
         return;
     if (!NeiHeld_HasResources(NEI_HELD_PATH("time_gate"), NULL) && TimeGate_GetDL() == NULL)
         return;

@@ -273,7 +273,9 @@ static void FireRod_SpawnFireSparks(PlayState* play, Vec3f* pos, f32 scale) {
         sparkPos.x = pos->x + (Rand_ZeroOne() - 0.5f) * (scale * 20.0f);
         sparkPos.y = pos->y + (Rand_ZeroOne() - 0.5f) * (scale * 20.0f);
         sparkPos.z = pos->z;
-        EffectSsKiraKira_SpawnDispersed(play, &sparkPos, &vel, &accel, &primColor, &envColor, 1000, 10);
+        // The private flame wake replaces the old flight sparkle cloud.
+        // Retain native effect lifetime/RNG without layering it over the new projectile.
+        EffectSsKiraKira_SpawnDispersed(play, &sparkPos, &vel, &accel, &primColor, &envColor, 0, 10);
     }
 }
 
@@ -588,7 +590,7 @@ static void FireRod_UpdateSpinFire(Player* p, PlayState* play) {
     fireRodSpinCollider.dim.pos.z = (s16)p->actor.world.pos.z;
 
     CollisionCheck_SetAT(play, &play->colChkCtx, &fireRodSpinCollider.base);
-    FX_DrawSpinFireCylinder(play, p, fireRodSpinRadius, fireRodSpinIsBig, &sFireRodColor);
+    NeiUsedMagic_DrawSpin(play, p, 0, fireRodSpinRadius, fireRodSpinIsBig);
 
     Audio_PlayActorSound2(&p->actor, FIRE_ROD_SFX_FIRE_IGNITE - SFX_FLAG);
 }

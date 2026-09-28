@@ -6,10 +6,11 @@
 #include "mods/items/logic/item_rod_common.h"
 #include "soh/Enhancements/randomizer/NeiUsedMagicPresentation.h"
 #include "variables.h"
+#include <array>
 
 extern "C" {
-#include "mods/items/logic/item_cane_of_somaria.h"
 #include "mods/actors/somaria_cubes.h"
+#include "mods/items/logic/item_cane_of_somaria.h"
 }
 
 namespace {
@@ -24,6 +25,17 @@ CaneSummonKind previewKind = CANE_SUMMON_STATUE;
 Vec3f previewPosition{};
 s16 previewYaw = 0;
 u8 previewValid = 0;
+bool localRodSets[3]{};
+RodProjSet rodSets[3][ROD_MAX_PROJ_SETS]{};
+struct ProjectileCall {
+  int element;
+  Vec3f position, velocity;
+  float scale;
+};
+std::vector<ProjectileCall> projectileCalls;
+std::vector<int> trailCalls;
+std::vector<std::array<Vec3f, 6>> trailPositions;
+std::string rodDrawOrder;
 
 void resetWrappers(GraphicsContext &graphics, Gfx *opa, Gfx *xlu) {
   reset();
@@ -50,19 +62,19 @@ void unchanged(const Player &player, const Player &before,
   assert(std::memcmp(&gCustomItemState, &state, sizeof(state)) == 0);
   assert(matrices.empty());
 }
-}
+} // namespace
 
 extern "C" {
 SaveContext gSaveContext{};
 Gfx Cylinder_001_opaque_dl[1];
 Gfx ice_rod_opaque_dl[1], ice_rod_transparent_dl[1];
 Gfx Cylinder_002_opaque_dl[1], Cylinder_002_transparent_dl[1];
-u8 FireRod_HasAnyActiveSet() { return 0; }
-u8 IceRod_HasAnyActiveSet() { return 0; }
-u8 LightRod_HasAnyActiveSet() { return 0; }
-RodProjSet *FireRod_GetProjSets() { return nullptr; }
-RodProjSet *IceRod_GetProjSets() { return nullptr; }
-RodProjSet *LightRod_GetProjSets() { return nullptr; }
+u8 FireRod_HasAnyActiveSet() { return localRodSets[0]; }
+u8 IceRod_HasAnyActiveSet() { return localRodSets[1]; }
+u8 LightRod_HasAnyActiveSet() { return localRodSets[2]; }
+RodProjSet *FireRod_GetProjSets() { return rodSets[0]; }
+RodProjSet *IceRod_GetProjSets() { return rodSets[1]; }
+RodProjSet *LightRod_GetProjSets() { return rodSets[2]; }
 void Gfx_SetupDL_25Xlu(GraphicsContext *) {}
 void gSPSegment(void *, int, uintptr_t) {}
 Gfx *Gfx_TwoTexScroll(GraphicsContext *, s32, u32, u32, s32, s32, s32, u32, u32,
@@ -72,9 +84,21 @@ Gfx *Gfx_TwoTexScroll(GraphicsContext *, s32, u32, u32, s32, s32, s32, u32, u32,
 s16 Camera_GetCamDirYaw(Camera *) { return 0; }
 f32 Rand_ZeroOne() { return 0; }
 void Matrix_ReplaceRotation(MtxF *) {}
-void NeiUsedMagic_DrawProjectile(PlayState *, int, const Vec3f *, const Vec3f *,
-                                 float, unsigned) {}
-void NeiUsedMagic_DrawTrail(PlayState *, int, const Vec3f *, unsigned, float) {}
+void NeiUsedMagic_DrawProjectile(PlayState *, int element,
+                                 const Vec3f *position, const Vec3f *velocity,
+                                 float scale, unsigned) {
+  projectileCalls.push_back({element, *position, *velocity, scale});
+  rodDrawOrder += 'H';
+}
+void NeiUsedMagic_DrawTrail(PlayState *, int element, const Vec3f *points,
+                            unsigned count, float) {
+  assert(count == 6);
+  trailCalls.push_back(element);
+  rodDrawOrder += 'T';
+  std::array<Vec3f, 6> copy;
+  std::copy(points, points + 6, copy.begin());
+  trailPositions.push_back(copy);
+}
 bool NeiHeld_DrawRod(PlayState *play, int element) {
   const char *paths[] = {NEI_HELD_PATH("fire_rod"), NEI_HELD_PATH("ice_rod"),
                          NEI_HELD_PATH("light_rod")};
@@ -97,8 +121,12 @@ void Pacci_UltrahandDrawVfx(PlayState *, Player *) {
   caneEffects.emplace_back("ultrahand");
 }
 void Pacci_FuseDrawPreview(PlayState *) { caneEffects.emplace_back("fuse"); }
-void PacciFlipVfx_Draw(PlayState *, Player *) { caneEffects.emplace_back("flip"); }
-void Trirod_DrawPreview(PlayState *, Player *) { caneEffects.emplace_back("trirod"); }
+void PacciFlipVfx_Draw(PlayState *, Player *) {
+  caneEffects.emplace_back("flip");
+}
+void Trirod_DrawPreview(PlayState *, Player *) {
+  caneEffects.emplace_back("trirod");
+}
 void CaneSummon_DrawPreview(PlayState *, CaneSummonKind kind, Vec3f *position,
                             s16 yaw, u8 valid) {
   caneEffects.emplace_back("summon");
@@ -111,7 +139,8 @@ void CaneSummon_DrawPreview(PlayState *, CaneSummonKind kind, Vec3f *position,
 
 namespace {
 void testMissingWrapperResources(Player &player, PlayState &play,
-                                 GraphicsContext &graphics, Gfx *opa, Gfx *xlu) {
+                                 GraphicsContext &graphics, Gfx *opa,
+                                 Gfx *xlu) {
   // Run in a fresh process: each real wrapper caches its first legacy lookup.
   // Neither missing archive path may reach the crash-prone resource loader.
   resetWrappers(graphics, opa, xlu);
@@ -133,9 +162,11 @@ void testMissingWrapperResources(Player &player, PlayState &play,
   CustomItems_DrawCaneOfSomaria(&player, &play);
   assert(drawn.empty() && nativeDraws == 0 && resourceLoads.empty());
   assert(resourceQueries == std::vector<std::string>{kOriginalCane});
-  assert(caneEffects == std::vector<std::string>({"ultrahand", "fuse", "flip"}));
+  assert(caneEffects ==
+         std::vector<std::string>({"ultrahand", "fuse", "flip"}));
   assert(matrices.empty());
-  std::cout << "PASS: real Spinner/Somaria wrappers safely decline absent replacement and legacy resources\n";
+  std::cout << "PASS: real Spinner/Somaria wrappers safely decline absent "
+               "replacement and legacy resources\n";
 }
 
 void testSpinnerWrapper(Player &player, PlayState &play,
@@ -201,10 +232,11 @@ void testSomariaWrapper(Player &player, PlayState &play,
   player.bodyPartsPos[PLAYER_BODYPART_R_FOREARM] = {10, 10, 30};
   for (int age : {LINK_AGE_CHILD, LINK_AGE_ADULT}) {
     gSaveContext.linkAge = age;
-    const Vec3f grip = age == LINK_AGE_CHILD ? Vec3f{0, 216.22f, -4.5f}
-                                           : Vec3f{0, 328, 77};
+    const Vec3f grip =
+        age == LINK_AGE_CHILD ? Vec3f{0, 216.22f, -4.5f} : Vec3f{0, 328, 77};
     for (float bodyScale : {.01f, .001f}) {
-      player.actor.scale.x = player.actor.scale.y = player.actor.scale.z = bodyScale;
+      player.actor.scale.x = player.actor.scale.y = player.actor.scale.z =
+          bodyScale;
       for (int sample = 0; sample < 8; ++sample) {
         resetWrappers(graphics, opa, xlu);
         available.insert(NEI_HELD_PATH("cane_of_somaria"));
@@ -230,13 +262,15 @@ void testSomariaWrapper(Player &player, PlayState &play,
         const Player before = player;
         const CustomItemState state = gCustomItemState;
         CustomItems_DrawCaneOfSomaria(&player, &play);
-        assert(drawn == std::vector<std::string>{NEI_HELD_PATH("cane_of_somaria")});
+        assert(drawn ==
+               std::vector<std::string>{NEI_HELD_PATH("cane_of_somaria")});
         assert(nativeDraws == 0 && resourceQueries.empty());
         near(transform(poses.front(), {0, 0, 0}), transform(wrist, grip));
         near(transform(poses.front(), {0, 10, 0}),
              transform(wrist, {10 / bodyScale, grip.y, grip.z}));
         assert(std::memcmp(&current, &caller, sizeof(current)) == 0);
-        assert(caneEffects == std::vector<std::string>({"ultrahand", "fuse", "flip"}));
+        assert(caneEffects ==
+               std::vector<std::string>({"ultrahand", "fuse", "flip"}));
         unchanged(player, before, state);
       }
     }
@@ -281,15 +315,18 @@ void testSomariaWrapper(Player &player, PlayState &play,
       assert(drawn.empty());
       assert(nativeDraws == (type == CANE_TYPE_ULTRAHAND ? 0 : 1));
       std::vector<std::string> expected = {"ultrahand", "fuse", "flip"};
-      if (type == CANE_TYPE_TRIROD && !animating) expected.emplace_back("trirod");
+      if (type == CANE_TYPE_TRIROD && !animating)
+        expected.emplace_back("trirod");
       assert(caneEffects == expected);
       if (type == CANE_TYPE_ULTRAHAND) {
         assert(resourceQueries.empty() && graphics.polyOpa.p == opa);
       } else {
         assert(commandColors(opa, graphics.polyOpa.p, G_SETPRIMCOLOR) ==
-               std::vector<uint32_t>{type == CANE_TYPE_PACCI ? 0xFFD746FF : 0xFF3C3CFF});
+               std::vector<uint32_t>{type == CANE_TYPE_PACCI ? 0xFFD746FF
+                                                             : 0xFF3C3CFF});
         assert(commandColors(opa, graphics.polyOpa.p, G_SETENVCOLOR) ==
-               std::vector<uint32_t>{type == CANE_TYPE_PACCI ? 0x966900FF : 0x8C0000FF});
+               std::vector<uint32_t>{type == CANE_TYPE_PACCI ? 0x966900FF
+                                                             : 0x8C0000FF});
       }
       unchanged(player, before, state);
     }
@@ -318,11 +355,14 @@ void testSomariaWrapper(Player &player, PlayState &play,
       const Player before = player;
       const CustomItemState state = gCustomItemState;
       CustomItems_DrawCaneOfSomaria(&player, &play);
-      assert(drawn == std::vector<std::string>{NEI_HELD_PATH("cane_of_somaria")});
+      assert(drawn ==
+             std::vector<std::string>{NEI_HELD_PATH("cane_of_somaria")});
       std::vector<std::string> expected = {"ultrahand", "fuse", "flip"};
       if (!animating) {
         expected.emplace_back("summon");
-        assert(previewKind == (skill == CANE_SKILL_SOMARIA_PLATFORM ? CANE_SUMMON_PLATFORM : CANE_SUMMON_BLOCK));
+        assert(previewKind == (skill == CANE_SKILL_SOMARIA_PLATFORM
+                                   ? CANE_SUMMON_PLATFORM
+                                   : CANE_SUMMON_BLOCK));
         near(previewPosition, {4, 5, 6});
         assert(previewYaw == 123 && previewValid == 1);
       }
@@ -331,7 +371,7 @@ void testSomariaWrapper(Player &player, PlayState &play,
     }
   }
 }
-}
+} // namespace
 
 int main(int argc, char **argv) {
   Player player{};
@@ -360,7 +400,7 @@ int main(int argc, char **argv) {
     // Independent landmarks from native Master/Kokiri Sword hilt sections
     // at wrist-local X=0. The child point also fits the YoungDin closed fist.
     const Vec3f grip = gSaveContext.linkAge == LINK_AGE_CHILD
-                          ? Vec3f{0, 216.22f, 4.5f}
+                           ? Vec3f{0, 216.22f, 4.5f}
                            : Vec3f{0, 328, -77};
     Matrix_Translate(10, 20, 30, MTXMODE_NEW);
     Matrix_RotateY(sample * .29f, MTXMODE_APPLY);
@@ -417,6 +457,120 @@ int main(int argc, char **argv) {
     draw[element](&player, &play);
     assert(drawn.empty() && nativeDraws > 0);
   }
+  // Execute the full production rod drawers, not just the pure effect samplers.
+  // Held replacement availability and wrist capture must never swallow shots.
+  for (int element = 0; element < 3; ++element)
+    for (bool heldResource : {false, true})
+      for (bool wrist : {false, true}) {
+        resetWrappers(graphics, opa, xlu);
+        if (heldResource)
+          available.insert(paths[element]);
+        if (wrist)
+          ItemEquip_CaptureLeftHandMatrix();
+        else
+          ItemEquip_ReleaseHandMatrix();
+        gCustomItemState = {};
+        gCustomItemState.fireRodActive = gCustomItemState.iceRodActive =
+            gCustomItemState.lightRodActive = 1;
+        localRodSets[element] = true;
+        for (int set : {0, 4}) {
+          rodSets[element][set] = {};
+          rodSets[element][set].active = 1;
+          rodSets[element][set].count = set == 0 ? 3 : 2;
+          rodSets[element][set].scale = 2;
+          for (int i = 0; i < 6; ++i)
+            rodSets[element][set].trail[i] = {
+                float(set * 100), 20 - float(i) * 3, 30 - float(i) * 15};
+          for (int head = 0; head < 3; ++head) {
+            rodSets[element][set].pos[head] = {float(set * 100 + head), 20, 30};
+            rodSets[element][set].vel[head] = {18, 0, 0};
+          }
+        }
+        projectileCalls.clear();
+        trailCalls.clear();
+        trailPositions.clear();
+        rodDrawOrder.clear();
+        draw[element](&player, &play);
+        assert(projectileCalls.size() == 5 &&
+               trailCalls == std::vector<int>(element == 1 ? 5 : 2, element));
+        if (element == 1)
+          assert(rodDrawOrder == "TTTHHHTTHH");
+        for (size_t head = 0; head < 5; ++head) {
+          const auto &call = projectileCalls[head];
+          assert(call.element == element && call.scale == 2 &&
+                 call.velocity.x == 18);
+          assert(call.position.x == float(head < 3 ? head : 400 + head - 3));
+          if (element == 1) {
+            const auto &wake = trailPositions[head];
+            assert(wake[0].x == call.position.x &&
+                   wake[0].y == call.position.y &&
+                   wake[0].z == call.position.z);
+            const int index = head < 3 ? head : head - 3;
+            const float angle = (index == 1   ? -1.f
+                                 : index == 2 ? 1.f
+                                              : 0.f) *
+                                5460.f * (6.2831853071795864769f / 65536.f);
+            assert(std::abs(wake[5].x -
+                            (call.position.x - 75 * std::sin(angle))) < .001f);
+            assert(std::abs(wake[5].z -
+                            (call.position.z - 75 * std::cos(angle))) < .001f);
+            assert(wake[5].y == call.position.y - 15);
+          }
+        }
+        localRodSets[element] = false;
+        gCustomItemState.fireRodProjActive = gCustomItemState.iceRodProjActive =
+            gCustomItemState.lightRodProjActive = 1;
+        gCustomItemState.fireRodProjCount = gCustomItemState.iceRodProjCount =
+            gCustomItemState.lightRodProjCount = 3;
+        gCustomItemState.fireRodProjScale = gCustomItemState.iceRodProjScale =
+            gCustomItemState.lightRodProjScale = 2;
+        gCustomItemState.iceRodProjPos = {10, 20, 30};
+        gCustomItemState.iceRodProjPos2 = {-40, 20, 15};
+        gCustomItemState.iceRodProjPos3 = {60, 20, 15};
+        // A stopped/fading center has duplicate newest history entries. Side
+        // reconstruction must preserve these, not invent velocity or extension.
+        for (int i = 0; i < 6; ++i)
+          gCustomItemState.iceRodProjTrail[i] = {
+              10, 20, 30 - float(std::max(i - 2, 0)) * 15};
+        projectileCalls.clear();
+        trailCalls.clear();
+        trailPositions.clear();
+        rodDrawOrder.clear();
+        draw[element](&player, &play);
+        assert(projectileCalls.size() == 3 &&
+               trailCalls == std::vector<int>(element == 1 ? 3 : 1, element));
+        if (element == 1)
+          assert(rodDrawOrder == "TTTHHH");
+        for (const auto &call : projectileCalls)
+          assert(call.element == element && call.scale == 2);
+        if (element == 1)
+          for (int head = 0; head < 3; ++head) {
+            const auto p = projectileCalls[head].position;
+            for (int i = 0; i < 3; ++i)
+              assert(trailPositions[head][i].x == p.x &&
+                     trailPositions[head][i].z == p.z);
+            const float dx = trailPositions[head][5].x - p.x,
+                        dz = trailPositions[head][5].z - p.z;
+            assert(std::abs(std::sqrt(dx * dx + dz * dz) - 45) < .001f);
+            const float angle = (head == 1   ? -1.f
+                                 : head == 2 ? 1.f
+                                             : 0.f) *
+                                5460.f * (6.2831853071795864769f / 65536.f);
+            const auto velocity = projectileCalls[head].velocity;
+            assert(std::abs(velocity.x - 15 * std::sin(angle)) < .001f);
+            assert(std::abs(velocity.z - 15 * std::cos(angle)) < .001f &&
+                   velocity.y == 0);
+          }
+        gCustomItemState.fireRodActive = gCustomItemState.iceRodActive =
+            gCustomItemState.lightRodActive = 0;
+        projectileCalls.clear();
+        trailCalls.clear();
+        draw[element](&player, &play);
+        assert(projectileCalls.empty() && trailCalls.empty());
+      }
+  std::cout
+      << "PASS real Fire/Ice/Light object draw dispatch: local three-shot sets "
+         "and remote sync, held-resource/wrist fallback, inactive guards\n";
   // Adult and child reductions keep the two-hand midpoint fixed.
   player.bodyPartsPos[PLAYER_BODYPART_R_HAND] = {-10, 20, 30};
   for (int age : {LINK_AGE_ADULT, LINK_AGE_CHILD}) {
@@ -443,6 +597,7 @@ int main(int argc, char **argv) {
                "poses; child/adult shovel scale\n";
   testSpinnerWrapper(player, play, graphics, opa, xlu);
   testSomariaWrapper(player, play, graphics, opa, xlu);
-  std::cout << "PASS: real Spinner rotation/height/fallback and Somaria right-wrist "
-               "child/adult grip; Pacci/Ultrahand/Trirod colors and VFX preserved\n";
+  std::cout
+      << "PASS: real Spinner rotation/height/fallback and Somaria right-wrist "
+         "child/adult grip; Pacci/Ultrahand/Trirod colors and VFX preserved\n";
 }

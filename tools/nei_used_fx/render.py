@@ -48,13 +48,15 @@ def load(path):
 textures={}
 def texture(material):
  if material in textures:return textures[material]
- names={1:'ice_fracture',2:'fire_wisp',3:'light_rays'}
- path=Path(__file__).resolve().parents[2]/'soh/assets/custom/objects/nei_used_magic'/names[material]
+ names={1:'ice_fracture',2:'fire_wisp',3:'light_rays',4:'fire_surge',5:'frost_surge',6:'light_surge',
+        7:'fire_release_flow',8:'ice_release_flow'}
+ folder='nei_rod_attack' if material>=4 else 'nei_used_magic'
+ path=Path(__file__).resolve().parents[2]/'soh/assets/custom/objects'/folder/names[material]
  raw=path.read_bytes();w,h=struct.unpack_from('<II',raw,68)
  pixels=np.frombuffer(raw,np.uint8,offset=92).reshape(h,w,4)
  tid=uint();GenTextures(1,C.byref(tid));BindTexture(0x0DE1,tid.value)
  TexParameteri(0x0DE1,0x2801,0x2601);TexParameteri(0x0DE1,0x2800,0x2601)
- TexParameteri(0x0DE1,0x2802,0x2901);TexParameteri(0x0DE1,0x2803,0x2901 if material==1 else 0x812F)
+ TexParameteri(0x0DE1,0x2802,0x812F if material in (4,5,6) else 0x2901);TexParameteri(0x0DE1,0x2803,0x2901 if material in (1,7,8) else 0x812F)
  TexImage(0x0DE1,0,0x1908,w,h,0,0x1908,0x1401,pixels.ctypes.data)
  textures[material]=tid.value;return tid.value
 def drawmesh(data,material):

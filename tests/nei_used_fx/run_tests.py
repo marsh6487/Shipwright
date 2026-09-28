@@ -21,6 +21,10 @@ def flags():
 if __name__ == "__main__":
     subprocess.run([sys.executable,str(ROOT/'tests/nei_used_fx/source_contract_test.py')],check=True)
     subprocess.run([sys.executable,str(ROOT/'tests/nei_used_fx/material_test.py')],check=True)
+    subprocess.run([sys.executable,str(ROOT/'tests/nei_used_fx/attack_material_test.py')],check=True)
+    subprocess.run([sys.executable,str(ROOT/'tests/nei_used_fx/flight_particle_test.py')],check=True)
+    subprocess.run([sys.executable,str(ROOT/'tests/nei_used_fx/preserve_approved_test.py')],check=True)
+    subprocess.run([sys.executable,str(ROOT/'tests/nei_used_fx/preserve_accepted_fire_test.py')],check=True)
     with tempfile.TemporaryDirectory(prefix="nei-used-fx-") as tmp:
         # The budget test uses the established real-engine graphics fixture.
         # Its unrelated GI-dispatch regressions are stripped at link time.
@@ -28,7 +32,7 @@ if __name__ == "__main__":
             'void Player_DrawGetItemImpl(PlayState*, Player*, Vec3f*, s32);\n'
             'void EnGirlA_Draw(Actor*, PlayState*);\n')
         (Path(tmp)/'nei_gi_bounds.inc').write_text('')
-        for name in ("policy", "presentation", "budget"):
+        for name in ("policy", "feedback_policy", "presentation", "budget"):
             binary = str(Path(tmp) / name)
             subprocess.run([os.environ.get("CXX", "c++"), "-std=c++20", "-O2", *flags(), '-I'+tmp,
                             '-ffunction-sections','-fdata-sections',

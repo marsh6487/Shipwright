@@ -156,6 +156,10 @@ def main():
         tail = render["Player_OverrideLimbDrawGameplayDefault"]
         tail = tail[tail.index("    GameInteractor_Should(VB_PLAYER_OVERRIDE_LIMB_DRAW"):]
         helpers = "static s32 sLeftHandType, sRightHandType;\nstatic s32 sDListsLodOffset;\n" + render["Player_ApplyBackEquipmentVisibility"] + "\n"
+        # This fixture has no custom item/lantern state. The separate
+        # tests/nei_lantern_grip runner exercises the production grip helper.
+        if "Player_ApplyLanternGrip" in render:
+            helpers += "static void Player_ApplyLanternGrip(Player* player, s32 limb, Gfx** dl) {}\n"
         if "Player_ReverseTimePedestalEquipmentSword" in render:
             helpers += render["Player_ReverseTimePedestalEquipmentSword"] + "\n"
         if "Player_ApplyTimePedestalSword" in render:

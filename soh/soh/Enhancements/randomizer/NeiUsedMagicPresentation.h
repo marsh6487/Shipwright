@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 // Element 0 fire, 1 ice, 2 light. These calls affect presentation only, and
-// preserve the caller's CPU matrix. Native Fire Rod projectiles stay native.
+// preserve the caller's CPU matrix.
 void NeiUsedMagic_DrawProjectile(PlayState* play, int element, const Vec3f* position, const Vec3f* velocity,
                                  float scale, unsigned phase);
 void NeiUsedMagic_DrawTrail(PlayState* play, int element, const Vec3f* positions, unsigned count, float scale);

@@ -9,6 +9,11 @@ python3 -B scripts/diagnostics/run_nei_gi_tests.py --held
 python3 -B tests/nei_held/run_hand_fit_tests.py
 python3 -B tests/nei_held/run_articulated_tests.py
 python3 -B tests/nei_used_fx/run_tests.py
+python3 -B tests/nei_leaf/run_tests.py
+python3 -B tests/nei_whip/run_tests.py
+python3 -B tests/nei_lantern_grip/run_tests.py
+python3 -B scripts/diagnostics/run_switch_hook_instant_tests.py
+python3 -B scripts/diagnostics/run_time_gate_visibility_tests.py
 python3 -B tests/nei_item_stow/run_ballchain_tests.py
 python3 -B tests/nei_item_stow/run_lantern_rod_tests.py
 python3 -B tests/nei_item_stow/run_stow_tests.py

@@ -1,4 +1,5 @@
 #include "soh/Enhancements/randomizer/NeiUsedMagicPresentation.h"
+#include "../helpers/ice_trail.h"
 #include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 /**
  * object_icerod.c - Ice Rod 3D model and draw functions
@@ -21,6 +22,25 @@
 
 // Public display list reference for draw.cpp (give item)
 Gfx* gIceRodGiveDL = g_ice_rod_dl;
+
+static Vec3f IceRod_DrawHeadTrail(PlayState* play, const Vec3f* history, const Vec3f* head, unsigned index, f32 scale) {
+    NeiIceTrailPoint center[6], reconstructed[6];
+    Vec3f wake[6];
+    for (s32 i = 0; i < 6; ++i)
+        center[i] = (NeiIceTrailPoint){ history[i].x, history[i].y, history[i].z };
+    NeiIceTrail_Reconstruct(center, 6, (NeiIceTrailPoint){ head->x, head->y, head->z }, index, reconstructed);
+    for (s32 i = 0; i < 6; ++i)
+        wake[i] = (Vec3f){ reconstructed[i].x, reconstructed[i].y, reconstructed[i].z };
+    NeiUsedMagic_DrawTrail(play, 1, wake, 6, scale);
+    // Remote state has center history but no per-head velocity. Retain its
+    // actual heading even when the newest stopped samples are duplicates.
+    for (s32 i = 1; i < 6; ++i) {
+        Vec3f direction = { wake[0].x - wake[i].x, wake[0].y - wake[i].y, wake[0].z - wake[i].z };
+        if (direction.x != 0.0f || direction.y != 0.0f || direction.z != 0.0f)
+            return direction;
+    }
+    return (Vec3f){ 0.0f, 0.0f, 0.0f };
+}
 
 // ============================================================================
 // DRAW FUNCTION - Draws Ice Rod and active projectiles
@@ -103,18 +123,21 @@ void CustomItems_DrawIceRod(Player* player, PlayState* play) {
             RodProjSet* set = &sets[s];
             if (!set->active)
                 continue;
-            NeiUsedMagic_DrawTrail(play, 1, set->trail, 6, set->scale);
+            for (s32 p = 0; p < set->count && p < 3; ++p) {
+                IceRod_DrawHeadTrail(play, set->trail, &set->pos[p], p, set->scale);
+            }
             for (s32 p = 0; p < set->count && p < 3; ++p) {
                 NeiUsedMagic_DrawProjectile(play, 1, &set->pos[p], &set->vel[p], set->scale, s * 19 + p * 7);
             }
         }
     } else if (hasRemoteSync) {
         Vec3f remotePos[3] = { iceRodProjPos, gCustomItemState.iceRodProjPos2, gCustomItemState.iceRodProjPos3 };
-        Vec3f velocity = { iceRodProjTrail[0].x - iceRodProjTrail[1].x, iceRodProjTrail[0].y - iceRodProjTrail[1].y,
-                           iceRodProjTrail[0].z - iceRodProjTrail[1].z };
-        NeiUsedMagic_DrawTrail(play, 1, iceRodProjTrail, 6, iceRodProjScale);
+        Vec3f directions[3];
         for (s32 p = 0; p < gCustomItemState.iceRodProjCount && p < 3; ++p) {
-            NeiUsedMagic_DrawProjectile(play, 1, &remotePos[p], &velocity, iceRodProjScale, p * 7);
+            directions[p] = IceRod_DrawHeadTrail(play, iceRodProjTrail, &remotePos[p], p, iceRodProjScale);
+        }
+        for (s32 p = 0; p < gCustomItemState.iceRodProjCount && p < 3; ++p) {
+            NeiUsedMagic_DrawProjectile(play, 1, &remotePos[p], &directions[p], iceRodProjScale, p * 7);
         }
     }
 

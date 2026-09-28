@@ -249,7 +249,9 @@ static void IceRod_SpawnIceSparks(PlayState* play, Vec3f* pos, f32 scale) {
         vel.x = (Rand_ZeroOne() - 0.5f) * 3.0f;
         vel.y = Rand_ZeroOne() * 2.0f;
         vel.z = (Rand_ZeroOne() - 0.5f) * 3.0f;
-        EffectSsEnIce_Spawn(play, &sparkPos, scale * 0.3f, &vel, &accel, &primColor, &envColor, 15);
+        // The private frost wake replaces these six opaque flight clumps.
+        // Keep allocation, lifespan and RNG cadence; only collapse their visual size.
+        EffectSsEnIce_Spawn(play, &sparkPos, 0.0f, &vel, &accel, &primColor, &envColor, 15);
     }
 }
 

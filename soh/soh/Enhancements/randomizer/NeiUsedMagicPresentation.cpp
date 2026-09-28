@@ -14,6 +14,30 @@ alignas(2) static const char kLightTexture[] = "__OTR__objects/nei_used_magic/li
 const NeiGi::TextureMaterial kIceMaterial{ kIceTexture, true, true };
 const NeiGi::TextureMaterial kFireMaterial{ kFireTexture, true, false };
 const NeiGi::TextureMaterial kLightMaterial{ kLightTexture, true, false };
+alignas(2) static const char kFireAttackTexture[] = "__OTR__objects/nei_rod_attack/fire_surge";
+alignas(2) static const char kIceAttackTexture[] = "__OTR__objects/nei_rod_attack/frost_surge";
+alignas(2) static const char kLightAttackTexture[] = "__OTR__objects/nei_rod_attack/light_surge";
+const NeiGi::TextureMaterial kAttackMaterial[] = { { kFireAttackTexture, false, false },
+                                                   { kIceAttackTexture, false, false },
+                                                   { kLightAttackTexture, false, false } };
+alignas(2) static const char kFireReleaseTexture[] = "__OTR__objects/nei_rod_attack/fire_release_flow";
+alignas(2) static const char kIceReleaseTexture[] = "__OTR__objects/nei_rod_attack/ice_release_flow";
+const NeiGi::TextureMaterial kReleaseMaterial[] = { { kFireReleaseTexture, true, true },
+                                                    { kIceReleaseTexture, true, true },
+                                                    { kLightAttackTexture, false, false } };
+void DrawAttackSurface(PlayState* play, const NeiGi::Mesh& mesh, int element, bool release = false) {
+    if (element < 0 || element > 2 || !mesh.count)
+        return;
+    if (!NeiGi_DrawTexturedMesh(play, mesh, release ? kReleaseMaterial[element] : kAttackMaterial[element])) {
+        auto fallback = mesh;
+        const uint32_t colors[] = { 0xFFB657, 0xA5E9FF, 0xFFF3B8 };
+        for (size_t i = 0; i < fallback.count; ++i) {
+            fallback.vertices[i].rgb = colors[element];
+            fallback.vertices[i].alpha = NeiUsedMagic::Alpha(fallback.vertices[i].alpha * .28f);
+        }
+        NeiGi_DrawMesh(play, fallback);
+    }
+}
 NeiGi::Kind Element(int element) {
     switch (element) {
         case 0:
@@ -56,14 +80,18 @@ void Draw(PlayState* play, const NeiGi::Mesh& mesh, bool ice) {
 
 extern "C" void NeiUsedMagic_DrawProjectile(PlayState* play, int element, const Vec3f* position, const Vec3f* velocity,
                                             float scale, unsigned phase) {
-    if (!play || !Position(position) || element < 1 || element > 2 || scale <= 0)
+    if (!play || !Position(position) || element < 0 || element > 2 || scale <= 0)
         return;
     const MatrixScope matrix(*position);
     const auto direction = Position(velocity) ? Point(*velocity) : NeiGi::Point{ 0, 0, 1 };
+    DrawAttackSurface(play,
+                      NeiUsedMagic::SampleProjectileSurface(Element(element), play->gameplayFrames + phase, scale,
+                                                            direction, NeiGi_CameraBasis(play)),
+                      element);
     Draw(play,
          NeiUsedMagic::SampleProjectile(Element(element), play->gameplayFrames + phase, scale, direction,
                                         NeiGi_CameraBasis(play)),
-         element == 1);
+         false);
 }
 extern "C" void NeiUsedMagic_DrawTrail(PlayState* play, int element, const Vec3f* positions, unsigned count,
                                        float scale) {
@@ -78,13 +106,13 @@ extern "C" void NeiUsedMagic_DrawTrail(PlayState* play, int element, const Vec3f
             return;
     }
     const MatrixScope matrix(positions[0]);
-    Draw(play,
-         NeiUsedMagic::SampleTrail(Element(element), play->gameplayFrames, relative, count, scale,
-                                   NeiGi_CameraBasis(play)),
-         element == 1);
+    const auto wake = NeiUsedMagic::SampleTrail(Element(element), play->gameplayFrames, relative, count, scale,
+                                                NeiGi_CameraBasis(play));
+    if (element != 1 || !NeiGi_DrawTexturedMesh(play, wake, kReleaseMaterial[1]))
+        NeiGi_DrawMesh(play, wake);
 }
 extern "C" void NeiUsedMagic_DrawCharge(PlayState* play, Player* player, int element, float charge) {
-    if (!play || !player || !Position(&player->actor.world.pos) || charge <= 0)
+    if (!play || !player || !Position(&player->actor.world.pos) || charge <= 0 || element == 0)
         return;
     Vec3f origin = player->actor.world.pos;
     origin.y += 5;
@@ -113,6 +141,12 @@ extern "C" void NeiUsedMagic_DrawChargeFocus(PlayState* play, int element) {
     if (!Position(&focus))
         return;
     const MatrixScope matrix(focus);
+    // Fire gathers at the actual rod tip, never around the player's body.
+    if (element == 0)
+        Draw(play,
+             NeiUsedMagic::SampleCharge(Element(element), play->gameplayFrames, charge[element],
+                                        NeiGi_CameraBasis(play)),
+             false);
     Draw(play,
          NeiUsedMagic::SampleChargeSparks(Element(element), play->gameplayFrames, charge[element],
                                           NeiGi_CameraBasis(play)),
@@ -125,7 +159,11 @@ extern "C" void NeiUsedMagic_DrawSpin(PlayState* play, Player* player, int eleme
     origin.y += 5;
     const MatrixScope matrix(origin);
     Draw(play, NeiUsedMagic::SampleSpin(Element(element), play->gameplayFrames, radius, big, NeiGi_CameraBasis(play)),
-         element == 1);
+         false);
+    DrawAttackSurface(play, NeiUsedMagic::SampleSpinSurface(Element(element), play->gameplayFrames, radius, big),
+                      element, true);
+    DrawAttackSurface(play, NeiUsedMagic::SampleSpinFlow(Element(element), play->gameplayFrames, radius, big, 1),
+                      element, true);
 }
 extern "C" void NeiUsedMagic_DrawBurst(PlayState* play, int element, const Vec3f* position, float size, float life) {
     if (!play || !Position(position) || size <= 0 || life <= 0)
