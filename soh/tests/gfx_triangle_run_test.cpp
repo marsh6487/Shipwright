@@ -410,7 +410,7 @@ static bool temporaryDraw(HANDLER_CONTEXT F3DGfx**) {
 // both violates that contract and adds atomic ownership work to every command.
 static void dispatchContextTest() {
     const UcodeHandler table = { { 1, { "tri", gfx_tri2_handler_f3dex } },
-                                     { 2, { "depth", gfx_set_prim_depth_handler_rdp } } };
+                                 { 2, { "depth", gfx_set_prim_depth_handler_rdp } } };
     Fixture selected, executing;
     auto selectedOwner = std::shared_ptr<Interpreter>(&selected.gfx, [](Interpreter*) {});
     mInstance = selectedOwner;

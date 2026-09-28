@@ -40,6 +40,10 @@ suffix = '''
 }
 int main() {
     using namespace Fast;
+    assert(ucode_handlers.size() == 6);
+    assert(ucode_handlers[0] == &f3dHandlers && ucode_handlers[1] == &f3dHandlers);
+    assert(ucode_handlers[2] == &f3dexHandlers && ucode_handlers[3] == &f3dexHandlers);
+    assert(ucode_handlers[4] == &f3dex2Handlers && ucode_handlers[5] == &s2dexHandlers);
     Interpreter gfx;
     F3DGfx packet, *cursor = &packet;
     unsigned count = 0;
