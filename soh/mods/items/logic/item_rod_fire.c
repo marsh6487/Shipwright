@@ -877,6 +877,12 @@ static void FireRod_OnUnequip(PlayState* play, Player* p) {
     ItemEquip_PlayUnequipSFX(play, p);
 }
 
+void FireRod_PutAway(Player* p, PlayState* play) {
+    if (fireRodActive || fireRodFirstPerson)
+        FireRod_OnUnequip(play, p);
+    sEquipState.isEquipped = 0;
+}
+
 // =============================================================================
 // MAIN HANDLER
 // =============================================================================
@@ -985,6 +991,8 @@ void Handle_FireRod(Player* p, PlayState* play) {
 
 void Player_InitFireRodIA(PlayState* play, Player* p) {
     fireRodActive = 1;
+    // Native item-change animation may finish after the original button press has passed.
+    sEquipState.isEquipped = 1;
     fireRodState = FIRE_ROD_STATE_EQUIPPED;
     sLastSwingType = 0;
     sJumpEffectSpawned = 0;

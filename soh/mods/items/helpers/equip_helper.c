@@ -18,14 +18,23 @@ typedef struct {
 } EquipCache;
 
 static EquipCache sEquipCache = { 0 };
+static u16 sStowedItemButtons[256] = { 0 };
+static u32 sStowedItemFrames[256] = { 0 };
 
 static void EquipCache_Update(PlayState* play) {
     if (sEquipCache.frameCount == play->gameplayFrames)
         return;
     sEquipCache.frameCount = play->gameplayFrames;
 
-    for (int i = 0; i < 256; i++)
+    for (int i = 0; i < 256; i++) {
         sEquipCache.cachedButtons[i] = 0;
+        sStowedItemButtons[i] &= play->state.input[0].cur.button | play->state.input[0].press.button;
+        // A fresh press proves release even if no custom item was assigned/polled
+        // during the intervening frames. Keep suppression on the stow frame itself.
+        if (sStowedItemFrames[i] != play->gameplayFrames) {
+            sStowedItemButtons[i] &= ~play->state.input[0].press.button;
+        }
+    }
 
     u8 dpadEnabled = CVarGetInteger("gEnhancements.DpadEquips", 0);
     u8 maxSlot = dpadEnabled ? 8 : 4;
@@ -53,6 +62,12 @@ static void EquipCache_Update(PlayState* play) {
 u16 ItemInput_GetEquippedButton(u8 itemId, PlayState* play) {
     EquipCache_Update(play);
     return sEquipCache.cachedButtons[itemId];
+}
+
+void ItemInput_SuppressUntilRelease(u8 itemId, PlayState* play) {
+    sStowedItemButtons[itemId] |= ItemInput_GetEquippedButton(itemId, play) &
+                                  (play->state.input[0].cur.button | play->state.input[0].press.button);
+    sStowedItemFrames[itemId] = play->gameplayFrames;
 }
 
 // mods/actors/cane_pacci.c - while Ultrahand mode is up the D-pad rotates and moves the held
@@ -106,6 +121,12 @@ void ItemInput_Update(ItemInputState* out, u8 itemId, Player* player, PlayState*
     out->isReleased = !out->isHeld && !out->isPressed;
     out->otherButtonPressed = ItemInput_CheckOtherButtons(out->equippedButton, &play->state.input[0]);
     out->damageTaken = 0;
+
+    // A held C/B/D-pad button must not immediately draw a just-stowed whip or
+    // Ball and Chain again. Release re-arms that item's normal hold behavior.
+    if (sStowedItemButtons[itemId] & out->equippedButton) {
+        out->isPressed = out->isHeld = out->isReleased = 0;
+    }
 }
 
 u8 ItemInput_CheckDamage(Player* player, s8* prevInvincibility) {

@@ -60,6 +60,7 @@ typedef void (*UnequipCallback)(PlayState* play, Player* player);
  * @return Button mask or 0 if not equipped
  */
 u16 ItemInput_GetEquippedButton(u8 itemId, PlayState* play);
+void ItemInput_SuppressUntilRelease(u8 itemId, PlayState* play);
 
 /**
  * Update input state for a custom item.

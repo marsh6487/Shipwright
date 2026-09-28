@@ -49,12 +49,14 @@ Their approved GI/world/shop/overhead models and ability effects are retained.
 
 ## Runtime boundary
 
-This is a local, unpublished candidate. These checks do not constitute a linked
-game build or a gameplay test. Review child/adult grips, animation clearance,
+These checks do not constitute a linked game build or a gameplay test.
+Review child/adult grips, animation clearance,
 first-person switch aim, launch/retraction/swap, whip lash/latch/swing/release,
 beetle aim/flight, jar direction/charge, leaf hold/swing/glide, lantern carry/catch
 and all four flame types, with normal and Alt assets. Existing gameplay state,
-collision, projectiles, save/progression and lantern behavior were not changed.
+collision, projectiles, save/progression and lantern behavior were not changed
+by this presentation checkpoint. The subsequent put-away/audio fixes are
+recorded separately in `tests/nei_item_stow/README.md`.
 
 Use `NEI_Held_Models_POC1.o2r` with code built from this candidate; the archive
 alone cannot add the new held draw paths to an older executable. It replaces

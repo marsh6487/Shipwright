@@ -912,6 +912,12 @@ static void IceRod_OnUnequip(PlayState* play, Player* p) {
     ItemEquip_PlayUnequipSFX(play, p);
 }
 
+void IceRod_PutAway(Player* p, PlayState* play) {
+    if (iceRodActive || iceRodFirstPerson)
+        IceRod_OnUnequip(play, p);
+    sIceEquipState.isEquipped = 0;
+}
+
 // =============================================================================
 // MAIN HANDLER
 // =============================================================================
@@ -1019,6 +1025,8 @@ void Handle_IceRod(Player* p, PlayState* play) {
 
 void Player_InitIceRodIA(PlayState* play, Player* p) {
     iceRodActive = 1;
+    // Native item-change animation may finish after the original button press has passed.
+    sIceEquipState.isEquipped = 1;
     iceRodState = ICE_ROD_STATE_EQUIPPED;
     sIceLastSwingType = 0;
     sIceJumpEffectSpawned = 0;

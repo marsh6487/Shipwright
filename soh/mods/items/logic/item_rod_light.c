@@ -961,6 +961,12 @@ static void LightRod_OnUnequip(PlayState* play, Player* p) {
     ItemEquip_PlayUnequipSFX(play, p);
 }
 
+void LightRod_PutAway(Player* p, PlayState* play) {
+    if (lightRodActive || lightRodFirstPerson)
+        LightRod_OnUnequip(play, p);
+    sLightEquipState.isEquipped = 0;
+}
+
 // =============================================================================
 // MAIN HANDLER
 // =============================================================================
@@ -1068,6 +1074,8 @@ void Handle_LightRod(Player* p, PlayState* play) {
 
 void Player_InitLightRodIA(PlayState* play, Player* p) {
     lightRodActive = 1;
+    // Native item-change animation may finish after the original button press has passed.
+    sLightEquipState.isEquipped = 1;
     lightRodState = LIGHT_ROD_STATE_EQUIPPED;
     sLightLastSwingType = 0;
     sLightJumpEffectSpawned = 0;
