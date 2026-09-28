@@ -1,13 +1,13 @@
 {
   "resource_count": 7,
-  "vertex_records": 3082,
-  "vertex_loads": 113,
+  "vertex_records": 2938,
+  "vertex_loads": 107,
   "slug": "ice_rod",
   "name": "Ice Rod",
   "entry": "objects/nei_gi_redesign/ice_rod/gi_dl",
   "draw_scale": 0.2,
   "matrix_scale": 0.243743896484375,
-  "triangles": 3216,
+  "triangles": 3168,
   "bounds_author": [
     [
       -20.75,

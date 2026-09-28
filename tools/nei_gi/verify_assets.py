@@ -14,7 +14,7 @@ CHECKPOINTS = Path(__file__).resolve().parent / "CHECKPOINTS"
 PREFIX = "objects/nei_gi_redesign/"
 ITEMS = ("fire_rod", "ice_rod", "light_rod", "rocs_feather", "time_gate", "whip", "shovel",
          "gust_jar", "hylia_grace", "zonai_permafrost", "demise_destruction", "ball_and_chain",
-         "deku_leaf", "mogma_mitts", "switch_hook", "beetle")
+         "deku_leaf", "mogma_mitts", "switch_hook", "beetle", "lantern")
 
 
 def face_key(points):
@@ -59,12 +59,12 @@ def read_glb(path):
     return doc, faces
 
 
-def verify():
+def verify(items=ITEMS, namespace=PREFIX, checkpoints=CHECKPOINTS):
     report = {}
-    for slug in ITEMS:
-        prefix = PREFIX + slug + "/"
-        meta = json.loads((CHECKPOINTS / slug / "checkpoint.json").read_text())
-        doc, expected = read_glb(CHECKPOINTS / slug / (slug + ".glb"))
+    for slug in items:
+        prefix = namespace + slug + "/"
+        meta = json.loads((checkpoints / slug / "checkpoint.json").read_text())
+        doc, expected = read_glb(checkpoints / slug / (slug + ".glb"))
         matrix = (ASSETS / prefix / "scale_mtx").read_bytes()
         assert len(matrix) == 128 and struct.unpack_from("<I", matrix, 4)[0] == 0x4F4D5458
         words = struct.unpack_from("<16I", matrix, 64)
@@ -158,6 +158,6 @@ if __name__ == "__main__":
         result["archive_entries"] = verify_archive(args.archive)
     if args.report:
         args.report.write_text(json.dumps(result, indent=2) + "\n")
-    print("PASS: 16 serialized GI models; geometry/winding, vertex cache, references, matrices, textures, and transparency")
+    print(f"PASS: {len(ITEMS)} serialized GI models; geometry/winding, vertex cache, references, matrices, textures, and transparency")
     if args.archive:
         print("PASS: combined archive matches source, with identical base/Alt resources")

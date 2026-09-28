@@ -202,6 +202,23 @@ void ItemEquip_ReleaseHandMatrix(void) {
     sHandMtxValid = 0;
 }
 
+u8 ItemEquip_ApplyHandPose(Player* player, const ItemHandPose* pose) {
+    f32 unscale;
+    if (!sHandMtxValid || player == NULL || pose == NULL) {
+        return 0;
+    }
+    Matrix_Put(&sHandMtx);
+    unscale = (player->actor.scale.x != 0.0f) ? (1.0f / player->actor.scale.x) : 1.0f;
+    Matrix_Scale(unscale, unscale, unscale, MTXMODE_APPLY);
+    Matrix_RotateY(DEG_TO_RAD(pose->rotY), MTXMODE_APPLY);
+    Matrix_RotateX(DEG_TO_RAD(pose->rotX), MTXMODE_APPLY);
+    Matrix_RotateZ(DEG_TO_RAD(pose->rotZ), MTXMODE_APPLY);
+    // Keep the established handheld convention: offsets follow model rotation.
+    Matrix_Translate(pose->offsetX, pose->offsetY, pose->offsetZ, MTXMODE_APPLY);
+    Matrix_Scale(pose->scale, pose->scale, pose->scale, MTXMODE_APPLY);
+    return 1;
+}
+
 // Six wand rods carry an opaque and a translucent DL each, so a session can walk 12 paths before
 // the slate's and the rod's are counted. Sized to hold every handheld, not just the ones in hand.
 #define HAND_MODEL_CACHE 24

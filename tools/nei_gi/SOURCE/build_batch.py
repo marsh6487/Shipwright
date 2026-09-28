@@ -6,6 +6,7 @@ from pathlib import Path
 from meshkit import ROOT,export_resources
 from preview import checkpoint
 import models
+import lantern
 
 def whip():
     """Import the previously validated Whip A checkpoint, preserving its triangles."""
@@ -28,6 +29,7 @@ def whip():
     return m
 
 BUILDERS={
+ 'lantern':lantern.build,
  'whip':whip,
  'fire_rod':lambda:models.rod('fire_rod'), 'ice_rod':lambda:models.rod('ice_rod'), 'light_rod':lambda:models.rod('light_rod'),
  'hylia_grace':lambda:models.spell('hylia_grace'), 'zonai_permafrost':lambda:models.spell('zonai_permafrost'), 'demise_destruction':lambda:models.spell('demise_destruction'),

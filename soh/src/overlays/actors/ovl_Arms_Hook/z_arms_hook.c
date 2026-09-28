@@ -2,11 +2,13 @@
 #include "objects/object_link_boy/object_link_boy.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/randomizer/NeiArticulatedPresentation.h"
 // Skijer's NEI: the switch hook's live "look at it to pick it" selection is now the shared
 // remote selector, so the Phantom Hourglass and friends reuse the exact same feel.
 #include "../../../../mods/items/helpers/target_select_helper.h"
 
 extern u8 TransformMasks_IsTransformed(void);
+extern u8 TransformMasks_IsTransformedAny(void);
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED)
 
@@ -728,6 +730,7 @@ void ArmsHook_Draw(Actor* thisx, PlayState* play) {
     Vec3f sp60;
     f32 sp5C;
     f32 sp58;
+    u8 useApprovedSwitch = !TransformMasks_IsTransformedAny() && NeiArticulated_UsesSwitchHook(player);
 
     if ((player->actor.draw != NULL) && (player->rightHandType == PLAYER_MODELTYPE_RH_HOOKSHOT)) {
         // Transformed: OOT's right-hand limb matrix isn't set up (MM form draws instead),
@@ -769,7 +772,11 @@ void ArmsHook_Draw(Actor* thisx, PlayState* play) {
         // z_player_lib.c) carries the model's silhouette on its own when
         // held. During shoot the actor IS at the flying position, so the
         // MM tip lines up correctly with the chain end.
-        {
+        if (useApprovedSwitch) {
+            // Only geometry changes: collision probes above used the original
+            // actor matrix. The returning head also draws when timer is zero.
+            NeiArticulated_DrawSwitchHookTip(play, player, &this->actor);
+        } else {
             extern u8 TwilightUpgrade_IsClawshotActive(void);
             extern void* MmAssets_LoadHookshotTipDL(void);
             extern Gfx* MmDL_Or(Gfx * vanillaDL, Gfx * mmDL);
@@ -806,7 +813,11 @@ void ArmsHook_Draw(Actor* thisx, PlayState* play) {
         // Twilight Upgrade — Clawshot mode: swap chain DL to MM's gameplay_keep
         // hookshot chain so the visual matches the body DL swap in z_player_lib.c.
         // Fallback to OOT chain when mm.o2r isn't loaded.
-        {
+        if (useApprovedSwitch) {
+            // This item retains the native chain. A CustomEquipment hookshot
+            // override must not suppress it or replace the switch-hook head.
+            gSPDisplayList(POLY_OPA_DISP++, gLinkAdultHookshotChainDL);
+        } else {
             extern u8 TwilightUpgrade_IsClawshotActive(void);
             extern void* MmAssets_LoadHookshotChainDL(void);
             extern Gfx* MmDL_Or(Gfx * vanillaDL, Gfx * mmDL);

@@ -138,6 +138,9 @@ typedef struct {
 
 void ItemEquip_CaptureHandMatrix(void); // z_player_lib.c, at PLAYER_LIMB_R_HAND
 void ItemEquip_ReleaseHandMatrix(void); // once per draw pass, AFTER every in-hand drawer
+// Pose only: no resource lookup or graphics submission. Returns 0 if this
+// player's draw has no captured wrist. Caller owns push/pop of the CPU matrix.
+u8 ItemEquip_ApplyHandPose(Player* player, const ItemHandPose* pose);
 
 /**
  * Draw one handheld model in Link's right fist. `xluPath` may be NULL for a fully opaque model.

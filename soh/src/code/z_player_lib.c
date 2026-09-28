@@ -12,6 +12,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/draw.h"
+#include "soh/Enhancements/randomizer/NeiArticulatedPresentation.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/customequipment.h"
 #include "mods/items/custom_items.h"
@@ -1973,6 +1974,17 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
         }
     }
 
+    // The Switch Hook shares the hookshot action/pose, but owns its item mesh.
+    // Apply after equipment/PAK hooks so an Alt hookshot cannot repaint it.
+    // Keep the selected skin's age/LOD-correct fist and all original limb math.
+    if (limbIndex == PLAYER_LIMB_R_HAND && *dList != NULL && this->actor.scale.y >= 0.0f &&
+        sRightHandType == PLAYER_MODELTYPE_RH_HOOKSHOT && !TransformMasks_IsTransformedAny() &&
+        NeiArticulated_UsesSwitchHook(this)) {
+        Gfx* hand = Player_ResolveLimbDLForDummyOrLocal(
+            sPlayerRightHandClosedDLs[gSaveContext.linkAge + sDListsLodOffset]);
+        NeiArticulated_ApplySwitchHookHand(play, this, dList, hand);
+    }
+
     // The sword cue changes leftHandDLists without changing the child's open
     // hand type. Preserve that handoff after ordinary hand/equipment overrides;
     // resource resolution still honors alternate assets and the selected pak.
@@ -2061,6 +2073,15 @@ s32 Player_OverrideLimbDrawGameplayFirstPerson(PlayState* play, s32 limbIndex, G
     }
 
     GameInteractor_Should(VB_PLAYER_OVERRIDE_LIMB_DRAW, true, limbIndex, dList, thisx, play);
+
+    // First-person has a distinct FAR hand path. Do not expose a limb hidden
+    // by its camera/transformation rules, and do not alter the aim transform.
+    if (limbIndex == PLAYER_LIMB_R_HAND && *dList != NULL && this->unk_6AD == 2 &&
+        this->actor.scale.y >= 0.0f && this->rightHandType == PLAYER_MODELTYPE_RH_HOOKSHOT &&
+        !TransformMasks_IsTransformedAny() && NeiArticulated_UsesSwitchHook(this)) {
+        Gfx* hand = Player_ResolveLimbDLForDummyOrLocal(sPlayerRightHandClosedDLs[gSaveContext.linkAge + 2]);
+        NeiArticulated_ApplySwitchHookHand(play, this, dList, hand);
+    }
 
     Player_ApplyBackEquipmentVisibility(limbIndex, dList);
     return false;
@@ -2323,7 +2344,7 @@ void Player_DrawGetItemIceTrap(PlayState* play, Player* this, Vec3f* refPos, s32
 
         // Draw fake item model.
         if (this->getItemEntry.drawFunc != NULL) {
-            this->getItemEntry.drawFunc(play, &this->getItemEntry);
+            GetItemEntry_Draw(play, this->getItemEntry);
         } else {
             GetItem_Draw(play, drawIdPlusOne - 1);
         }
@@ -2353,7 +2374,7 @@ void Player_DrawGetItemImpl(PlayState* play, Player* this, Vec3f* refPos, s32 dr
                (this->getItemEntry.getItemId == RG_TRIFORCE_PIECE || this->getItemEntry.getItemId == RG_TRIFORCE)) {
         Randomizer_DrawTriforcePieceGI(play, this->getItemEntry);
     } else if (this->getItemEntry.drawFunc != NULL) {
-        this->getItemEntry.drawFunc(play, &this->getItemEntry);
+        GetItemEntry_Draw(play, this->getItemEntry);
     } else {
         GetItem_Draw(play, drawIdPlusOne - 1);
     }

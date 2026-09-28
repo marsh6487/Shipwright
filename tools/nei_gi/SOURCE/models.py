@@ -56,10 +56,6 @@ def rod(slug):
         m.tube('Winding metal inlay',trim,np.c_[r*np.cos(a),-12+35*t,r*np.sin(a)],.55,5)
     if ice:
         m.crystal('Faceted ice focus','energy',[0,43,0],10.5,34,6)
-        for j in range(3):
-            a=TAU*j/3;start=len(m.parts)
-            m.crystal('Small ice splinter','crystal_highlight',[0,34,0],2.5,13,4)
-            m.transform(rotation('z',20),offset=[9*math.cos(a),0,9*math.sin(a)],start=start)
     else:
         m.sphere('Luminous focus','energy',[0,41,0],[12,12,12],8,16)
         # Fine arcs lie on the surface; particles are added by the GI renderer.

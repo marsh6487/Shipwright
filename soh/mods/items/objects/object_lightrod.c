@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 /**
  * object_lightrod.c - Light Rod 3D model and draw functions
  *
@@ -78,15 +79,17 @@ void CustomItems_DrawLightRod(Player* player, PlayState* play) {
 
     Matrix_Scale(0.05f, 0.05f, 0.05f, MTXMODE_APPLY);
 
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, g_light_rod_dl);
+    if (!NeiHeld_DrawRod(play, 2)) {
+        gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
+                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_OPA_DISP++, g_light_rod_dl);
 
-    // Draw transparent parts (light crystal) with same matrix
-    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_XLU_DISP++, g_light_rod_xlu_dl);
+        // Draw transparent parts (light crystal) with same matrix
+        Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+        gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
+                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_XLU_DISP++, g_light_rod_xlu_dl);
+    }
 
     // Draw active light ball sets. Local play uses sLightProjSets[]. Remote
     // dummies fall back to gCustomItemState (single set, mirrored from sync).

@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 /**
  * object_shovel.c - Shovel 3D model draw functions
  *
@@ -62,7 +63,9 @@ void CustomItems_DrawShovel(Player* player, PlayState* play) {
 
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, gDampeShovelDL_mesh_001_opaque_dl);
+    if (!NeiHeld_DrawModel(play, NEI_HELD_PATH("shovel"), NULL)) {
+        gSPDisplayList(POLY_OPA_DISP++, gDampeShovelDL_mesh_001_opaque_dl);
+    }
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

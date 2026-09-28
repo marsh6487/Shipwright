@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 /**
  * object_icerod.c - Ice Rod 3D model and draw functions
  *
@@ -64,15 +65,17 @@ void CustomItems_DrawIceRod(Player* player, PlayState* play) {
 
     Matrix_Scale(0.05f, 0.05f, 0.05f, MTXMODE_APPLY);
 
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, g_ice_rod_dl);
+    if (!NeiHeld_DrawRod(play, 1)) {
+        gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
+                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_OPA_DISP++, g_ice_rod_dl);
 
-    // Draw transparent parts (ice crystal) with same matrix
-    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_XLU_DISP++, g_ice_rod_xlu_dl);
+        // Draw transparent parts (ice crystal) with same matrix
+        Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+        gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
+                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_XLU_DISP++, g_ice_rod_xlu_dl);
+    }
 
     // Draw active ice ball sets. Local play uses sIceProjSets[]. Remote dummies
     // fall back to gCustomItemState (single set, mirrored from network sync).

@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 /**
  * object_timegate.c - Time Gate draw functions
  *
@@ -38,7 +39,7 @@ static f32 sPortalScrollOffset = 0.0f;
 void CustomItems_DrawTimeGate(Player* player, PlayState* play) {
     if (!tgItemVisible)
         return;
-    if (TimeGate_GetDL() == NULL)
+    if (!NeiHeld_HasResources(NEI_HELD_PATH("time_gate"), NULL) && TimeGate_GetDL() == NULL)
         return;
 
     OPEN_DISPS(play->state.gfxCtx);
@@ -63,7 +64,9 @@ void CustomItems_DrawTimeGate(Player* player, PlayState* play) {
 
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, TimeGate_GetDL());
+    if (!NeiHeld_DrawModel(play, NEI_HELD_PATH("time_gate"), NULL)) {
+        gSPDisplayList(POLY_OPA_DISP++, TimeGate_GetDL());
+    }
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

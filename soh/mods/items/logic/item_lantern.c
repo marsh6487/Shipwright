@@ -19,6 +19,7 @@
 #include "../../nei_save.h" // Skijer's NEI
 #include "objects/object_poh/object_poh.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
+#include "soh/Enhancements/randomizer/NeiLanternPresentation.h"
 // Fire sources whose flame COLOUR has to be read off the actor itself (see
 // Lantern_DetectFireType): the Poe-sister torches and the Poes' lanterns.
 #include "overlays/actors/ovl_Bg_Po_Syokudai/z_bg_po_syokudai.h"
@@ -788,6 +789,15 @@ s32 Player_UpperAction_Lantern(Player* this, PlayState* play) {
 // ── Draw ────────────────────────────────────────────────────────────────────
 
 void CustomItems_DrawLantern(Player* p, PlayState* play) {
+    if (NeiLantern_DrawHeld(p, play, gCustomItemState.lanternFireType)) {
+        // The original lit draw consumes one random sample for its glass tint.
+        // Preserve that shared RNG cadence while the new visual motion is deterministic.
+        if (gCustomItemState.lanternFireType > LANTERN_FIRE_NONE &&
+            gCustomItemState.lanternFireType < LANTERN_FIRE_MAX) {
+            Rand_ZeroOne();
+        }
+        return;
+    }
     Vec3f handPos = p->bodyPartsPos[PLAYER_BODYPART_L_HAND];
     s16 handYaw = p->actor.shape.rot.y;
     u8 fireType = gCustomItemState.lanternFireType;

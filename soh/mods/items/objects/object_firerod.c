@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 /**
  * object_firerod.c - Fire Rod 3D model and draw functions
  *
@@ -64,9 +65,11 @@ void CustomItems_DrawFireRod(Player* player, PlayState* play) {
 
     Matrix_Scale(0.05f, 0.05f, 0.05f, MTXMODE_APPLY);
 
-    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, g_fire_rod_dl);
+    if (!NeiHeld_DrawRod(play, 0)) {
+        gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
+                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_OPA_DISP++, g_fire_rod_dl);
+    }
 
     // Draw active fireball sets. Local play uses sFireProjSets[] (multi-set).
     // Remote dummies have no local sets — fall back to gCustomItemState fields

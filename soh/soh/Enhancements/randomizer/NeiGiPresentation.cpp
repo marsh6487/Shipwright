@@ -1,5 +1,9 @@
 #include "NeiGiPresentation.h"
 #include "NeiGiEffectPolicy.h"
+#include "NeiGiEnergyTexture.h"
+#include "NeiGiRender.h"
+#include <algorithm>
+#include <cstring>
 #include "draw.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/frame_interpolation.h"
@@ -54,38 +58,11 @@ const Presentation kPresentations[] = {
     { Randomizer_DrawDominionRod, nullptr, nullptr, 1.f, Kind::Neutral, {} },
     { Randomizer_DrawMagnesis, nullptr, nullptr, 1.f, Kind::Neutral, {} },
     { Randomizer_DrawStasis, nullptr, nullptr, 1.f, Kind::Neutral, {} },
-    { Randomizer_DrawLantern, nullptr, nullptr, 1.f, Kind::Neutral, {} },
+    { Randomizer_DrawLantern, GI_PATH("lantern"), GI_XLU("lantern"), .025f, Kind::Neutral, {} },
     { Randomizer_DrawCryonis, nullptr, nullptr, 1.f, Kind::Neutral, {} },
 };
 #undef GI_PATH
 #undef GI_XLU
-
-// Small static billboard meshes. No actors, random-number calls, or persistent particle state.
-Vtx kSparkle[] = {
-    { { { 0, 3, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { -1, 1, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { -3, 0, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { -1, -1, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { 0, -3, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { 1, -1, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { 3, 0, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { 1, 1, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { 0, 0, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-};
-Vtx kShard[] = {
-    { { { 0, 3, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { -1, 0, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { 0, -2, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { 1, 0, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-};
-Vtx kLeaf[] = {
-    { { { 0, 3, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { -2, 1, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { -1, -2, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { 0, -3, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { 2, -1, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-    { { { 1, 2, 0 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
-};
 
 float Spin(PlayState* play) {
     // Match DrawCustomItemDiamond's signed 16-bit rotation, including wrap.
@@ -102,58 +79,143 @@ bool HasResource(const char* path) {
 
 // OPEN_DISPS declares interpolation callbacks with the enclosing C linkage.
 extern "C" {
-static void NeiGi_DrawEffects(PlayState* play, const Presentation& item, bool upgraded) {
-    if (!CVarGetInteger(CVAR_NEI_GI_EFFECTS, 0))
+NeiGi::Basis NeiGi_CameraBasis(PlayState* play) {
+    MtxF m;
+    Matrix_Get(&m);
+    auto local = [&](NeiGi::Point p) {
+        return NeiGi::Point{ p.x * m.xx + p.y * m.yx + p.z * m.zx, p.x * m.xy + p.y * m.yy + p.z * m.zy,
+                             p.x * m.xz + p.y * m.yz + p.z * m.zz };
+    };
+    const auto& b = play->billboardMtxF;
+    const auto right = NeiGi::Unit(local({ b.xx, b.yx, b.zx }));
+    const auto up = NeiGi::Unit(local({ b.xy, b.yy, b.zy }));
+    return { right, up, NeiGi::Unit(NeiGi::Cross(right, up)) };
+}
+
+void NeiGi_DrawMesh(PlayState* play, const NeiGi::Mesh& mesh, Kind orb) {
+    if (mesh.count == 0)
         return;
-    // Old rod models have different tip origins. A missing replacement gets a neutral
-    // origin-centred shimmer instead of incorrectly positioned replacement-tip particles.
-    const bool missingRod =
-        !upgraded && (item.effect == Kind::Fire || item.effect == Kind::Ice || item.effect == Kind::Light);
-    const auto frame = NeiGi::Sample(missingRod ? Kind::Neutral : item.effect, play->gameplayFrames, true);
-    const Vec3f center = missingRod ? Vec3f{} : item.effectCenter;
+    // Reuse shared vertices within each 32-entry RSP cache load. A full potion
+    // shop must leave room in both the OPA arena and XLU command buffer.
+    struct Batch {
+        size_t vertexStart, vertexCount, indexStart, indexCount;
+    };
+    std::array<Vtx, 1536> packed{};
+    std::array<uint8_t, 1536> indices{};
+    std::array<Batch, 64> batches{};
+    size_t vertexCount = 0, indexCount = 0, batchCount = 0;
+    Batch batch{};
+    auto equal = [](const Vtx& a, const Vtx& b) {
+        return std::memcmp(a.v.ob, b.v.ob, sizeof(a.v.ob)) == 0 && std::memcmp(a.v.tc, b.v.tc, sizeof(a.v.tc)) == 0 &&
+               std::memcmp(a.v.cn, b.v.cn, 4) == 0;
+    };
+    auto finish = [&]() {
+        if (batch.indexCount)
+            batches[batchCount++] = batch;
+        batch = { vertexCount, 0, indexCount, 0 };
+    };
+    for (size_t i = 0; i < mesh.count; i += 3) {
+        Vtx triangle[3]{};
+        for (size_t j = 0; j < 3; ++j) {
+            const auto& v = mesh.vertices[i + j];
+            triangle[j] = { { { static_cast<int16_t>(std::lround(v.p.x * 16)),
+                                static_cast<int16_t>(std::lround(v.p.y * 16)),
+                                static_cast<int16_t>(std::lround(v.p.z * 16)) },
+                              0,
+                              { static_cast<int16_t>(std::lround(v.u * 63 * 32)),
+                                static_cast<int16_t>(std::lround(v.v * 63 * 32)) },
+                              { static_cast<uint8_t>(v.rgb >> 16), static_cast<uint8_t>(v.rgb >> 8),
+                                static_cast<uint8_t>(v.rgb), v.alpha } } };
+        }
+        // Conservative reservation of three vertices keeps a complete triangle
+        // in one load. Unused cache slots do not consume arena storage.
+        if (batch.vertexCount > 29)
+            finish();
+        for (const auto& vertex : triangle) {
+            size_t found = 0;
+            while (found < batch.vertexCount && !equal(vertex, packed[batch.vertexStart + found]))
+                ++found;
+            if (found == batch.vertexCount) {
+                packed[vertexCount++] = vertex;
+                ++batch.vertexCount;
+            }
+            indices[indexCount++] = static_cast<uint8_t>(found);
+            ++batch.indexCount;
+        }
+    }
+    finish();
+    auto* vertices = static_cast<Vtx*>(Graph_Alloc(play->state.gfxCtx, vertexCount * sizeof(Vtx)));
+    if (vertices == nullptr)
+        return;
+    std::memcpy(vertices, packed.data(), vertexCount * sizeof(Vtx));
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gDPPipeSync(POLY_XLU_DISP++);
     gSPClearGeometryMode(POLY_XLU_DISP++,
                          G_LIGHTING | G_CULL_BACK | G_CULL_FRONT | G_TEXTURE_GEN | G_TEXTURE_GEN_LINEAR | G_FOG);
-    gSPTexture(POLY_XLU_DISP++, 0, 0, 0, G_TX_RENDERTILE, G_OFF);
-    gDPSetCombineMode(POLY_XLU_DISP++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
+    gSPSetGeometryMode(POLY_XLU_DISP++, G_ZBUFFER | G_SHADE | G_SHADING_SMOOTH);
+    gDPSetCycleType(POLY_XLU_DISP++, G_CYC_2CYCLE);
+    gDPSetAlphaCompare(POLY_XLU_DISP++, G_AC_NONE);
+    gDPSetRenderMode(POLY_XLU_DISP++, G_RM_PASS, G_RM_AA_ZB_XLU_SURF2);
+    if (orb != Kind::Neutral) {
+        const auto color = NeiGi::OrbPalette(orb);
+        gSPTexture(POLY_XLU_DISP++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON);
+        gDPSetTextureLUT(POLY_XLU_DISP++, G_TT_NONE);
+        gDPSetTextureFilter(POLY_XLU_DISP++, G_TF_BILERP);
+        gDPLoadTextureBlock(POLY_XLU_DISP++, NeiGi::OrbTexture(orb, play->gameplayFrames).data(), G_IM_FMT_I,
+                            G_IM_SIZ_8b, 64, 64, 0, G_TX_CLAMP, G_TX_CLAMP, 6, 6, G_TX_NOLOD, G_TX_NOLOD);
+        gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, color.hot >> 16, (color.hot >> 8) & 255, color.hot & 255, 255);
+        gDPSetEnvColor(POLY_XLU_DISP++, color.edge >> 16, (color.edge >> 8) & 255, color.edge & 255, 255);
+        // I8 controls both the hot/edge gradient and alpha, exactly as previewed.
+        gDPSetCombineMode(POLY_XLU_DISP++, G_CC_BLENDPE, G_CC_PASS2);
+    } else {
+        gSPTexture(POLY_XLU_DISP++, 0, 0, 0, G_TX_RENDERTILE, G_OFF);
+        gDPSetCombineMode(POLY_XLU_DISP++, G_CC_SHADE, G_CC_SHADE);
+    }
     Matrix_Push();
-    Matrix_RotateY(Spin(play), MTXMODE_APPLY);
-    for (size_t i = 0; i < frame.count; ++i) {
-        const auto& p = frame.particles[i];
-        if (p.alpha == 0)
-            continue;
-        Matrix_Push();
-        Matrix_Translate(center.x + p.x, center.y + p.y, center.z + p.z, MTXMODE_APPLY);
-        Matrix_ReplaceRotation(&play->billboardMtxF);
-        Matrix_RotateZ(p.angle, MTXMODE_APPLY);
-        // Vertex meshes span ±3; sample.size denotes the final radius, not a multiplier.
-        Matrix_Scale(p.size / 3.f, p.size / 3.f, p.size / 3.f, MTXMODE_APPLY);
-        gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
-                  G_MTX_MODELVIEW | G_MTX_LOAD | G_MTX_NOPUSH);
-        gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, (p.rgb >> 16) & 255, (p.rgb >> 8) & 255, p.rgb & 255, p.alpha);
-        if (p.shape == NeiGi::Shape::Sparkle) {
-            gSPVertex(POLY_XLU_DISP++, reinterpret_cast<uintptr_t>(kSparkle), 9, 0);
-            for (int j = 0; j < 8; j += 2)
-                gSP2Triangles(POLY_XLU_DISP++, 8, j, j + 1, 0, 8, j + 1, (j + 2) % 8, 0);
-        } else if (p.shape == NeiGi::Shape::Leaf) {
-            gSPVertex(POLY_XLU_DISP++, reinterpret_cast<uintptr_t>(kLeaf), 6, 0);
-            gSP2Triangles(POLY_XLU_DISP++, 0, 1, 2, 0, 0, 2, 3, 0);
-            gSP2Triangles(POLY_XLU_DISP++, 0, 3, 4, 0, 0, 4, 5, 0);
-        } else {
-            gSPVertex(POLY_XLU_DISP++, reinterpret_cast<uintptr_t>(kShard), 4, 0);
-            gSP2Triangles(POLY_XLU_DISP++, 0, 1, 2, 0, 0, 2, 3, 0);
+    Matrix_Scale(1.f / 16, 1.f / 16, 1.f / 16, MTXMODE_APPLY);
+    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD | G_MTX_NOPUSH);
+    for (size_t b = 0; b < batchCount; ++b) {
+        const auto& part = batches[b];
+        gSPVertex(POLY_XLU_DISP++, reinterpret_cast<uintptr_t>(vertices + part.vertexStart), part.vertexCount, 0);
+        const auto* index = indices.data() + part.indexStart;
+        for (size_t j = 0; j < part.indexCount; j += 6) {
+            if (j + 3 < part.indexCount) {
+                gSP2Triangles(POLY_XLU_DISP++, index[j], index[j + 1], index[j + 2], 0, index[j + 3], index[j + 4],
+                              index[j + 5], 0);
+            } else {
+                gSP1Triangle(POLY_XLU_DISP++, index[j], index[j + 1], index[j + 2], 0);
+            }
         }
-        Matrix_Pop();
     }
     Matrix_Pop();
-    // Restore the standard translucent pipeline for the next GI/world draw.
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     CLOSE_DISPS(play->state.gfxCtx);
 }
+
+static void NeiGi_DrawEffects(PlayState* play, const Presentation& item, bool upgraded) {
+    const bool shimmer = CVarGetInteger(CVAR_NEI_GI_EFFECTS, 0) != 0;
+    const bool energy = upgraded && (NeiGi::IsRod(item.effect) || NeiGi::IsSpell(item.effect));
+    if (!shimmer && !energy)
+        return;
+    Matrix_Push();
+    Matrix_RotateY(Spin(play), MTXMODE_APPLY);
+    const auto camera = NeiGi_CameraBasis(play);
+    if (energy) {
+        Matrix_Push();
+        Matrix_Translate(item.effectCenter.x, item.effectCenter.y, item.effectCenter.z, MTXMODE_APPLY);
+        NeiGi_DrawMesh(play, NeiGi::SampleOrb(item.effect, camera), item.effect);
+        NeiGi_DrawMesh(play, NeiGi::SampleEnergy(item.effect, play->gameplayFrames, camera));
+        Matrix_Pop();
+    }
+    if (shimmer)
+        NeiGi_DrawMesh(play, NeiGi::SampleShimmer(play->gameplayFrames, true, camera, item.effect));
+    Matrix_Pop();
+}
 }
 
-extern "C" bool NeiGi_Draw(PlayState* play, GetItemEntry* entry) {
+static bool NeiGi_DrawImpl(PlayState* play, GetItemEntry* entry, bool shop) {
     if (play == nullptr || entry == nullptr || entry->drawFunc == nullptr)
         return false;
     const Presentation* item = nullptr;
@@ -170,6 +232,24 @@ extern "C" bool NeiGi_Draw(PlayState* play, GetItemEntry* entry) {
     // Archive presence checks preserve the original model if a required pass is absent.
     const bool upgraded = HasResource(item->opaque) && (!item->translucent || HasResource(item->translucent));
     Matrix_Push();
+    if (shop && upgraded) {
+        // EnGirlA's origin is 24 local units above the shelf. Fit the lowest
+        // serialized vertex above -22; leave world and overhead sizes intact.
+        float scale = 1.f, lift = 0.f;
+        if (item->draw == Randomizer_DrawBallAndChain) {
+            scale = .62f;
+            lift = 9.f;
+        } else if (item->draw == Randomizer_DrawShovel) {
+            scale = .82f;
+            lift = 13.f;
+        } else if (item->effect == Kind::Fire || item->effect == Kind::Ice || item->effect == Kind::Light) {
+            scale = .85f;
+            lift = 14.f;
+        }
+        Matrix_Translate(0, lift, 0, MTXMODE_APPLY);
+        Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
+    }
+    Matrix_Push();
     if (upgraded) {
         OPEN_DISPS(play->state.gfxCtx);
         Matrix_Scale(item->scale, item->scale, item->scale, MTXMODE_APPLY);
@@ -178,17 +258,33 @@ extern "C" bool NeiGi_Draw(PlayState* play, GetItemEntry* entry) {
         gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
                   G_MTX_MODELVIEW | G_MTX_LOAD | G_MTX_NOPUSH);
         gDma1p(POLY_OPA_DISP++, G_DL_OTR_FILEPATH, item->opaque, 0, G_DL_PUSH);
-        if (item->translucent != nullptr) {
-            Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-            gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
-                      G_MTX_MODELVIEW | G_MTX_LOAD | G_MTX_NOPUSH);
-            gDma1p(POLY_XLU_DISP++, G_DL_OTR_FILEPATH, item->translucent, 0, G_DL_PUSH);
-        }
         CLOSE_DISPS(play->state.gfxCtx);
     } else {
         entry->drawFunc(play, entry);
     }
     Matrix_Pop();
     NeiGi_DrawEffects(play, *item, upgraded);
+    if (upgraded && item->translucent != nullptr) {
+        // Composite the crystal skin over its contained energy, using the same pose.
+        OPEN_DISPS(play->state.gfxCtx);
+        Matrix_Push();
+        Matrix_Scale(item->scale, item->scale, item->scale, MTXMODE_APPLY);
+        Matrix_RotateY(Spin(play), MTXMODE_APPLY);
+        Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+        gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+                  G_MTX_MODELVIEW | G_MTX_LOAD | G_MTX_NOPUSH);
+        gDma1p(POLY_XLU_DISP++, G_DL_OTR_FILEPATH, item->translucent, 0, G_DL_PUSH);
+        Matrix_Pop();
+        CLOSE_DISPS(play->state.gfxCtx);
+    }
+    Matrix_Pop();
     return true;
+}
+
+extern "C" bool NeiGi_Draw(PlayState* play, GetItemEntry* entry) {
+    return NeiGi_DrawImpl(play, entry, false);
+}
+
+extern "C" bool NeiGi_DrawShop(PlayState* play, GetItemEntry* entry) {
+    return NeiGi_DrawImpl(play, entry, true);
 }
