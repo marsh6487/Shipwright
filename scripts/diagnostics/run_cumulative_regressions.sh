@@ -4,6 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 python3 -B scripts/diagnostics/check_feature_baselines.py
 python3 -B -m unittest discover -s scripts/diagnostics -p test_feature_baselines.py
+python3 -B scripts/diagnostics/run_hint_item_name_tests.py
 python3 -B scripts/diagnostics/run_nei_gi_tests.py --held
 python3 -B tests/nei_held/run_hand_fit_tests.py
 python3 -B tests/nei_held/run_articulated_tests.py
