@@ -11,10 +11,12 @@
 #include "z64.h"
 #include "../custom_items.h"
 #include "../helpers/equip_helper.h"
+#include "../helpers/rod_visual.h"
 #include "../logic/item_rod_ice.h"
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
+#include "soh/frame_interpolation.h"
 #include <math.h>
 
 // Ice Rod model from ice_rodDL folder
@@ -123,12 +125,20 @@ void CustomItems_DrawIceRod(Player* player, PlayState* play) {
             RodProjSet* set = &sets[s];
             if (!set->active)
                 continue;
+            FrameInterpolation_RecordOpenChild(set, set->drawEpoch);
             for (s32 p = 0; p < set->count && p < 3; ++p) {
+                FrameInterpolation_RecordOpenChild(&set->pos[p], 1);
                 IceRod_DrawHeadTrail(play, set->trail, &set->pos[p], p, set->scale);
+                FrameInterpolation_RecordCloseChild();
             }
             for (s32 p = 0; p < set->count && p < 3; ++p) {
-                NeiUsedMagic_DrawProjectile(play, 1, &set->pos[p], &set->vel[p], set->scale, s * 19 + p * 7);
+                FrameInterpolation_RecordOpenChild(&set->pos[p], 0);
+                Vec3f direction =
+                    RodVisual_Heading(set->vel[p], set->yaw, set->pitch, ICE_ROD_SLASH_SPREAD * (0x10000 / 360), p);
+                NeiUsedMagic_DrawProjectile(play, 1, &set->pos[p], &direction, set->scale, s * 19 + p * 7);
+                FrameInterpolation_RecordCloseChild();
             }
+            FrameInterpolation_RecordCloseChild();
         }
     } else if (hasRemoteSync) {
         Vec3f remotePos[3] = { iceRodProjPos, gCustomItemState.iceRodProjPos2, gCustomItemState.iceRodProjPos3 };

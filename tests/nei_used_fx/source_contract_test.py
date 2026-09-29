@@ -8,6 +8,7 @@ BASE='cec63fce86b1f582f6e61ad6a98eca6c3cca784b'
 def baseline(p):return subprocess.check_output(['git','show',f'{BASE}:{p}'],cwd=ROOT,text=True)
 def tokens(s):return re.sub(r'\s+','',re.sub(r'//[^\n]*|/\*.*?\*/','',s,flags=re.S))
 def gameplay(s):
+ s=re.sub(r'    set->drawEpoch = \+\+s(?:Fire|Ice)DrawEpoch;\n', '', s)
  s=s.replace('EffectSsEnIce_Spawn(play, &sparkPos, 0.0f,', 'EffectSsEnIce_Spawn(play, &sparkPos, scale * 0.3f,')
  s=s.replace('&primColor, &envColor, 0, 10);', '&primColor, &envColor, 1000, 10);')
  s=re.sub(r'\s*(?:FX_DrawChargeAura|FX_DrawSpinFireCylinder|NeiUsedMagic_DrawCharge|NeiUsedMagic_DrawSpin)\([^;]*;', '',s)
@@ -47,7 +48,16 @@ ice=subprocess.check_output(['git','show','c77c18587a976f6d6cb5c8f91f27593286469
 marker='    // Item-local USED meshes.'
 expected=ice.split(marker,1)[1].replace('IceRod','FireRod').replace('iceRod','fireRod')
 expected=expected.replace('DrawTrail(play, 1,','DrawTrail(play, 0,').replace('DrawProjectile(play, 1,','DrawProjectile(play, 0,')
-assert tokens(fire.split(marker,1)[1])==tokens(expected)
+visual=fire.split(marker,1)[1]
+visual=re.sub(r'\s*FrameInterpolation_Record(?:Open|Close)Child\([^;]*;', '', visual)
+visual=re.sub(r'\s*Vec3f\s+direction\s*=\s*RodVisual_Heading\([^;]*;', '', visual)
+visual=visual.replace('&set->pos[p], &direction,', '&set->pos[p], &set->vel[p],')
+assert tokens(visual)==tokens(expected)
+for element in ('fire','ice'):
+ current=(ROOT/f'soh/mods/items/logic/item_rod_{element}.c').read_text()
+ for suffix in ('SingleProjectile','TripleProjectile'):
+  init=functions(current)[f'{element.capitalize()}Rod_Init{suffix}']
+  assert init.count(f'set->drawEpoch = ++s{element.capitalize()}DrawEpoch;')==1
 path='soh/mods/items/objects/object_lightrod.c'
 assert (ROOT/path).read_text().count('Rand_ZeroOne()')==baseline(path).count('Rand_ZeroOne()')==1
 path='soh/soh/Enhancements/randomizer/NeiGiPresentation.cpp'

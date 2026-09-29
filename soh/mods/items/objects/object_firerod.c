@@ -10,10 +10,12 @@
 #include "z64.h"
 #include "../custom_items.h"
 #include "../helpers/equip_helper.h"
+#include "../helpers/rod_visual.h"
 #include "../logic/item_rod_fire.h"
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
+#include "soh/frame_interpolation.h"
 #include <math.h>
 
 // Fire Rod model from fire_rodDL folder
@@ -97,10 +99,18 @@ void CustomItems_DrawFireRod(Player* player, PlayState* play) {
             RodProjSet* set = &sets[s];
             if (!set->active)
                 continue;
+            FrameInterpolation_RecordOpenChild(set, set->drawEpoch);
+            FrameInterpolation_RecordOpenChild(set->trail, 0);
             NeiUsedMagic_DrawTrail(play, 0, set->trail, 6, set->scale);
+            FrameInterpolation_RecordCloseChild();
             for (s32 p = 0; p < set->count && p < 3; ++p) {
-                NeiUsedMagic_DrawProjectile(play, 0, &set->pos[p], &set->vel[p], set->scale, s * 19 + p * 7);
+                FrameInterpolation_RecordOpenChild(&set->pos[p], 0);
+                Vec3f direction =
+                    RodVisual_Heading(set->vel[p], set->yaw, set->pitch, FIRE_ROD_SLASH_SPREAD * (0x10000 / 360), p);
+                NeiUsedMagic_DrawProjectile(play, 0, &set->pos[p], &direction, set->scale, s * 19 + p * 7);
+                FrameInterpolation_RecordCloseChild();
             }
+            FrameInterpolation_RecordCloseChild();
         }
     } else if (hasRemoteSync) {
         Vec3f remotePos[3] = { fireRodProjPos, gCustomItemState.fireRodProjPos2, gCustomItemState.fireRodProjPos3 };

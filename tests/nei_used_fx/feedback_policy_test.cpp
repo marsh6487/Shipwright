@@ -30,7 +30,9 @@ int main() {
     assert(SampleProjectile(Kind::Fire, frame, 2, {1, 0, 0}).count > 0);
     auto release = SampleSpin(Kind::Fire, frame, 150, true);
     assert(release.count > 0 && release.count < release.vertices.size());
-    for (auto kind : {Kind::Fire, Kind::Ice, Kind::Light}) {
+    assert(SampleSpinSurface(Kind::Light, frame, 150, true).count == 0);
+    assert(SampleSpinFlow(Kind::Light, frame, 150, true, 1).count == 0);
+    for (auto kind : {Kind::Fire, Kind::Ice}) {
       auto spin = SampleSpinSurface(kind, frame, 150, true);
       float height = 0;
       for (size_t i = 0; i < spin.count; ++i)
@@ -42,22 +44,28 @@ int main() {
         const auto flow = SampleSpinFlow(kind, frame, 150, true, 1);
         const auto next = SampleSpinFlow(kind, frame + 1, 150, true, 1);
         assert(flow.count > 0 && flow.count + spin.count <= 864);
-        assert(flow.vertices[0].u != next.vertices[0].u &&
-               flow.vertices[0].v != next.vertices[0].v);
+        assert(flow.vertices[0].u != next.vertices[0].u);
+        for (size_t i = 0; i < flow.count; ++i) {
+          assert(flow.vertices[i].v >= 0 && flow.vertices[i].v <= 1);
+          assert(flow.vertices[i].p.y <= 36.001f); // Low outward sweep, separate from tall crest.
+        }
         assert(flow.vertices[0].u !=
                spin.vertices[0].u); // Independent material motion.
       }
     }
-    assert(SampleChargeSurface(Kind::Fire, frame, 1).count ==
-           0); // no enclosing portal cylinder
-    auto fire = SampleCharge(Kind::Fire, frame, 1);
-    assert(fire.count > 0 && fire.count <= 300);
-    for (size_t i = 0; i < fire.count; ++i) {
-      auto p = fire.vertices[i].p;
-      assert(std::abs(p.x) <= 12 && std::abs(p.z) <= 12 && p.y >= -5 &&
-             p.y <= 40);
+    // Fire reuses Light's charge fixtures; the production-dispatch test checks
+    // that only the bound texture differs.
+    for (const auto sampler : {SampleCharge, SampleChargeSparks, SampleChargeSurface}) {
+      const auto fire = sampler(Kind::Fire, frame, 1, {});
+      const auto light = sampler(Kind::Light, frame, 1, {});
+      assert(fire.count == light.count && fire.count > 0);
+      for (size_t i = 0; i < fire.count; ++i) {
+        const auto& a = fire.vertices[i]; const auto& b = light.vertices[i];
+        assert(a.p.x == b.p.x && a.p.y == b.p.y && a.p.z == b.p.z);
+        assert(a.rgb == b.rgb && a.alpha == b.alpha && a.u == b.u && a.v == b.v);
+      }
     }
   }
   std::cout << "PASS substantial Ice/Fire bolts, native-height elemental "
-               "walls, compact Fire focus\n";
+               "walls, Light-shaped Fire charge\n";
 }

@@ -89,8 +89,9 @@ int main() {
   const auto before = Fixture::draws.size();
   NeiUsedMagic_DrawCharge(&play, &player, 0, 1);
   restored();
-  assert(Fixture::draws.size() ==
-         before); // Fire body aura removed; focus draws at the rod tip.
+  assert(Fixture::draws.size() > before);
+  assert(Fixture::draws.back().position.x == 100 && Fixture::draws.back().position.y == 205);
+  assert(std::string(Fixture::materials.back().path) == "__OTR__objects/nei_rod_attack/fire_release_crest");
   gCustomItemState.fireRodCharging = 1;
   gCustomItemState.fireRodChargeLevel = 1;
   NeiUsedMagic_DrawChargeFocus(&play, 0);
@@ -135,6 +136,10 @@ int main() {
   assert(std::string(Fixture::materials[0].path) ==
          "__OTR__objects/nei_rod_attack/fire_surge");
   assert(!Fixture::materials[0].repeatS && !Fixture::materials[0].repeatT);
+  Fixture::materials.clear();
+  NeiUsedMagic_DrawSpin(&play, &player, 2, 500, true);
+  restored();
+  assert(Fixture::materials.empty()); // Accepted Light rays have no release-wall texture.
   for (int element = 0; element < 2; ++element) {
     Fixture::materials.clear();
     NeiUsedMagic_DrawSpin(&play, &player, element, 500, true);
@@ -142,9 +147,9 @@ int main() {
     assert(Fixture::materials.size() == 2);
     for (const auto &material : Fixture::materials) {
       assert(std::string(material.path) ==
-             (element == 0 ? "__OTR__objects/nei_rod_attack/fire_release_flow"
-                           : "__OTR__objects/nei_rod_attack/ice_release_flow"));
-      assert(material.repeatS && material.repeatT);
+             (element == 0 ? "__OTR__objects/nei_rod_attack/fire_release_crest"
+                           : "__OTR__objects/nei_rod_attack/ice_release_crest"));
+      assert(material.repeatS && !material.repeatT);
     }
   }
   Fixture::textures = false;

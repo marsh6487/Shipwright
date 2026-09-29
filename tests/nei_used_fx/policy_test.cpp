@@ -56,7 +56,10 @@ int main() {
           assert(!same(projectile, SampleProjectile(kind, frame + 17, 2.f,
                                                     {1, .2f, .1f}, camera)));
         valid(SampleSpin(kind, frame, 500, true, camera), 540);
-        valid(SampleSpinSurface(kind, frame, 500, true), 540);
+        if (kind == Kind::Ice)
+          valid(SampleSpinSurface(kind, frame, 500, true), 540);
+        else
+          assert(SampleSpinSurface(kind, frame, 500, true).count == 0);
         valid(SampleBurst(kind, frame, 1, camera), 85);
       }
       for (Kind kind : {Kind::Fire, Kind::Ice, Kind::Light}) {
@@ -64,10 +67,7 @@ int main() {
         valid(SampleChargeSparks(kind, frame, 1, camera), 40);
         assert(SampleCharge(kind, frame, 0, camera).count == 0);
         const auto surface = SampleChargeSurface(kind, frame, 1, camera);
-        if (kind == Kind::Fire)
-          assert(surface.count == 0);
-        else
-          valid(surface, 90);
+        valid(surface, 90);
         for (size_t i = 0; i < surface.count; ++i) {
           assert(std::isfinite(surface.vertices[i].u) &&
                  std::isfinite(surface.vertices[i].v));

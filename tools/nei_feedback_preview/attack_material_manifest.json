@@ -68,5 +68,33 @@
       32
     ],
     "origin": "Original generated RGBA artwork; no medallion/Henriko texture source; authored alpha preserved"
+  },
+  "fire_release_crest": {
+    "source": "tools/nei_feedback_preview/art/fire_release_crest.png",
+    "source_sha256": "2ddd5fcaf86763093fd6a930f53fac9d225393f40210cc686d6429b7da5af873",
+    "resource_sha256": "05e0a53b044ac55080e4e47e0606c62f11ab552c57c450508b19b47705f5b4bb",
+    "pixels": [
+      512,
+      512
+    ],
+    "logical_tile": [
+      32,
+      32
+    ],
+    "origin": "Original generated RGBA artwork; no medallion/Henriko texture source; authored alpha preserved"
+  },
+  "ice_release_crest": {
+    "source": "tools/nei_feedback_preview/art/ice_release_crest.png",
+    "source_sha256": "4ad8b7c7ec199ba70c3c5503b6d56c2c61452706b4d1f87cfe3fb52cf76e8fbe",
+    "resource_sha256": "3a742f042432f58d4d2031d9951bc7da5a481a1284d00fb56c7e01948a8734de",
+    "pixels": [
+      512,
+      512
+    ],
+    "logical_tile": [
+      32,
+      32
+    ],
+    "origin": "Original generated RGBA artwork; no medallion/Henriko texture source; authored alpha preserved"
   }
 }

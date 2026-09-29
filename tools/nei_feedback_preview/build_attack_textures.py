@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parents[2]
 DEST=ROOT/'soh/assets/custom/objects/nei_rod_attack'
 DEST.mkdir(parents=True,exist_ok=True)
 manifest={}
-for name in ('fire_surge','frost_surge','light_surge','fire_release_flow','ice_release_flow'):
+for name in ('fire_surge','frost_surge','light_surge','fire_release_flow','ice_release_flow','fire_release_crest','ice_release_crest'):
  source=Path(__file__).with_name('art')/(name+'.png')
  im=Image.open(source).convert('RGBA').resize((512,512),Image.Resampling.LANCZOS)
  header=bytearray(64)

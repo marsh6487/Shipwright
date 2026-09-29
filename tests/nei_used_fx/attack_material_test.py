@@ -8,7 +8,7 @@ assets=ROOT/'soh/assets/custom/objects/nei_rod_attack'
 # Explicitly accepted in review02; a release-art rebuild must not reauthor it.
 assert hashlib.sha256((assets/'fire_surge').read_bytes()).hexdigest()=='824c9501c9702710636e056bb463e476d81f2680cef710e3936cd01e60335463'
 assert {p.name for p in assets.iterdir()}==set(manifest)=={'fire_surge','frost_surge','light_surge',
-                                                        'fire_release_flow','ice_release_flow'}
+                                                        'fire_release_flow','ice_release_flow','fire_release_crest','ice_release_crest'}
 for name,m in manifest.items():
  source=ROOT/m['source'];raw=(assets/name).read_bytes()
  assert hashlib.sha256(source.read_bytes()).hexdigest()==m['source_sha256']

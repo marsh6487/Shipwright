@@ -184,18 +184,13 @@ inline Mesh SampleTrail(Kind kind, uint32_t frame, const Point* points, size_t c
     return m;
 }
 inline Mesh SampleChargeSparks(Kind kind, uint32_t frame, float charge, const Basis& camera = {}) {
+    // Fire uses the accepted Light charge animation; only its surface texture differs.
+    if (kind == Kind::Fire)
+        kind = Kind::Light;
     Mesh m;
     charge = Clamp(charge, 0, 1);
     if (charge <= 0 || !NeiGi::IsRod(kind))
         return m;
-    if (kind == Kind::Fire) {
-        for (int i = 0; i < 3; ++i) {
-            const float f = std::fmod((frame % 180u) / 55.f + i / 3.f, 1.f);
-            const Point p{ std::sin(i * 2.4f + f * 2) * 4, 7 + 27 * f, std::cos(i * 2.4f) * 3 };
-            NeiGi::Glow(m, p, .5f + .4f * charge, 0xFFC46D, Alpha(190 * std::sin(f * Tau * .5f)), camera);
-        }
-        return m;
-    }
     const float t = NeiGi::Time(frame), r = 5 + 9 * charge;
     for (int i = 0; i < 8; ++i) {
         const float f = std::fmod((frame % 180u) / 45.f + i / 8.f, 1.f);
@@ -204,8 +199,6 @@ inline Mesh SampleChargeSparks(Kind kind, uint32_t frame, float charge, const Ba
         const uint8_t alpha = Alpha(240 * std::sin(f * Tau * .5f));
         if (kind == Kind::Ice) {
             NeiGi::IceCrystal(m, p, { std::sin(a), 1, std::cos(a) }, 3.5f + charge, .95f, a + t, alpha, camera);
-        } else if (kind == Kind::Fire) {
-            Ray(m, p, camera.up + camera.right * (std::sin(a) * .25f), 3 + 5 * charge, 1.4f, 0xFF9C35, alpha, camera);
         } else {
             NeiGi::Glow(m, p, 3, 0xFFE070, alpha / 2, camera);
             Ray(m, p, camera.up, 4 + 3 * charge, .8f, 0xFFF1A6, alpha, camera);
@@ -216,6 +209,8 @@ inline Mesh SampleChargeSparks(Kind kind, uint32_t frame, float charge, const Ba
     return m;
 }
 inline Mesh SampleCharge(Kind kind, uint32_t frame, float charge, const Basis& camera = {}) {
+    if (kind == Kind::Fire)
+        kind = Kind::Light;
     Mesh m;
     charge = Clamp(charge, 0, 1);
     if (charge <= 0 || !NeiGi::IsRod(kind))
@@ -236,8 +231,6 @@ inline Mesh SampleCharge(Kind kind, uint32_t frame, float charge, const Basis& c
             Frost(m, Radial(i * 2.4f + t * .3f, radius * .85f, 48 * (1 - f)), 2 + charge, t * .4f,
                   Alpha(200 * std::sin(f * Tau * .5f)), camera);
         }
-    } else if (kind == Kind::Fire) {
-        Flame(m, { 0, -2, 0 }, { 0, 1, 0 }, 12 + 19 * charge, 3 + 3 * charge, t * 3, camera);
     } else {
         Ring(m, radius, 2, 5, t * .2f, Tau, 0xFFF0A8, 230, 24);
         Ring(m, radius * .73f, 6, 2.5f, -t * .3f, Tau, 0xFFF9C9, 180, 20);
@@ -251,13 +244,25 @@ inline Mesh SampleCharge(Kind kind, uint32_t frame, float charge, const Basis& c
     Fade(m, 1, .4f + .6f * charge);
     return m;
 }
-// Native gEffFireCircleDL: radius ~849, height 2400; caller scales XZ by
-// radius/1000 and Y by .08. Preserve that full 192-unit wall silhouette.
+// Native Fire/Ice release envelope: radius ~.849 * gameplay radius, 192 high.
 inline Mesh SampleSpin(Kind kind, uint32_t frame, float radius, bool big, const Basis& camera = {}) {
     Mesh m;
     radius = Clamp(radius, 0, 500);
     if (radius <= 0 || !NeiGi::IsRod(kind))
         return m;
+    // Preserve the accepted Light release: separated rays and two rings.
+    // The native-height Fire/Ice wall treatment does not apply to Light.
+    if (kind == Kind::Light) {
+        const float t = NeiGi::Time(frame);
+        Ring(m, radius, 2, big ? 13 : 8, t, Tau, 0xFFF0A2, 220, 32);
+        Ring(m, radius - std::min(radius * .18f, 20.f), 13, 5, -t, Tau, 0xFFF9D7, 170, 24);
+        for (int i = 0; i < 16; ++i) {
+            const float a = Tau * i / 16 + t * .25f;
+            Ray(m, Radial(a, radius, 4), { 0, 1, 0 }, (big ? 74 : 43) * (.85f + .15f * std::sin(t + i)), big ? 5 : 3,
+                0xFFE9A0, 225, camera);
+        }
+        return m;
+    }
     const float edge = radius * .849f * (1 + .05f * std::sin((frame % 16u) * Tau / 16));
     Ring(m, edge, 3, std::min(edge * .3f, big ? 25.f : 18.f), 0, Tau,
          kind == Kind::Fire  ? 0xFFCA7A
@@ -266,8 +271,8 @@ inline Mesh SampleSpin(Kind kind, uint32_t frame, float radius, bool big, const 
          225, 32);
     return m;
 }
-// A private flowing field sampled twice, at different scales and scroll rates.
-// Both passes stay inside the previous wall's triangle/height envelope.
+// A tall moving crest and a low outward sweep. Independent materials keep the
+// accepted Ice projectile history separate from this release revision.
 inline Mesh SampleSpinFlow(Kind kind, uint32_t frame, float radius, bool big, int layer) {
     Mesh m;
     radius = Clamp(radius, 0, 500);
@@ -278,11 +283,13 @@ inline Mesh SampleSpinFlow(Kind kind, uint32_t frame, float radius, bool big, in
     const float tick = frame % 1600u;
     auto v = [&](int j, int row) {
         const float f = row / float(rows), a = j * Tau / segments;
-        const float u =
-            j * (layer ? 11.f : 8.f) / segments + std::fmod(tick * (layer ? -.0375f : .075f), 1.f) + (layer ? .31f : 0);
-        const float v = 1 - f * (layer ? 1.7f : .95f) + std::fmod(tick * (layer ? .045f : .075f), 1.f);
-        const float opacity = row == rows ? 0.f : (layer ? 178.f : 245.f) * (big ? 1.f : .88f);
-        return NeiGi::EffectVertex{ Radial(a, edge * (layer ? .97f : 1.f), 192 * f), 0xFFFFFF, Alpha(opacity), u, v };
+        const float u = j * 4.f / segments + std::fmod(tick * (layer ? -.0125f : .025f), 1.f) + (layer ? .37f : 0);
+        const float billow = std::sin(f * Tau * .5f);
+        const float r = layer ? edge * (.72f + .34f * f)
+                              : edge * (.94f + .06f * billow) + 8 * billow * std::sin(a * 4 + tick * .25f);
+        const float height = layer ? 4 + 32 * billow : 192 * f;
+        const float opacity = (layer ? 130 * billow : 245) * (big ? 1.f : .88f);
+        return NeiGi::EffectVertex{ Radial(a, r, height), 0xFFFFFF, Alpha(opacity), u, 1 - f };
     };
     for (int j = 0; j < segments; ++j)
         for (int row = 0; row < rows; ++row) {
@@ -294,33 +301,7 @@ inline Mesh SampleSpinFlow(Kind kind, uint32_t frame, float radius, bool big, in
 inline Mesh SampleSpinSurface(Kind kind, uint32_t frame, float radius, bool big) {
     if (kind == Kind::Fire || kind == Kind::Ice)
         return SampleSpinFlow(kind, frame, radius, big, 0);
-    Mesh m;
-    radius = Clamp(radius, 0, 500);
-    if (radius <= 0 || !NeiGi::IsRod(kind))
-        return m;
-    const float edge = radius * .849f * (1 + .05f * std::sin((frame % 16u) * Tau / 16));
-    constexpr int segments = 48, rows = 3;
-    const float scroll = (frame % 720u) / 720.f;
-    // Continuous native-height cylinder; the artwork supplies the flame/frost
-    // silhouette, not sparse spikes or a top-edge opacity fade.
-    auto v = [&](int j, int row) {
-        const float f = row / float(rows), a = j * Tau / segments;
-        // Mirrored neighboring panels share exact edge texels. Rotate geometry
-        // slowly to animate the artwork without an authored wrap seam.
-        const float tile = j / 8.f;
-        const float u = 1 - std::abs(std::fmod(tile, 2.f) - 1);
-        return NeiGi::EffectVertex{
-            Radial(a + scroll * Tau, edge * (1 + .025f * std::sin(a * 5 + scroll * Tau * 24) * std::sin(f * Tau * .5f)),
-                   192 * f),
-            0xFFFFFF, uint8_t(big ? 245 : 225), u, 1 - f
-        };
-    };
-    for (int j = 0; j < segments; ++j)
-        for (int row = 0; row < rows; ++row) {
-            m.Tri(v(j, row), v(j + 1, row), v(j + 1, row + 1));
-            m.Tri(v(j, row), v(j + 1, row + 1), v(j, row + 1));
-        }
-    return m;
+    return {};
 }
 // A substantial textured wake belongs to each moving head. The original set
 // still owns one history trail; no projectile/gameplay state is added.
@@ -471,17 +452,16 @@ inline Mesh CylinderSurface(uint32_t frame, float radius, float height, uint32_t
     return m;
 }
 inline Mesh SampleChargeSurface(Kind kind, uint32_t frame, float charge, const Basis& camera = {}) {
+    if (kind == Kind::Fire)
+        kind = Kind::Light;
     charge = Clamp(charge, 0, 1);
     if (charge <= 0)
         return {};
-    if (kind == Kind::Fire)
-        return {};
     if (kind == Kind::Ice)
         return IceSurface(SampleCharge(kind, frame, charge, camera));
-    if (kind != Kind::Fire && kind != Kind::Light)
+    if (kind != Kind::Light)
         return {};
-    return CylinderSurface(frame, 17 + 18 * charge, 30 + 47 * charge, kind == Kind::Fire ? 0xFFF1B8 : 0xFFFFDD,
-                           kind == Kind::Fire ? 0xFF861C : 0xFFE486, 130 + 100 * charge, kind == Kind::Fire ? 3 : 2);
+    return CylinderSurface(frame, 17 + 18 * charge, 30 + 47 * charge, 0xFFFFDD, 0xFFE486, 130 + 100 * charge, 2);
 }
 inline Mesh SamplePortalSurface(uint32_t frame, float scale, float alpha) {
     scale = Clamp(scale, 0, 1.25f);

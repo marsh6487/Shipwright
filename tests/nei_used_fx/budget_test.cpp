@@ -15,9 +15,10 @@ int main() {
       {"__OTR__objects/nei_rod_attack/frost_surge", false, false},
       {"__OTR__objects/nei_rod_attack/light_surge", false, false}};
   const NeiGi::TextureMaterial releases[] = {
-      {"__OTR__objects/nei_rod_attack/fire_release_flow", true, true},
-      {"__OTR__objects/nei_rod_attack/ice_release_flow", true, true},
+      {"__OTR__objects/nei_rod_attack/fire_release_crest", true, false},
+      {"__OTR__objects/nei_rod_attack/ice_release_crest", true, false},
       {"__OTR__objects/nei_rod_attack/light_surge", false, false}};
+  const NeiGi::TextureMaterial iceWake{"__OTR__objects/nei_rod_attack/ice_release_flow", true, true};
   const Basis cameras[] = {{},
                            {{0, 0, 1}, {0, 1, 0}, {-1, 0, 0}},
                            {{.7071f, 0, .7071f},
@@ -36,6 +37,7 @@ int main() {
         Reset();
         play.gameplayFrames = frame;
         files.insert(ice.path);
+        files.insert(iceWake.path);
         files.insert(rays.path);
         files.insert(attack.path);
         files.insert(release.path);
@@ -62,7 +64,7 @@ int main() {
             if (kind == Kind::Ice)
               NeiGi_DrawTexturedMesh(
                   &play, SampleTrail(kind, frame, sideTrail, 6, 2, camera),
-                  release);
+                  iceWake);
             NeiGi_DrawTexturedMesh(
                 &play,
                 SampleProjectileSurface(kind, frame + set * 19 + p * 7, 2,
@@ -76,7 +78,7 @@ int main() {
         draw(SampleCharge(kind, frame, 1, camera));
         if (kind != Kind::Ice)
           NeiGi_DrawTexturedMesh(
-              &play, SampleChargeSurface(kind, frame, 1, camera), rays);
+              &play, SampleChargeSurface(kind, frame, 1, camera), kind == Kind::Fire ? release : rays);
         draw(SampleChargeSparks(kind, frame, 1, camera));
         NeiGi_DrawMesh(&play, SampleSpin(kind, frame, 150, true, camera));
         NeiGi_DrawTexturedMesh(&play, SampleSpinSurface(kind, frame, 150, true),

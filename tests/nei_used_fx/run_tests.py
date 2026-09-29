@@ -19,6 +19,7 @@ def flags():
     return result
 
 if __name__ == "__main__":
+    subprocess.run([sys.executable,str(ROOT/"tests/nei_used_fx/run_interpolation_test.py")],check=True)
     subprocess.run([sys.executable,str(ROOT/'tests/nei_used_fx/source_contract_test.py')],check=True)
     subprocess.run([sys.executable,str(ROOT/'tests/nei_used_fx/material_test.py')],check=True)
     subprocess.run([sys.executable,str(ROOT/'tests/nei_used_fx/attack_material_test.py')],check=True)

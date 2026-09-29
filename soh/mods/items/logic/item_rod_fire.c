@@ -34,6 +34,7 @@ static u8 sFlameCollidersInited = 0;
 
 // Multi-set projectile system (5 concurrent sets)
 static RodProjSet sFireProjSets[ROD_MAX_PROJ_SETS];
+static u32 sFireDrawEpoch;
 
 static RodColor sFireRodColor = { FIRE_ROD_PRIM_R, FIRE_ROD_PRIM_G, FIRE_ROD_PRIM_B, FIRE_ROD_PRIM_A,
                                   FIRE_ROD_ENV_R,  FIRE_ROD_ENV_G,  FIRE_ROD_ENV_B,  FIRE_ROD_ENV_A };
@@ -184,6 +185,7 @@ static void FireRod_InitSingleProjectile(Player* p, PlayState* play, Vec3f* star
                                          f32 maxRange) {
     RodProjSet* set = FireRod_FindFreeSet(play);
     FireRod_InitSetColliders(set, p, play);
+    set->drawEpoch = ++sFireDrawEpoch;
 
     set->targetScale = 2.0f;
     set->active = 1;
@@ -209,6 +211,7 @@ static void FireRod_InitSingleProjectile(Player* p, PlayState* play, Vec3f* star
 static void FireRod_InitTripleProjectile(Player* p, PlayState* play, Vec3f* startPos, s16 baseYaw, s16 pitch) {
     RodProjSet* set = FireRod_FindFreeSet(play);
     FireRod_InitSetColliders(set, p, play);
+    set->drawEpoch = ++sFireDrawEpoch;
 
     set->targetScale = 2.0f;
     set->active = 1;

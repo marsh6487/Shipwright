@@ -1,5 +1,8 @@
 # NEI runtime feedback candidate — 2026-09-28
 
+Latest revision: the user accepted review04 releases, then requested Fire charge use the accepted Light charge animation with only a readable fire texture substituted. The final candidate retains the previous combined GI/held/hint work, restores Light release, fixes local Fire/Ice interpolation identity and impact heading, and includes the cold MM-stop Leaf completion fix. The new Fire charge uses the exact recovered Light geometry and the existing private fire crest artwork. See `docs/poc/rod-runtime-revision-20260928.md` for the current record; the revision03 descriptions below are historical and superseded where they conflict.
+
+
 Baseline: GI17 published head `c77c18587a976f6d6cb5c8f91f27593286469218`; local mirror `68c198b4c` with identical tree `3669ec1bedc12fc1118f48a392af38cb400e9874`.
 Preview checkout: `poc/nei-runtime-feedback-20260928`, isolated from the performance candidate. User approved revision03 on2026-09-28 at03:02 America/Chicago after reviewing the video/still. This accepts the demonstrated appearance and authorizes the pending runtime-build push; it does not establish in-game proof.
 
@@ -22,7 +25,7 @@ Publication candidate: `poc/nei-feedback-runtime-approved-20260928`, based on cu
 
 The earlier combined feedback cumulative gate passed, including lantern and corrected Switch Hook checks. Revision03 has focused effect, material, source-preservation and actual-object dispatch checks; full game link/runtime remains unperformed. The effect budget exercises15 projectile heads,15 Ice wakes (5 Fire/Light wakes), charge and released spin together across3 camera bases and180 frames. Offline previews sample production geometry/materials. Whip/lantern previews use actual source animation/player geometry with studio rendering. They are not in-game captures.
 
-Deku Leaf first-ground-activation freeze/crash remains **unresolved**. The user's supplied log ends without a crash stack. An ASan/UBSan harness runs real activation, animation payload, gust and stop paths successfully, but stubs resource/GPU boundaries and does not reproduce the failure. No speculative production crash fix was made. See `tests/nei_leaf/README.md`.
+Deku Leaf first-ground-activation freeze/crash was unresolved in the published feedback build. Follow-up log `(2)` and the user's animation-completion timing led to a reproducible MM sound-stop infinite loop before first playback. This local candidate adds a readiness guard and links the real bank engine into the Leaf regression test; the previous no-op audio boundary hid the failure. Source tests pass, but runtime confirmation is pending. See `tests/nei_leaf/README.md` and `docs/poc/deku-leaf-cold-stop-20260928.md`.
 
 Full game build/runtime, active user PAK configuration, first-person camera transition and crash reproduction remain unverified. Preview acceptance now includes the Fire projectile and revision03 Fire/Ice release plus Ice wake. Passing source checks and preview approval do not imply in-game acceptance or master promotion.
 

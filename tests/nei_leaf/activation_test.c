@@ -3,6 +3,7 @@
 #include "global.h"
 #include "mods/items/logic/item_dekuleaf.c"
 #include "mods/items/anim/deku_leaf/dekuleaf_anim_data.c"
+#include "mods/sound_translator/mm_audio_sfx.h"
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
@@ -31,7 +32,9 @@ s32 Collider_InitCylinder(PlayState* p, ColliderCylinder* c) { memset(c, 0, size
 s32 Collider_SetCylinder(PlayState* p, ColliderCylinder* c, Actor* a, ColliderCylinderInit* src) { c->base.actor = a; return 0; }
 s32 CollisionCheck_SetAT(PlayState* p, CollisionCheckContext* ctx, Collider* c) { assert(c->actor == &player.actor); ++colliders; return 0; }
 void Audio_StopSfxById(u32 id) {}
-void MmSfx_Stop(u16 id) {}
+// Keep the real bank stop: ground Leaf can reach it before any MM playback.
+// The outer audio mutex and output mixer remain fixture boundaries.
+void MmSfx_Stop(u16 id) { AudioMmSfx_StopById(id); }
 s32 MmSfx_PlayAtPos(u16 id, Vec3f* pos) { return 0; }
 void Player_PlaySfx(Actor* p, u16 id) {}
 void FX_SpawnWindBlow(PlayState* p, Vec3f* v, s16 yaw, f32 range) {}
@@ -68,6 +71,8 @@ static void reset(void) {
     magic=30; spent=missing=blocked=colliders=equips=unequips=frames=0;
 }
 int main(void) {
+    puts("Starting first ground Leaf with the MM bank engine still uninitialized");
+    fflush(stdout);
     reset(); Handle_DekuLeaf(&player,&play);
     assert(dlBlowing && dlActive && equips==1 && frames==1 && spent==0);
     input.isPressed=0;

@@ -35,6 +35,7 @@ static u8 sIceWaveCollidersInited = 0;
 
 // Multi-set projectile system (5 concurrent sets)
 static RodProjSet sIceProjSets[ROD_MAX_PROJ_SETS];
+static u32 sIceDrawEpoch;
 
 static RodColor sIceRodColor = { ICE_ROD_PRIM_R, ICE_ROD_PRIM_G, ICE_ROD_PRIM_B, ICE_ROD_PRIM_A,
                                  ICE_ROD_ENV_R,  ICE_ROD_ENV_G,  ICE_ROD_ENV_B,  ICE_ROD_ENV_A };
@@ -142,6 +143,7 @@ static void IceRod_CalcVelocity(Vec3f* outVel, s16 yaw, s16 pitch) {
 static void IceRod_InitSingleProjectile(Player* p, PlayState* play, Vec3f* startPos, s16 yaw, s16 pitch, f32 maxRange) {
     RodProjSet* set = IceRod_FindFreeSet(play);
     IceRod_InitSetColliders(set, p, play);
+    set->drawEpoch = ++sIceDrawEpoch;
 
     set->targetScale = 2.0f;
     set->active = 1;
@@ -167,6 +169,7 @@ static void IceRod_InitSingleProjectile(Player* p, PlayState* play, Vec3f* start
 static void IceRod_InitTripleProjectile(Player* p, PlayState* play, Vec3f* startPos, s16 baseYaw, s16 pitch) {
     RodProjSet* set = IceRod_FindFreeSet(play);
     IceRod_InitSetColliders(set, p, play);
+    set->drawEpoch = ++sIceDrawEpoch;
 
     set->targetScale = 2.0f;
     set->active = 1;

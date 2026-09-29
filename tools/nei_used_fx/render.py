@@ -49,7 +49,7 @@ textures={}
 def texture(material):
  if material in textures:return textures[material]
  names={1:'ice_fracture',2:'fire_wisp',3:'light_rays',4:'fire_surge',5:'frost_surge',6:'light_surge',
-        7:'fire_release_flow',8:'ice_release_flow'}
+        7:'fire_release_flow',8:'ice_release_flow',9:'fire_release_crest',10:'ice_release_crest'}
  folder='nei_rod_attack' if material>=4 else 'nei_used_magic'
  path=Path(__file__).resolve().parents[2]/'soh/assets/custom/objects'/folder/names[material]
  raw=path.read_bytes();w,h=struct.unpack_from('<II',raw,68)
