@@ -1957,7 +1957,7 @@ void func_80832440(PlayState* play, Player* this) {
  * @return  true if an item needs to be put away, false if not.
  */
 s32 Player_PutAwayHeldItem(PlayState* play, Player* this) {
-    if (this->heldItemAction >= PLAYER_IA_FISHING_POLE) {
+    if (this->heldItemAction >= PLAYER_IA_FISHING_POLE || CustomItems_HasStowableHeldItem(this)) {
         Player_UseItem(play, this, ITEM_NONE);
         return true;
     } else {
@@ -2612,11 +2612,15 @@ void Player_InitBoomerangIA(PlayState* play, Player* this) {
 }
 
 void Player_InitItemAction(PlayState* play, Player* this, s8 itemAction) {
+    if (itemAction == PLAYER_IA_NONE) {
+        CustomItems_PutAwayHeldItems(this, play);
+    }
     this->unk_85C = 0.0f;
     this->unk_858 = 0.0f;
     this->unk_860 = 0;
 
     this->heldItemAction = this->itemAction = itemAction;
+    ItemEquip_ResetUnequipSound(play, this, itemAction);
     this->modelGroup = this->nextModelGroup;
 
     this->stateFlags1 &= ~(PLAYER_STATE1_ITEM_IN_HAND | PLAYER_STATE1_USING_BOOMERANG);
@@ -3145,7 +3149,9 @@ s32 func_8083442C(Player* this, PlayState* play) {
 }
 
 void Player_FinishItemChange(PlayState* play, Player* this) {
-    if (this->heldItemAction != PLAYER_IA_NONE) {
+    // Cleanup may already have sounded, or may run during/after Player_UseItem.
+    // Claim only the outgoing sound; the incoming equipment sound stays separate.
+    if (this->heldItemAction != PLAYER_IA_NONE && ItemEquip_ClaimUnequipSound(play, this, this->heldItemAction)) {
         if (func_8008F2BC(this, this->heldItemAction) >= 0) {
             func_808328EC(this, NA_SE_IT_SWORD_PUTAWAY);
         } else {
@@ -4115,6 +4121,12 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
             ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
              ((itemAction == PLAYER_IA_HOOKSHOT) || (itemAction == PLAYER_IA_LONGSHOT)))) {
 
+            // Some custom tools own a held model while the native action is already
+            // NONE. Clean up on accepted stow even when no item-change animation runs.
+            if (itemAction == PLAYER_IA_NONE) {
+                CustomItems_PutAwayHeldItems(this, play);
+            }
+
             if ((play->bombchuBowlingStatus == 0) &&
                 (((itemAction == PLAYER_IA_DEKU_STICK) && (AMMO(ITEM_STICK) == 0)) ||
                  ((itemAction == PLAYER_IA_MAGIC_BEAN) && (AMMO(ITEM_BEAN) == 0)) ||
@@ -4232,6 +4244,7 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
             } else if ((itemAction != this->heldItemAction) ||
                        ((this->heldActor == NULL) && (Player_ActionToExplosive(this, itemAction) >= 0))) {
                 // Handle using a new held item
+                ItemEquip_BeginItemChangeSound(play, this, this->heldItemAction);
                 this->nextModelGroup = Player_ActionToModelGroup(this, itemAction);
                 nextAnimType = gPlayerModelTypes[this->nextModelGroup][PLAYER_MODELGROUPENTRY_ANIM];
 
@@ -7812,7 +7825,9 @@ s32 Player_ActionHandler_Roll(Player* this, PlayState* play) {
             return true;
         } else if (GameInteractor_Should(
                        VB_PLAYER_PUTAWAY_HELD_ITEM,
-                       (this->putAwayCooldownTimer == 0) && (this->heldItemAction >= PLAYER_IA_SWORD_MASTER), this)) {
+                       (this->putAwayCooldownTimer == 0) &&
+                           (this->heldItemAction >= PLAYER_IA_SWORD_MASTER || CustomItems_HasStowableHeldItem(this)),
+                       this)) {
             Player_UseItem(play, this, ITEM_NONE);
         } else if (GameInteractor_Should(VB_PLAYER_TOGGLE_NAVI, true, this)) {
             this->stateFlags2 ^= PLAYER_STATE2_NAVI_ACTIVE;
@@ -12699,6 +12714,7 @@ void Player_UpdateInterface(PlayState* play, Player* this) {
                         // disappear) — the putaway is blocked in Player_ActionHandler_Roll,
                         // so don't advertise it on the A button either.
                     } else if (((this->heldItemAction >= PLAYER_IA_SWORD_MASTER) && !Player_IsFDHoldingSword(this)) ||
+                               CustomItems_HasStowableHeldItem(this) ||
                                ((this->stateFlags2 & PLAYER_STATE2_NAVI_ACTIVE) &&
                                 (play->actorCtx.targetCtx.arrowPointedActor == NULL))) {
                         doAction = DO_ACTION_PUTAWAY;

@@ -178,6 +178,17 @@ void Fixture_BuildHandItemDL(PlayState*, Gfx** dl, Gfx* hand, Gfx* sword, bool s
 }
 Gfx* gPlayerLeftHandBgsDLs[] = { &wrongSword, &nativeSword, &wrongSword, &nativeSword };
 Gfx* gPlayerLeftHandClosedDLs[] = { &emptyHand, &emptyHand, &emptyHand, &emptyHand };
+Gfx* sPlayerRightHandClosedDLs[] = { &emptyHand, &emptyHand, &emptyHand, &emptyHand };
+// These pedestal cases never hold the Switch Hook. Its real hand dispatch is
+// exercised independently by tests/nei_held/run_articulated_tests.py.
+bool NeiArticulated_UsesSwitchHook(const Player* player) {
+    REQUIRE(player->heldItemId != ITEM_SWITCH_HOOK);
+    return false;
+}
+bool NeiArticulated_ApplySwitchHookHand(PlayState*, Player*, Gfx**, Gfx*) {
+    REQUIRE(false); // An unrelated item must not take ownership of the sword hand.
+    return false;
+}
 Gfx* Player_ResolveLimbDLForDummyOrLocal(void* path) {
     if (path == &emptyHand)
         return &emptyHand;

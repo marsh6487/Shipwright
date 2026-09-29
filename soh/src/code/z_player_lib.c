@@ -12,6 +12,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/draw.h"
+#include "soh/Enhancements/randomizer/NeiArticulatedPresentation.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/customequipment.h"
 #include "mods/items/custom_items.h"
@@ -43,6 +44,7 @@ extern void KiteSurf_AdjustLimb(s32 limbIndex, Vec3s* rot);
 // The Sheikah Slate is pinned to the right fist and used to rebuild its pose from two bodyPartsPos
 // points, which give a direction and so cannot express the wrist twisting around it. Skijer's NEI
 extern void ItemEquip_CaptureHandMatrix(void);
+extern void ItemEquip_CaptureLeftHandMatrix(void);
 extern u8 ItemEquip_HoldsClosedFist(void);
 extern u8 ItemEquip_HoldsEmptyHand(void);
 
@@ -1736,6 +1738,38 @@ static void Player_ApplyBackEquipmentVisibility(s32 limbIndex, Gfx** dList) {
     }
 }
 
+// The lantern's accepted placement is at the left hand; only choose its
+// grasping mesh here, after ordinary model/equipment overrides. Keep the wrist
+// matrix, animation and lantern transform intact.
+static void Player_ApplyLanternGrip(Player* player, s32 limbIndex, Gfx** dList) {
+    if (limbIndex != PLAYER_LIMB_L_HAND || *dList == NULL ||
+        !(gCustomItemState.lanternEquipped || gCustomItemState.lanternSwinging) ||
+        (player->heldItemAction != PLAYER_IA_NONE && player->heldItemAction != PLAYER_IA_LANTERN)) {
+        return;
+    }
+    u8 equipped = 0;
+    for (u8 button = 1; button < ARRAY_COUNT(gSaveContext.equips.buttonItems); ++button) {
+        if (gSaveContext.equips.buttonItems[button] == ITEM_LANTERN) {
+            equipped = 1;
+            break;
+        }
+    }
+    if (!equipped) {
+        return;
+    }
+    // PAK uses the canonical adult resource name as its DL_LFIST (0x50A0)
+    // lookup key for either age. The selected model owns the returned fist.
+    const char* pakKey = sDListsLodOffset == 0 ? gLinkAdultLeftHandClosedNearDL : gLinkAdultLeftHandClosedFarDL;
+    Gfx* hand = PakLoader_GetDLOverride(pakKey);
+    if (hand == NULL || hand == PAK_DL_STUB) {
+        hand = Player_ResolveLimbDLForDummyOrLocal(gPlayerLeftHandClosedDLs[gSaveContext.linkAge + sDListsLodOffset]);
+    }
+    if (hand != NULL) {
+        *dList = hand;
+        sLeftHandType = PLAYER_MODELTYPE_LH_CLOSED;
+    }
+}
+
 static void Player_ApplyTimePedestalSword(PlayState* play, Player* player, s32 limbIndex, Gfx** dList, Vec3s* rot) {
     // Keep the animated wrist basis. CustomEquipment applies the native child
     // ceremonial placement to the selected sword alone, inside its display list.
@@ -1973,6 +2007,19 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
         }
     }
 
+    // The Switch Hook shares the hookshot action/pose, but owns its item mesh.
+    // Apply after equipment/PAK hooks so an Alt hookshot cannot repaint it.
+    // Keep the selected skin's age/LOD-correct fist and all original limb math.
+    if (limbIndex == PLAYER_LIMB_R_HAND && *dList != NULL && this->actor.scale.y >= 0.0f &&
+        sRightHandType == PLAYER_MODELTYPE_RH_HOOKSHOT && !TransformMasks_IsTransformedAny() &&
+        NeiArticulated_UsesSwitchHook(this)) {
+        Gfx* hand =
+            Player_ResolveLimbDLForDummyOrLocal(sPlayerRightHandClosedDLs[gSaveContext.linkAge + sDListsLodOffset]);
+        NeiArticulated_ApplySwitchHookHand(play, this, dList, hand);
+    }
+
+    Player_ApplyLanternGrip(this, limbIndex, dList);
+
     // The sword cue changes leftHandDLists without changing the child's open
     // hand type. Preserve that handoff after ordinary hand/equipment overrides;
     // resource resolution still honors alternate assets and the selected pak.
@@ -2061,6 +2108,15 @@ s32 Player_OverrideLimbDrawGameplayFirstPerson(PlayState* play, s32 limbIndex, G
     }
 
     GameInteractor_Should(VB_PLAYER_OVERRIDE_LIMB_DRAW, true, limbIndex, dList, thisx, play);
+
+    // First-person has a distinct FAR hand path. Do not expose a limb hidden
+    // by its camera/transformation rules, and do not alter the aim transform.
+    if (limbIndex == PLAYER_LIMB_R_HAND && *dList != NULL && this->unk_6AD == 2 && this->actor.scale.y >= 0.0f &&
+        this->rightHandType == PLAYER_MODELTYPE_RH_HOOKSHOT && !TransformMasks_IsTransformedAny() &&
+        NeiArticulated_UsesSwitchHook(this)) {
+        Gfx* hand = Player_ResolveLimbDLForDummyOrLocal(sPlayerRightHandClosedDLs[gSaveContext.linkAge + 2]);
+        NeiArticulated_ApplySwitchHookHand(play, this, dList, hand);
+    }
 
     Player_ApplyBackEquipmentVisibility(limbIndex, dList);
     return false;
@@ -2323,7 +2379,7 @@ void Player_DrawGetItemIceTrap(PlayState* play, Player* this, Vec3f* refPos, s32
 
         // Draw fake item model.
         if (this->getItemEntry.drawFunc != NULL) {
-            this->getItemEntry.drawFunc(play, &this->getItemEntry);
+            GetItemEntry_Draw(play, this->getItemEntry);
         } else {
             GetItem_Draw(play, drawIdPlusOne - 1);
         }
@@ -2353,7 +2409,7 @@ void Player_DrawGetItemImpl(PlayState* play, Player* this, Vec3f* refPos, s32 dr
                (this->getItemEntry.getItemId == RG_TRIFORCE_PIECE || this->getItemEntry.getItemId == RG_TRIFORCE)) {
         Randomizer_DrawTriforcePieceGI(play, this->getItemEntry);
     } else if (this->getItemEntry.drawFunc != NULL) {
-        this->getItemEntry.drawFunc(play, &this->getItemEntry);
+        GetItemEntry_Draw(play, this->getItemEntry);
     } else {
         GetItem_Draw(play, drawIdPlusOne - 1);
     }
@@ -2512,6 +2568,9 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
         MtxF sp14C;
         Actor* hookedActor;
 
+        // Capture the actual wrist before a native stick/sword draw changes
+        // this matrix. PAK/custom hand display lists keep the same bone frame.
+        ItemEquip_CaptureLeftHandMatrix();
         Math_Vec3f_Copy(&this->leftHandPos, D_80160000);
 
         // Boss Remains: draw Odolwa's sword on the hand bone (the native sword was hidden to a

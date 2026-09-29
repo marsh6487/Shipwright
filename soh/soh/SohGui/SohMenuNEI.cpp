@@ -1,4 +1,5 @@
 #include "SohMenu.h"
+#include "soh/Enhancements/randomizer/NeiGiPresentation.h"
 #include "soh/OTRGlobals.h"
 #include "UIWidgets.hpp"
 #include "soh/ResourceManagerHelpers.h"
@@ -504,6 +505,14 @@ void RegisterNEIMenu() {
     path.sidebarName = "Custom Items";
     path.column = SECTION_COLUMN_1;
     mSohMenu->AddWidget(path, "Custom Items", WIDGET_SEPARATOR_TEXT);
+
+    mSohMenu->AddWidget(path, "NEI item shimmer", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_NEI_GI_EFFECTS)
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(false).Tooltip(
+            "Adds wonder-item-style glints to NEI pickups, shop displays, and shuffled world items.\n"
+            "Deku Leaf uses green shimmer. Rod and spell energy remain active independently.\n"
+            "Applies immediately and does not change the seed or item behavior."));
 
     // Gerudo demon mode. The axe placement is dialled and baked (GERUDO_AXE_* in
     // mm_player_form.cpp); what is left is a way INTO demon mode while the rest of its
