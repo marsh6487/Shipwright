@@ -381,6 +381,7 @@ int main(int argc, char **argv) {
   graphics.polyOpa.p = opa;
   graphics.polyXlu.p = xlu;
   play.state.gfxCtx = &graphics;
+  play.actorCtx.actorLists[ACTORCAT_PLAYER].head = &player.actor;
   player.actor.scale.x = player.actor.scale.y = player.actor.scale.z = .01f;
   player.bodyPartsPos[PLAYER_BODYPART_L_HAND] = {10, 20, 30};
   player.bodyPartsPos[PLAYER_BODYPART_L_FOREARM] = {10, 10, 30};
@@ -393,6 +394,70 @@ int main(int argc, char **argv) {
   void (*draw[])(Player *, PlayState *) = {CustomItems_DrawFireRod,
                                            CustomItems_DrawIceRod,
                                            CustomItems_DrawLightRod};
+  // First-person transitions must hide both replacement and fallback rods,
+  // while the actual single shot keeps rendering. Leaving aim restores the
+  // normal held route for either age without changing gameplay state.
+  for (int age : {LINK_AGE_ADULT, LINK_AGE_CHILD})
+    for (int element = 0; element < 3; ++element)
+      for (bool heldResource : {false, true})
+        for (bool wrist : {false, true})
+          for (int cameraTimer : {14, 13, 10, 1}) {
+            gSaveContext.linkAge = age;
+            player.unk_6AD = cameraTimer;
+            gCustomItemState = {};
+            gCustomItemState.fireRodActive = gCustomItemState.iceRodActive =
+                gCustomItemState.lightRodActive = 1;
+            auto firstPerson = std::array<u8 *, 3>{
+                &gCustomItemState.fireRodFirstPerson,
+                &gCustomItemState.iceRodFirstPerson,
+                &gCustomItemState.lightRodFirstPerson};
+            localRodSets[element] = true;
+            for (auto &set : rodSets[element]) set = {};
+            rodSets[element][0].active = 1;
+            rodSets[element][0].count = 1;
+            rodSets[element][0].scale = 2;
+            rodSets[element][0].pos[0] = {100, 20, 30};
+            rodSets[element][0].vel[0] = {18, 0, 0};
+            for (bool aiming : {true, false}) {
+              resetWrappers(graphics, opa, xlu);
+              if (heldResource) available.insert(paths[element]);
+              if (wrist) ItemEquip_CaptureLeftHandMatrix();
+              else ItemEquip_ReleaseHandMatrix();
+              *firstPerson[element] = aiming;
+              projectileCalls.clear();
+              trailCalls.clear();
+              const Player before = player;
+              const CustomItemState state = gCustomItemState;
+              draw[element](&player, &play);
+              if (aiming) {
+                assert(drawn.empty() && nativeDraws == 0);
+              } else if (heldResource && wrist) {
+                assert(drawn == std::vector<std::string>{paths[element]});
+                assert(nativeDraws == 0);
+              } else {
+                assert(drawn.empty() && nativeDraws > 0);
+              }
+              assert(projectileCalls.size() == 1 && trailCalls.size() == 1);
+              near(projectileCalls[0].position, {100, 20, 30});
+              near(projectileCalls[0].velocity, {18, 0, 0});
+              unchanged(player, before, state);
+              // Four Sword clones share the local state but remain visible.
+              if (aiming) {
+                Player clone = player;
+                resetWrappers(graphics, opa, xlu);
+                if (heldResource) available.insert(paths[element]);
+                if (wrist) ItemEquip_CaptureLeftHandMatrix();
+                else ItemEquip_ReleaseHandMatrix();
+                draw[element](&clone, &play);
+                assert(!drawn.empty() || nativeDraws > 0);
+                unchanged(clone, before, state);
+              }
+            }
+            localRodSets[element] = false;
+          }
+  player.unk_6AD = 0;
+  std::cout << "PASS all three rods hide held models in first-person aim, "
+               "retain single shots, and restore third-person models\n";
   // Rotate the wrist while arm endpoints remain fixed. A direction rebuilt
   // from those endpoints cannot preserve either the grip or the wrist roll.
   for (int sample = 0; sample < 16; ++sample) {
