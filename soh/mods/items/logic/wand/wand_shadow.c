@@ -4,11 +4,14 @@
  * A black Boe, thrown at the nearest enemy, which it stuns and then disperses into.
  *
  * The Boe is Majora's Mask's En_Mkk, and it is unusually cheap to borrow: it has no skeleton and no
- * animations at all, just billboarded display lists. So there is no actor to register, no ActorDB
- * entry and no skeleton loader — the bolt is wand state that draws three MM display lists by path.
+ * animations at all, just billboarded display lists. The bolt owns no actor or skeleton. Load its
+ * complete display-list graphs through the MM archive loader; the global extension index is not
+ * an authoritative inventory of that optional archive. A native shadow puff keeps casts visible
+ * when the MM model is unavailable.
  */
 
 #include "align_asset_macro.h"
+#include "mods/transformation_masks/assets/mm_asset_loader.h"
 
 #define dgBlackBoeBodyMaterialDL "__OTR__objects/object_mkk/gBlackBoeBodyMaterialDL"
 static const ALIGN_ASSET(2) char gBlackBoeBodyMaterialDL[] = dgBlackBoeBodyMaterialDL;
@@ -16,6 +19,8 @@ static const ALIGN_ASSET(2) char gBlackBoeBodyMaterialDL[] = dgBlackBoeBodyMater
 static const ALIGN_ASSET(2) char gBlackBoeBodyModelDL[] = dgBlackBoeBodyModelDL;
 #define dgBlackBoeEndDL "__OTR__objects/object_mkk/gBlackBoeEndDL"
 static const ALIGN_ASSET(2) char gBlackBoeEndDL[] = dgBlackBoeEndDL;
+#define dgBlackBoeEyesDL "__OTR__objects/object_mkk/gBlackBoeEyesDL"
+static const ALIGN_ASSET(2) char gBlackBoeEyesDL[] = dgBlackBoeEyesDL;
 
 #define SHADOW_SEEK_RANGE 460.0f
 #define SHADOW_SPAWN_DIST 30.0f
@@ -41,18 +46,95 @@ static struct {
     u8 active;
 } sShadowBolt;
 
-extern u8 ResourceMgr_FileExists(const char* resName);
+// Resource ownership/caching stays with the MM graph loader, which retains the vertices and
+// textures as well as the lists. Do not permanently cache a failed lookup in the wand.
+static Gfx* sShadowModel[4];
 
-// mm.o2r may not be mounted. The bolt still flies and still stuns — it just has nothing to draw.
-static u8 WandShadow_HasModel(void) {
-    static u8 sChecked = 0;
-    static u8 sPresent = 0;
+static u8 WandShadow_LoadModel(void) {
+    static const char* paths[] = { gBlackBoeBodyMaterialDL, gBlackBoeBodyModelDL, gBlackBoeEndDL, gBlackBoeEyesDL };
 
-    if (!sChecked) {
-        sChecked = 1;
-        sPresent = ResourceMgr_FileExists(gBlackBoeBodyModelDL);
+    MmAssets_Init();
+    if (!MmAssets_IsLoaded()) {
+        return 0;
     }
-    return sPresent;
+    for (u8 i = 0; i < ARRAY_COUNT(paths); i++) {
+        sShadowModel[i] = MmAssets_LoadDisplayListGraphStrict(paths[i]);
+        if (sShadowModel[i] == NULL) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+// Self-contained fallback: a soft dark billboard with bright eyes. No MM archive, external
+// texture, or Alt resource is needed to see where a successfully cast projectile is travelling.
+static Vtx sShadowFallbackVtx[] = {
+    { { { 0, 0, 0 }, 0, { 0, 0 }, { 18, 10, 26, 245 } } },
+    { { { -14, 0, 0 }, 0, { 0, 0 }, { 36, 20, 52, 0 } } },
+    { { { -10, 10, 0 }, 0, { 0, 0 }, { 36, 20, 52, 0 } } },
+    { { { 0, 14, 0 }, 0, { 0, 0 }, { 36, 20, 52, 0 } } },
+    { { { 10, 10, 0 }, 0, { 0, 0 }, { 36, 20, 52, 0 } } },
+    { { { 14, 0, 0 }, 0, { 0, 0 }, { 36, 20, 52, 0 } } },
+    { { { 10, -10, 0 }, 0, { 0, 0 }, { 36, 20, 52, 0 } } },
+    { { { 0, -14, 0 }, 0, { 0, 0 }, { 36, 20, 52, 0 } } },
+    { { { -10, -10, 0 }, 0, { 0, 0 }, { 36, 20, 52, 0 } } },
+    { { { -6, 1, 1 }, 0, { 0, 0 }, { 255, 240, 160, 255 } } },
+    { { { -4, 4, 1 }, 0, { 0, 0 }, { 255, 240, 160, 255 } } },
+    { { { -2, 1, 1 }, 0, { 0, 0 }, { 255, 240, 160, 255 } } },
+    { { { -4, -2, 1 }, 0, { 0, 0 }, { 255, 240, 160, 255 } } },
+    { { { 2, 1, 1 }, 0, { 0, 0 }, { 255, 240, 160, 255 } } },
+    { { { 4, 4, 1 }, 0, { 0, 0 }, { 255, 240, 160, 255 } } },
+    { { { 6, 1, 1 }, 0, { 0, 0 }, { 255, 240, 160, 255 } } },
+    { { { 4, -2, 1 }, 0, { 0, 0 }, { 255, 240, 160, 255 } } },
+};
+
+static Gfx sShadowFallbackDL[] = {
+    gsDPPipeSync(),
+    gsSPClearGeometryMode(G_LIGHTING | G_CULL_BOTH | G_FOG),
+    gsSPSetGeometryMode(G_SHADE | G_SHADING_SMOOTH),
+    gsSPTexture(0, 0, 0, G_TX_RENDERTILE, G_OFF),
+    gsDPSetCombineMode(G_CC_SHADE, G_CC_SHADE),
+    gsSPVertex(sShadowFallbackVtx, ARRAY_COUNT(sShadowFallbackVtx), 0),
+    gsSP2Triangles(0, 1, 2, 0, 0, 2, 3, 0),
+    gsSP2Triangles(0, 3, 4, 0, 0, 4, 5, 0),
+    gsSP2Triangles(0, 5, 6, 0, 0, 6, 7, 0),
+    gsSP2Triangles(0, 7, 8, 0, 0, 8, 1, 0),
+    gsSP2Triangles(9, 10, 11, 0, 9, 11, 12, 0),
+    gsSP2Triangles(13, 14, 15, 0, 13, 15, 16, 0),
+    gsSPEndDisplayList(),
+};
+
+// Use the same point for seeking and hitting. Comparing a bolt 25 units above the floor with
+// enemy foot origins and a 22-unit hit radius made level-ground casts miss without exception.
+static Actor* WandShadow_FindTarget(PlayState* play, Vec3f* pos, f32 range) {
+    Actor* closest = NULL;
+    f32 closestDistSq = range * range;
+
+    for (u8 i = 0; i < ARRAY_COUNT(sShadowEnemyCats); i++) {
+        for (Actor* enemy = play->actorCtx.actorLists[sShadowEnemyCats[i]].head; enemy != NULL; enemy = enemy->next) {
+            f32 dx = enemy->focus.pos.x - pos->x;
+            f32 dy = enemy->focus.pos.y - pos->y;
+            f32 dz = enemy->focus.pos.z - pos->z;
+            f32 distSq = (dx * dx) + (dy * dy) + (dz * dz);
+
+            if ((enemy->update != NULL) && (distSq < closestDistSq)) {
+                closest = enemy;
+                closestDistSq = distSq;
+            }
+        }
+    }
+    return closest;
+}
+
+static u8 WandShadow_TargetIsAlive(PlayState* play, Actor* target) {
+    for (u8 i = 0; i < ARRAY_COUNT(sShadowEnemyCats); i++) {
+        for (Actor* enemy = play->actorCtx.actorLists[sShadowEnemyCats[i]].head; enemy != NULL; enemy = enemy->next) {
+            if (enemy == target) {
+                return enemy->update != NULL;
+            }
+        }
+    }
+    return 0;
 }
 
 // A frozen enemy is the Deku Nut effect: the freeze stops its update, the colour filter is what
@@ -67,8 +149,8 @@ void WandShadow_Forget(void) {
     sShadowBolt.target = NULL;
 }
 
-// Re-acquired every frame rather than trusted: the enemy the bolt left Link chasing can die, or be
-// killed by something else, before the bolt arrives.
+// Validate against live lists before dereferencing a retained target: it may have been removed
+// since the last frame. Home in all three axes so focus points above/below the launch can be hit.
 void WandShadow_Tick(PlayState* play) {
     Actor* hit;
 
@@ -80,14 +162,27 @@ void WandShadow_Tick(PlayState* play) {
         return;
     }
 
-    if ((sShadowBolt.target != NULL) && (sShadowBolt.target->update != NULL)) {
-        sShadowBolt.yaw = Math_Vec3f_Yaw(&sShadowBolt.pos, &sShadowBolt.target->world.pos);
+    if ((sShadowBolt.target != NULL) && !WandShadow_TargetIsAlive(play, sShadowBolt.target)) {
+        sShadowBolt.target = WandShadow_FindTarget(play, &sShadowBolt.pos, SHADOW_SEEK_RANGE);
     }
-    sShadowBolt.pos.x += Math_SinS(sShadowBolt.yaw) * SHADOW_SPEED;
-    sShadowBolt.pos.z += Math_CosS(sShadowBolt.yaw) * SHADOW_SPEED;
+    if (sShadowBolt.target != NULL) {
+        Vec3f* aim = &sShadowBolt.target->focus.pos;
+        f32 dx = aim->x - sShadowBolt.pos.x;
+        f32 dy = aim->y - sShadowBolt.pos.y;
+        f32 dz = aim->z - sShadowBolt.pos.z;
+        f32 distance = sqrtf((dx * dx) + (dy * dy) + (dz * dz));
+        f32 step = (distance > SHADOW_SPEED) ? (SHADOW_SPEED / distance) : 1.0f;
 
-    hit = TargetSelect_FindNearest(play, sShadowEnemyCats, ARRAY_COUNT(sShadowEnemyCats), NULL, &sShadowBolt.pos,
-                                   SHADOW_HIT_RADIUS);
+        sShadowBolt.yaw = Math_Vec3f_Yaw(&sShadowBolt.pos, aim);
+        sShadowBolt.pos.x += dx * step;
+        sShadowBolt.pos.y += dy * step;
+        sShadowBolt.pos.z += dz * step;
+    } else {
+        sShadowBolt.pos.x += Math_SinS(sShadowBolt.yaw) * SHADOW_SPEED;
+        sShadowBolt.pos.z += Math_CosS(sShadowBolt.yaw) * SHADOW_SPEED;
+    }
+
+    hit = WandShadow_FindTarget(play, &sShadowBolt.pos, SHADOW_HIT_RADIUS);
     if (hit != NULL) {
         WandShadow_Stun(hit);
         Audio_PlaySoundGeneral(NA_SE_EN_GANON_DARKWAVE, &sShadowBolt.pos, 4, &gSfxDefaultFreqAndVolScale,
@@ -97,26 +192,49 @@ void WandShadow_Tick(PlayState* play) {
 }
 
 void WandShadow_Draw(PlayState* play) {
-    if (!sShadowBolt.active || !WandShadow_HasModel()) {
+    u8 hasModel;
+
+    if (!sShadowBolt.active) {
         return;
     }
+    hasModel = WandShadow_LoadModel();
 
     OPEN_DISPS(play->state.gfxCtx);
 
+    Matrix_Push();
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     Matrix_Translate(sShadowBolt.pos.x, sShadowBolt.pos.y, sShadowBolt.pos.z, MTXMODE_NEW);
     // The Boe is a flat billboard in MM too — its own draw replaces the rotation the same way.
     Matrix_ReplaceRotation(&play->billboardMtxF);
-    Matrix_Scale(SHADOW_SCALE, SHADOW_SCALE, SHADOW_SCALE, MTXMODE_APPLY);
+    if (hasModel) {
+        Mtx* matrix;
 
-    // The MM material lists reach for segment 8; pointing it at an empty list is what keeps them
-    // from running whatever the scene happened to leave there.
-    gSPSegment(POLY_XLU_DISP++, 0x08, (uintptr_t)gEmptyDL);
-    gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
-              G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gBlackBoeBodyMaterialDL);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gBlackBoeBodyModelDL);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gBlackBoeEndDL);
+        MmAssets_EnsureStrictTextureBindings();
+        Matrix_Scale(SHADOW_SCALE, SHADOW_SCALE, SHADOW_SCALE, MTXMODE_APPLY);
+        matrix = Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__);
+
+        // MM's EnMkk explicitly sets body alpha and draws its eyes separately. Inheriting alpha
+        // from the previous translucent draw can make the entire body disappear.
+        gDPPipeSync(POLY_XLU_DISP++);
+        gDPSetEnvColor(POLY_XLU_DISP++, 255, 255, 255, 255);
+        gSPSegment(POLY_XLU_DISP++, 0x08, (uintptr_t)gEmptyDL);
+        gSPMatrix(POLY_XLU_DISP++, matrix, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_XLU_DISP++, sShadowModel[0]);
+        gSPDisplayList(POLY_XLU_DISP++, sShadowModel[1]);
+        gSPDisplayList(POLY_XLU_DISP++, sShadowModel[2]);
+
+        Gfx_SetupDL_25Opa(play->state.gfxCtx);
+        gDPPipeSync(POLY_OPA_DISP++);
+        gDPSetPrimColor(POLY_OPA_DISP++, 0, 255, 255, 255, 255, 255);
+        gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)MmAssets_GetOpaqueRenderMode());
+        gSPMatrix(POLY_OPA_DISP++, matrix, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_OPA_DISP++, sShadowModel[3]);
+    } else {
+        gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
+                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_XLU_DISP++, sShadowFallbackDL);
+    }
+    Matrix_Pop();
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -133,8 +251,7 @@ u8 WandShadow_Cast(Player* player, PlayState* play) {
     sShadowBolt.pos.z = player->actor.world.pos.z + (Math_CosS(yaw) * SHADOW_SPAWN_DIST);
 
     // No enemy in reach is not a failed cast: the bolt flies off Link's nose and fades on its timer.
-    sShadowBolt.target = TargetSelect_FindNearest(play, sShadowEnemyCats, ARRAY_COUNT(sShadowEnemyCats), NULL,
-                                                  &player->actor.world.pos, SHADOW_SEEK_RANGE);
+    sShadowBolt.target = WandShadow_FindTarget(play, &sShadowBolt.pos, SHADOW_SEEK_RANGE);
     sShadowBolt.yaw = yaw;
     sShadowBolt.life = SHADOW_LIFE_FRAMES;
     sShadowBolt.active = 1;
