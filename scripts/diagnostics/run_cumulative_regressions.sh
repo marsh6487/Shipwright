@@ -23,6 +23,7 @@ python3 -B scripts/diagnostics/run_medallion_arrow_textures_tests.py
 python3 -B scripts/diagnostics/run_medallion_cast_textures_tests.py
 python3 -B scripts/diagnostics/run_spin_effect_texture_tests.py
 python3 -B scripts/diagnostics/run_demise_lightning_tests.py
+python3 -B scripts/diagnostics/run_shadow_scepter_tests.py
 python3 -B scripts/diagnostics/run_oot_custom_cosmetics_tests.py
 python3 -B scripts/diagnostics/run_stat_upgrade_tests.py
 python3 -B scripts/diagnostics/run_chest_size_tests.py
