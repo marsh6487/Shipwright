@@ -11,6 +11,7 @@
 #include "objects/object_kw1/object_kw1.h"
 #include "vt.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/cosmetics/YoungFadoNpc.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY | ACTOR_FLAG_UPDATE_CULLING_DISABLED)
@@ -1160,7 +1161,11 @@ void func_80A99048(EnKo* this, PlayState* play) {
         this->actor.flags &= ~ACTOR_FLAG_UPDATE_CULLING_DISABLED;
         this->actor.objBankIndex = this->legsObjectBankIdx;
         gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[this->actor.objBankIndex].segment);
-        SkelAnime_InitFlex(play, &this->skelAnime, sSkeleton[sModelInfo[ENKO_TYPE].legsId].flexSkeletonHeader, NULL,
+        FlexSkeletonHeader* skeleton = sSkeleton[sModelInfo[ENKO_TYPE].legsId].flexSkeletonHeader;
+        if (ENKO_TYPE == ENKO_TYPE_CHILD_FADO) {
+            skeleton = (FlexSkeletonHeader*)YoungFadoNpc_SelectSkeleton((const char*)skeleton);
+        }
+        SkelAnime_InitFlex(play, &this->skelAnime, skeleton, NULL,
                            this->jointTable, this->morphTable, 16);
         ActorShape_Init(&this->actor.shape, 0.0f, ActorShadow_DrawCircle, 18.0f);
         gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[this->osAnimeBankIndex].segment);
@@ -1319,6 +1324,9 @@ s32 EnKo_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* po
 
         headId = sModelInfo[ENKO_TYPE].headId;
         *dList = sHead[headId].dList;
+        if (ENKO_TYPE == ENKO_TYPE_CHILD_FADO) {
+            *dList = YoungFadoNpc_SelectHead(*dList);
+        }
         if (sHead[headId].eyeTextures != NULL) {
             eyeTexture = sHead[headId].eyeTextures[this->eyeTextureIndex];
             gSPSegment((*gfx)++, 0x0A, SEGMENTED_TO_VIRTUAL(eyeTexture));

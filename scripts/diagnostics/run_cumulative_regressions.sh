@@ -29,4 +29,5 @@ python3 -B scripts/diagnostics/run_chest_size_tests.py
 python3 -B scripts/diagnostics/run_time_pedestal_tests.py
 python3 -B scripts/diagnostics/run_pedestal_sword_selection_tests.py
 python3 -B scripts/diagnostics/check_time_pedestal_syntax.py
+python3 -B scripts/diagnostics/run_young_fado_npc_tests.py
 bash scripts/diagnostics/run_stabilization_tests.sh

@@ -12,13 +12,20 @@
 #include "kokiri_pose_fixture.h"
 
 static bool donorAvailable = true;
+static bool fadoPackAvailable = false;
+static const char* expectedSkeleton;
 static unsigned donorLoads;
 uintptr_t gSegments[16];
+
+uint8_t ResourceMgr_FileExists(const char* path) {
+    REQUIRE(strcmp(path, "__OTR__objects/object_fa/YoungFadoNpcPOC1/Skel") == 0);
+    return fadoPackAvailable;
+}
 
 /* Exercise the production init path while retaining caller-owned test tables. */
 s32 __wrap_SkelAnime_InitFlex(PlayState* play, SkelAnime* skel, FlexSkeletonHeader* skeleton,
                               AnimationHeader* animation, Vec3s* joints, Vec3s* morph, s32 count) {
-    REQUIRE(strcmp((const char*)skeleton, gKw1Skel) == 0);
+    REQUIRE(strcmp((const char*)skeleton, expectedSkeleton != NULL ? expectedSkeleton : gKw1Skel) == 0);
     REQUIRE(animation == NULL && joints == NULL && morph == NULL && count == 0);
     REQUIRE(skel->jointTable != NULL);
     skel->limbCount = 16;
@@ -97,6 +104,17 @@ int main(void) {
     REQUIRE(memcmp(girlJoints, fadoJoints, sizeof(girlJoints)) == 0);
     RequireLevelHead(girlJoints);
     RequireLevelHead(fadoJoints);
+
+    /* The new pack changes Fado's rig selection without taking over the girl
+     * or resetting the proven native seated animation and head correction. */
+    fadoPackAvailable = true;
+    StaticStoryKokiri_Init(&girl, play);
+    expectedSkeleton = "__OTR__objects/object_fa/YoungFadoNpcPOC1/Skel";
+    StaticStoryKokiri_Init(&fado, play);
+    REQUIRE(memcmp(girlJoints, fadoJoints, sizeof(girlJoints)) == 0);
+    RequireLevelHead(fadoJoints);
+    fadoPackAvailable = false;
+    expectedSkeleton = NULL;
 
     /* Two complete loops plus fractional updates and the seam. */
     float frame = 0;
