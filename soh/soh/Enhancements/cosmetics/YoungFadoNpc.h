@@ -7,10 +7,8 @@
 /* The base rig is a native Kokiri copy; its Alt rig has the same joint layout.
  * Registering this private path lets SkeletonPatcher switch both variants when
  * Alt Assets changes without altering another Kokiri or resetting animation. */
-static const ALIGN_ASSET(2) char sYoungFadoNpcSkel[] =
-    "__OTR__objects/object_fa/YoungFadoNpcPOC1/Skel";
-static const ALIGN_ASSET(2) char sYoungFadoNpcHead[] =
-    "__OTR__objects/object_fa/YoungFadoNpcPOC1/Body/Limb14";
+static const ALIGN_ASSET(2) char sYoungFadoNpcSkel[] = "__OTR__objects/object_fa/YoungFadoNpcPOC1/Skel";
+static const ALIGN_ASSET(2) char sYoungFadoNpcHead[] = "__OTR__objects/object_fa/YoungFadoNpcPOC1/Body/Limb14";
 
 /* Pelvis and both thigh wrappers replace only the seated cloth batches. */
 static const ALIGN_ASSET(2) char sYoungFadoNpcSeated4Bodies[3][80] = {

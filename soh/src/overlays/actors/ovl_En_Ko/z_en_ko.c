@@ -1165,8 +1165,7 @@ void func_80A99048(EnKo* this, PlayState* play) {
         if (ENKO_TYPE == ENKO_TYPE_CHILD_FADO) {
             skeleton = (FlexSkeletonHeader*)YoungFadoNpc_SelectSkeleton((const char*)skeleton);
         }
-        SkelAnime_InitFlex(play, &this->skelAnime, skeleton, NULL,
-                           this->jointTable, this->morphTable, 16);
+        SkelAnime_InitFlex(play, &this->skelAnime, skeleton, NULL, this->jointTable, this->morphTable, 16);
         ActorShape_Init(&this->actor.shape, 0.0f, ActorShadow_DrawCircle, 18.0f);
         gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[this->osAnimeBankIndex].segment);
         Collider_InitCylinder(play, &this->collider);

@@ -56,9 +56,8 @@ void StaticStoryKokiri_Init(EnViewer* this, PlayState* play) {
         StaticStoryActor_ResolvePose((StaticStoryActorType)this->staticState.type, this->staticState.pose);
 
     gSegments[6] = VIRTUAL_TO_PHYSICAL(play->objectCtx.status[this->staticState.objectSlots[3]].segment);
-    const char* skeleton = this->staticState.type == STATIC_STORY_ACTOR_FADO
-                               ? YoungFadoNpc_SelectSkeleton(gKw1Skel)
-                               : gKw1Skel;
+    const char* skeleton =
+        this->staticState.type == STATIC_STORY_ACTOR_FADO ? YoungFadoNpc_SelectSkeleton(gKw1Skel) : gKw1Skel;
     SkelAnime_InitFlex(play, &this->skin.skelAnime, (FlexSkeletonHeader*)skeleton, NULL, NULL, NULL, 0);
     Animation_PlayLoopSetSpeed(&this->skin.skelAnime, StaticStoryKokiri_GetAnimation(pose->animation),
                                pose->playbackSpeed);

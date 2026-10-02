@@ -46,13 +46,13 @@ int main(void) {
         for (u8 pose = 0; pose <= 8; ++pose) {
             for (s32 limb = -1; limb <= 16; ++limb) {
                 Gfx* body = YoungFadoNpc_SelectSeatedBody(nativeBody, limb, pose);
-                bool replaced = active && (sAssets & 16) && (pose == 4 || pose == 5) &&
-                                (limb == 1 || limb == 2 || limb == 5);
+                bool replaced =
+                    active && (sAssets & 16) && (pose == 4 || pose == 5) && (limb == 1 || limb == 2 || limb == 5);
                 assert((body != nativeBody) == replaced);
                 if (replaced) {
                     char expected[100];
-                    snprintf(expected, sizeof(expected),
-                             "__OTR__objects/object_fa/YoungFadoNpcPOC1/Seated%d/Limb%02d", pose, limb - 1);
+                    snprintf(expected, sizeof(expected), "__OTR__objects/object_fa/YoungFadoNpcPOC1/Seated%d/Limb%02d",
+                             pose, limb - 1);
                     assert(strcmp((const char*)body, expected) == 0);
                     assert((uintptr_t)body % 2 == 0);
                 }
