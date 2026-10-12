@@ -29,4 +29,9 @@ python3 -B scripts/diagnostics/run_chest_size_tests.py
 python3 -B scripts/diagnostics/run_time_pedestal_tests.py
 python3 -B scripts/diagnostics/run_pedestal_sword_selection_tests.py
 python3 -B scripts/diagnostics/check_time_pedestal_syntax.py
+python3 -B scripts/diagnostics/run_soh_season_weather_tests.py
+python3 -B scripts/diagnostics/run_soh_season_particle_tests.py
+season_foliage_test_dir="$(mktemp -d)"
+trap 'rm -rf "$season_foliage_test_dir"' EXIT
+python3 -B scripts/diagnostics/run_soh_season_foliage_tests.py "$season_foliage_test_dir"
 bash scripts/diagnostics/run_stabilization_tests.sh

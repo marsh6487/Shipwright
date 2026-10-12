@@ -10,6 +10,7 @@
 #include "concurrent_weather_audio.h"
 #include "soh/Enhancements/audio/WeatherSamplePlayer.h"
 #include "soh/Enhancements/audio/GlobalOutdoorRainBridge.h"
+#include "soh/Enhancements/audio/SeasonWeather.h"
 
 typedef enum {
     /* 0 */ LENS_FLARE_CIRCLE0,
@@ -1152,30 +1153,35 @@ void Environment_Update(PlayState* play, EnvironmentContext* envCtx, LightContex
 
         // Apply lighting adjustments
         for (i = 0; i < 3; i++) {
-            if ((s16)(envCtx->lightSettings.ambientColor[i] + envCtx->adjAmbientColor[i]) > 255) {
+            // Seasonal shade belongs to the displayed light, not the shared
+            // adjustment fields that native bombs/lightning update and fade.
+            s16 seasonalAmbient = SeasonWeather_LightOffset(play, i, true);
+            s16 seasonalLight = SeasonWeather_LightOffset(play, i, false);
+            s16 ambient = envCtx->lightSettings.ambientColor[i] + envCtx->adjAmbientColor[i] + seasonalAmbient;
+            s16 light1 = envCtx->lightSettings.light1Color[i] + envCtx->adjLight1Color[i] + seasonalLight;
+            s16 light2 = envCtx->lightSettings.light2Color[i] + envCtx->adjLight1Color[i] + seasonalLight;
+            if (ambient > 255) {
                 lightCtx->ambientColor[i] = 255;
-            } else if ((s16)(envCtx->lightSettings.ambientColor[i] + envCtx->adjAmbientColor[i]) < 0) {
+            } else if (ambient < 0) {
                 lightCtx->ambientColor[i] = 0;
             } else {
-                lightCtx->ambientColor[i] = (s16)(envCtx->lightSettings.ambientColor[i] + envCtx->adjAmbientColor[i]);
+                lightCtx->ambientColor[i] = ambient;
             }
 
-            if ((s16)(envCtx->lightSettings.light1Color[i] + envCtx->adjLight1Color[i]) > 255) {
+            if (light1 > 255) {
                 envCtx->dirLight1.params.dir.color[i] = 255;
-            } else if ((s16)(envCtx->lightSettings.light1Color[i] + envCtx->adjLight1Color[i]) < 0) {
+            } else if (light1 < 0) {
                 envCtx->dirLight1.params.dir.color[i] = 0;
             } else {
-                envCtx->dirLight1.params.dir.color[i] =
-                    (s16)(envCtx->lightSettings.light1Color[i] + envCtx->adjLight1Color[i]);
+                envCtx->dirLight1.params.dir.color[i] = light1;
             }
 
-            if ((s16)(envCtx->lightSettings.light2Color[i] + envCtx->adjLight1Color[i]) > 255) {
+            if (light2 > 255) {
                 envCtx->dirLight2.params.dir.color[i] = 255;
-            } else if ((s16)(envCtx->lightSettings.light2Color[i] + envCtx->adjLight1Color[i]) < 0) {
+            } else if (light2 < 0) {
                 envCtx->dirLight2.params.dir.color[i] = 0;
             } else {
-                envCtx->dirLight2.params.dir.color[i] =
-                    (s16)(envCtx->lightSettings.light2Color[i] + envCtx->adjLight1Color[i]);
+                envCtx->dirLight2.params.dir.color[i] = light2;
             }
 
             if ((s16)(envCtx->lightSettings.fogColor[i] + envCtx->adjFogColor[i]) > 255) {

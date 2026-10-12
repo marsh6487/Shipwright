@@ -1,7 +1,9 @@
 #include "AudioEditor.h"
+#include "SeasonWeather.h"
 #include "sequence.h"
 
 #include <map>
+#include <array>
 #include <set>
 #include <string>
 #include <functions.h>
@@ -49,6 +51,7 @@ static WidgetInfo globalOutdoorRainMode;
 static WidgetInfo globalOutdoorRainColor;
 static WidgetInfo globalOutdoorRainOvercast;
 static WidgetInfo weatherAudioDiagnostics;
+static std::array<WidgetInfo, 13> seasonWeatherWidgets;
 
 namespace SohGui {
 extern std::shared_ptr<SohMenu> mSohMenu;
@@ -111,6 +114,17 @@ static const std::map<int32_t, const char*> proximityWeatherThunderStyles = {
 static const std::map<int32_t, const char*> globalOutdoorRainModes = {
     { 0, "Persistent" },
     { 1, "Intermittent Storms" },
+};
+
+static const std::map<int32_t, const char*> seasonWeatherChoices = {
+    { -2, "Follow Game / Rod" }, { -1, "Native" }, { 0, "Spring" }, { 1, "Summer" }, { 2, "Autumn" }, { 3, "Winter" },
+};
+
+static const std::map<int32_t, const char*> seasonRainModes = {
+    { -1, "Season Default" },
+    { 0, "Off" },
+    { 1, "Persistent" },
+    { 2, "Intermittent" },
 };
 
 static void DrawHyruleFieldNightTrack() {
@@ -597,6 +611,52 @@ void AudioEditor::InitElement() {
     AudioEditorRegisterOnLoadGameHook();
 }
 
+static void DrawWeatherOptions() {
+    const auto draw = [](WidgetInfo& widget) {
+        SohGui::mSohMenu->MenuDrawItem(widget, static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
+    };
+
+    ImGui::SeparatorText("Seasonal Presentation");
+    draw(seasonWeatherWidgets[0]);
+    ImGui::TextWrapped(
+        "The selected season controls outdoor colors and effects. The Rod still controls world changes.");
+    ImGui::TextWrapped("Configure each season below; opening a tab does not change the selected season.");
+    if (ImGui::BeginTabBar("SeasonWeatherSettings")) {
+        const auto drawSeason = [&](const char* name, size_t first, size_t last) {
+            if (ImGui::BeginTabItem(name)) {
+                for (size_t i = first; i <= last; ++i) {
+                    draw(seasonWeatherWidgets[i]);
+                }
+                ImGui::EndTabItem();
+            }
+        };
+        drawSeason("Spring", 1, 2);
+        drawSeason("Summer", 3, 6);
+        drawSeason("Autumn", 7, 8);
+        drawSeason("Winter", 9, 12);
+        ImGui::EndTabBar();
+    }
+
+    ImGui::SeparatorText("Outdoor Rain");
+    draw(globalOutdoorRain);
+    if (CVarGetInteger(CVAR_AUDIO("GlobalOutdoorRain"), 0)) {
+        draw(globalOutdoorRainMode);
+        draw(globalOutdoorRainColor);
+    }
+    draw(globalOutdoorRainOvercast);
+
+    ImGui::SeparatorText("Rain Audio and Thunder");
+    draw(proximityWeatherRainVolume);
+    draw(proximityWeatherThunder);
+    draw(proximityWeatherThunderStyle);
+    draw(proximityWeatherThunderVolume);
+    draw(proximityWeatherThunderFrequency);
+    if (ImGui::TreeNode("Diagnostics")) {
+        draw(weatherAudioDiagnostics);
+        ImGui::TreePop();
+    }
+}
+
 void AudioEditor::DrawElement() {
     AudioCollection::Instance->InitializeShufflePool();
 
@@ -667,32 +727,11 @@ void AudioEditor::DrawElement() {
                                       UIWidgets::ButtonOptions().Size(ImVec2(80, 36)).Padding(ImVec2(5.0f, 0.0f)))) {
                     CVarSetFloat(CVAR_AUDIO("LinkVoiceFreqMultiplier"), 1.0f);
                 }
-                ImGui::SeparatorText("Weather");
+                ImGui::SeparatorText("Night Music");
                 SohGui::mSohMenu->MenuDrawItem(hyruleFieldNightMusic,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 DrawHyruleFieldNightTrack();
-                SohGui::mSohMenu->MenuDrawItem(globalOutdoorRain,
-                                               static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
-                if (CVarGetInteger(CVAR_AUDIO("GlobalOutdoorRain"), 0)) {
-                    SohGui::mSohMenu->MenuDrawItem(
-                        globalOutdoorRainMode, static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
-                    SohGui::mSohMenu->MenuDrawItem(
-                        globalOutdoorRainColor, static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
-                }
-                SohGui::mSohMenu->MenuDrawItem(globalOutdoorRainOvercast,
-                                               static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
-                SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunder,
-                                               static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
-                SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunderStyle,
-                                               static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
-                SohGui::mSohMenu->MenuDrawItem(proximityWeatherRainVolume,
-                                               static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
-                SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunderVolume,
-                                               static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
-                SohGui::mSohMenu->MenuDrawItem(proximityWeatherThunderFrequency,
-                                               static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
-                SohGui::mSohMenu->MenuDrawItem(weatherAudioDiagnostics,
-                                               static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
+                ImGui::SeparatorText("Audio Randomization");
                 SohGui::mSohMenu->MenuDrawItem(randomAudioGenModes,
                                                static_cast<uint32_t>(ImGui::GetContentRegionAvail().x), THEME_COLOR);
                 SohGui::mSohMenu->MenuDrawItem(lowerOctaves, static_cast<uint32_t>(ImGui::GetContentRegionAvail().x),
@@ -701,6 +740,14 @@ void AudioEditor::DrawElement() {
             ImGui::EndChild();
             ImGui::EndTable();
             ImGui::PopStyleVar(1);
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Weather & Seasons")) {
+            if (ImGui::BeginChild("WeatherOptions", ImVec2(0, -8))) {
+                DrawWeatherOptions();
+            }
+            ImGui::EndChild();
             ImGui::EndTabItem();
         }
 
@@ -1032,6 +1079,109 @@ void RegisterAudioWidgets() {
                               "ordinary SFX, and proximity weather."));
     SohGui::mSohMenu->AddSearchWidget({ hyruleFieldNightMusic, "Enhancements", "Audio Editor", "Audio Options" });
 
+    seasonWeatherWidgets[0] = { .name = "Seasonal Weather", .type = WidgetType::WIDGET_CVAR_COMBOBOX };
+    seasonWeatherWidgets[0]
+        .CVar(SOH_SEASON_WEATHER_CVAR("Season"))
+        .Options(ComboboxOptions()
+                     .DefaultIndex(-2)
+                     .ComboMap(seasonWeatherChoices)
+                     .Tooltip("Follow Game / Rod uses your saved, owned Rod season. Native uses the scene's original "
+                              "presentation. Manual seasons change outdoor visuals without granting the Rod, "
+                              "unlocking seasons or changing saved gameplay."));
+    seasonWeatherWidgets[1] = { .name = "Spring Rain", .type = WidgetType::WIDGET_CVAR_COMBOBOX };
+    seasonWeatherWidgets[1]
+        .CVar(SOH_SEASON_WEATHER_CVAR("Spring.RainMode"))
+        .Options(ComboboxOptions()
+                     .DefaultIndex(-1)
+                     .ComboMap(seasonRainModes)
+                     .Tooltip("Season Default keeps Spring dry. Persistent and Intermittent add seasonal rain. "
+                              "Scene and story rain retain priority. The global outdoor rain setting also "
+                              "remains independent."));
+    seasonWeatherWidgets[2] = { .name = "Spring Cherry Blossoms", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    seasonWeatherWidgets[2]
+        .CVar(SOH_SEASON_WEATHER_CVAR("Spring.Blossoms"))
+        .Options(CheckboxOptions()
+                     .DefaultValue(true)
+                     .Color(THEME_COLOR)
+                     .Tooltip("Drifting cherry blossom petals outdoors during Spring."));
+    seasonWeatherWidgets[3] = { .name = "Summer Atmosphere", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    seasonWeatherWidgets[3]
+        .CVar(SOH_SEASON_WEATHER_CVAR("Summer.Enabled"))
+        .Options(CheckboxOptions()
+                     .DefaultValue(true)
+                     .Color(THEME_COLOR)
+                     .Tooltip("Enables Summer fluff, nighttime fireflies and optional sunbeams. "
+                              "Each effect also has its own setting below."));
+    seasonWeatherWidgets[4] = { .name = "Summer Drifting Fluff", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    seasonWeatherWidgets[4]
+        .CVar(SOH_SEASON_WEATHER_CVAR("Summer.Fluff"))
+        .Options(CheckboxOptions()
+                     .DefaultValue(true)
+                     .Color(THEME_COLOR)
+                     .Tooltip("Drifting dandelion fluff during clear Summer days."));
+    seasonWeatherWidgets[5] = { .name = "Summer Nighttime Fireflies", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    seasonWeatherWidgets[5]
+        .CVar(SOH_SEASON_WEATHER_CVAR("Summer.Fireflies"))
+        .Options(CheckboxOptions()
+                     .DefaultValue(true)
+                     .Color(THEME_COLOR)
+                     .Tooltip("Softly pulsing Summer fireflies after dusk."));
+    seasonWeatherWidgets[6] = { .name = "Soft Summer Sunbeams", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    seasonWeatherWidgets[6]
+        .CVar(SOH_SEASON_WEATHER_CVAR("Summer.Sunbeams"))
+        .Options(CheckboxOptions()
+                     .DefaultValue(false)
+                     .Color(THEME_COLOR)
+                     .Tooltip("Soft shafts of sunlight during clear Summer days. Disabled by default."));
+    seasonWeatherWidgets[7] = { .name = "Autumn Rain", .type = WidgetType::WIDGET_CVAR_COMBOBOX };
+    seasonWeatherWidgets[7]
+        .CVar(SOH_SEASON_WEATHER_CVAR("Autumn.RainMode"))
+        .Options(ComboboxOptions()
+                     .DefaultIndex(-1)
+                     .ComboMap(seasonRainModes)
+                     .Tooltip("Season Default preserves the Rod's steady Autumn rain. Off clears added seasonal "
+                              "rain; Persistent and Intermittent use a separate shower cycle. Scene and story "
+                              "rain retain priority."));
+    seasonWeatherWidgets[8] = { .name = "Autumn Falling Leaves", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    seasonWeatherWidgets[8]
+        .CVar(SOH_SEASON_WEATHER_CVAR("Autumn.Leaves"))
+        .Options(
+            CheckboxOptions().DefaultValue(true).Color(THEME_COLOR).Tooltip("Falling leaves outdoors during Autumn."));
+    seasonWeatherWidgets[9] = { .name = "Winter Snow", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    seasonWeatherWidgets[9]
+        .CVar(SOH_SEASON_WEATHER_CVAR("Winter.Snow"))
+        .Options(CheckboxOptions()
+                     .DefaultValue(true)
+                     .Color(THEME_COLOR)
+                     .Tooltip("Adds falling snow outdoors during Winter. Scenes with native snow keep their "
+                              "existing snow."));
+    seasonWeatherWidgets[10] = { .name = "Winter Windblown Flurries", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    seasonWeatherWidgets[10]
+        .CVar(SOH_SEASON_WEATHER_CVAR("Winter.Flurries"))
+        .Options(CheckboxOptions()
+                     .DefaultValue(false)
+                     .Color(THEME_COLOR)
+                     .Tooltip("Adds gusts of windblown snow when Winter Snow is enabled."));
+    seasonWeatherWidgets[11] = { .name = "Winter Freezing Mist", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    seasonWeatherWidgets[11]
+        .CVar(SOH_SEASON_WEATHER_CVAR("Winter.Mist"))
+        .Options(CheckboxOptions()
+                     .DefaultValue(true)
+                     .Color(THEME_COLOR)
+                     .Tooltip("Low, pale blue mist over outdoor terrain during Winter, day and night. "
+                              "Works with Winter Snow turned off."));
+    seasonWeatherWidgets[12] = { .name = "Winter Nighttime Aurora", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
+    seasonWeatherWidgets[12]
+        .CVar(SOH_SEASON_WEATHER_CVAR("Winter.Aurora"))
+        .Options(CheckboxOptions()
+                     .DefaultValue(true)
+                     .Color(THEME_COLOR)
+                     .Tooltip("Slow blue and green ribbons in the open Winter night sky, fading after dusk "
+                              "and toward dawn. Works with Winter Snow turned off."));
+    for (auto& widget : seasonWeatherWidgets) {
+        SohGui::mSohMenu->AddSearchWidget({ widget, "Enhancements", "Audio Editor", "Weather & Seasons" });
+    }
+
     globalOutdoorRain = { .name = "Enable Rain in Outdoor Scenes", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
     globalOutdoorRain.CVar(CVAR_AUDIO("GlobalOutdoorRain"))
         .Options(CheckboxOptions()
@@ -1039,7 +1189,7 @@ void RegisterAudioWidgets() {
                      .DefaultValue(false)
                      .Tooltip("Displays rain and plays the concurrent rain loop in outdoor scenes without requiring "
                               "a proximity-weather actor. Does not force lightning or thunder."));
-    SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRain, "Enhancements", "Audio Editor", "Audio Options" });
+    SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRain, "Enhancements", "Audio Editor", "Weather & Seasons" });
 
     globalOutdoorRainMode = { .name = "Global Rain Mode", .type = WidgetType::WIDGET_CVAR_COMBOBOX };
     globalOutdoorRainMode.CVar(CVAR_AUDIO("GlobalOutdoorRainMode"))
@@ -1048,7 +1198,7 @@ void RegisterAudioWidgets() {
                      .ComboMap(globalOutdoorRainModes)
                      .Tooltip("Persistent rains continuously. Intermittent Storms alternate randomized dry and "
                               "rain periods with synchronized visual and audio fades."));
-    SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRainMode, "Enhancements", "Audio Editor", "Audio Options" });
+    SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRainMode, "Enhancements", "Audio Editor", "Weather & Seasons" });
 
     globalOutdoorRainColor = { .name = "Global Rain Color", .type = WidgetType::WIDGET_CVAR_COLOR_PICKER };
     globalOutdoorRainColor.CVar(CVAR_AUDIO("GlobalOutdoorRainColor"))
@@ -1058,7 +1208,7 @@ void RegisterAudioWidgets() {
                      .ShowReset()
                      .Tooltip("Changes only rain created by Enable Rain in Outdoor Scenes. Native story and "
                               "proximity-weather rain keep their original color."));
-    SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRainColor, "Enhancements", "Audio Editor", "Audio Options" });
+    SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRainColor, "Enhancements", "Audio Editor", "Weather & Seasons" });
 
     globalOutdoorRainOvercast = { .name = "Overcast Sky During Rain", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
     globalOutdoorRainOvercast.CVar(CVAR_AUDIO("GlobalOutdoorRainOvercast"))
@@ -1067,7 +1217,8 @@ void RegisterAudioWidgets() {
                      .DefaultValue(true)
                      .Tooltip("Fades compatible outdoor skies and lighting to the native overcast palette during "
                               "placed thunderstorms, persistent rain, and intermittent rain."));
-    SohGui::mSohMenu->AddSearchWidget({ globalOutdoorRainOvercast, "Enhancements", "Audio Editor", "Audio Options" });
+    SohGui::mSohMenu->AddSearchWidget(
+        { globalOutdoorRainOvercast, "Enhancements", "Audio Editor", "Weather & Seasons" });
 
     weatherAudioDiagnostics = { .name = "Log Weather Audio Diagnostics", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
     weatherAudioDiagnostics.CVar(CVAR_AUDIO("WeatherAudioDiagnostics"))
@@ -1075,8 +1226,8 @@ void RegisterAudioWidgets() {
                      .Color(THEME_COLOR)
                      .DefaultValue(false)
                      .Tooltip("Logs thunder voice admission and periodic pre/post weather PCM peaks and clamp "
-                              "counts. Intended only for the POC7 stabilization playthrough."));
-    SohGui::mSohMenu->AddSearchWidget({ weatherAudioDiagnostics, "Enhancements", "Audio Editor", "Audio Options" });
+                              "counts for troubleshooting weather audio."));
+    SohGui::mSohMenu->AddSearchWidget({ weatherAudioDiagnostics, "Enhancements", "Audio Editor", "Weather & Seasons" });
 
     proximityWeatherThunder = { .name = "Enable Weather Thunder", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
     proximityWeatherThunder.CVar(CVAR_AUDIO("ProximityWeatherThunder"))
@@ -1085,7 +1236,7 @@ void RegisterAudioWidgets() {
                      .DefaultValue(true)
                      .Tooltip("Enables synchronized lightning and thunder for placed, persistent, and intermittent "
                               "weather."));
-    SohGui::mSohMenu->AddSearchWidget({ proximityWeatherThunder, "Enhancements", "Audio Editor", "Audio Options" });
+    SohGui::mSohMenu->AddSearchWidget({ proximityWeatherThunder, "Enhancements", "Audio Editor", "Weather & Seasons" });
 
     proximityWeatherThunderStyle = { .name = "Thunder Style", .type = WidgetType::WIDGET_CVAR_COMBOBOX };
     proximityWeatherThunderStyle.CVar(CVAR_AUDIO("ProximityWeatherThunderStyle"))
@@ -1095,19 +1246,20 @@ void RegisterAudioWidgets() {
                      .Tooltip("Low Thunder plays the native rumble. Lightning plays the native crack. Layered "
                               "Thunder combines both."));
     SohGui::mSohMenu->AddSearchWidget(
-        { proximityWeatherThunderStyle, "Enhancements", "Audio Editor", "Audio Options" });
+        { proximityWeatherThunderStyle, "Enhancements", "Audio Editor", "Weather & Seasons" });
 
     proximityWeatherRainVolume = { .name = "Weather Rain Volume: %d%%", .type = WidgetType::WIDGET_CVAR_SLIDER_INT };
     proximityWeatherRainVolume.CVar(CVAR_AUDIO("ProximityWeatherRainVolume"))
         .Options(IntSliderOptions().Color(THEME_COLOR).Min(0).Max(100).DefaultValue(50).Size(ImVec2(300.0f, 0.0f)));
-    SohGui::mSohMenu->AddSearchWidget({ proximityWeatherRainVolume, "Enhancements", "Audio Editor", "Audio Options" });
+    SohGui::mSohMenu->AddSearchWidget(
+        { proximityWeatherRainVolume, "Enhancements", "Audio Editor", "Weather & Seasons" });
 
     proximityWeatherThunderVolume = { .name = "Weather Thunder Volume: %d%%",
                                       .type = WidgetType::WIDGET_CVAR_SLIDER_INT };
     proximityWeatherThunderVolume.CVar(CVAR_AUDIO("ProximityWeatherThunderVolume"))
         .Options(IntSliderOptions().Color(THEME_COLOR).Min(0).Max(100).DefaultValue(70).Size(ImVec2(300.0f, 0.0f)));
     SohGui::mSohMenu->AddSearchWidget(
-        { proximityWeatherThunderVolume, "Enhancements", "Audio Editor", "Audio Options" });
+        { proximityWeatherThunderVolume, "Enhancements", "Audio Editor", "Weather & Seasons" });
 
     proximityWeatherThunderFrequency = { .name = "Weather Thunder Frequency: %d%%",
                                          .type = WidgetType::WIDGET_CVAR_SLIDER_INT };
@@ -1121,7 +1273,7 @@ void RegisterAudioWidgets() {
                      .Tooltip("Controls the shared lightning cadence. 50% preserves the native timing; 0% disables "
                               "strikes and 100% approximately doubles their frequency."));
     SohGui::mSohMenu->AddSearchWidget(
-        { proximityWeatherThunderFrequency, "Enhancements", "Audio Editor", "Audio Options" });
+        { proximityWeatherThunderFrequency, "Enhancements", "Audio Editor", "Weather & Seasons" });
 
     randomAudioGenModes = { .name = "Automatically Randomize All Music and Sound Effects",
                             .type = WidgetType::WIDGET_CVAR_COMBOBOX };

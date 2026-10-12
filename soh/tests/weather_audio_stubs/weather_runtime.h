@@ -20,6 +20,7 @@ struct PlayState {
         uint8_t indoors;
         uint8_t skyboxDisabled;
         uint8_t gloomySkyMode;
+        uint8_t unk_DE;
         uint8_t lightningMode;
         uint8_t unk_EE[4];
     } envCtx;

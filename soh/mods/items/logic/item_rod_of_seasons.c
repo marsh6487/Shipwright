@@ -15,29 +15,19 @@
  * Confirming a DIFFERENT season reloads the scene in place, the Time Gate's trick, so actors and
  * scene behaviour re-init under the new season instead of waiting for the next room change.
  *
- * The season is world state, not a cast: this file pushes it into envCtx every frame, which is also
- * what re-applies it after that reload (Environment_Init zeroes the whole context).
+ * The season is saved world state. The separate presentation controller restores its weather
+ * after scene loads while this file retains the Rod input and gameplay behavior.
  */
 
 #include "global.h"
 #include "mods/extended_inventory.h"
 #include "mods/items/helpers/equip_helper.h"
+#include "soh/Enhancements/audio/SeasonWeather.h"
 // box_menu.c is unity-included just before this file in custom_items.c, so its BoxMenu_*
 // declarations are already in scope — it has no header (see the note at its top).
 
 // Ext-button store: which u16 item a button really holds when it shows ITEM_EXT_BUTTON.
 extern u16 ExtButton_GetItem(s32 btn);
-
-// Precipitation targets. Rain matches the Kakariko thunderstorm's density (without its thunder) and
-// snow the vanilla flurry; Spring is thinner because its particles are drifting sprites, not weather.
-#define SEASON_RAIN_DROPS 30
-#define SEASON_SNOWFLAKES 64
-#define SEASON_SPRITES 32
-
-// Object_Kankyo params. Spring wears Kokiri Forest's own atmosphere — the drifting fairy sprites —
-// which is the same particle system the snow uses, so the two can never be on screen together.
-#define OBJECT_KANKYO_FAIRIES 0
-#define OBJECT_KANKYO_SNOW 3
 
 // Drains the scene's water in Summer and hands it back otherwise (season_scene.cpp). Called every
 // frame, season included in its own decision, so the restore has one place to happen too.
@@ -64,185 +54,19 @@ u8 Seasons_WalksOnWater(void) {
 // WEATHER
 // ============================================================================
 
-// The vanilla snow grey, which is what every season but Spring draws with.
-#define SEASON_SNOW_GREY 200
-
-// Spring's drifting sprites are pale green, the Kokiri Forest look. Deliberately not
-// Seasons_SeasonColor: that is the coin's identity colour, far too saturated for a particle.
-static const u8 sSpringSpriteTint[3] = { 190, 245, 200 };
-
-/**
- * Tint for the Object_Kankyo particles, read from its draw. Spring's sprites ride the same particle
- * system the snow does, so the colour is the only thing separating the two.
- */
+// Retained for the native snow draw ABI. Seasonal petals/leaves/snow now use
+// their own native-engine display lists; native fairy and snow actors keep the
+// original neutral color and their own precipitation count.
 void Seasons_PrecipTint(u8* r, u8* g, u8* b) {
-    if ((Seasons_SeasonCount() != 0) && (Seasons_GetSeason() == SEASON_SPRING)) {
-        *r = sSpringSpriteTint[0];
-        *g = sSpringSpriteTint[1];
-        *b = sSpringSpriteTint[2];
-        return;
-    }
-    *r = *g = *b = SEASON_SNOW_GREY;
+    *r = *g = *b = 200;
 }
 
-// Is the rod currently the thing driving the particle count? Object_Kankyo's fairies keep THEIR
-// count in that same field, so a season with no particles must hand it back instead of pinning it
-// to zero — otherwise the rod deletes the fairies in every scene that has them.
-static u8 sOwnsPrecip = 0;
-
-/**
- * Snow and blossom are drawn by Object_Kankyo, never by the engine — setting the flake count with no
- * such actor in the scene draws nothing at all. Spawning while nothing is falling is the vanilla
- * "Let It Snow" idiom; the actor's own init kills the duplicate.
- *
- * KNOWN GAP: that init keeps ONE Object_Kankyo of any kind, so in the three fairy scenes (Kokiri
- * Forest, Lost Woods, Sacred Forest Meadow) the fairies hold the slot and Winter falls dry there.
- */
-static void Seasons_TakePrecip(PlayState* play, u8 count, s16 kankyoType) {
-    play->envCtx.unk_EE[3] = count;
-    sOwnsPrecip = 1;
-    if (play->envCtx.unk_EE[2] == 0) {
-        Actor_Spawn(&play->actorCtx, play, ACTOR_OBJECT_KANKYO, 0, 0, 0, 0, 0, 0, kankyoType);
-    }
-}
-
-// Drain what the previous season left falling, then stop touching the field at all.
-static void Seasons_ReleasePrecip(PlayState* play) {
-    if (!sOwnsPrecip) {
-        return;
-    }
-    play->envCtx.unk_EE[3] = 0;
-    if (play->envCtx.unk_EE[2] == 0) {
-        sOwnsPrecip = 0;
-    }
-}
-
-// Same shared-field problem as the particle count: the scene's own weather tags write the rain
-// count and the sky mode too, so the rod may only undo what the rod set.
-static u8 sOwnsRain = 0;
-static u8 sOwnsSky = 0;
-
-// gloomySkyMode is a two-step handshake: 1 darkens, 2 hands it to the restore branch, which zeroes
-// it itself. Writing 2 unconditionally would strand it non-zero.
-static void Seasons_TakeSky(EnvironmentContext* env) {
-    env->gloomySkyMode = 1;
-    sOwnsSky = 1;
-}
-
-static void Seasons_ReleaseSky(EnvironmentContext* env) {
-    if (!sOwnsSky) {
-        return;
-    }
-    if (env->gloomySkyMode == 1) {
-        env->gloomySkyMode = 2;
-    }
-    sOwnsSky = 0;
-}
-
-// Per-channel offsets onto the scene's own light, so they shade every scene without knowing
-// anything about it — the trick the fishing pond's storm uses (z_fishing.c:5808). Kept gentle: this
-// is meant to read as an overcast sky, not as nightfall.
-//
-// Winter takes red down hardest and barely touches blue, which is what leaves the cold blue-grey
-// cast rather than a flat dimming. Ambient goes a little further than the directional light so
-// shadows deepen instead of the whole scene greying out evenly.
-typedef struct {
-    s16 light[3];
-    s16 ambient[3];
-} SeasonShade;
-
-static const SeasonShade sSeasonShade[SEASON_COUNT] = {
-    { { 0, 0, 0 }, { 0, 0, 0 } },             // Spring — clear
-    { { 0, 0, 0 }, { 0, 0, 0 } },             // Summer — clear
-    { { -34, -32, -26 }, { -42, -40, -34 } }, // Autumn — overcast, a touch warm
-    { { -46, -34, -14 }, { -54, -42, -20 } }, // Winter — blue-grey
-};
-
-// Applied every frame: Environment_Update resets these each pass.
-static void Seasons_ShadeOvercast(EnvironmentContext* env, s32 season) {
-    const SeasonShade* shade = &sSeasonShade[(season < SEASON_COUNT) ? season : SEASON_SPRING];
-
-    for (s32 i = 0; i < 3; i++) {
-        env->adjLight1Color[i] = shade->light[i];
-        env->adjAmbientColor[i] = shade->ambient[i];
-    }
-}
-
-static void Seasons_TakeRain(EnvironmentContext* env, u8 drops) {
-    env->unk_EE[0] = drops;
-    sOwnsRain = 1;
-}
-
-static void Seasons_ReleaseRain(EnvironmentContext* env) {
-    if (!sOwnsRain) {
-        return;
-    }
-    env->unk_EE[0] = 0;
-    sOwnsRain = 0;
-}
-
-// The rain and thunder tracks belong to the nature ambience sequence, which shares the main BGM
-// player — starting it would replace the scene's music. A season lasts, so the rain is voiced as a
-// plain looping sound effect instead.
-static void Seasons_PlayRainSfx(void) {
-    Sfx_PlaySfxCentered(NA_SE_EV_RAIN - SFX_FLAG);
-}
-
-/**
- * Pushes the active season into the environment context. Every write is idempotent, so this runs
- * unconditionally each frame and needs no "what changed" bookkeeping — which is exactly what makes
- * the season survive a scene load, where Environment_Init zeroes all of it.
- *
- * Autumn and Winter darken the world two ways, because neither reaches everywhere alone:
- * gloomySkyMode redraws the SKYBOX but bows out while gSkyboxBlendingEnabled is set, and the
- * lighting offsets shade the GEOMETRY in every scene regardless. Owning gloomySkyMode is also what
- * keeps the scene's own weather tags from firing, which is why season_scene.cpp retires them.
- */
 static void Seasons_ApplyWeather(PlayState* play, u8 season) {
-    EnvironmentContext* env = &play->envCtx;
-
-    // The blank coin, and anywhere with a roof over it — without this the rod rains inside every
-    // dungeon and shop. Only `indoors` is tested: gating on skyboxId as well was too strict, since
-    // plenty of open-air scenes ship a skybox that is not SKYBOX_NORMAL_SKY.
-    if ((season == SEASON_OFF) || env->indoors) {
-        Seasons_ReleaseRain(env);
-        Seasons_ReleasePrecip(play);
-        Seasons_ShadeOvercast(env, SEASON_SPRING); // the clear row: no offsets at all
-        return;
-    }
-
-    Seasons_ShadeOvercast(env, season);
-
-    switch (season) {
-        case SEASON_SPRING:
-            Seasons_ReleaseRain(env);
-            Seasons_TakePrecip(play, SEASON_SPRITES, OBJECT_KANKYO_FAIRIES);
-            Seasons_ReleaseSky(env);
-            break;
-        case SEASON_SUMMER:
-            Seasons_ReleaseRain(env);
-            Seasons_ReleasePrecip(play);
-            Seasons_ReleaseSky(env);
-            break;
-        case SEASON_AUTUMN:
-            // Particles on screen suppress the engine's whole rain pass, so the rain can only start
-            // once the previous season's flakes have drained out.
-            Seasons_ReleasePrecip(play);
-            Seasons_TakeRain(env, SEASON_RAIN_DROPS);
-            Seasons_TakeSky(env);
-            Seasons_PlayRainSfx();
-            // Env flag 5 is what the Song of Storms raises, and what a bean sprout watches for
-            // before it shoots up and drops its fairies. Autumn rains, so the beans grow on their
-            // own rather than being pushed into that state from outside.
-            Flags_SetEnv(play, 5);
-            break;
-        case SEASON_WINTER:
-            Seasons_ReleaseRain(env);
-            Seasons_TakePrecip(play, SEASON_SNOWFLAKES, OBJECT_KANKYO_SNOW);
-            Seasons_TakeSky(env);
-            break;
-        default:
-            break;
+    SeasonWeather_Update(play);
+    // This is Rod gameplay, independent of Audio Editor presentation. Keep the
+    // original Autumn bean-growing behavior even when presentation is Native.
+    if (season == SEASON_AUTUMN && !play->envCtx.indoors) {
+        Flags_SetEnv(play, 5);
     }
 }
 
@@ -344,7 +168,7 @@ void Seasons_TickInput(PlayState* play, Player* player) {
     }
 
     Seasons_ApplyWeather(play, Seasons_GetSeason());
-    // Outside ApplyWeather's indoor guard on purpose: frozen water is not sky weather, so the
+    // Frozen water is saved Rod gameplay rather than sky weather, so the
     // Water Temple and every other indoor pool freeze too.
     SeasonScene_UpdateWater(play);
     SeasonScene_UpdateWasteland(play);

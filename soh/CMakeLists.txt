@@ -228,6 +228,31 @@ if(BUILD_TESTING)
         add_test(NAME rain_engine_runtime COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_rain_runtime_test.py
             ${CMAKE_CURRENT_BINARY_DIR}/rain-runtime ${CMAKE_C_COMPILER} ${CMAKE_CXX_COMPILER})
+        add_test(NAME soh_season_weather_runtime COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_soh_season_weather_tests.py
+            ${CMAKE_CURRENT_BINARY_DIR}/season-weather-runtime
+            --cc ${CMAKE_C_COMPILER} --cxx ${CMAKE_CXX_COMPILER})
+        add_test(NAME soh_season_particles_runtime COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_soh_season_particle_tests.py)
+        set_tests_properties(soh_season_particles_runtime PROPERTIES ENVIRONMENT
+            "CXX=${CMAKE_CXX_COMPILER};SOH_SEASON_PARTICLE_CXXFLAGS=-I\"$<JOIN:$<TARGET_PROPERTY:nlohmann_json::nlohmann_json,INTERFACE_INCLUDE_DIRECTORIES>,\" -I\">\"")
+        find_package(spdlog REQUIRED)
+        foreach(foliage_test season_foliage_test season_foliage_binding_test)
+            add_executable(${foliage_test}
+                tests/${foliage_test}.cpp
+                ${CMAKE_SOURCE_DIR}/libultraship/src/fast/resource/type/Texture.cpp
+                ${CMAKE_SOURCE_DIR}/libultraship/src/ship/resource/Resource.cpp)
+            target_compile_definitions(${foliage_test} PRIVATE SPDLOG_ACTIVE_LEVEL=6)
+            target_include_directories(${foliage_test} PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}
+                ${CMAKE_SOURCE_DIR}/libultraship/include)
+            target_link_libraries(${foliage_test} PRIVATE spdlog::spdlog)
+            if(foliage_test STREQUAL "season_foliage_binding_test")
+                target_include_directories(${foliage_test} BEFORE PRIVATE
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/season_foliage_stubs)
+            endif()
+            add_test(NAME ${foliage_test} COMMAND ${foliage_test})
+        endforeach()
         add_test(NAME midna_navi_draw COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_midna_navi_draw_test.py)
         set_tests_properties(midna_navi_draw PROPERTIES ENVIRONMENT "CC=${CMAKE_C_COMPILER}")

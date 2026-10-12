@@ -150,6 +150,8 @@ static int sLastMode = -1;
 static GlobalOutdoorRainCycle sCycle = { GlobalOutdoorRainPhase::Dry, 0, 0.0f };
 static bool sOwnsFallbackLoop = false;
 static bool sOwnsOvercast = false;
+static bool sOwnsSeasonalOvercast = false;
+static bool sSeasonSkyAllowed = true;
 static bool sOwnsLightning = false;
 static void PlayRainLoop(float intensity);
 struct RainRequest {
@@ -159,6 +161,11 @@ struct RainRequest {
 static std::unordered_map<const void*, RainRequest> sNativeRequests;
 static PlayState* sOwnerPlay = nullptr;
 static RainRequest sSceneRequest = {};
+static struct {
+    int density;
+    float intensity;
+    bool overcast;
+} sSeasonRequest = {};
 static bool sOwnsDensity = false;
 static bool sScriptedRain = false;
 static int sScriptedDensity = 0;
@@ -233,6 +240,7 @@ extern "C" void GlobalOutdoorRain_SetScriptedRain(PlayState* play, int32_t densi
 extern "C" int32_t GlobalOutdoorRain_HasRainIntent() {
     return sOwnerPlay != nullptr && !sScriptedRain &&
            (RequestedRain().density > 0 ||
+            (sRainSource == GlobalOutdoorRainSource::SeasonalPresentation && sSeasonRequest.density > 0) ||
             (sRainSource == GlobalOutdoorRainSource::EnhancedOutdoor && sCycle.intensity > 0.0f));
 }
 
@@ -264,20 +272,30 @@ static void UpdateLightning(PlayState* play, bool thunderEnabled, bool enhancedR
 }
 
 static void UpdateOvercast(PlayState* play, bool enabled, bool outdoors) {
+    if (sScriptedRain) {
+        // Story rain takes over the current sky. Relinquish our ownership
+        // without sending its overcast through the clear-sky transition.
+        sOwnsOvercast = false;
+        sOwnsSeasonalOvercast = false;
+        return;
+    }
     if (sOwnsOvercast && play->envCtx.gloomySkyMode != 1) {
         // A cutscene/sky transition finished our presentation independently.
         sOwnsOvercast = false;
+        sOwnsSeasonalOvercast = false;
     }
     const bool compatibleSky =
         play->skyboxId == SKYBOX_NORMAL_SKY && !play->envCtx.skyboxDisabled && play->csCtx.state == CS_STATE_IDLE;
     const GlobalOutdoorRainOvercastState state = {
-        .enabled = enabled,
+        .enabled = (enabled || sSeasonRequest.overcast) && sSeasonSkyAllowed,
         .outdoors = outdoors,
         .compatibleSky = compatibleSky,
         .rainActive =
             sRainSource == GlobalOutdoorRainSource::NativePlaced ||
             sRainSource == GlobalOutdoorRainSource::AuthoredScene ||
-            (sRainSource == GlobalOutdoorRainSource::EnhancedOutdoor && sCycle.phase != GlobalOutdoorRainPhase::Dry),
+            (sRainSource == GlobalOutdoorRainSource::SeasonalPresentation && sSeasonRequest.density > 0) ||
+            (sRainSource == GlobalOutdoorRainSource::EnhancedOutdoor && sCycle.phase != GlobalOutdoorRainPhase::Dry) ||
+            sSeasonRequest.overcast,
         .ownsOvercast = sOwnsOvercast,
     };
 
@@ -286,17 +304,46 @@ static void UpdateOvercast(PlayState* play, bool enabled, bool outdoors) {
             if (play->envCtx.gloomySkyMode == 0) {
                 play->envCtx.gloomySkyMode = 1;
                 sOwnsOvercast = true;
+                sOwnsSeasonalOvercast =
+                    sSeasonRequest.overcast || sRainSource == GlobalOutdoorRainSource::SeasonalPresentation;
             }
             break;
         case GlobalOutdoorRainOvercastDecision::Restore:
             if (play->envCtx.gloomySkyMode == 1) {
-                play->envCtx.gloomySkyMode = 2;
+                // At phase zero the native engine has not applied our queued
+                // overcast yet. Its restore handshake only handles phase one;
+                // queuing mode two at phase zero would strand native weather.
+                play->envCtx.gloomySkyMode =
+                    (sOwnsSeasonalOvercast || !sSeasonSkyAllowed) && play->envCtx.unk_DE == 0 ? 0 : 2;
             }
             sOwnsOvercast = false;
+            sOwnsSeasonalOvercast = false;
             break;
         case GlobalOutdoorRainOvercastDecision::NoChange:
             break;
     }
+}
+
+extern "C" void GlobalOutdoorRain_SetSeasonSkyAllowed(PlayState* play, int32_t allowed) {
+    if (play == nullptr) {
+        sSeasonSkyAllowed = true;
+        return;
+    }
+    BindPlay(play);
+    sSeasonSkyAllowed = allowed != 0;
+}
+
+extern "C" void GlobalOutdoorRain_SetSeasonRequest(PlayState* play, int32_t density, float intensity,
+                                                   int32_t overcast) {
+    if (play == nullptr) {
+        sSeasonRequest = {};
+        sSeasonSkyAllowed = true;
+        return;
+    }
+    BindPlay(play);
+    sSeasonRequest = { GlobalOutdoorRain_ClampDensity(density), std::clamp(intensity, 0.0f, 1.0f), overcast != 0 };
+    GlobalOutdoorRain_Resolve(play);
+    UpdateOvercast(play, CVarGetInteger(CVAR_AUDIO("GlobalOutdoorRainOvercast"), 1) != 0, !play->envCtx.indoors);
 }
 
 static int RandomDryFrames() {
@@ -357,7 +404,13 @@ extern "C" void GlobalOutdoorRain_Resolve(PlayState* play) {
             Audio_SetNatureAmbienceChannelIO(NATURE_CHANNEL_RAIN, CHANNEL_IO_PORT_1, 0);
         PlayRainLoop(1.0f);
         UpdateLightning(play, CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunder"), 1) != 0, request.thunder);
-    } else if (sOwnsDensity) {
+    } else if (sSeasonRequest.density > 0 && sRainSource != GlobalOutdoorRainSource::EnhancedOutdoor) {
+        sRainSource = GlobalOutdoorRainSource::SeasonalPresentation;
+        play->envCtx.unk_EE[0] = sSeasonRequest.density;
+        sOwnsDensity = true;
+        PlayRainLoop(sSeasonRequest.intensity);
+        UpdateLightning(play, false, false);
+    } else if (sOwnsDensity && sRainSource != GlobalOutdoorRainSource::EnhancedOutdoor) {
         play->envCtx.unk_EE[0] = 0;
         sOwnsDensity = false;
         PlayRainLoop(0.0f);
@@ -437,6 +490,7 @@ void GlobalOutdoorRain_Update(PlayState* play) {
     switch (decision) {
         case GlobalOutdoorRainDecision::Start:
             sRainSource = GlobalOutdoorRainSource::EnhancedOutdoor;
+            sOwnsDensity = false;
             break;
         case GlobalOutdoorRainDecision::Maintain:
             break;
@@ -477,6 +531,7 @@ void GlobalOutdoorRain_OnPlayDestroy() {
     sNativeRequests.clear();
     sOwnerPlay = nullptr;
     sSceneRequest = {};
+    sSeasonRequest = {};
     sOwnsDensity = false;
     sScriptedRain = false;
     sSceneDiagnostics = false;
@@ -486,13 +541,16 @@ void GlobalOutdoorRain_OnPlayDestroy() {
     // Enhanced rain is global and may continue across compatible outdoor
     // scenes. Placed proximity rain belongs to the outgoing PlayState and must
     // release its private loop before the destination scene is constructed.
-    if (sRainSource == GlobalOutdoorRainSource::NativePlaced || sRainSource == GlobalOutdoorRainSource::AuthoredScene) {
+    if (sRainSource == GlobalOutdoorRainSource::NativePlaced || sRainSource == GlobalOutdoorRainSource::AuthoredScene ||
+        sRainSource == GlobalOutdoorRainSource::SeasonalPresentation) {
         PlayRainLoop(0.0f);
         sRainSource = GlobalOutdoorRainSource::None;
     }
     // Sky state is PlayState-owned, so the incoming scene must claim its own
     // overcast transition even while the rain loop itself remains continuous.
     sOwnsOvercast = false;
+    sOwnsSeasonalOvercast = false;
+    sSeasonSkyAllowed = true;
     sOwnsLightning = false;
 }
 
