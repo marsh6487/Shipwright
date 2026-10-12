@@ -103,8 +103,8 @@ shared bomb/lightning adjustment fields. Native lightning retains its flash.
 
 Active seasonal sky requests yield to living native cloud/snow/Lake/Kakariko
 weather controllers. Queued versus already-applied overcast is distinguished
-when restoring the native sky handshake. Native selection, an unowned Rod and
-inactive seasonal rain do not alter the original global rain policy.
+when restoring the native sky handshake. Native selection, an unowned Rod, dry
+Spring and Summer leave the original global rain policy unchanged.
 
 ## Verification and runtime handoff
 
@@ -129,8 +129,11 @@ pinned SoH/LUS headers, and source formatting/whitespace checks pass.
 The existing `GenerateSohOtr` target builds successfully. The generated core
 archive contains all four donor autumn leaf resources with exact source bytes;
 its SHA-256 is `79810f2045cc70860ec7f0123fc84cfb9a73168a5a0f882419f527031f8050f7`.
-Full executable/platform build verification is still pending. Source/object
-tests and asset packaging do not establish visual quality or runtime acceptance.
+The full Linux Release application also builds and links successfully using the
+existing pinned engine. Hosted cumulative and formatting gates pass on the
+implementation commit `6a7df2ce95ccb456d4766e18935e178b37127110`. Other platform
+packages are still going through hosted CI. No game/GPU session was launched;
+build and source tests do not establish visual quality or runtime acceptance.
 
 The focused game pass should cover:
 
